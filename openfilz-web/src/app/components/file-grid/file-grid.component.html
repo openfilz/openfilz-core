@@ -1,0 +1,68 @@
+<div class="file-grid-container">
+    <div class="file-grid">
+        @for(item of items; track item.id) {
+            <div
+                class="file-item"
+                [class.selected]="item.selected"
+                (click)="onItemClick(item)"
+                (dblclick)="onItemDoubleClick(item)"
+                (contextmenu)="onContextMenu($event, item)">
+
+                <div class="file-header">
+                    <mat-checkbox
+                            [checked]="item.selected"
+                            (click)="$event.stopPropagation()"
+                            (change)="onSelectionChange(item, $event.checked)">
+                    </mat-checkbox>
+
+                    <button mat-icon-button [matMenuTriggerFor]="itemMenu" (click)="$event.stopPropagation()">
+                        <mat-icon>more_vert</mat-icon>
+                    </button>
+
+                    <mat-menu #itemMenu="matMenu">
+                        <button mat-menu-item (click)="onRename(item)">
+                            <mat-icon>edit</mat-icon>
+                            <span>Rename</span>
+                        </button>
+                        <button mat-menu-item (click)="onDownload(item)">
+                            <mat-icon>cloud_download</mat-icon>
+                            <span>Download</span>
+                        </button>
+                        <button mat-menu-item (click)="onMove(item)">
+                            <mat-icon>drive_file_move</mat-icon>
+                            <span>Move</span>
+                        </button>
+                        <button mat-menu-item (click)="onCopy(item)">
+                            <mat-icon>content_copy</mat-icon>
+                            <span>Copy</span>
+                        </button>
+                        <mat-divider></mat-divider>
+                        <button mat-menu-item (click)="onDelete(item)" class="delete-item">
+                            <mat-icon>delete</mat-icon>
+                            <span>Delete</span>
+                        </button>
+                    </mat-menu>
+                </div>
+
+                <div class="file-content">
+                    <div class="file-icon">
+                        <mat-icon [class]="'file-type-' + item.type.toLowerCase()">
+                            {{ getFileIcon(item.name, item.type) }}
+                        </mat-icon>
+                    </div>
+
+                    <div class="file-name" [title]="item.name">
+                        {{ item.name }}
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+    <div class="dropzone-overlay" [class.file-over]="fileOver">
+        <div class="dropzone-message">
+            <mat-icon>cloud_upload</mat-icon>
+            <p>Drop files here to upload</p>
+        </div>
+    </div>
+    
+</div>

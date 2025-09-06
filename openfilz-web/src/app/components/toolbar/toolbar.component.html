@@ -1,0 +1,45 @@
+<mat-toolbar color="primary">
+  <span class="app-title">OpenFilz</span>
+  
+  <div class="toolbar-spacer"></div>
+  
+  <div class="search-container">
+    <mat-form-field appearance="outline" class="search-field">
+      <mat-icon matPrefix>search</mat-icon>
+      <input matInput placeholder="Search files and folders" [(ngModel)]="searchQuery" (keyup.enter)="onSearch()">
+    </mat-form-field>
+  </div>
+  
+  <div class="toolbar-actions">
+    <button mat-icon-button (click)="onCreateFolder()" title="Create folder">
+      <mat-icon>create_new_folder</mat-icon>
+    </button>
+    
+    <button mat-icon-button (click)="onUploadFiles()" title="Upload files">
+      <mat-icon>cloud_upload</mat-icon>
+    </button>
+    
+    <button mat-icon-button [matMenuTriggerFor]="viewMenu" title="View options">
+      <mat-icon>view_module</mat-icon>
+    </button>
+    
+    <mat-menu #viewMenu="matMenu">
+      <button mat-menu-item (click)="onViewChange('grid')" [class.active]="viewMode === 'grid'">
+        <mat-icon>view_module</mat-icon>
+        <span>Grid view</span>
+      </button>
+      <button mat-menu-item (click)="onViewChange('list')" [class.active]="viewMode === 'list'">
+        <mat-icon>view_list</mat-icon>
+        <span>List view</span>
+      </button>
+    </mat-menu>
+    
+    <button mat-icon-button [disabled]="!hasSelection" (click)="onDownloadSelected()" title="Download selected">
+      <mat-icon>cloud_download</mat-icon>
+    </button>
+    
+    <button mat-icon-button [disabled]="!hasSelection" (click)="onDeleteSelected()" title="Delete selected">
+      <mat-icon>delete</mat-icon>
+    </button>
+  </div>
+</mat-toolbar>

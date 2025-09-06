@@ -1,0 +1,78 @@
+{
+  "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
+  "cli": {
+    "analytics": "1e1de97b-a744-405a-8b5a-0397bb3d01ce"
+  },
+  "newProjectRoot": "projects",
+  "projects": {
+    "openfilz-ui": {
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "configurations": {
+            "local-dev": {
+              "extractLicenses": false,
+              "namedChunks": true,
+              "optimization": false,
+              "sourceMap": true,
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.local-dev.ts"
+                }
+                ]
+            },
+            "development": {
+              "extractLicenses": false,
+              "namedChunks": true,
+              "optimization": false,
+              "sourceMap": true
+            },
+            "production": {
+              "aot": true,
+              "extractLicenses": true,
+              "namedChunks": false,
+              "optimization": true,
+              "outputHashing": "all",
+              "sourceMap": false
+            }
+          },
+          "options": {
+            "assets": ["src/favicon.ico"],
+            "index": "src/index.html",
+            "browser": "src/main.ts",
+            "outputPath": "dist/openfilz-ui",
+            "polyfills": ["zone.js"],
+            "scripts": [],
+            "styles": [
+              "src/custom-theme.scss",
+              "src/global_styles.css"
+            ],
+            "tsConfig": "tsconfig.app.json"
+          }
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "configurations": {
+            "development": {
+              "buildTarget": "openfilz-ui:build:development"
+            },
+            "local-dev": {
+              "buildTarget": "openfilz-ui:build:local-dev"
+            },
+            "production": {
+              "buildTarget": "openfilz-ui:build:production"
+            }
+          },
+          "defaultConfiguration": "development"
+        }
+      },
+      "prefix": "app",
+      "projectType": "application",
+      "root": "",
+      "schematics": {},
+      "sourceRoot": "src"
+    }
+  },
+  "version": 1
+}

@@ -1,0 +1,32 @@
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 16px;
+  background-color: white;
+  border-bottom: 1px solid #e0e0e0;
+  min-height: 48px;
+}
+
+.separator {
+  color: #666;
+  font-size: 16px;
+}
+
+.breadcrumb-item {
+  color: #1976d2;
+  text-transform: none;
+  font-weight: 400;
+  min-width: auto;
+  padding: 4px 8px;
+}
+
+.breadcrumb-item.current {
+  color: #333;
+  font-weight: 500;
+  cursor: default;
+}
+
+.breadcrumb-item:not(.current):hover {
+  background-color: #e3f2fd;
+}

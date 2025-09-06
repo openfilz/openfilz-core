@@ -1,0 +1,143 @@
+# helm-openfilz-api/values.yaml
+
+# -- Global settings that are passed to all sub-charts.
+# @param global Namespace to deploy the chart. It's recommended to use `helm install --namespace` instead.
+global: {}
+
+route:
+  hostname: &route-hostname ""
+
+# -- Common labels and annotations to apply to all resources.
+# @param common.labels Custom labels to add to all resources.
+# @param common.annotations Custom annotations to add to all resources.
+common: {}
+
+# -- Set to true if deploying on OpenShift.
+# @param openshift.enabled Enables OpenShift-specific resources and deployment logic.
+openshift:
+  enabled: false
+  # -- Configuration for the OpenShift Route.
+  # This section is only used when `openshift.enabled` is true.
+  route:
+    enabled: false
+    # @param openshift.route.hostname The hostname for the Route (e.g., api.example.com). If empty, OpenShift will generate one.
+    hostname: *route-hostname
+    # -- TLS configuration for the Route.
+    # For more info, see: https://docs.openshift.com/container-platform/latest/networking/routes/secured-routes.html
+    tls:
+      # @param openshift.route.tls.enabled Enable TLS termination for the Route.
+      enabled: true
+      # @param openshift.route.tls.termination TLS termination policy. Valid values: 'edge', 'passthrough', 'reencrypt'.
+      termination: "edge"
+      # @param openshift.route.tls.insecureEdgeTerminationPolicy Policy for handling insecure traffic. Valid values: 'Allow', 'Disable', 'Redirect'.
+      insecureEdgeTerminationPolicy: "Redirect"
+      # -- IMPORTANT: Do not commit plain-text keys or certificates to Git.
+      # Use Helm secrets or --set for production values.
+      # @param openshift.route.tls.key The private key for the TLS certificate.
+      key: ""
+      # @param openshift.route.tls.certificate The public TLS certificate.
+      certificate: ""
+      # @param openshift.route.tls.caCertificate The CA certificate for the chain.
+      caCertificate: ""
+      # @param openshift.route.tls.destinationCACertificate The CA cert to validate the destination server in 'reencrypt' deployments.
+      destinationCACertificate: ""
+
+# -- Number of application pods to run.
+# @param replicaCount The number of replicas for the Deployment.
+replicaCount: 1
+
+# -- Image configuration.
+# @param image.registry The container image registry.
+# @param image.repository The container image repository.
+# @param image.tag The container image tag.
+# @param image.pullPolicy The image pull policy.
+# @param image.pullSecrets Secrets for pulling images from a private registry.
+image:
+  registry: localhost:5000
+  repository: snapshots/openfilz-api
+  tag: 1.0.0-SNAPSHOT
+  pullPolicy: Always
+  pullSecrets: []
+
+# -- Application and server settings.
+# @param api.port The container port the application listens on.
+api:
+  port: 9984
+
+# -- Spring Boot profile settings.
+# @param spring.activeProfile The active Spring profile (e.g., kube, dev).
+spring:
+  activeProfile: ""
+
+# -- Database connection configuration.
+database:
+  # @param database.host The hostname of the database server.
+  host: "localhost"
+  # @param database.port The port of the database server.
+  port: 5432
+  # @param database.name The name of the database.
+  name: "dms-db"
+  # @param database.existingSecret Name of an existing Secret with DB credentials (keys: `user`, `password`).
+  # If provided, `createUser` and `createPassword` are ignored.
+  existingSecret: ""
+  # @param database.createUser The database username to create in the new Secret.
+  createUser: "app"
+  # @param database.createPassword The database password to create. If empty, a random one is generated.
+  createPassword: ""
+
+# -- Storage configuration for the application.
+# These values are used to construct the JAVA_TOOL_OPTIONS environment variable.
+storage:
+  # @param storage.type The type of storage backend (e.g., 'local' or 'minio').
+  type: local
+  # @param storage.basePath The path within the container where the volume is mounted.
+  basePath: /var/data/ged
+
+# -- Service resource configuration.
+# @param service.type The type of Kubernetes Service.
+# @param service.port The port the Service will expose.
+service:
+  type: ClusterIP
+  port: 80
+
+# -- Ingress resource configuration (used only when `openshift.enabled` is false).
+# @param ingress.enabled Enables the Ingress resource.
+# @param ingress.ingressClassName The class of the Ingress controller.
+# @param ingress.annotations Annotations for the Ingress resource.
+ingress:
+  enabled: true
+  # @param ingress.ingressClassName The class of the Ingress controller.
+  ingressClassName: "nginx"
+  # @param ingress.path The path for the Ingress rule.
+  path: "/"
+  # @param ingress.annotations Annotations for the Ingress resource.
+  # The rewrite-target is set to '/$1' or '/$2' depending on the path's regex.
+  # For a simple path like '/', no rewrite is typically needed unless stripping the path.
+  # For a path like '/api(/|$)(.*)', a rewrite to '/$2' would be appropriate.
+  annotations:
+    # kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-buffering: "on"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "16"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "256k"
+    nginx.ingress.kubernetes.io/proxy-max-temp-file-size: "2048m"
+    nginx.ingress.kubernetes.io/proxy-body-size: "1024m"
+    nginx.org/client-max-body-size: "1024m"
+    # rest of nginx config #
+  labels: {}
+
+# -- Persistence configuration.
+persistence:
+  # @param persistence.enabled Enable persistence using a PersistentVolumeClaim.
+  enabled: true
+  # @param persistence.accessModes PVC access modes.
+  accessModes:
+    - ReadWriteOnce
+  # @param persistence.size PVC storage size.
+  size: 10Mi
+  # @param persistence.storageClass PVC StorageClass. For OpenShift, use a dynamic provisioner like 'thin-csi'.
+  # For manual PV on non-OpenShift, set to a matching class (e.g., 'manual').
+  storageClass: ""
+  # @param persistence.hostPath The host path for the manual PV. Used only when `openshift.enabled` is false.
+  hostPath: /tmp/kube-storage
+  # @param persistence.existingClaim Use an existing PVC instead of creating a new one.
+  existingClaim: ""

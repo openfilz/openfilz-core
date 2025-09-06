@@ -1,0 +1,40 @@
+# Example values for an OpenShift deployment
+
+image:
+  registry: nexus.oddo-bhf.com:8443
+  pullSecrets:
+    - name: imagePullSecrets
+
+# -- Enable OpenShift-specific resources and logic.
+openshift:
+  enabled: true
+  # -- Enable and configure the OpenShift Route for external access.
+  route:
+    enabled: true
+    # -- Set the desired hostname for your application.
+    # hostname: "dms-api.apps.my-cluster.com"
+    tls:
+      enabled: true
+      termination: "edge"
+      insecureEdgeTerminationPolicy: "Redirect"
+      # In production, provide certs via --set or secrets, not directly in this file.
+      # key: ""
+      # certificate: ""
+
+# -- Disable the Kubernetes Ingress, as we are using an OpenShift Route.
+ingress:
+  enabled: false
+
+# -- Configure persistence to use a dynamic provisioner available in OpenShift.
+persistence:
+  enabled: true
+  size: 1Gi
+
+# -- Database password should be set via --set or a sealed secret in production.
+database:
+  host: ged-db-rw.ged-lab.svc.cluster.local
+  existingSecret: db-credentials
+# -- Remaining values can inherit from the defaults in values.yaml or be set as needed.
+# replicaCount: 2
+# image:
+#   tag: "1.2.3"

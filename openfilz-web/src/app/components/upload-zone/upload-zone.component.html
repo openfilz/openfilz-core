@@ -1,0 +1,26 @@
+@if(showUploadZone) {
+    <div class="upload-zone-container">
+        <mat-card class="upload-drop-zone"
+                  [class.dragover]="isDragOver"
+                  (dragover)="onDragOver($event)"
+                  (dragleave)="onDragLeave($event)"
+                  (drop)="onDrop($event)"
+                  (click)="onZoneClick()">
+
+            <div class="upload-content">
+                <mat-icon class="upload-icon">cloud_upload</mat-icon>
+                <h3>Drop files here to upload</h3>
+                <p>or click to select files</p>
+                <button mat-raised-button color="primary" class="upload-button">
+                    Choose Files
+                </button>
+            </div>
+
+            <input #fileInput
+                   type="file"
+                   multiple
+                   style="display: none"
+                   (change)="onFileSelected($event)">
+        </mat-card>
+    </div>
+}

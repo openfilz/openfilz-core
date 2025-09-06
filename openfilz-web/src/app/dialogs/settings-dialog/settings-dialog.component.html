@@ -1,0 +1,15 @@
+<h2 mat-dialog-title>Settings</h2>
+<mat-dialog-content>
+  <mat-form-field appearance="fill">
+    <mat-label>Items per page</mat-label>
+    <mat-select [(ngModel)]="selectedItemsPerPage">
+      @for (option of itemsPerPageOptions; track option) {
+        <mat-option [value]="option">{{ option }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button (click)="onCancel()">Cancel</button>
+  <button mat-button color="primary" (click)="onSave()">Save</button>
+</mat-dialog-actions>

@@ -1,0 +1,126 @@
+name: Create Release for the backend
+
+on:
+  pull_request:
+    branches: [ "main" ]
+    types:
+      - closed
+    paths-ignore:
+      - 'openfilz-web/**'
+
+jobs:
+  build:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo The PR was merged to main....
+      
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ secrets.RELEASE_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_PRIVATE_KEY }}
+      
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
+          
+
+      - name: Set up JDK 24
+        uses: actions/setup-java@v4
+        with:
+          java-version: '24'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Configure Git Credentials
+        run: |
+          git config --global user.name "maven-release-bot[bot]"
+          git config --global user.email "maven-release-bot[bot]@users.noreply.github.com"
+          git config --global credential.helper store 
+          echo "https://x-access-token:${{ steps.app-token.outputs.token }}@github.com" > ~/.git-credentials
+
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.OSSRH_GPG_SECRET_KEY }}
+          passphrase: ${{ secrets.OSSRH_GPG_SECRET_KEY_PASSWORD }}
+
+      - name: Setup Maven settings.xml
+        uses: s4u/maven-settings-action@v3.1.0
+        with:
+          servers: |
+            [{
+              "id": "git",
+              "username": "x-access-token",
+              "password": "${{ steps.app-token.outputs.token }}"
+            },
+            {
+                "id": "central",
+                "username": "${{ secrets.MAVEN_USERNAME }}",
+                "password": "${{ secrets.MAVEN_PASSWORD }}"
+            }]
+
+      - name: Extract Maven project version
+        run: echo "version=$(mvn -q -Dexec.executable=echo -Dexec.args='${project.version}' --non-recursive exec:exec)" >> $GITHUB_OUTPUT
+        id: project
+
+      - name: Remove SNAPSHOT from version
+        uses: spassai/get-between-action@v1
+        id: version
+        with:
+          string: ${{ steps.project.outputs.version }}"
+          start: ''
+          end: '-SNAPSHOT'
+
+      - name: Prepare Release
+        run: mvn -B release:prepare -DtagNameFormat=v@{project.version} -Darguments="-DskipTests"
+
+      - name: Perform Release
+        run: mvn -B release:perform -Darguments="-Pkube,publishMaven -Dregistry.hostname=ghcr.io -Dregistry.port=443 -Ddocker.context.path=openfilz/ -Djib.to.auth.username=${{ github.actor }} -Djib.to.auth.password=${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Generate Changelog
+        run: mvn git-changelog-maven-plugin:git-changelog -PchangeLog
+
+      - name: Commit Changelog
+        run: |
+          git add CHANGELOG.md
+          git commit -m "docs: update changelog for version ${{ steps.version.outputs.substring }}"
+          git push origin main
+
+      - name: Get Changelog Entry
+        id: changelog
+        run: |
+          CHANGELOG_ENTRY=$(sed -n "/## ${GITHUB_REF#refs/tags/}/,/## /p" CHANGELOG.md | sed '$d')
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG_ENTRY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.substring }}
+          name: Release v${{ steps.version.outputs.substring }}
+          body: ${{ steps.changelog.outputs.changelog }}
+          fail_on_unmatched_files: false
+          files: |
+            openfilz-api/target/*${{ steps.version.outputs.substring }}.jar
+            openfilz-gateway/target/*${{ steps.version.outputs.substring }}.jar
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Merge main -> develop
+        uses: devmasx/merge-branch@master
+        with:
+          type: now
+          from_branch: main
+          target_branch: develop
+          github_token: ${{ steps.app-token.outputs.token }}
+
+      - name: Cleanup credentials
+        if: always()
+        run: |
+          rm -f ~/.git-credentials
+          git config --global --unset credential.helper || true

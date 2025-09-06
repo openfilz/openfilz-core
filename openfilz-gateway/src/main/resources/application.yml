@@ -1,0 +1,93 @@
+# src/main/resources/application.yml (for gateway)
+spring:
+  application:
+    name: openfilz-gateway
+  cloud:
+    gateway:
+      server:
+        webflux:
+          default-filters:
+            - TokenRelay # If you want to propagate the JWT token to downstream services
+                    # - Add other default filters like Retry, RateLimiter, etc.
+          routes:
+            - id: openfilz-api-swagger
+            # uri: lb://openfilz-api # If using service discovery (e.g., Eureka, Consul)
+              uri: http://localhost:8081 # If direct routing (replace openfilz-api with actual service name if using discovery)
+              predicates:
+                - Path=/dms-api/swagger-ui/**, /dms-api/v3/** # All requests to swagger will be routed
+            - id: openfilz-api-route
+              # uri: lb://openfilz-api # If using service discovery (e.g., Eureka, Consul)
+              uri: http://localhost:8081 # If direct routing (replace openfilz-api with actual service name if using discovery)
+              predicates:
+                - Path=/dms-api/** # All requests to /dms-api/... will be routed
+              filters:
+                - StripPrefix=1
+
+  # Security config for Gateway to act as an OAuth2 Client (for TokenRelay) and Resource Server (to validate incoming token)
+  security:
+    oauth2:
+      client:
+        provider:
+          keycloak: # Matches registration-id below
+            issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/test-realm}
+        registration:
+          gateway-client: # This registration ID can be used by TokenRelay
+            provider: keycloak
+            client-id: ${GATEWAY_CLIENT_ID:gateway-client} # Client ID for the gateway itself in Keycloak
+            client-secret: ${GATEWAY_CLIENT_SECRET:your-gateway-client-secret}
+            authorization-grant-type: authorization_code # client_credentials # Or authorization_code if user interaction is involved at gateway
+            scope: openid # Or other scopes required by the gateway
+      # If the Gateway itself needs to validate tokens as a Resource Server (recommended)
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/test-realm}/protocol/openid-connect/certs
+          # issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/test-realm}
+
+server:
+  port: 8888 # Gateway port, clients will connect here
+
+# If not using Spring Cloud Discovery Client, define the downstream service URL directly
+# openfilz-api:
+#  url: http://localhost:8081 # Port of your DMS API
+
+# Logging
+logging:
+  level:
+    org.springframework:
+      cloud: TRACE # For debugging routes
+      http.server.reactive: DEBUG
+      web.reactive: DEBUG
+      security: DEBUG
+    reactor.netty.http.client: DEBUG # For debugging client requests
+
+
+# Resilience4j Circuit Breaker example config (optional)
+resilience4j:
+  circuitbreaker:
+    instances:
+      openfilz-api-cb: # Name this to match filter config if used
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        waitDurationInOpenState: 5s
+        failureRateThreshold: 50
+        eventConsumerBufferSize: 10
+  timelimiter:
+    instances:
+      openfilz-api-tl:
+        timeoutDuration: 3s
+        cancelRunningFuture: true
+
+# Swagger / OpenAPI
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    oauth:
+      client-id: ${GATEWAY_CLIENT_ID:gateway-client}
+    config-url: /v3/api-docs/swagger-config
+    urls:
+      - name: openfilz-api
+        url: /dms-api/v3/api-docs

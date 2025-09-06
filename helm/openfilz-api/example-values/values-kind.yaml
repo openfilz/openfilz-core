@@ -1,0 +1,29 @@
+# Example values for a standard Kubernetes deployment
+
+# -- Disable OpenShift-specific resources as we are on standard Kubernetes.
+openshift:
+  enabled: false
+  route:
+    enabled: false
+
+image:
+  registry: "localhost:5001"
+
+# -- Enable and configure the Kubernetes Ingress resource.
+ingress:
+  enabled: true
+persistence:
+  enabled: true
+  size: 1Gi
+
+# -- For test purposes only. Database password should be set via --set or a secret in production.
+database:
+  host: dms-postgres-postgresql
+  createUser: dms_user
+  createPassword: dms_password
+  name: dms_db
+
+# -- Remaining values can inherit from the defaults in values.yaml or be set as needed.
+# replicaCount: 1
+# image:
+#   tag: "1.2.3"

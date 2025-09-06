@@ -1,0 +1,100 @@
+.file-list-container {
+  padding: 24px;
+  background-color: #f9fafb;
+  min-height: calc(100vh - 64px);
+  position: relative; /* Added for overlay positioning */
+}
+
+.file-list-table {
+  width: 100%;
+  background-color: white;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+}
+
+.file-row {
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.file-row:hover {
+  background-color: #f5f5f5;
+}
+
+.file-row.selected {
+  background-color: #e3f2fd;
+}
+
+.file-name-cell {
+  cursor: pointer;
+}
+
+.file-name-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.file-icon {
+  color: #666;
+}
+
+.file-icon.file-type-folder {
+  color: #1976d2;
+}
+
+.file-name {
+  font-weight: 500;
+}
+
+.delete-item {
+  color: #f44336;
+}
+
+th.mat-header-cell {
+  font-weight: 600;
+  color: #374151;
+  background-color: #f9fafb;
+}
+
+.dropzone-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  color: white;
+  text-align: center;
+}
+
+.dropzone-overlay.file-over {
+  display: flex;
+  background-color: rgba(0, 0, 0, 0.7);
+  background-image: url('https://www.gstatic.com/images/icons/material/system_gm/1x/cloud_upload_white_48dp.png'); /* Placeholder image */
+  background-repeat: no-repeat;
+  background-position: center 40%;
+  flex-direction: column;
+}
+
+.dropzone-message {
+  margin-top: 80px; /* Adjust based on image size */
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.dropzone-message mat-icon {
+  display: none; /* Hide the icon when background image is used */
+}
+
+@media (max-width: 768px) {
+  .file-list-container {
+    margin-left: 60px;
+    padding: 16px;
+  }
+}

@@ -1,0 +1,71 @@
+scalar JSON
+scalar Long
+scalar DateTime
+@specifiedBy(url: "https://scalars.graphql.org/andimarek/date-time.html")
+scalar UUID
+@specifiedBy(url:"https://tools.ietf.org/html/rfc4122")
+
+type Query {
+    listFolder(request: ListFolderRequest!): [FolderElementInfo]
+    documentById(id: UUID!): DocumentInfo
+    count(request: ListFolderRequest): Long
+}
+
+type FolderElementInfo {
+    id : UUID
+    type : DocumentType
+    contentType : String
+    name : String
+    metadata : JSON
+    size : Long
+    createdAt : DateTime
+    updatedAt : DateTime
+    createdBy : String
+    updatedBy : String
+}
+
+type DocumentInfo {
+    id : UUID
+    parentId : UUID
+    type : DocumentType
+    contentType : String
+    name : String
+    metadata : JSON
+    size : Long
+    createdAt : DateTime
+    updatedAt : DateTime
+    createdBy : String
+    updatedBy : String
+}
+
+input ListFolderRequest {
+    id : UUID
+    type : DocumentType
+    contentType : String
+    name : String
+    nameLike : String
+    metadata : JSON
+    size : Long
+    createdAtAfter : DateTime
+    createdAtBefore : DateTime
+    updatedAtAfter : DateTime
+    updatedAtBefore : DateTime
+    createdBy : String
+    updatedBy : String
+    pageInfo : PageInfo
+}
+
+input PageInfo {
+    pageNumber : Int!
+    pageSize : Int!
+    sortBy : String
+    sortOrder : SortOrder
+}
+
+enum SortOrder {
+    ASC, DESC
+}
+
+enum DocumentType {
+    FILE, FOLDER
+}

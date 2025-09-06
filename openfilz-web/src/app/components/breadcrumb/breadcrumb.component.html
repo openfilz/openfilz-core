@@ -1,0 +1,19 @@
+<div class="breadcrumb">
+  <button mat-icon-button (click)="onNavigate()">
+    <mat-icon>home</mat-icon>
+  </button>
+
+    @for(item of breadcrumbs; track item.id; let i = $index) {
+        <ng-container>
+            <mat-icon class="separator">chevron_right</mat-icon>
+            <button
+                    mat-button
+                    class="breadcrumb-item"
+                    [class.current]="i === breadcrumbs.length - 1"
+                    (click)="onNavigate(item)">
+                {{ item.name }}
+            </button>
+        </ng-container>
+    }
+
+</div>

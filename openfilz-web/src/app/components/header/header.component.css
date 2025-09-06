@@ -1,0 +1,242 @@
+.header {
+  height: 64px;
+  background-color: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  gap: 24px;
+  position: fixed;
+  top: 0;
+  left: 180px;
+  right: 0;
+  z-index: 99;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+.header-left {
+  flex-shrink: 0;
+  min-width: 120px;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.breadcrumb-icon {
+  color: #6b7280;
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+}
+
+.breadcrumb-item {
+  font-size: 15px;
+  font-weight: 500;
+  color: #1f2937;
+  cursor: pointer;
+}
+
+.breadcrumb-item:hover {
+  text-decoration: underline;
+}
+
+.breadcrumb-item.current {
+  color: #6b7280;
+  cursor: default;
+  text-decoration: none;
+}
+
+.separator {
+  font-size: 15px;
+  color: #6b7280;
+}
+
+.header-center {
+  flex: 1;
+  max-width: 1200px;
+  display: flex;
+  justify-content: center;
+}
+
+.search-container {
+  width: 100%;
+  max-width: 480px;
+}
+
+.search-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0 12px;
+  height: 40px;
+  transition: all 0.2s ease;
+}
+
+.search-wrapper:focus-within {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  background-color: #ffffff;
+}
+
+.search-icon {
+  color: #9ca3af;
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+.search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: #1f2937;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-weight: 400;
+}
+
+.search-input::placeholder {
+  color: #9ca3af;
+  font-weight: 400;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.upload-btn {
+  border-radius: 8px;
+  font-weight: 500;
+  text-transform: none;
+  padding: 0 16px;
+  height: 36px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+}
+
+.upload-btn mat-icon {
+  margin-right: 6px;
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+}
+
+.new-folder-btn {
+  border-radius: 8px;
+  font-weight: 500;
+  text-transform: none;
+  padding: 0 16px;
+  height: 36px;
+  border-color: #d1d5db;
+  color: #374151;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+}
+
+.new-folder-btn mat-icon {
+  margin-right: 6px;
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+}
+
+.view-menu-btn,
+.more-options-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+}
+
+.view-menu-btn mat-icon,
+.more-options-btn mat-icon {
+  color: #6b7280;
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+}
+
+.selection-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+}
+
+.selection-count {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+.download-btn {
+  border-radius: 8px;
+  font-weight: 500;
+  text-transform: none;
+  padding: 0 16px;
+  height: 36px;
+  background-color: #10b981;
+  color: white;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+}
+
+.download-btn:hover {
+  background-color: #059669;
+}
+
+.download-btn mat-icon {
+  margin-right: 6px;
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+}
+
+.delete-btn {
+  border-radius: 8px;
+  font-weight: 500;
+  text-transform: none;
+  padding: 0 16px;
+  height: 36px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+}
+
+.delete-btn mat-icon {
+  margin-right: 6px;
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+}
+
+@media (max-width: 768px) {
+  .header {
+    left: 60px;
+    padding: 0 16px;
+    gap: 16px;
+  }
+  
+  .header-center {
+    max-width: 300px;
+  }
+  
+  .new-folder-btn span {
+    display: none;
+  }
+  
+  .upload-btn span {
+    display: none;
+  }
+}

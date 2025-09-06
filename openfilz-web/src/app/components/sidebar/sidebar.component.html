@@ -1,0 +1,23 @@
+<div class="sidebar">
+  <div class="sidebar-header">
+    <div class="logo">
+      <mat-icon class="logo-icon">folder</mat-icon>
+      <span class="logo-text">Openfilz</span>
+    </div>
+  </div>
+
+  <div class="sidebar-content">
+    <mat-nav-list>
+        @for(item of navigationItems; track item.id) {
+        <mat-list-item
+                [class.active]="item.active"
+                (click)="onNavigationClick(item.id)">
+            <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
+            <span matListItemTitle>{{ item.label }}</span>
+        </mat-list-item>
+        }
+    </mat-nav-list>
+  </div>
+
+  
+</div>

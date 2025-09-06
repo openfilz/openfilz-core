@@ -1,0 +1,85 @@
+<div class="header">
+  <div class="header-left">
+    <div class="breadcrumb">
+      <mat-icon class="breadcrumb-icon">home</mat-icon>
+      @if (breadcrumbs.length === 0) {
+        <span class="breadcrumb-item current">Home</span>
+      } @else {
+        @for (crumb of breadcrumbs; track crumb.id; let last = $last) {
+          <span 
+            class="breadcrumb-item" 
+            [class.current]="last"
+            (click)="onBreadcrumbClick(crumb)">
+            {{ crumb.name }}
+          </span>
+          @if (!last) {
+            <span class="separator">/</span>
+          }
+        }
+      }
+    </div>
+  </div>
+
+  <div class="header-center">
+    @if(!hasSelection) {
+      <div class="search-container">
+        <div class="search-wrapper">
+          <mat-icon class="search-icon">search</mat-icon>
+          <input 
+            class="search-input"
+            placeholder="Search files and folders..." 
+            [(ngModel)]="searchQuery" 
+            (keyup.enter)="onSearch()">
+        </div>
+      </div>
+    }
+    @if(hasSelection) {
+      <div class="selection-info">
+        <span class="selection-count">{{ selectedCount }} item{{ selectedCount > 1 ? 's' : '' }} selected</span>
+      </div>
+    }
+  </div>
+
+  <div class="header-right">
+    @if(!hasSelection) {
+      <button mat-raised-button color="primary" class="upload-btn" (click)="onUploadFiles()">
+        <mat-icon>cloud_upload</mat-icon>
+        Upload
+      </button>
+      
+      <button mat-stroked-button class="new-folder-btn" (click)="onCreateFolder()">
+        <mat-icon>create_new_folder</mat-icon>
+        New folder
+      </button>
+
+      <button mat-icon-button [matMenuTriggerFor]="viewMenu" class="view-menu-btn">
+        <mat-icon>view_module</mat-icon>
+      </button>
+      
+      <mat-menu #viewMenu="matMenu">
+        <button mat-menu-item (click)="onViewModeChange('grid')">
+          <mat-icon>view_module</mat-icon>
+          <span>Grid view</span>
+        </button>
+        <button mat-menu-item (click)="onViewModeChange('list')">
+          <mat-icon>view_list</mat-icon>
+          <span>List view</span>
+        </button>
+      </mat-menu>
+
+    }
+    
+    @if(hasSelection) {
+      <button mat-raised-button class="download-btn" (click)="onDownloadSelected()">
+        <mat-icon>cloud_download</mat-icon>
+        Download
+      </button>
+      
+      <button mat-raised-button color="warn" class="delete-btn" (click)="onDeleteSelected()">
+        <mat-icon>delete</mat-icon>
+        Delete
+      </button>
+      
+    }
+  </div>
+</div>

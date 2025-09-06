@@ -1,0 +1,24 @@
+<h2 mat-dialog-title>Create New Folder</h2>
+
+<div mat-dialog-content>
+  <mat-form-field appearance="outline" style="width: 100%;">
+    <mat-label>Folder Name</mat-label>
+    <input 
+      matInput 
+      [(ngModel)]="folderName" 
+      placeholder="Enter folder name"
+      (keyup.enter)="onCreate()"
+      #nameInput>
+  </mat-form-field>
+</div>
+
+<div mat-dialog-actions align="end">
+  <button mat-button mat-dialog-close>Cancel</button>
+  <button 
+    mat-raised-button 
+    color="primary" 
+    [disabled]="!folderName.trim()"
+    (click)="onCreate()">
+    Create
+  </button>
+</div>

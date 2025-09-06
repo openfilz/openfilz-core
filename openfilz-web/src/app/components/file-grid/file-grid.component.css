@@ -1,0 +1,191 @@
+.file-grid-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+  margin-left: 1rem;
+}
+
+.file-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 16px;
+  padding: 24px;
+  background-color: #f8f9fa;
+  flex-grow: 1;
+  overflow-y: auto;
+}
+
+.file-item {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  height: 140px;
+  background-color: white;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.file-item:hover {
+  border-color: #6c7ae0;
+  box-shadow: 0 2px 8px rgba(108, 122, 224, 0.15);
+}
+
+.file-item.selected {
+  border: 2px solid #6c7ae0;
+  background-color: #f0f2ff;
+}
+
+.file-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  min-height: 32px;
+  background-color: transparent;
+  flex-shrink: 0;
+}
+
+.file-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px 12px 12px;
+  text-align: center;
+  flex: 1;
+}
+
+.file-icon {
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.file-icon mat-icon {
+  font-size: 32px;
+  width: 32px;
+  height: 32px;
+  color: #6c757d;
+}
+
+.file-icon mat-icon.file-type-folder {
+  color: #ffc107;
+}
+
+.file-icon mat-icon.file-type-file {
+  color: #6c757d;
+}
+
+.file-name {
+  font-weight: 400;
+  font-size: 12px;
+  line-height: 1.3;
+  word-break: break-word;
+  max-width: 100%;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  color: #212529;
+  text-align: center;
+}
+
+.delete-item {
+  color: #dc3545;
+}
+
+.file-header mat-checkbox {
+  transform: scale(0.8);
+}
+
+.file-header mat-checkbox ::ng-deep .mat-checkbox-frame {
+  border-color: #dee2e6;
+}
+
+.file-header button {
+  width: 24px;
+  height: 24px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.file-item:hover .file-header button {
+  opacity: 1;
+}
+
+.file-header button mat-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+  color: #6c757d;
+}
+
+mat-paginator {
+    flex-shrink: 0;
+    background: #fff;
+    border-top: 1px solid #e5e7eb;
+}
+
+.dropzone-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  color: white;
+  text-align: center;
+}
+
+.dropzone-overlay.file-over {
+  display: flex;
+  background-color: rgba(0, 0, 0, 0.7);
+  background-image: url('https://www.gstatic.com/images/icons/material/system_gm/1x/cloud_upload_white_48dp.png'); /* Placeholder image */
+  background-repeat: no-repeat;
+  background-position: center 40%;
+  flex-direction: column;
+}
+
+.dropzone-message {
+  margin-top: 80px; /* Adjust based on image size */
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.dropzone-message mat-icon {
+  display: none; /* Hide the icon when background image is used */
+}
+
+@media (max-width: 768px) {
+  .file-grid {
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 12px;
+    padding: 16px;
+  }
+  
+  .file-item {
+    height: 120px;
+  }
+  
+  .file-icon mat-icon {
+    font-size: 28px;
+    width: 28px;
+    height: 28px;
+  }
+  
+  .file-name {
+    font-size: 11px;
+  }
+
+  mat-paginator {
+  }
+}

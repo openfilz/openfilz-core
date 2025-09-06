@@ -1,0 +1,24 @@
+<h2 mat-dialog-title>Rename {{ data.type === 'FOLDER' ? 'Folder' : 'File' }}</h2>
+
+<div mat-dialog-content>
+  <mat-form-field appearance="outline" style="width: 100%;">
+    <mat-label>{{ data.type === 'FOLDER' ? 'Folder' : 'File' }} Name</mat-label>
+    <input 
+      matInput 
+      [(ngModel)]="newName" 
+      placeholder="Enter new name"
+      (keyup.enter)="onRename()"
+      #nameInput>
+  </mat-form-field>
+</div>
+
+<div mat-dialog-actions align="end">
+  <button mat-button mat-dialog-close>Cancel</button>
+  <button 
+    mat-raised-button 
+    color="primary" 
+    [disabled]="!newName.trim() || newName.trim() === data.name"
+    (click)="onRename()">
+    Rename
+  </button>
+</div>

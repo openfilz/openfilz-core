@@ -1,0 +1,290 @@
+{
+  "realm": "your-realm",
+  "enabled": true,
+  "clients": [
+    {
+      "clientId": "test-client",
+      "secret": "test-client-secret",
+      "enabled": true,
+      "publicClient": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "standardFlowEnabled": true,
+      "rootUrl": "http://localhost:8080",
+      "defaultClientScopes": [
+        "test-client-scope",
+        "roles",
+        "basic"
+      ]
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "test-client-scope",
+      "description": "",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "email",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "introspection.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "user.attribute": "email",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "email",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "User groups mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "true",
+            "introspection.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "lightweight.claim": "false",
+            "access.token.claim": "true",
+            "claim.name": "groups"
+          }
+        }
+      ]
+    },
+    {
+      "name": "roles",
+      "description": "OpenID Connect scope for add user roles to the access token",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "consent.screen.text": "${rolesScopeConsentText}",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "realm roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "foo",
+            "introspection.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "multivalued": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "basic",
+      "description": "OpenID Connect scope for add all basic claims to the token",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "auth_time",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usersessionmodel-note-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.session.note": "AUTH_TIME",
+            "id.token.claim": "true",
+            "introspection.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "auth_time",
+            "jsonType.label": "long"
+          }
+        },
+        {
+          "name": "sub",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "consentRequired": false,
+          "config": {
+            "introspection.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "audit-user",
+      "firstName": "audit-user first name",
+      "lastName": "audit-user last name",
+      "email": "audit-user@test.com",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password"
+        }
+      ],
+      "realmRoles": [
+        "AUDITOR"
+      ],
+      "groups": [
+        "/GED/AUDITOR"
+      ]
+    },
+    {
+      "username": "reader-user",
+      "firstName": "reader-user first name",
+      "lastName": "reader-user last name",
+      "email": "reader-user@test.com",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password"
+        }
+      ],
+      "realmRoles": [
+        "READER"
+      ],
+      "groups": [
+        "/GED/READER"
+      ]
+    },
+    {
+      "username": "contributor-user",
+      "firstName": "contributor-user first name",
+      "lastName": "contributor-user last name",
+      "email": "contributor-user@test.com",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password"
+        }
+      ],
+      "realmRoles": [
+        "CONTRIBUTOR"
+      ],
+      "groups": [
+        "/GED/CONTRIBUTOR"
+      ]
+    },
+    {
+      "username": "cleaner-user",
+      "firstName": "cleaner-user first name",
+      "lastName": "cleaner-user last name",
+      "email": "cleaner-user@test.com",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password"
+        }
+      ],
+      "realmRoles": [
+        "CLEANER"
+      ],
+      "groups": [
+        "/GED/CLEANER"
+      ]
+    },
+    {
+      "username": "admin-user",
+      "firstName": "admin-user first name",
+      "lastName": "admin-user last name",
+      "email": "admin-user@test.com",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password"
+        }
+      ],
+      "realmRoles": [
+        "CONTRIBUTOR", "CLEANER", "AUDITOR"
+      ],
+      "groups": [
+        "/GED/CONTRIBUTOR",
+        "/GED/CLEANER",
+        "/GED/AUDITOR"
+      ]
+    },
+    {
+      "username": "test-user",
+      "firstName": "test-user first name",
+      "lastName": "test-user last name",
+      "email": "test-user@test.com",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password"
+        }
+      ],
+      "realmRoles": [
+
+      ]
+    }
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "AUDITOR",
+        "description": "AUDITOR role"
+      },
+      {
+        "name": "CONTRIBUTOR",
+        "description": "CONTRIBUTOR role"
+      },
+      {
+        "name": "READER",
+        "description": "READER role"
+      },
+      {
+        "name": "CLEANER",
+        "description": "CLEANER role"
+      }
+    ]
+  },
+  "groups": [
+    {
+      "name": "GED",
+      "path": "/GED",
+      "subGroups": [
+        {
+          "name": "AUDITOR",
+          "path": "/GED/AUDITOR"
+        },
+        {
+          "name": "CONTRIBUTOR",
+          "path": "/GED/CONTRIBUTOR"
+        },
+        {
+          "name": "READER",
+          "path": "/GED/READER"
+        },
+        {
+          "name": "CLEANER",
+          "path": "/GED/CLEANER"
+        }
+      ]
+    }
+  ]
+}
