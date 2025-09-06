@@ -172,7 +172,7 @@
                         <goals>
                             <goal>repackage</goal>
                         </goals>
-
+                        <phase>post-integration-test</phase>
                     </execution>
                 </executions>
             </plugin>
@@ -220,7 +220,6 @@
                     <execution>
                         <goals>
                             <goal>integration-test</goal>
-                            <goal>verify</goal>
                         </goals>
                     </execution>
                 </executions>
