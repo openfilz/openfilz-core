@@ -803,7 +803,7 @@ public class DocumentServiceImpl implements DocumentService {
 
     // Utility method to find a document
     @Override
-    public Mono<Document> findDocumentById(UUID documentId, Authentication auth) {
+    public Mono<Document> findDocumentToDownloadById(UUID documentId, Authentication auth) {
         return documentDAO.findById(documentId, auth)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)));
     }

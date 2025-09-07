@@ -162,7 +162,7 @@ public class DocumentController {
     @GetMapping("/{documentId}/download")
     @Operation(summary = "Download a document", description = "Downloads a single file document.")
     public Mono<ResponseEntity<Resource>> downloadDocument(@PathVariable UUID documentId, Authentication authentication) {
-        return documentService.findDocumentById(documentId, authentication) // First get metadata like name
+        return documentService.findDocumentToDownloadById(documentId, authentication) // First get metadata like name
                 .flatMap(docInfo -> documentService.downloadDocument(docInfo, authentication)
                         .map(resource -> sendDownloadResponse(docInfo, resource))
                 );

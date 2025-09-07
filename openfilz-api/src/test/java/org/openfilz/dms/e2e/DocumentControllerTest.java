@@ -11,14 +11,11 @@ import org.openfilz.dms.dto.request.DeleteMetadataRequest;
 import org.openfilz.dms.dto.request.SearchMetadataRequest;
 import org.openfilz.dms.dto.response.DocumentInfo;
 import org.openfilz.dms.dto.response.UploadResponse;
-import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.exception.DocumentNotFoundException;
 import org.openfilz.dms.service.DocumentService;
 import org.springframework.core.io.Resource;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -125,7 +122,7 @@ class DocumentControllerTest {
     void downloadDocument_NotFound_ShouldReturnNotFound() {
         UUID documentId = UUID.randomUUID();
 
-        when(documentService.findDocumentById(documentId, authentication)).thenReturn(Mono.error(new DocumentNotFoundException(documentId)));
+        when(documentService.findDocumentToDownloadById(documentId, authentication)).thenReturn(Mono.error(new DocumentNotFoundException(documentId)));
 
         StepVerifier.create(documentController.downloadDocument(documentId, authentication))
                 .expectError(DocumentNotFoundException.class)

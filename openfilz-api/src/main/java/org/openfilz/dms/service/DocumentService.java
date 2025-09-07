@@ -54,7 +54,7 @@ public interface DocumentService {
 
     Mono<Map<String, Object>> getDocumentMetadata(UUID documentId, SearchMetadataRequest request, Authentication auth);
 
-    Mono<Document> findDocumentById(UUID documentId, Authentication authentication); // Utility
+    Mono<Document> findDocumentToDownloadById(UUID documentId, Authentication authentication); // Utility
 
     Mono<DocumentInfo> getDocumentInfo(UUID documentId, Boolean withMetadata, Authentication authentication);
 
