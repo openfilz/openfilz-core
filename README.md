@@ -15,6 +15,12 @@ OpenFilz is a document management API designed for scalability, security, and pe
 
 ---
 
+## Web Interface
+
+A web-based graphical user interface (GUI), similar to Google Drive, is currently under development in the `openfilz-web` module. This interface will provide a user-friendly way to perform all file and folder operations provided by the API.
+
+---
+
 ## Features
 
 ### File System Operations
@@ -82,12 +88,12 @@ Security is handled by the **Spring Cloud Gateway**, which acts as the single po
 
 ### Audit Trail
 
-Every write operation (`CREATE`, `UPDATE`, `DELETE`) is recorded in an immutable audit trail. The audit log captures:
+Every operation is recorded in an immutable audit trail. The audit log captures:
 
-- **Who:** The user principal from the JWT token.
-- **What:** The action performed (e.g., `FILE_UPLOAD`, `FOLDER_DELETE`).
+- **Who:** The email of the user from the JWT token (the user `email` has to be mapped to a claim in the token)
+- **What:** The action performed (e.g., `CREATE_FOLDER`, `UPLOAD_DOCUMENT`, `DOWNLOAD_DOCUMENT`...).
 - **When:** A precise timestamp of the event.
-- **Where:** The storage location (S3/filesystem) and database records affected.
+- **Where:** The document concerned by this action.
 
 ### Request Flow
 
