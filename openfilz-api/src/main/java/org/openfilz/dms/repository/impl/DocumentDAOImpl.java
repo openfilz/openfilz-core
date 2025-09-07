@@ -137,7 +137,7 @@ public class DocumentDAOImpl implements DocumentDAO {
             return Flux.error(new IllegalArgumentException("All criteria cannot be empty."));
         }
         StringBuilder sql = new StringBuilder(selectDocumentIds);
-        boolean first = true;
+        boolean first = isWhereNotInSelect();
         if(metadataCriteria) {
             first = isFirst(first, sql);
             sqlUtils.appendJsonEqualsCriteria(selectDocumentPrefix, METADATA, sql);
@@ -172,6 +172,10 @@ public class DocumentDAOImpl implements DocumentDAO {
             query = sqlUtils.bindCriteria(SqlColumnMapping.PARENT_ID, request.parentFolderId(), query);
         }
         return executeQuery(authentication, query, mapDocumentId());
+    }
+
+    protected boolean isWhereNotInSelect() {
+        return true;
     }
 
     protected Function<Readable, UUID> mapDocumentId() {
