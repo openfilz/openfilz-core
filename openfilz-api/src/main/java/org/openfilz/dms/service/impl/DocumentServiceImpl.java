@@ -263,7 +263,7 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     private Mono<Void> deleteFolderRecursive(UUID folderId, Authentication auth) {
-        return documentDAO.findDocumentByIdAndType(auth, folderId, FOLDER)
+        return documentDAO.getFolderToDelete(auth, folderId)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, folderId)))
                 .flatMap(folder -> {
                     // 1. Delete child files

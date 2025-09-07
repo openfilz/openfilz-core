@@ -28,7 +28,7 @@ public interface DocumentDAO {
 
     Mono<Boolean> existsByIdAndType(Authentication authentication, UUID id, DocumentType type);
 
-    Mono<Document> findDocumentByIdAndType(Authentication auth, UUID folderId, DocumentType documentType);
+    Mono<Document> getFolderToDelete(Authentication auth, UUID folderId);
 
     Flux<Document> findDocumentsByParentIdAndType(Authentication auth, @Nonnull UUID folderId, @Nonnull DocumentType documentType);
 

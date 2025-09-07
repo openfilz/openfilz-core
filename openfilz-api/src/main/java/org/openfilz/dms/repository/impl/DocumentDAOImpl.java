@@ -29,6 +29,7 @@ import java.util.function.Function;
 
 import static org.openfilz.dms.entity.SqlColumnMapping.*;
 import static org.openfilz.dms.entity.SqlTableMapping.DOCUMENT;
+import static org.openfilz.dms.enums.DocumentType.FOLDER;
 import static org.openfilz.dms.utils.FileConstants.SLASH;
 import static org.openfilz.dms.utils.SqlUtils.isFirst;
 
@@ -296,8 +297,8 @@ public class DocumentDAOImpl implements DocumentDAO {
     }
 
     @Override
-    public Mono<Document> findDocumentByIdAndType(Authentication auth, UUID folderId, DocumentType documentType) {
-        return documentRepository.findByIdAndType(folderId, documentType);
+    public Mono<Document> getFolderToDelete(Authentication auth, UUID folderId) {
+        return documentRepository.findByIdAndType(folderId, FOLDER);
     }
 
     @Override
