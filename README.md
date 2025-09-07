@@ -1,106 +1,101 @@
+# OpenFilz Document Management System
+
 [![Build Backend with Maven](https://github.com/openfilz/openfilz-core/actions/workflows/build-backend.yml/badge.svg)](https://github.com/openfilz/openfilz-core/actions/workflows/build-backend.yml)
-![image](./.github/badges/jacoco.svg)
-![image](./.github/badges/branches.svg)
+![Jacoco Coverage](./.github/badges/jacoco.svg)
+![Branches Coverage](./.github/badges/branches.svg)
 ![Maven Central Version](https://img.shields.io/maven-central/v/org.openfilz/openfilz-api?link=https%3A%2F%2Fcentral.sonatype.com%2Fnamespace%2Forg.openfilz)
 
-# 🚀 **_OpenFilz_** Document Management API: Modern, Reactive, and Secure 🚀
-
-Welcome to the next generation of document management. This isn't just another file storage API; it's a meticulously crafted, high-performance system designed for scalability, security, and a stellar developer experience. It provides a robust, centralized solution to handle all your application's document needs.
-
-> Our philosophy is simple: **abstract complexity, empower developers.** We handle the intricate details of storage, security, and performance so you can focus on building amazing features.
+OpenFilz is a document management API designed for scalability, security, and performance. It provides a centralized solution for handling document and folder-related operations within your application.
 
 ---
 
-## 📚 Related Components 
+## Related Components
 
-- [Document Management Gateway](./openfilz-gateway/README.md): Learn about the API gateway, security, and how to access the system's Swagger UI.
-
----
-
-## ✨ Key Features at a Glance ✨
-
-### 1. Intuitive & Powerful File System Operations
-
-Manage your digital assets with the ease of a local file system but with the power of a distributed, cloud-native application.
-
-*   📂 **Hierarchical Folder Management:** Create an infinite folder structure to perfectly organize your data. Simply provide a `parentId` to nest folders, or omit it to create them at the root level.
-*   💨 **Atomic Bulk Operations:** Why make a thousand calls when one will do? Move, copy, or delete entire sets of files and folders in a **single, efficient API call**. The API handles the complexity of processing these operations reliably.
-*   🔄 **Recursive Actions:** When you move or copy a folder, its entire contents—including all subfolders and files—are moved or copied with it, maintaining the integrity of your hierarchy.
-*   ✏️ **Seamless Renaming:** Rename any file or folder instantly with a simple `PUT` request. Thanks to our intelligent storage design, renaming a folder with thousands of files is a near-instant metadata update, not a costly storage operation.
-
-### 2. The Power of Smart, Flexible Metadata
-
-Unleash the true potential of your documents by enriching them with meaningful data. Our metadata engine is built for flexibility and powerful querying.
-
-*   🗂️ **Dynamic Metadata on Upload:** Attach any custom metadata as a simple JSON object during single or multiple file uploads.
-*   🔧 **Granular Metadata Control:**
-    *   **Update:** Add or modify specific key-value pairs without touching the rest of the metadata.
-    *   **Replace:** Completely swap out a document's old metadata for a new set.
-    *   **Delete:** Precisely remove specific metadata keys you no longer need.
-*   🔍 **Advanced Metadata Search:** This is the API's superpower!
-    *   **Find Documents by Content:** Retrieve a list of all document IDs that match a specific set of metadata criteria (e.g., `{"customerId": "123", "status": "approved"}`).
-    *   **Query Specific Keys:** Fetch only the metadata fields you need for a given document, minimizing payload size and improving performance.
-
-### 3. Efficient & Convenient Data Transfer
-
-Getting data in and out of the system is designed to be as smooth as possible.
-
-*   📤 **Bulk Uploads:** Upload hundreds of files in a single `multipart/form-data` request, each with its own optional metadata and target folder.
-*   📥 **ZIP Downloads:** Retrieve multiple documents at once as a single, conveniently packaged `.zip` archive. Just provide an array of document IDs, and the API does the rest.
+- [Document Management Gateway](./openfilz-gateway/README.md): Describes the API gateway, security configuration, and how to access the Swagger UI.
 
 ---
 
-## 🛠️ Under the Hood: An Architecture Built for the Future 🛠️
+## Web Interface
 
-The "cool" features on the surface are powered by a modern, robust, and thoughtfully designed architecture.
-
-### A Fully Reactive Core
-The entire system is built on a non-blocking, reactive stack using **Spring WebFlux** and **R2DBC**.
-
-*   **What this means for you:**
-    *   **Blazing-Fast Performance:** Handles massive concurrency with a small number of threads, leading to lower memory consumption and higher throughput.
-    *   **Extreme Scalability:** Perfectly suited for microservices architectures and scales horizontally with ease.
-    *   **End-to-End Reactivity:** From the API endpoint to the database call, the entire request lifecycle is asynchronous, ensuring your application remains responsive under heavy load.
-
-### Intelligent Storage Abstraction
-We separate the logical hierarchy from the physical storage, which provides immense flexibility.
-
-*   **Virtual Folders:** Folders exist only as metadata in the **PostgreSQL database**. On the storage layer (**Local Filesystem or S3**), we only store files.
-*   **The Benefit:** Operations like moving a file or renaming a folder are simply fast metadata updates in the database. There's no need for slow, costly file system moves or re-writes.
-*   **Pluggable Backend:** The storage layer is an interface, allowing you to switch between a local filesystem for development and a **MinIO/S3** backend for production without changing a single line of your application code.
-
-### A Dream for Developers
-We believe a great API should be a joy to use.
-
-*   📝 **Modern Java:** We leverage **Java Records** for clean, immutable, and boilerplate-free Data Transfer Objects (DTOs), further streamlined with **Lombok** annotations.
-*   📖 **Self-Documenting:** All endpoints are fully documented using OpenAPI (Swagger), providing a clear, interactive contract for developers to work with.
-*   ✅ **Tested & Reliable:** A comprehensive suite of **JUnit** tests ensures the codebase is stable, reliable, and behaves as expected.
+A web-based graphical user interface (GUI), similar to Google Drive, is currently under development in the `openfilz-web` module. This interface will provide a user-friendly way to perform all file and folder operations provided by the API.
 
 ---
 
-## 🛡️ Ironclad Security & Comprehensive Auditing 🛡️
+## Features
 
-Security isn't an afterthought; it's a core principle of the API's design.
+### File System Operations
 
-### Centralized, Gateway-Powered Security
-The **Spring Cloud Gateway** acts as a fortified front door for the entire system.
+- **Hierarchical Folder Management:** Organize files within a nested folder structure. Create folders at the root level or within other folders by specifying a `parentId`.
+- **Bulk Operations:** Move, copy, or delete multiple files and folders in a single API call for efficiency.
+- **Recursive Actions:** Operations on folders (move, copy, delete) are applied recursively to all their contents.
+- **Renaming:** Files and folders can be renamed via a `PUT` request. This is a fast metadata-only operation.
 
-1.  **Single Point of Entry:** Clients interact only with the gateway, never directly with the API.
-2.  **Authentication & Authorization:** The gateway integrates with **Keycloak** to enforce authentication. It validates the JWT token on every incoming request.
-3.  **Secure Routing:** Only valid, authenticated requests are routed to the Document Management API.
-4.  **Defense in Depth:** The API itself re-validates the JWT token, ensuring that it cannot be accessed without proper credentials, even within the internal network.
+### Metadata Management
 
-### Every Action is Accounted For
-A complete, immutable **audit trail** is generated for every write operation and stored securely in the database.
+- **Dynamic Metadata:** Attach custom JSON metadata to files during upload.
+- **Granular Metadata Control:**
+    - **Update:** Add or modify specific key-value pairs in a document's metadata.
+    - **Replace:** Overwrite a document's existing metadata with a new JSON object.
+    - **Delete:** Remove specific keys from a document's metadata.
+- **Metadata-based Search:**
+    - **Query by Content:** Find documents matching specific metadata criteria.
+    - **Retrieve Specific Fields:** Fetch only the required metadata fields for a document to reduce payload size.
 
-*   **Who:** The user's principal is extracted from the JWT token.
-*   **What:** The action performed (e.g., `FILE_UPLOAD`, `FOLDER_DELETE`).
-*   **When:** A precise timestamp for the event.
-*   **Where:** Traces all writes to both the storage layer (S3/filesystem) and the database.
+### Data Transfer
 
-This provides complete visibility and accountability for every change made in the system.
+- **Bulk Uploads:** Upload multiple files in a single `multipart/form-data` request, with optional metadata and a target folder for each.
+- **ZIP Downloads:** Download multiple documents as a single `.zip` archive by providing a list of document IDs.
 
-### Request Flow at a Glance
+### Security Management
+
+- **OIDC Resource Server:** When enabled, the API acts as an OIDC resource server, validating JWT tokens for every request.
+- **Pluggable Authorization:** Supports a default role-based authorization model using roles from the JWT, and allows for a fully custom authorization model to be implemented for advanced scenarios.
+- **Security Toggle:** Security can be disabled for development and testing environments.
+
+---
+
+## Architecture
+
+### Reactive Core
+
+The system is built on a non-blocking, reactive stack using **Spring WebFlux** and **R2DBC** for high concurrency and scalability. This ensures that the application remains responsive under heavy load.
+
+### Storage Abstraction
+
+OpenFilz separates the logical folder hierarchy from the physical file storage.
+
+- **Virtual Folders:** Folders are represented as metadata in a **PostgreSQL** database. Only files are stored in the physical storage backend (e.g., Local Filesystem or S3-compatible object storage).
+- **Efficient Operations:** As a result, operations like moving or renaming a folder are fast metadata updates in the database, avoiding costly file system operations.
+- **Pluggable Storage Backend:** The storage layer is designed as an interface, allowing you to switch between a local filesystem for development and a **MinIO/S3** backend for production without application code changes.
+
+### Developer Experience
+
+- **Modern Java:** Uses **Java Records** for immutable Data Transfer Objects (DTOs) and **Lombok** to reduce boilerplate code.
+- **API Documentation:** Endpoints are documented using OpenAPI (Swagger) for a clear and interactive API contract.
+- **Testing:** The project includes a comprehensive suite of **JUnit** tests.
+
+---
+
+## Security and Auditing
+
+### Centralized Security
+
+Security is handled by the **Spring Cloud Gateway**, which acts as the single point of entry.
+
+1.  **Authentication:** The gateway integrates with **Keycloak** to validate JWT tokens for every incoming request.
+2.  **Secure Routing:** Only authenticated and authorized requests are forwarded to the Document Management API.
+3.  **Defense in Depth:** The API re-validates the JWT, ensuring security even within the internal network.
+
+### Audit Trail
+
+Every operation is recorded in an immutable audit trail. The audit log captures:
+
+- **Who:** The email of the user from the JWT token (the user `email` has to be mapped to a claim in the token)
+- **What:** The action performed (e.g., `CREATE_FOLDER`, `UPLOAD_DOCUMENT`, `DOWNLOAD_DOCUMENT`...).
+- **When:** A precise timestamp of the event.
+- **Where:** The document concerned by this action.
+
+### Request Flow
 
 ```mermaid
 sequenceDiagram
@@ -127,6 +122,6 @@ sequenceDiagram
 
 ---
 
-## Building and Running 
+## Building and Running
 
-See [BUILD_AND_TEST.md](BUILD_AND_TEST.md) for detailed instructions on how to build, configure, and run the application locally, including how to run integration tests with Testcontainers.
+See [BUILD_AND_TEST.md](BUILD_AND_TEST.md) for detailed instructions on how to build, configure, and run the application, including how to execute integration tests with Testcontainers.

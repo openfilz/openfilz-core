@@ -10,7 +10,7 @@ In any large-scale enterprise, applications frequently need to handle files—fr
 
 ## Our Solution: A Centralized, API-First Approach
 
-The **Document Management API** is designed to solve these challenges by providing a single, robust, and standardized service for all document-related operations. It acts as the central source of truth for files and their associated metadata.
+The **OpenFilz API** is designed to solve these challenges by providing a single, robust, and standardized service for all document-related operations. It acts as the central source of truth for files and their associated metadata.
 
 By abstracting away the complexities of file storage, organization, and security, this API empowers developers to treat document management as a reliable utility. Instead of building these foundational features, teams can simply consume our well-defined endpoints, allowing them to focus on delivering core business value.
 
@@ -38,7 +38,7 @@ Frontend applications, backend microservices, and data processing pipelines can 
 
 ## Security
 
-The Document Management API provides flexible security options.
+The OpenFilz API provides flexible security options.
 
 ### Disabling Security
 
@@ -53,7 +53,7 @@ spring:
 ### Enabled Security (OIDC Resource Server)
 
 When security is enabled, the API acts as an OIDC resource server, validating JWT tokens for every request.
-
+~~~~
 #### Default Authorization
 
 The default authorization model uses roles extracted from the JWT token. You can configure how roles are looked up using the `spring.security.role-token-lookup` property.
