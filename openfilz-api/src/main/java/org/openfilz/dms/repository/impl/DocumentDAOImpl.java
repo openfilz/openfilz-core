@@ -41,7 +41,6 @@ public class DocumentDAOImpl implements DocumentDAO {
     public static final String EQUALS_ID = " = :id";
     public static final String IS_NULL = " is null";
     public static final String EQUALS_TYPE = " and type = :type";
-    private final UserInfoService userInfoService;
 
     private static final String SELECT_ID_FROM_DOCUMENTS = "SELECT id FROM " + DOCUMENT + " d ";
 
@@ -50,20 +49,6 @@ public class DocumentDAOImpl implements DocumentDAO {
             SELECT d.id, d.type, d.name
             FROM Documents d
             WHERE d.parent_id""";
-
-    private static final String SELECT_OWN_FOLDER_ELEMENT_INFO = """
-            SELECT d.id, d.type, d.name
-            FROM Documents d
-            left join users u on u.email = :email
-            left join doc_owner o on o.doc_id = d.id
-            WHERE o.owner_id = u.id and d.parent_id""";
-
-    private static final String SELECT_SHARED_FOLDER_ELEMENT_INFO = """
-            SELECT d.id, d.type, d.name
-            FROM Documents d
-            left join users u on u.email = :email
-            left join doc_share s on s.doc_id = d.id
-            WHERE s.user_id = u.id""";
 
     public static final String SELECT_CHILDREN = """
             WITH RECURSIVE folder_tree AS (
@@ -313,7 +298,12 @@ public class DocumentDAOImpl implements DocumentDAO {
     }
 
     @Override
-    public Mono<Document> save(Document document) {
+    public Mono<Document> update(Document document) {
+        return documentRepository.save(document);
+    }
+
+    @Override
+    public Mono<Document> create(Document document) {
         return documentRepository.save(document);
     }
 

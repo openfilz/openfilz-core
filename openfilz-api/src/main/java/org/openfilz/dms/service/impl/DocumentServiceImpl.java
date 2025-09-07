@@ -123,13 +123,13 @@ public class DocumentServiceImpl implements DocumentService {
 
     private Function<String, Mono<Document>> saveNewDocumentFunction(Document.DocumentBuilder request) {
         return username -> {
-            Document folder = request
+            Document document = request
                     .createdAt(OffsetDateTime.now())
                     .updatedAt(OffsetDateTime.now())
                     .createdBy(username)
                     .updatedBy(username)
                     .build();
-            return documentDAO.save(folder);
+            return documentDAO.create(document);
         };
     }
 
@@ -379,7 +379,7 @@ public class DocumentServiceImpl implements DocumentService {
             documentToMove.setParentId(request.targetFolderId());
             documentToMove.setUpdatedAt(OffsetDateTime.now());
             documentToMove.setUpdatedBy(username);
-            return documentDAO.save(documentToMove);
+            return documentDAO.update(documentToMove);
         });
     }
 
@@ -554,7 +554,7 @@ public class DocumentServiceImpl implements DocumentService {
                 fileToRename.setName(request.newName());
                 fileToRename.setUpdatedAt(OffsetDateTime.now());
                 fileToRename.setUpdatedBy(username);
-                return documentDAO.save(fileToRename);
+                return documentDAO.update(fileToRename);
             });
         });
     }
@@ -611,7 +611,7 @@ public class DocumentServiceImpl implements DocumentService {
             document.setUpdatedAt(OffsetDateTime.now());
             document.setUpdatedBy(username);
             document.setSize(contentLength);
-            return documentDAO.save(document);
+            return documentDAO.update(document);
         }).flatMap(savedDoc -> {
                     // 3. Delete old file content from storage
                     if (oldStoragePath != null && !oldStoragePath.equals(newStoragePath)) {
@@ -635,7 +635,7 @@ public class DocumentServiceImpl implements DocumentService {
                         document.setMetadata(newMetadata != null ? Json.of(objectMapper.valueToTree(newMetadata).toString()) : null);
                         document.setUpdatedAt(OffsetDateTime.now());
                         document.setUpdatedBy(username);
-                        return documentDAO.save(document);
+                        return documentDAO.update(document);
                     }))
                     .flatMap(updatedDoc -> auditService.logAction(auth, REPLACE_DOCUMENT_METADATA, updatedDoc.getType(), updatedDoc.getId(),
                            new ReplaceAudit(newMetadata)).thenReturn(updatedDoc));
@@ -653,7 +653,7 @@ public class DocumentServiceImpl implements DocumentService {
                     if (currentMetadata == null || currentMetadata.isNull() || !currentMetadata.isObject()) {
                         updatedMetadataNode = objectMapper.createObjectNode();
                     } else {
-                        updatedMetadataNode = (ObjectNode) currentMetadata.deepCopy();
+                        updatedMetadataNode = currentMetadata.deepCopy();
                     }
 
                     for (Map.Entry<String, Object> entry : request.metadataToUpdate().entrySet()) {
@@ -662,7 +662,7 @@ public class DocumentServiceImpl implements DocumentService {
                     document.setMetadata(jsonUtils.toJson(updatedMetadataNode));
                     document.setUpdatedAt(OffsetDateTime.now());
                     document.setUpdatedBy(username);
-                    return documentDAO.save(document);
+                    return documentDAO.update(document);
                 }))
                 .flatMap(updatedDoc -> auditService.logAction(auth, UPDATE_DOCUMENT_METADATA, updatedDoc.getType(), updatedDoc.getId(),
                         new UpdateMetadataAudit(request.metadataToUpdate())).thenReturn(updatedDoc));
@@ -686,7 +686,7 @@ public class DocumentServiceImpl implements DocumentService {
                     document.setMetadata(jsonUtils.toJson(currentMetadata));
                     document.setUpdatedAt(OffsetDateTime.now());
                     document.setUpdatedBy(username);
-                    return documentDAO.save(document);
+                    return documentDAO.update(document);
                 }))
                 .flatMap(updatedDoc -> auditService.logAction(auth, DELETE_DOCUMENT_METADATA, updatedDoc.getType(), updatedDoc.getId(),
                         new DeleteMetadataAudit(request.metadataKeysToDelete())));

@@ -3,6 +3,7 @@ package org.openfilz.dms.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import graphql.scalars.ExtendedScalars;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.mapper.DocumentMapper;
 import org.openfilz.dms.repository.graphql.DocumentDataFetcher;
 import org.openfilz.dms.repository.graphql.ListFolderCountDataFetcher;
@@ -15,6 +16,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.graphql.execution.RuntimeWiringConfigurer;
 import org.springframework.r2dbc.core.DatabaseClient;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Map;
 
@@ -22,6 +24,7 @@ import static org.openfilz.dms.config.GraphQlQueryConfig.*;
 
 @RequiredArgsConstructor
 @Configuration
+@Slf4j
 public class GraphQlConfig {
 
     @Value("${features.graphql.data-fetcher.list:#{null}}")
@@ -60,17 +63,22 @@ public class GraphQlConfig {
     private ListFolderDataFetcher getListFolderDataFetcher() {
         try {
             return customListFolderDataFetcherClass == null ? new ListFolderDataFetcher(databaseClient, mapper, objectMapper, sqlUtils, listFolderCriteria)
-                    : (ListFolderDataFetcher) Class.forName(customListFolderDataFetcherClass).getConstructors()[0]
+                    : (ListFolderDataFetcher) getConstructor(customListFolderDataFetcherClass)
                     .newInstance(databaseClient, mapper, objectMapper, sqlUtils, listFolderCriteria);
         } catch (ClassNotFoundException | InstantiationException | IllegalAccessException | InvocationTargetException e) {
             throw new RuntimeException(e);
         }
     }
 
+    private Constructor<?> getConstructor(String className) throws ClassNotFoundException {
+        log.info("Loading custom class '{}'", className);
+        return Class.forName(className).getConstructors()[0];
+    }
+
     private ListFolderCountDataFetcher getListFolderCountDataFetcher() {
         try {
             return customListFolderCountDataFetcherClass == null ? new ListFolderCountDataFetcher(databaseClient, mapper, objectMapper, sqlUtils, listFolderCriteria)
-                    : (ListFolderCountDataFetcher) Class.forName(customListFolderCountDataFetcherClass).getConstructors()[0]
+                    : (ListFolderCountDataFetcher) getConstructor(customListFolderCountDataFetcherClass)
                     .newInstance(databaseClient, mapper, objectMapper, sqlUtils, listFolderCriteria);
         } catch (ClassNotFoundException | InstantiationException | IllegalAccessException | InvocationTargetException e) {
             throw new RuntimeException(e);
@@ -80,7 +88,7 @@ public class GraphQlConfig {
     private DocumentDataFetcher getDocumentDataFetcher() {
         try {
             return customDocumentDataFetcherClass == null ? new DocumentDataFetcher(databaseClient, mapper, objectMapper, sqlUtils)
-                    : (DocumentDataFetcher) Class.forName(customDocumentDataFetcherClass).getConstructors()[0]
+                    : (DocumentDataFetcher) getConstructor(customDocumentDataFetcherClass)
                     .newInstance(databaseClient, mapper, objectMapper, sqlUtils);
         } catch (ClassNotFoundException | InstantiationException | IllegalAccessException | InvocationTargetException e) {
             throw new RuntimeException(e);

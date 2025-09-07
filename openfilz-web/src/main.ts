@@ -26,7 +26,7 @@ bootstrapApplication(App, {
 
       const basic = setContext((operation, context) => ({
         headers: {
-          Accept: 'charset=utf-8',
+          Accept: 'application/json; charset=UTF-8',
         },
       }));
 

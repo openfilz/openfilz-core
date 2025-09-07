@@ -34,7 +34,9 @@ public interface DocumentDAO {
 
     Mono<Document> findById(UUID documentId, Authentication authentication);
 
-    Mono<Document> save(Document document);
+    Mono<Document> update(Document document);
 
     Mono<Void> delete(Document document);
+
+    Mono<Document> create(Document document);
 }
