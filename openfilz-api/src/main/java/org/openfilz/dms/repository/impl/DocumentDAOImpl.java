@@ -2,6 +2,7 @@ package org.openfilz.dms.repository.impl;
 
 import io.r2dbc.spi.Readable;
 import jakarta.annotation.Nonnull;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.dto.request.SearchByMetadataRequest;
@@ -37,11 +38,11 @@ import static org.openfilz.dms.utils.SqlUtils.isFirst;
 @Slf4j
 public class DocumentDAOImpl implements DocumentDAO {
 
-    public static final String EQUALS_ID = " = :id";
-    public static final String IS_NULL = " is null";
-    public static final String EQUALS_TYPE = " and type = :type";
+    protected static final String EQUALS_ID = " = :id";
+    protected static final String IS_NULL = " is null";
+    protected static final String EQUALS_TYPE = " and type = :type";
 
-    private static final String SELECT_ID_FROM_DOCUMENTS = "SELECT id FROM " + DOCUMENT + " d ";
+    protected static final String SELECT_ID_FROM_DOCUMENTS = "SELECT id FROM " + DOCUMENT;
 
 
     private static final String SELECT_ALL_FOLDER_ELEMENT_INFO = """
@@ -49,7 +50,7 @@ public class DocumentDAOImpl implements DocumentDAO {
             FROM Documents d
             WHERE d.parent_id""";
 
-    public static final String SELECT_CHILDREN = """
+    protected static final String SELECT_CHILDREN = """
             WITH RECURSIVE folder_tree AS (
               SELECT
                  id,
@@ -74,7 +75,7 @@ public class DocumentDAOImpl implements DocumentDAO {
              SELECT * FROM folder_tree""";
 
 
-    public static final String SELECT_CHILDREN_2 = """
+    protected static final String SELECT_CHILDREN_2 = """
             WITH RECURSIVE folder_tree AS (
               SELECT
                  id,
@@ -100,16 +101,25 @@ public class DocumentDAOImpl implements DocumentDAO {
 
 
 
-    public static final String FULLPATH = "fullpath";
-    public static final String STORAGE = "storage";
-    public static final String PARENT_ID = "parentId";
-    public static final String IDS = "ids";
+    protected static final String FULLPATH = "fullpath";
+    protected static final String STORAGE = "storage";
+    protected static final String PARENT_ID = "parentId";
+    protected static final String IDS = "ids";
 
-    private final DocumentRepository documentRepository;
+    protected final DocumentRepository documentRepository;
 
-    private final DatabaseClient databaseClient;
+    protected final DatabaseClient databaseClient;
 
-    private  final SqlUtils sqlUtils;
+    protected  final SqlUtils sqlUtils;
+
+    protected String selectDocumentIds;
+    protected String selectDocumentPrefix;
+
+    @PostConstruct
+    protected void init() {
+        this.selectDocumentIds =  SELECT_ID_FROM_DOCUMENTS;
+        this.selectDocumentPrefix = null;
+    }
 
     @Override
     public Flux<UUID> listDocumentIds(Authentication authentication, SearchByMetadataRequest request) {
@@ -126,27 +136,27 @@ public class DocumentDAOImpl implements DocumentDAO {
                 && !metadataCriteria) {
             return Flux.error(new IllegalArgumentException("All criteria cannot be empty."));
         }
-        StringBuilder sql = new StringBuilder(SELECT_ID_FROM_DOCUMENTS);
+        StringBuilder sql = new StringBuilder(selectDocumentIds);
         boolean first = true;
         if(metadataCriteria) {
             first = isFirst(first, sql);
-            sqlUtils.appendJsonEqualsCriteria(null, METADATA, sql);
+            sqlUtils.appendJsonEqualsCriteria(selectDocumentPrefix, METADATA, sql);
         }
         if(nameCriteria) {
             first = isFirst(first, sql);
-            sqlUtils.appendEqualsCriteria(null, NAME, sql);
+            sqlUtils.appendEqualsCriteria(selectDocumentPrefix, NAME, sql);
         }
         if(typeCriteria) {
             first = isFirst(first, sql);
-            sqlUtils.appendEqualsCriteria(null, TYPE, sql);
+            sqlUtils.appendEqualsCriteria(selectDocumentPrefix, TYPE, sql);
         }
         if(parentFolderCriteria) {
             first = isFirst(first, sql);
-            sqlUtils.appendEqualsCriteria(null, SqlColumnMapping.PARENT_ID, sql);
+            sqlUtils.appendEqualsCriteria(selectDocumentPrefix, SqlColumnMapping.PARENT_ID, sql);
         }
         if(rootOnlyCriteria) {
             isFirst(first, sql);
-            sqlUtils.appendIsNullCriteria(null, SqlColumnMapping.PARENT_ID, sql);
+            sqlUtils.appendIsNullCriteria(selectDocumentPrefix, SqlColumnMapping.PARENT_ID, sql);
         }
         DatabaseClient.GenericExecuteSpec query = databaseClient.sql(sql.toString());
         if(metadataCriteria) {
@@ -164,7 +174,7 @@ public class DocumentDAOImpl implements DocumentDAO {
         return executeQuery(authentication, query, mapDocumentId());
     }
 
-    private Function<Readable, UUID> mapDocumentId() {
+    protected Function<Readable, UUID> mapDocumentId() {
         return row -> row.get(ID, UUID.class);
     }
 
@@ -212,11 +222,11 @@ public class DocumentDAOImpl implements DocumentDAO {
         return executeQuery(authentication, query, mapFolderElementInfo());
     }
 
-    private <T> Flux<T> executeQuery(Authentication authentication, DatabaseClient.GenericExecuteSpec query, Function<Readable, T> mappingFunction) {
+    protected  <T> Flux<T> executeQuery(Authentication authentication, DatabaseClient.GenericExecuteSpec query, Function<Readable, T> mappingFunction) {
        return query.map(mappingFunction).all();
     }
 
-    private StringBuilder buildListDocumentInfoInFolderQuery(UUID parentFolderId, DocumentType type) {
+    protected StringBuilder buildListDocumentInfoInFolderQuery(UUID parentFolderId, DocumentType type) {
         StringBuilder sql = new StringBuilder();
         sql.append(SELECT_ALL_FOLDER_ELEMENT_INFO);
 
@@ -237,13 +247,13 @@ public class DocumentDAOImpl implements DocumentDAO {
         return parentId == null ? documentRepository.countDocumentByParentIdIsNull() : documentRepository.countDocumentByParentIdEquals(parentId);
     }
 
-    private Function<Readable, FolderElementInfo> mapFolderElementInfo() {
+    protected Function<Readable, FolderElementInfo> mapFolderElementInfo() {
         return row -> new FolderElementInfo(row.get(ID, UUID.class),
                 DocumentType.valueOf(row.get(TYPE, String.class)),
                 row.get(NAME, String.class));
     }
 
-    private Flux<Tuple2<UUID, String>> getFolders(List<UUID> documentIds) {
+    protected Flux<Tuple2<UUID, String>> getFolders(List<UUID> documentIds) {
         return databaseClient.sql("select id, name from documents where type = :type and id in (:ids)")
                 .bind(TYPE, DocumentType.FOLDER.toString())
                 .bind(IDS, documentIds)
@@ -251,16 +261,16 @@ public class DocumentDAOImpl implements DocumentDAO {
                 .all();
     }
 
-    private ChildElementInfo toRootChild(io.r2dbc.spi.Readable row) {
+    protected ChildElementInfo toRootChild(io.r2dbc.spi.Readable row) {
         return getChildElementInfo(row, NAME, STORAGE_PATH);
 
     }
 
-    private ChildElementInfo toChild(io.r2dbc.spi.Readable row) {
+    protected ChildElementInfo toChild(io.r2dbc.spi.Readable row) {
         return getChildElementInfo(row, FULLPATH, STORAGE);
     }
 
-    private ChildElementInfo getChildElementInfo(Readable row, String fullpath, String storage) {
+    protected ChildElementInfo getChildElementInfo(Readable row, String fullpath, String storage) {
         return ChildElementInfo.builder()
                 .id(row.get(ID, UUID.class))
                 .name(row.get(NAME, String.class))
