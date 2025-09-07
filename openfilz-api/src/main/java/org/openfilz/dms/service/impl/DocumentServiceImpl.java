@@ -469,7 +469,7 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @Transactional
     public Flux<UUID> copyFolders(CopyRequest request, Authentication auth) {
-        Mono<Document> targetFolderMono = documentDAO.findById(request.targetFolderId(), auth)
+        Mono<Document> targetFolderMono = getCopyTargetFolder(request, auth)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, request.targetFolderId())))
                 .filter(doc -> doc.getType() == DocumentType.FOLDER)
                 .switchIfEmpty(Mono.error(new OperationForbiddenException("Target is not a folder: " + request.targetFolderId())));
@@ -484,6 +484,10 @@ public class DocumentServiceImpl implements DocumentService {
                             return copyFolderRecursive(folderIdToCopy, request.targetFolderId(), request.allowDuplicateFileNames(), auth);
                         })
         );
+    }
+
+    protected Mono<Document> getCopyTargetFolder(CopyRequest request, Authentication auth) {
+        return documentDAO.findById(request.targetFolderId(), auth);
     }
 
     private Flux<UUID> copyFolderRecursive(UUID sourceFolderId, UUID targetParentFolderId, Boolean allowDuplicateFileNames, Authentication auth) {
