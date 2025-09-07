@@ -313,7 +313,12 @@ public class DocumentDAOImpl implements DocumentDAO {
     }
 
     @Override
-    public Mono<Document> save(Document document) {
+    public Mono<Document> update(Document document) {
+        return documentRepository.save(document);
+    }
+
+    @Override
+    public Mono<Document> create(Document document) {
         return documentRepository.save(document);
     }
 
