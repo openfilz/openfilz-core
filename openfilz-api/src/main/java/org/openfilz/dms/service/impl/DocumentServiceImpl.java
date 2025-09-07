@@ -653,7 +653,7 @@ public class DocumentServiceImpl implements DocumentService {
                     if (currentMetadata == null || currentMetadata.isNull() || !currentMetadata.isObject()) {
                         updatedMetadataNode = objectMapper.createObjectNode();
                     } else {
-                        updatedMetadataNode = (ObjectNode) currentMetadata.deepCopy();
+                        updatedMetadataNode = currentMetadata.deepCopy();
                     }
 
                     for (Map.Entry<String, Object> entry : request.metadataToUpdate().entrySet()) {

@@ -61,7 +61,7 @@ public class DocumentManagementLocalStorageIT extends TestContainersBaseConfig {
 
     private HttpGraphQlClient graphQlHttpClient;
 
-    private static Long testTxtSize;
+    private static final Long testTxtSize;
 
     static {
         try {
@@ -1767,7 +1767,7 @@ public class DocumentManagementLocalStorageIT extends TestContainersBaseConfig {
                 .returnResult().getResponseBody();
 
         Assertions.assertNotNull(auditTrail);
-        Assertions.assertTrue(!auditTrail.isEmpty());
+        Assertions.assertFalse(auditTrail.isEmpty());
 
         auditTrail = webTestClient.post().uri(RestApiVersion.API_PREFIX + "/audit/search")
                 .body(BodyInserters.fromValue(new SearchByAuditLogRequest(null, null, null, null, Map.of("filename", "schema.sql"))))
@@ -1777,7 +1777,7 @@ public class DocumentManagementLocalStorageIT extends TestContainersBaseConfig {
                 .returnResult().getResponseBody();
 
         Assertions.assertNotNull(auditTrail);
-        Assertions.assertTrue(!auditTrail.isEmpty());
+        Assertions.assertFalse(auditTrail.isEmpty());
 
         auditTrail = webTestClient.post().uri(RestApiVersion.API_PREFIX + "/audit/search")
                 .body(BodyInserters.fromValue(new SearchByAuditLogRequest(null, uploadResponse.id(), null, UPLOAD_DOCUMENT, null)))
@@ -1787,7 +1787,7 @@ public class DocumentManagementLocalStorageIT extends TestContainersBaseConfig {
                 .returnResult().getResponseBody();
 
         Assertions.assertNotNull(auditTrail);
-        Assertions.assertTrue(!auditTrail.isEmpty());
+        Assertions.assertFalse(auditTrail.isEmpty());
 
         RenameRequest renameRequest = new RenameRequest("new-name-for-search_audit.sql");
 
@@ -1838,7 +1838,7 @@ public class DocumentManagementLocalStorageIT extends TestContainersBaseConfig {
 
         Assertions.assertNotNull(auditTrail);
         Assertions.assertEquals(2, auditTrail.size());
-        Assertions.assertEquals(DELETE_FOLDER, auditTrail.get(0).action());;
+        Assertions.assertEquals(DELETE_FOLDER, auditTrail.get(0).action());
         Assertions.assertEquals(CREATE_FOLDER, auditTrail.get(1).action());
 
         auditTrail = webTestClient.get().uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/audit/{id}").queryParam("sort", SortOrder.ASC.name())
@@ -1850,7 +1850,7 @@ public class DocumentManagementLocalStorageIT extends TestContainersBaseConfig {
 
         Assertions.assertNotNull(auditTrail);
         Assertions.assertEquals(2, auditTrail.size());
-        Assertions.assertEquals(DELETE_FOLDER, auditTrail.get(1).action());;
+        Assertions.assertEquals(DELETE_FOLDER, auditTrail.get(1).action());
         Assertions.assertEquals(CREATE_FOLDER, auditTrail.get(0).action());
     }
 
