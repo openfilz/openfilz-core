@@ -26,6 +26,7 @@ import org.openfilz.dms.service.StorageService;
 import org.openfilz.dms.utils.JsonUtils;
 import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.codec.multipart.FilePart;
@@ -55,16 +56,17 @@ import static org.openfilz.dms.utils.FileConstants.SLASH;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "features.custom-access", matchIfMissing = true, havingValue = "false")
 public class DocumentServiceImpl implements DocumentService {
 
     public static final String APPLICATION_OCTET_STREAM = "application/octet-stream";
 
-    private final StorageService storageService;
-    private final ObjectMapper objectMapper; // For JSONB processing
-    private final AuditService auditService; // For auditing
-    private final JsonUtils jsonUtils;
-    private final DocumentDAO documentDAO;
-    private final UserInfoService userInfoService;
+    protected final StorageService storageService;
+    protected final ObjectMapper objectMapper; // For JSONB processing
+    protected final AuditService auditService; // For auditing
+    protected final JsonUtils jsonUtils;
+    protected final DocumentDAO documentDAO;
+    protected final UserInfoService userInfoService;
 
     @Value("${piped.buffer.size:1024}")
     private Integer pipedBufferSize;
