@@ -26,6 +26,7 @@ import org.openfilz.dms.service.StorageService;
 import org.openfilz.dms.utils.JsonUtils;
 import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.codec.multipart.FilePart;
@@ -55,16 +56,17 @@ import static org.openfilz.dms.utils.FileConstants.SLASH;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "features.custom-access", matchIfMissing = true, havingValue = "false")
 public class DocumentServiceImpl implements DocumentService {
 
     public static final String APPLICATION_OCTET_STREAM = "application/octet-stream";
-    
-    private final StorageService storageService;
-    private final ObjectMapper objectMapper; // For JSONB processing
-    private final AuditService auditService; // For auditing
-    private final JsonUtils jsonUtils;
-    private final DocumentDAO documentDAO;
-    private final UserInfoService userInfoService;
+
+    protected final StorageService storageService;
+    protected final ObjectMapper objectMapper; // For JSONB processing
+    protected final AuditService auditService; // For auditing
+    protected final JsonUtils jsonUtils;
+    protected final DocumentDAO documentDAO;
+    protected final UserInfoService userInfoService;
 
     @Value("${piped.buffer.size:1024}")
     private Integer pipedBufferSize;
@@ -90,10 +92,10 @@ public class DocumentServiceImpl implements DocumentService {
                     }
                     if(request.parentId() != null) {
                         return documentDAO.existsByIdAndType(auth, request.parentId(), FOLDER).flatMap(folderExists->{
-                           if(!folderExists) {
-                               return Mono.error(new DocumentNotFoundException(FOLDER, request.parentId()));
-                           }
-                           return saveFolderInRepository(request, auth, folderMetadata);
+                            if(!folderExists) {
+                                return Mono.error(new DocumentNotFoundException(FOLDER, request.parentId()));
+                            }
+                            return saveFolderInRepository(request, auth, folderMetadata);
                         });
                     }
                     return saveFolderInRepository(request, auth, folderMetadata);
@@ -201,14 +203,12 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     @Transactional
-    public Mono<Resource> downloadDocument(UUID documentId, Authentication auth) {
-        return documentDAO.findById(documentId, auth)
-                .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
-                .flatMap(doc -> doc.getType() == FILE ?
-                        storageService.loadFile(doc.getStoragePath())
-                        : zipFolder(documentDAO.getChildren(documentId)))
-                .flatMap(r -> auditService.logAction(auth, AuditAction.DOWNLOAD_DOCUMENT, FILE, documentId)
-                                .thenReturn(r));
+    public Mono<? extends Resource> downloadDocument(Document doc, Authentication auth) {
+        return doc.getType() == FILE ?
+                storageService.loadFile(doc.getStoragePath())
+                : zipFolder(documentDAO.getChildren(doc.getId()))
+                .flatMap(r -> auditService.logAction(auth, AuditAction.DOWNLOAD_DOCUMENT, FILE, doc.getId())
+                        .thenReturn(r));
     }
 
     private Mono<? extends Resource> zipFolder(Flux<ChildElementInfo> children) {
@@ -263,7 +263,7 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     private Mono<Void> deleteFolderRecursive(UUID folderId, Authentication auth) {
-        return documentDAO.findDocumentByIdAndType(auth, folderId, FOLDER)
+        return documentDAO.getFolderToDelete(auth, folderId)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, folderId)))
                 .flatMap(folder -> {
                     // 1. Delete child files
@@ -515,7 +515,7 @@ public class DocumentServiceImpl implements DocumentService {
                                                                 return doSaveDocument(auth, saveNewDocumentFunction(documentBuilder));
                                                             })
                                                             .flatMap(ccf -> auditService.logAction(auth, COPY_FILE_CHILD, FILE, ccf.getId(),
-                                                                     new CopyAudit(childFile.getId(), newFolderId, sourceFolderId)).thenReturn(ccf)));
+                                                                    new CopyAudit(childFile.getId(), newFolderId, sourceFolderId)).thenReturn(ccf)));
                                         });
 
                                 // 3. Recursively copy child folders
@@ -630,15 +630,15 @@ public class DocumentServiceImpl implements DocumentService {
     public Mono<Document> replaceDocumentMetadata(UUID documentId, Map<String, Object> newMetadata, Authentication auth) {
 
         return documentDAO.findById(documentId, auth)
-                    .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
-                    .flatMap(document -> doSaveDocument(auth, username -> {
-                        document.setMetadata(newMetadata != null ? Json.of(objectMapper.valueToTree(newMetadata).toString()) : null);
-                        document.setUpdatedAt(OffsetDateTime.now());
-                        document.setUpdatedBy(username);
-                        return documentDAO.update(document);
-                    }))
-                    .flatMap(updatedDoc -> auditService.logAction(auth, REPLACE_DOCUMENT_METADATA, updatedDoc.getType(), updatedDoc.getId(),
-                           new ReplaceAudit(newMetadata)).thenReturn(updatedDoc));
+                .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
+                .flatMap(document -> doSaveDocument(auth, username -> {
+                    document.setMetadata(newMetadata != null ? Json.of(objectMapper.valueToTree(newMetadata).toString()) : null);
+                    document.setUpdatedAt(OffsetDateTime.now());
+                    document.setUpdatedBy(username);
+                    return documentDAO.update(document);
+                }))
+                .flatMap(updatedDoc -> auditService.logAction(auth, REPLACE_DOCUMENT_METADATA, updatedDoc.getType(), updatedDoc.getId(),
+                        new ReplaceAudit(newMetadata)).thenReturn(updatedDoc));
     }
 
     @Override
@@ -705,24 +705,24 @@ public class DocumentServiceImpl implements DocumentService {
             ZipArchiveOutputStream zos = new ZipArchiveOutputStream(pipedOutputStream);
 
             documentDAO.getElementsAndChildren(documentIds)
-                .collectList()
-                .flatMap(docs -> {
-                    if (docs.isEmpty()) {
-                        return Mono.error(new DocumentNotFoundException("No valid files found for the provided IDs to zip."));
-                    }
-                    if (docs.size() != documentIds.size()) {
-                        log.warn("Some requested documents were not files or not found. Zipping available files.");
-                    }
-                    return Flux.fromIterable(docs)
-                        .concatMap(doc ->  addDocumentToZip(doc, zos))
-                        .then(Mono.just(true));
-                })
-                .doOnTerminate(() -> closeOutputStream(zos))
-                .subscribeOn(Schedulers.boundedElastic())
-                .subscribe(
-                    null,
-                    error -> log.error("Error during zip creation", error)
-                );
+                    .collectList()
+                    .flatMap(docs -> {
+                        if (docs.isEmpty()) {
+                            return Mono.error(new DocumentNotFoundException("No valid files found for the provided IDs to zip."));
+                        }
+                        if (docs.size() != documentIds.size()) {
+                            log.warn("Some requested documents were not files or not found. Zipping available files.");
+                        }
+                        return Flux.fromIterable(docs)
+                                .concatMap(doc ->  addDocumentToZip(doc, zos))
+                                .then(Mono.just(true));
+                    })
+                    .doOnTerminate(() -> closeOutputStream(zos))
+                    .subscribeOn(Schedulers.boundedElastic())
+                    .subscribe(
+                            null,
+                            error -> log.error("Error during zip creation", error)
+                    );
 
             return Mono.just(new InputStreamResource(pipedInputStream));
         } catch (IOException e) {
@@ -782,31 +782,30 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     public Mono<Map<String, Object>> getDocumentMetadata(UUID documentId, SearchMetadataRequest request, Authentication auth) {
         return documentDAO.findById(documentId, auth)
-                    .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
-                    .map(document -> {
-                        JsonNode metadataNode = jsonUtils.toJsonNode(document.getMetadata());
-                        if (metadataNode == null || metadataNode.isNull()) {
-                            return new HashMap<String, Object>();
-                        }
-                        Map<String, Object> allMetadata = objectMapper.convertValue(metadataNode, Map.class);
+                .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
+                .map(document -> {
+                    JsonNode metadataNode = jsonUtils.toJsonNode(document.getMetadata());
+                    if (metadataNode == null || metadataNode.isNull()) {
+                        return new HashMap<String, Object>();
+                    }
+                    Map<String, Object> allMetadata = objectMapper.convertValue(metadataNode, Map.class);
 
-                        if (request.metadataKeys() != null && !request.metadataKeys().isEmpty()) {
-                            Map<String, Object> filteredMetadata = new HashMap<>();
-                            for (String key : request.metadataKeys()) {
-                                if (allMetadata.containsKey(key)) {
-                                    filteredMetadata.put(key, allMetadata.get(key));
-                                }
+                    if (request.metadataKeys() != null && !request.metadataKeys().isEmpty()) {
+                        Map<String, Object> filteredMetadata = new HashMap<>();
+                        for (String key : request.metadataKeys()) {
+                            if (allMetadata.containsKey(key)) {
+                                filteredMetadata.put(key, allMetadata.get(key));
                             }
-                            return filteredMetadata;
                         }
-                        return allMetadata;
-                    });
+                        return filteredMetadata;
+                    }
+                    return allMetadata;
+                });
     }
-
 
     // Utility method to find a document
     @Override
-    public Mono<Document> findDocumentById(UUID documentId, Authentication auth) {
+    public Mono<Document> findDocumentToDownloadById(UUID documentId, Authentication auth) {
         return documentDAO.findById(documentId, auth)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)));
     }
@@ -816,11 +815,11 @@ public class DocumentServiceImpl implements DocumentService {
         return documentDAO.findById(documentId, authentication)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
                 .flatMap(doc -> {
-            DocumentInfo info = withMetadata != null && withMetadata.booleanValue() ?
-                    new DocumentInfo(doc.getType(), doc.getName(), doc.getParentId(), doc.getMetadata() != null ? jsonUtils.toMap(doc.getMetadata()) : null, doc.getSize())
-                    : new DocumentInfo(doc.getType(), doc.getName(), doc.getParentId(), null, null);
-            return Mono.just(info);
-        } );
+                    DocumentInfo info = withMetadata != null && withMetadata.booleanValue() ?
+                            new DocumentInfo(doc.getType(), doc.getName(), doc.getParentId(), doc.getMetadata() != null ? jsonUtils.toMap(doc.getMetadata()) : null, doc.getSize())
+                            : new DocumentInfo(doc.getType(), doc.getName(), doc.getParentId(), null, null);
+                    return Mono.just(info);
+                } );
     }
 
     @Override
@@ -834,9 +833,9 @@ public class DocumentServiceImpl implements DocumentService {
         }
         return documentDAO.existsByIdAndType(authentication, folderId, DocumentType.FOLDER)
                 .flatMapMany(exists -> {
-                   if(!exists) {
-                       return Flux.error(new DocumentNotFoundException(FOLDER, folderId));
-                   }
+                    if(!exists) {
+                        return Flux.error(new DocumentNotFoundException(FOLDER, folderId));
+                    }
                     return documentDAO.listDocumentInfoInFolder(authentication, folderId, type);
                 });
     }

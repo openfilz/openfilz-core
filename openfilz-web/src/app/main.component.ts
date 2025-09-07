@@ -17,13 +17,14 @@ import {DocumentApiService} from './services/document-api.service';
 import {FileIconService} from './services/file-icon.service';
 
 import {
-  CreateFolderRequest,
-  DeleteRequest,
-  DocumentType,
-  ElementInfo,
-  FileItem, ListFolderAndCountResponse,
-  RenameRequest,
-  Root
+    CreateFolderRequest,
+    DeleteRequest,
+    DocumentType,
+    ElementInfo,
+    FileItem,
+    ListFolderAndCountResponse,
+    RenameRequest,
+    Root
 } from './models/document.models';
 
 import {DragDropDirective} from "./directives/drag-drop.directive";

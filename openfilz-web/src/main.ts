@@ -1,8 +1,8 @@
 import {Component, inject} from '@angular/core';
-import { bootstrapApplication } from '@angular/platform-browser';
-import { provideAnimations } from '@angular/platform-browser/animations';
-import { provideHttpClient } from '@angular/common/http';
-import { MainComponent } from './app/main.component';
+import {bootstrapApplication} from '@angular/platform-browser';
+import {provideAnimations} from '@angular/platform-browser/animations';
+import {provideHttpClient} from '@angular/common/http';
+import {MainComponent} from './app/main.component';
 import {provideApollo} from "apollo-angular";
 import {HttpLink} from "apollo-angular/http";
 import {setContext} from "@apollo/client/link/context";

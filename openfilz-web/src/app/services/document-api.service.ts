@@ -1,21 +1,20 @@
-import { Injectable } from '@angular/core';
-import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
-import {filter, map, Observable} from 'rxjs';
-import { Apollo, gql } from 'apollo-angular';
+import {Injectable} from '@angular/core';
+import {HttpClient, HttpHeaders, HttpParams} from '@angular/common/http';
+import {map, Observable} from 'rxjs';
+import {Apollo, gql} from 'apollo-angular';
 import {
-  ElementInfo,
-  DocumentInfo,
-  CreateFolderRequest,
-  FolderResponse,
-  RenameRequest,
-  MoveRequest,
   CopyRequest,
+  CreateFolderRequest,
   DeleteRequest,
-  UploadResponse,
-  SearchByMetadataRequest,
+  DocumentInfo,
+  ElementInfo,
+  FolderResponse,
+  ListFolderAndCountResponse,
+  MoveRequest,
   MultipleUploadFileParameter,
-  MultipleUploadFileParameterAttributes,
-  ListFolderAndCountResponse
+  RenameRequest,
+  SearchByMetadataRequest,
+  UploadResponse
 } from '../models/document.models';
 import {environment} from "../../environments/environment";
 
