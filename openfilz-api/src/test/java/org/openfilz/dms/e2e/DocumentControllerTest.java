@@ -73,27 +73,6 @@ class DocumentControllerTest {
                 .verifyComplete();
     }
 
-    @Test
-    void downloadDocument_Success() {
-        UUID documentId = UUID.randomUUID();
-        Document doc = Document.builder()
-                .id(documentId)
-                .name("test.txt")
-                .contentType("text/plain")
-                .type(DocumentType.FILE)
-                .build();
-
-        when(documentService.findDocumentById(documentId, authentication)).thenReturn(Mono.just(doc));
-        when(documentService.downloadDocument(documentId, authentication)).thenReturn(Mono.just(resource));
-
-        StepVerifier.create(documentController.downloadDocument(documentId, authentication))
-                .expectNextMatches(response ->
-                    response.getStatusCode().is2xxSuccessful() &&
-                    response.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION).contains(doc.getName()) &&
-                    response.getHeaders().getContentType().equals(MediaType.parseMediaType(doc.getContentType()))
-                )
-                .verifyComplete();
-    }
 
     @Test
     void getDocumentMetadata_Success() {

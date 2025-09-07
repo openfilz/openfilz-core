@@ -46,7 +46,7 @@ public interface DocumentService {
 
     Mono<Void> deleteDocumentMetadata(UUID documentId, DeleteMetadataRequest request, Authentication auth);
 
-    Mono<Resource> downloadDocument(UUID documentId, Authentication auth);
+    Mono<? extends Resource> downloadDocument(Document document, Authentication auth);
 
     Mono<Resource> downloadMultipleDocumentsAsZip(List<UUID> documentIds, Authentication auth); // Complex: zipping
 
