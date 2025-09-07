@@ -801,7 +801,6 @@ public class DocumentServiceImpl implements DocumentService {
                 });
     }
 
-
     // Utility method to find a document
     @Override
     public Mono<Document> findDocumentById(UUID documentId, Authentication auth) {
