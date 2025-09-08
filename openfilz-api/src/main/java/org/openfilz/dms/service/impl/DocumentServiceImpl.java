@@ -13,6 +13,7 @@ import org.openfilz.dms.dto.request.*;
 import org.openfilz.dms.dto.response.*;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.entity.PhysicalDocument;
+import org.openfilz.dms.enums.AccessType;
 import org.openfilz.dms.enums.AuditAction;
 import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.exception.DocumentNotFoundException;
@@ -91,7 +92,7 @@ public class DocumentServiceImpl implements DocumentService {
                         return Mono.error(new DuplicateNameException(FOLDER, request.name()));
                     }
                     if(request.parentId() != null) {
-                        return documentDAO.existsByIdAndType(auth, request.parentId(), FOLDER).flatMap(folderExists->{
+                        return documentDAO.existsByIdAndType(auth, request.parentId(), FOLDER, AccessType.RW).flatMap(folderExists->{
                             if(!folderExists) {
                                 return Mono.error(new DocumentNotFoundException(FOLDER, request.parentId()));
                             }
@@ -157,7 +158,7 @@ public class DocumentServiceImpl implements DocumentService {
     public Mono<UploadResponse> uploadDocument(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, Boolean allowDuplicateFileNames, Authentication auth) {
         String originalFilename = filePart.filename().replace(StorageService.FILENAME_SEPARATOR, "");
         if (parentFolderId != null) {
-            return documentDAO.existsByIdAndType(auth, parentFolderId, FOLDER)
+            return documentDAO.existsByIdAndType(auth, parentFolderId, FOLDER, AccessType.RW)
                     .flatMap(exists -> {
                         if (!exists) {
                             return Mono.error(new DocumentNotFoundException(FOLDER, parentFolderId));
@@ -839,7 +840,7 @@ public class DocumentServiceImpl implements DocumentService {
         if(folderId == null) {
             return documentDAO.listDocumentInfoInFolder(authentication, null, type);
         }
-        return documentDAO.existsByIdAndType(authentication, folderId, DocumentType.FOLDER)
+        return documentDAO.existsByIdAndType(authentication, folderId, DocumentType.FOLDER, AccessType.RO)
                 .flatMapMany(exists -> {
                     if(!exists) {
                         return Flux.error(new DocumentNotFoundException(FOLDER, folderId));

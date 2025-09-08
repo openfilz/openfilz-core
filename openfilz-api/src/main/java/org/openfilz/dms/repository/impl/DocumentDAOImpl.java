@@ -10,6 +10,7 @@ import org.openfilz.dms.dto.response.ChildElementInfo;
 import org.openfilz.dms.dto.response.FolderElementInfo;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.entity.SqlColumnMapping;
+import org.openfilz.dms.enums.AccessType;
 import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.repository.DocumentDAO;
 import org.openfilz.dms.repository.DocumentRepository;
@@ -292,7 +293,7 @@ public class DocumentDAOImpl implements DocumentDAO {
     }
 
     @Override
-    public Mono<Boolean> existsByIdAndType(Authentication authentication, UUID id, DocumentType type) {
+    public Mono<Boolean> existsByIdAndType(Authentication authentication, UUID id, DocumentType type, AccessType accessType) {
         return documentRepository.existsByIdAndType(id, type);
     }
 
