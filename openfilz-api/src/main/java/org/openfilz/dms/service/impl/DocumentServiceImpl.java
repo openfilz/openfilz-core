@@ -242,7 +242,7 @@ public class DocumentServiceImpl implements DocumentService {
     @Transactional
     public Mono<Void> deleteFiles(DeleteRequest request, Authentication auth) {
         return Flux.fromIterable(request.documentIds())
-                .flatMap(docId -> documentDAO.findById(docId, auth)
+                .flatMap(docId -> findDocumentToDelete(auth, docId)
                         .switchIfEmpty(Mono.error(new DocumentNotFoundException(docId)))
                         .filter(doc -> doc.getType() == FILE) // Ensure it's a file
                         .switchIfEmpty(Mono.error(new OperationForbiddenException("ID " + docId + " is a folder. Use delete folders API.")))
@@ -251,6 +251,10 @@ public class DocumentServiceImpl implements DocumentService {
                         .then(auditService.logAction(auth, AuditAction.DELETE_FILE, FILE, docId))
                 )
                 .then();
+    }
+
+    protected Mono<Document> findDocumentToDelete(Authentication auth, UUID docId) {
+        return documentDAO.findById(docId, auth);
     }
 
 
@@ -469,7 +473,7 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @Transactional
     public Flux<UUID> copyFolders(CopyRequest request, Authentication auth) {
-        Mono<Document> targetFolderMono = documentDAO.findById(request.targetFolderId(), auth)
+        Mono<Document> targetFolderMono = getCopyTargetFolder(request, auth)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, request.targetFolderId())))
                 .filter(doc -> doc.getType() == DocumentType.FOLDER)
                 .switchIfEmpty(Mono.error(new OperationForbiddenException("Target is not a folder: " + request.targetFolderId())));
@@ -484,6 +488,10 @@ public class DocumentServiceImpl implements DocumentService {
                             return copyFolderRecursive(folderIdToCopy, request.targetFolderId(), request.allowDuplicateFileNames(), auth);
                         })
         );
+    }
+
+    protected Mono<Document> getCopyTargetFolder(CopyRequest request, Authentication auth) {
+        return documentDAO.findById(request.targetFolderId(), auth);
     }
 
     private Flux<UUID> copyFolderRecursive(UUID sourceFolderId, UUID targetParentFolderId, Boolean allowDuplicateFileNames, Authentication auth) {

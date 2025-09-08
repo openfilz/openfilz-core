@@ -50,21 +50,10 @@ jobs:
               "id": "git",
               "username": "x-access-token",
               "password": "${{ steps.app-token.outputs.token }}"
-            },
-            {
-                "id": "central",
-                "username": "${{ secrets.MAVEN_USERNAME }}",
-                "password": "${{ secrets.MAVEN_PASSWORD }}"
             }]
 
-      - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@v6
-        with:
-          gpg_private_key: ${{ secrets.OSSRH_GPG_SECRET_KEY }}
-          passphrase: ${{ secrets.OSSRH_GPG_SECRET_KEY_PASSWORD }}
-
       - name: Build with Maven
-        run: mvn -B clean deploy -Pkube,publishMaven -Dregistry.hostname=ghcr.io -Dregistry.port=443 -Ddocker.context.path=openfilz/ -Djib.to.auth.username=${{ github.actor }} -Djib.to.auth.password=${{ secrets.GITHUB_TOKEN }} --file pom.xml
+        run: mvn -B clean install --file pom.xml
 
       - name: Generate JaCoCo Badge
         id: jacoco-badge

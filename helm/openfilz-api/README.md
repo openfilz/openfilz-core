@@ -76,46 +76,46 @@ The names of the deployed resources are managed by the `bitnami/common` helper c
 
 The following table lists the configurable parameters of the Document Management API chart and their default values.
 
-| Parameter | Description | Default |
-| :--- | :--- | :--- |
-| `nameOverride` | String to override the default chart name component. | `""` |
-| `fullnameOverride` | String to fully override the name of all resources. | `""` |
-| `openshift.enabled` | Enables OpenShift-specific resources and deployment logic. | `false` |
-| `openshift.route.enabled` | Enables the OpenShift Route. Only used when `openshift.enabled` is true. | `false` |
-| `openshift.route.hostname` | The hostname for the Route (e.g., api.example.com). If empty, OpenShift will generate one. | `""` |
-| `openshift.route.tls.enabled` | Enable TLS termination for the Route. | `true` |
-| `openshift.route.tls.termination` | TLS termination policy. Valid values: 'edge', 'passthrough', 'reencrypt'. | `"edge"` |
-| `openshift.route.tls.insecureEdgeTerminationPolicy` | Policy for handling insecure traffic. Valid values: 'Allow', 'Disable', 'Redirect'. | `"Redirect"` |
-| `openshift.route.tls.key` | The private key for the TLS certificate. | `""` |
-| `openshift.route.tls.certificate` | The public TLS certificate. | `""` |
-| `openshift.route.tls.caCertificate` | The CA certificate for the chain. | `""` |
-| `openshift.route.tls.destinationCACertificate` | The CA cert to validate the destination server in 'reencrypt' deployments. | `""` |
-| `replicaCount` | The number of replicas for the Deployment. | `1` |
-| `image.registry` | The container image registry. | `"nexus.oddo-bhf.com:8443"` |
-| `image.repository` | The container image repository. | `"snapshots/openfilz-api"` |
-| `image.tag` | The container image tag. | `"1.0.0-SNAPSHOT"` |
-| `image.pullPolicy` | The image pull policy. | `"Always"` |
-| `image.pullSecrets` | Secrets for pulling images from a private registry. | `[]` |
-| `api.port` | The container port the application listens on. | `9984` |
-| `spring.activeProfile`| The active Spring profile (e.g., kube, dev). | `"kube"` |
-| `database.host` | The hostname of the database server. | `"localhost"` |
-| `database.port` | The port of the database server. | `5432` |
-| `database.name` | The name of the database. | `"dms-db"` |
-| `database.existingSecret`| Name of an existing Secret with DB credentials (keys: `user`, `password`). | `""` |
-| `database.createUser` | The database username to create in the new Secret. | `"app"` |
-| `database.createPassword`| The database password to create. If empty, a random one is generated. | `""` |
-| `storage.type` | The type of storage backend (e.g., 'local' or 'minio'). | `"local"` |
-| `storage.basePath` | The path within the container where the volume is mounted. | `"/var/data/ged"` |
-| `service.type` | The type of Kubernetes Service. | `"ClusterIP"` |
-| `service.port` | The port the Service will expose. | `80` |
-| `ingress.enabled` | Enables the Ingress resource (only if `openshift.enabled` is false). | `true` |
-| `ingress.ingressClassName`| The class of the Ingress controller. | `"nginx"` |
-| `ingress.path` | The path for the Ingress rule. | `"/"` |
-| `ingress.annotations`| Annotations for the Ingress resource. | (map of values) |
-| `ingress.labels` | Custom labels for the Ingress resource. | `{}` |
-| `persistence.enabled`| Enable persistence using a PersistentVolumeClaim. | `true` |
-| `persistence.accessModes`| PVC access modes. | `["ReadWriteOnce"]` |
-| `persistence.size` | PVC storage size. | `"10Mi"` |
-| `persistence.storageClass`| PVC StorageClass. If `""`, the cluster's default is used. | `""` |
-| `persistence.hostPath` | The host path for the manual PV (used only if `openshift.enabled` is false). | `"/tmp/kube-storage"` |
-| `persistence.existingClaim`| Use an existing PVC instead of creating a new one. | `""` |
+| Parameter | Description | Default                   |
+| :--- | :--- |:--------------------------|
+| `nameOverride` | String to override the default chart name component. | `""`                      |
+| `fullnameOverride` | String to fully override the name of all resources. | `""`                      |
+| `openshift.enabled` | Enables OpenShift-specific resources and deployment logic. | `false`                   |
+| `openshift.route.enabled` | Enables the OpenShift Route. Only used when `openshift.enabled` is true. | `false`                   |
+| `openshift.route.hostname` | The hostname for the Route (e.g., api.example.com). If empty, OpenShift will generate one. | `""`                      |
+| `openshift.route.tls.enabled` | Enable TLS termination for the Route. | `true`                    |
+| `openshift.route.tls.termination` | TLS termination policy. Valid values: 'edge', 'passthrough', 'reencrypt'. | `"edge"`                  |
+| `openshift.route.tls.insecureEdgeTerminationPolicy` | Policy for handling insecure traffic. Valid values: 'Allow', 'Disable', 'Redirect'. | `"Redirect"`              |
+| `openshift.route.tls.key` | The private key for the TLS certificate. | `""`                      |
+| `openshift.route.tls.certificate` | The public TLS certificate. | `""`                      |
+| `openshift.route.tls.caCertificate` | The CA certificate for the chain. | `""`                      |
+| `openshift.route.tls.destinationCACertificate` | The CA cert to validate the destination server in 'reencrypt' deployments. | `""`                      |
+| `replicaCount` | The number of replicas for the Deployment. | `1`                       |
+| `image.registry` | The container image registry. | `"ghcr.io"`               |
+| `image.repository` | The container image repository. | `"openfilz/openfilz-api"` |
+| `image.tag` | The container image tag. | `"latest"`                |
+| `image.pullPolicy` | The image pull policy. | `"Always"`                |
+| `image.pullSecrets` | Secrets for pulling images from a private registry. | `[]`                      |
+| `api.port` | The container port the application listens on. | `9984`                    |
+| `spring.activeProfile`| The active Spring profile (e.g., kube, dev). | `"kube"`                  |
+| `database.host` | The hostname of the database server. | `"localhost"`             |
+| `database.port` | The port of the database server. | `5432`                    |
+| `database.name` | The name of the database. | `"dms-db"`                |
+| `database.existingSecret`| Name of an existing Secret with DB credentials (keys: `user`, `password`). | `""`                      |
+| `database.createUser` | The database username to create in the new Secret. | `"app"`                   |
+| `database.createPassword`| The database password to create. If empty, a random one is generated. | `""`                      |
+| `storage.type` | The type of storage backend (e.g., 'local' or 'minio'). | `"local"`                 |
+| `storage.basePath` | The path within the container where the volume is mounted. | `"/var/data/ged"`         |
+| `service.type` | The type of Kubernetes Service. | `"ClusterIP"`             |
+| `service.port` | The port the Service will expose. | `80`                      |
+| `ingress.enabled` | Enables the Ingress resource (only if `openshift.enabled` is false). | `true`                    |
+| `ingress.ingressClassName`| The class of the Ingress controller. | `"nginx"`                 |
+| `ingress.path` | The path for the Ingress rule. | `"/"`                     |
+| `ingress.annotations`| Annotations for the Ingress resource. | (map of values)           |
+| `ingress.labels` | Custom labels for the Ingress resource. | `{}`                      |
+| `persistence.enabled`| Enable persistence using a PersistentVolumeClaim. | `true`                    |
+| `persistence.accessModes`| PVC access modes. | `["ReadWriteOnce"]`       |
+| `persistence.size` | PVC storage size. | `"10Mi"`                  |
+| `persistence.storageClass`| PVC StorageClass. If `""`, the cluster's default is used. | `""`                      |
+| `persistence.hostPath` | The host path for the manual PV (used only if `openshift.enabled` is false). | `"/tmp/kube-storage"`     |
+| `persistence.existingClaim`| Use an existing PVC instead of creating a new one. | `""`                      |
