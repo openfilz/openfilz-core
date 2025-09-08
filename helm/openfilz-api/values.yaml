@@ -53,9 +53,9 @@ replicaCount: 1
 # @param image.pullPolicy The image pull policy.
 # @param image.pullSecrets Secrets for pulling images from a private registry.
 image:
-  registry: localhost:5000
-  repository: snapshots/openfilz-api
-  tag: 1.0.0-SNAPSHOT
+  registry: ghcr.io
+  repository: openfilz/openfilz-api
+  tag: latest
   pullPolicy: Always
   pullSecrets: []
 

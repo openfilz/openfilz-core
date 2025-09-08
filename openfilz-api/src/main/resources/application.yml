@@ -17,7 +17,6 @@ spring:
 
   security:
     no-auth: true # No authentication required
-    ownership-share: false # No ownership and share management
     # cors-allowed-origins: http://localhost:4200/ # Comma-separated list of authorized origins
     # auth-class: optional class name which must inherit org.openfilz.dms.service.impl.AbstractSecurityService - default value : org.openfilz.dms.service.impl.SecurityServiceImpl
     # role-token-lookup: GROUPS or REALM_ACCESS (default value) : optional value used in org.openfilz.dms.service.impl.SecurityServiceImpl to retrieve Role information from Groups or from the Realm_access
