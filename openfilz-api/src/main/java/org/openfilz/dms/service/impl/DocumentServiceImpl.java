@@ -243,7 +243,7 @@ public class DocumentServiceImpl implements DocumentService {
     @Transactional
     public Mono<Void> deleteFiles(DeleteRequest request, Authentication auth) {
         return Flux.fromIterable(request.documentIds())
-                .flatMap(docId -> findDocumentToDelete(auth, docId)
+                .flatMap(docId -> documentDAO.findById(docId, auth, AccessType.RWD)
                         .switchIfEmpty(Mono.error(new DocumentNotFoundException(docId)))
                         .filter(doc -> doc.getType() == FILE) // Ensure it's a file
                         .switchIfEmpty(Mono.error(new OperationForbiddenException("ID " + docId + " is a folder. Use delete folders API.")))
@@ -253,11 +253,6 @@ public class DocumentServiceImpl implements DocumentService {
                 )
                 .then();
     }
-
-    protected Mono<Document> findDocumentToDelete(Authentication auth, UUID docId) {
-        return documentDAO.findById(docId, auth);
-    }
-
 
     @Override
     @Transactional
@@ -298,7 +293,7 @@ public class DocumentServiceImpl implements DocumentService {
             return doMoveFiles(request, auth);
         }
         // 1. Validate target folder exists and is a folder
-        Mono<Document> targetFolderMono = documentDAO.findById(request.targetFolderId(), auth)
+        Mono<Document> targetFolderMono = documentDAO.findById(request.targetFolderId(), auth, AccessType.RW)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, request.targetFolderId())))
                 .filter(doc -> doc.getType() == DocumentType.FOLDER)
                 .switchIfEmpty(Mono.error(new OperationForbiddenException("Target is not a folder: " + request.targetFolderId())));
@@ -310,7 +305,7 @@ public class DocumentServiceImpl implements DocumentService {
 
     private Mono<Void> doMoveFiles(MoveRequest request, Authentication auth) {
         return Flux.fromIterable(request.documentIds())
-                .flatMap(fileId -> documentDAO.findById(fileId, auth)
+                .flatMap(fileId -> documentDAO.findById(fileId, auth, AccessType.RWD)
                         .switchIfEmpty(Mono.error(new DocumentNotFoundException(FILE, fileId)))
                         .filter(doc -> doc.getType() == FILE) // Ensure it's a file being moved
                         .switchIfEmpty(Mono.error(new OperationForbiddenException("Cannot move folder using file move API: " + fileId)))
@@ -327,7 +322,7 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @Transactional
     public Mono<Void> moveFolders(MoveRequest request, Authentication auth) {
-        Mono<Document> targetFolderMono = documentDAO.findById(request.targetFolderId(), auth)
+        Mono<Document> targetFolderMono = documentDAO.findById(request.targetFolderId(), auth, AccessType.RW)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, request.targetFolderId())))
                 .filter(doc -> doc.getType() == DocumentType.FOLDER)
                 .switchIfEmpty(Mono.error(new OperationForbiddenException("Target is not a folder: " + request.targetFolderId())));
@@ -346,7 +341,7 @@ public class DocumentServiceImpl implements DocumentService {
                                     return Mono.error(new OperationForbiddenException("Cannot move a folder into one of its descendants."));
                                 }
 
-                                return documentDAO.findById(folderIdToMove, auth)
+                                return documentDAO.findById(folderIdToMove, auth, AccessType.RWD)
                                         .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, folderIdToMove)))
                                         .filter(doc -> doc.getType() == DocumentType.FOLDER)
                                         .switchIfEmpty(Mono.error(new OperationForbiddenException("Cannot move file using folder move API: " + folderIdToMove)))
@@ -397,7 +392,7 @@ public class DocumentServiceImpl implements DocumentService {
             return Mono.just(true); // Or false depending on definition, for move, this is an invalid state
         }
 
-        return documentDAO.findById(potentialChildId, auth)
+        return documentDAO.findById(potentialChildId, auth, null)
                 .flatMap(childDoc -> {
                     if (childDoc.getParentId() == null) {
                         return Mono.just(false); // Reached root without finding potentialParentId
@@ -417,7 +412,7 @@ public class DocumentServiceImpl implements DocumentService {
         if (request.targetFolderId() == null) {
             return doCopyFiles(request, auth);
         }
-        Mono<Document> targetFolderMono = documentDAO.findById(request.targetFolderId(), auth)
+        Mono<Document> targetFolderMono = documentDAO.findById(request.targetFolderId(), auth, AccessType.RW)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, request.targetFolderId())))
                 .filter(doc -> doc.getType() == DocumentType.FOLDER)
                 .switchIfEmpty(Mono.error(new OperationForbiddenException("Target is not a folder: " + request.targetFolderId())));
@@ -429,7 +424,7 @@ public class DocumentServiceImpl implements DocumentService {
 
     private Flux<CopyResponse> doCopyFiles(CopyRequest request, Authentication auth) {
         return Flux.fromIterable(request.documentIds())
-                .flatMapSequential(fileIdToCopy -> documentDAO.findById(fileIdToCopy, auth)
+                .flatMapSequential(fileIdToCopy -> documentDAO.findById(fileIdToCopy, auth, AccessType.RO)
                         .switchIfEmpty(Mono.error(new DocumentNotFoundException(FILE, fileIdToCopy)))
                         .filter(doc -> doc.getType() == FILE)
                         .switchIfEmpty(Mono.error(new OperationForbiddenException("Cannot copy folder using file copy API: " + fileIdToCopy)))
@@ -474,7 +469,7 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @Transactional
     public Flux<UUID> copyFolders(CopyRequest request, Authentication auth) {
-        Mono<Document> targetFolderMono = getCopyTargetFolder(request, auth)
+        Mono<Document> targetFolderMono = documentDAO.findById(request.targetFolderId(), auth, AccessType.RW)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, request.targetFolderId())))
                 .filter(doc -> doc.getType() == DocumentType.FOLDER)
                 .switchIfEmpty(Mono.error(new OperationForbiddenException("Target is not a folder: " + request.targetFolderId())));
@@ -491,12 +486,8 @@ public class DocumentServiceImpl implements DocumentService {
         );
     }
 
-    protected Mono<Document> getCopyTargetFolder(CopyRequest request, Authentication auth) {
-        return documentDAO.findById(request.targetFolderId(), auth);
-    }
-
-    private Flux<UUID> copyFolderRecursive(UUID sourceFolderId, UUID targetParentFolderId, Boolean allowDuplicateFileNames, Authentication auth) {
-        return documentDAO.findById(sourceFolderId, auth)
+   private Flux<UUID> copyFolderRecursive(UUID sourceFolderId, UUID targetParentFolderId, Boolean allowDuplicateFileNames, Authentication auth) {
+        return documentDAO.findById(sourceFolderId, auth, AccessType.RO)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, sourceFolderId)))
                 .flatMapMany(sourceFolder -> {
                     // Generate unique name for the new folder in the target location
@@ -540,7 +531,7 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @Transactional
     public Mono<Document> renameFile(UUID fileId, RenameRequest request, Authentication auth) {
-        return documentDAO.findById(fileId, auth)
+        return documentDAO.findById(fileId, auth, AccessType.RW)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(FILE, fileId)))
                 .filter(doc -> doc.getType() == FILE)
                 .switchIfEmpty(Mono.error(new OperationForbiddenException("Cannot rename folder using file rename API: " + fileId)))
@@ -571,7 +562,7 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @Transactional
     public Mono<Document> renameFolder(UUID folderId, RenameRequest request, Authentication auth) {
-        return documentDAO.findById(folderId, auth)
+        return documentDAO.findById(folderId, auth, AccessType.RW)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, folderId)))
                 .filter(doc -> doc.getType() == DocumentType.FOLDER)
                 .switchIfEmpty(Mono.error(new OperationForbiddenException("Cannot rename file using folder rename API: " + folderId)))
@@ -591,7 +582,7 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @Transactional
     public Mono<Document> replaceDocumentContent(UUID documentId, FilePart newFilePart, Long contentLength, Authentication auth) {
-        return documentDAO.findById(documentId, auth)
+        return documentDAO.findById(documentId, auth, AccessType.RWD)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
                 .filter(doc -> doc.getType() == FILE) // Only files have content to replace
                 .switchIfEmpty(Mono.error(new OperationForbiddenException("Cannot replace content of a folder: " + documentId)))
@@ -638,7 +629,7 @@ public class DocumentServiceImpl implements DocumentService {
     @Transactional
     public Mono<Document> replaceDocumentMetadata(UUID documentId, Map<String, Object> newMetadata, Authentication auth) {
 
-        return documentDAO.findById(documentId, auth)
+        return documentDAO.findById(documentId, auth, AccessType.RW)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
                 .flatMap(document -> doSaveDocument(auth, username -> {
                     document.setMetadata(newMetadata != null ? Json.of(objectMapper.valueToTree(newMetadata).toString()) : null);
@@ -653,7 +644,7 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @Transactional
     public Mono<Document> updateDocumentMetadata(UUID documentId, UpdateMetadataRequest request, Authentication auth) {
-        return documentDAO.findById(documentId, auth)
+        return documentDAO.findById(documentId, auth, AccessType.RW)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
                 .flatMap(document -> doSaveDocument(auth, username -> {
                     JsonNode currentMetadata = jsonUtils.toJsonNode(document.getMetadata());
@@ -681,7 +672,7 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @Transactional
     public Mono<Void> deleteDocumentMetadata(UUID documentId, DeleteMetadataRequest request, Authentication auth) {
-        return documentDAO.findById(documentId, auth)
+        return documentDAO.findById(documentId, auth, AccessType.RW)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
                 .flatMap(document -> doSaveDocument(auth, username -> {
                     Map<String, Object> currentMetadata = jsonUtils.toMap(document.getMetadata());
@@ -713,7 +704,7 @@ public class DocumentServiceImpl implements DocumentService {
             PipedOutputStream pipedOutputStream = new PipedOutputStream(pipedInputStream);
             ZipArchiveOutputStream zos = new ZipArchiveOutputStream(pipedOutputStream);
 
-            documentDAO.getElementsAndChildren(documentIds)
+            documentDAO.getElementsAndChildren(documentIds, auth)
                     .collectList()
                     .flatMap(docs -> {
                         if (docs.isEmpty()) {
@@ -790,7 +781,7 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     public Mono<Map<String, Object>> getDocumentMetadata(UUID documentId, SearchMetadataRequest request, Authentication auth) {
-        return documentDAO.findById(documentId, auth)
+        return documentDAO.findById(documentId, auth, AccessType.RO)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
                 .map(document -> {
                     JsonNode metadataNode = jsonUtils.toJsonNode(document.getMetadata());
@@ -815,13 +806,13 @@ public class DocumentServiceImpl implements DocumentService {
     // Utility method to find a document
     @Override
     public Mono<Document> findDocumentToDownloadById(UUID documentId, Authentication auth) {
-        return documentDAO.findById(documentId, auth)
+        return documentDAO.findById(documentId, auth, AccessType.RO)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)));
     }
 
     @Override
     public Mono<DocumentInfo> getDocumentInfo(UUID documentId, Boolean withMetadata, Authentication authentication) {
-        return documentDAO.findById(documentId, authentication)
+        return documentDAO.findById(documentId, authentication, AccessType.RO)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
                 .flatMap(doc -> {
                     DocumentInfo info = withMetadata != null && withMetadata.booleanValue() ?

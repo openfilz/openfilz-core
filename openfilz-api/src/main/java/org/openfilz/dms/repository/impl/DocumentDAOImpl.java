@@ -5,6 +5,7 @@ import jakarta.annotation.Nonnull;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jetbrains.annotations.NotNull;
 import org.openfilz.dms.dto.request.SearchByMetadataRequest;
 import org.openfilz.dms.dto.response.ChildElementInfo;
 import org.openfilz.dms.dto.response.FolderElementInfo;
@@ -198,21 +199,20 @@ public class DocumentDAOImpl implements DocumentDAO {
     }
 
     @Override
-    public Flux<ChildElementInfo> getElementsAndChildren(List<UUID> documentIds) {
+    public Flux<ChildElementInfo> getElementsAndChildren(List<UUID> documentIds, Authentication auth) {
         return databaseClient.sql("""
-            SELECT
-                id,
-                name,
-                type,
-                size,
-                storage_path
-            FROM documents
-            where id in (:ids)""")
+                SELECT
+                    id,
+                    name,
+                    type,
+                    size,
+                    storage_path
+                FROM documents
+                where id in (:ids)""")
                 .bind(IDS, documentIds)
                 .map(this::toRootChild)
                 .all()
                 .mergeWith(getChildren(getFolders(documentIds)));
-
     }
 
     @Override
@@ -250,7 +250,8 @@ public class DocumentDAOImpl implements DocumentDAO {
 
     @Override
     public Mono<Long> countDocument(Authentication authentication, UUID parentId) {
-        return parentId == null ? documentRepository.countDocumentByParentIdIsNull() : documentRepository.countDocumentByParentIdEquals(parentId);
+        return parentId == null ? documentRepository.countDocumentByParentIdIsNull()
+                : documentRepository.countDocumentByParentIdEquals(parentId);
     }
 
     protected Function<Readable, FolderElementInfo> mapFolderElementInfo() {
@@ -308,7 +309,7 @@ public class DocumentDAOImpl implements DocumentDAO {
     }
 
     @Override
-    public Mono<Document> findById(UUID documentId, Authentication authentication) {
+    public Mono<Document> findById(UUID documentId, Authentication authentication, AccessType accessType) {
         return documentRepository.findById(documentId);
     }
 

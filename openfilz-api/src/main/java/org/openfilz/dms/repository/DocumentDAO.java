@@ -19,7 +19,7 @@ public interface DocumentDAO {
 
     Flux<ChildElementInfo> getChildren(UUID folderId);
 
-    Flux<ChildElementInfo> getElementsAndChildren(List<UUID> documentIds);
+    Flux<ChildElementInfo> getElementsAndChildren(List<UUID> documentIds, Authentication auth);
 
     Flux<FolderElementInfo> listDocumentInfoInFolder(Authentication authentication, UUID parentFolderId, DocumentType type);
 
@@ -33,7 +33,7 @@ public interface DocumentDAO {
 
     Flux<Document> findDocumentsByParentIdAndType(Authentication auth, @Nonnull UUID folderId, @Nonnull DocumentType documentType);
 
-    Mono<Document> findById(UUID documentId, Authentication authentication);
+    Mono<Document> findById(UUID documentId, Authentication authentication, AccessType accessType);
 
     Mono<Document> update(Document document);
 
