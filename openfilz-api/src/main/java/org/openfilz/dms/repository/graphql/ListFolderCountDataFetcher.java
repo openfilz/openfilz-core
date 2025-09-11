@@ -47,7 +47,7 @@ public class ListFolderCountDataFetcher  extends AbstractDataFetcher<Mono<Long>,
                 }
                 criteria.checkFilter(filter);
                 applyFilter(query, filter);
-                sqlQuery = prepareQuery(null, query, filter);
+                sqlQuery = prepareQuery(environment, query, filter);
             }
         }
         if(sqlQuery == null) {
