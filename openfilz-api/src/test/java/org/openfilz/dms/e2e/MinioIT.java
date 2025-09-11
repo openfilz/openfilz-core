@@ -28,12 +28,12 @@ import java.util.UUID;
 
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-public class DocumentManagementMinioIT extends DocumentManagementLocalStorageIT {
+public class MinioIT extends LocalStorageIT {
 
     @Container
     static MinIOContainer minio = new MinIOContainer("minio/minio:latest");
 
-    public DocumentManagementMinioIT(WebTestClient webTestClient) {
+    public MinioIT(WebTestClient webTestClient) {
         super(webTestClient);
     }
 

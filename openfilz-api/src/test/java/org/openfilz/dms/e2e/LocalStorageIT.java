@@ -54,7 +54,7 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Slf4j
 @TestConstructor(autowireMode = ALL)
-public class DocumentManagementLocalStorageIT extends TestContainersBaseConfig {
+public class LocalStorageIT extends TestContainersBaseConfig {
 
     @Autowired
     private DatabaseClient databaseClient;
@@ -71,7 +71,7 @@ public class DocumentManagementLocalStorageIT extends TestContainersBaseConfig {
         }
     }
 
-    public DocumentManagementLocalStorageIT(WebTestClient webTestClient) {
+    public LocalStorageIT(WebTestClient webTestClient) {
         super(webTestClient);
     }
 

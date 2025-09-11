@@ -8,7 +8,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-public class CorsIT extends DocumentManagementLocalStorageIT {
+public class CorsIT extends LocalStorageIT {
 
     public CorsIT(WebTestClient webTestClient) {
         super(webTestClient);

@@ -73,32 +73,6 @@ public class SecurityIT extends TestContainersBaseConfig {
         adminAccessToken = getAccessToken("admin-user");
     }
 
-    private static String getAccessToken(String username) {
-        return WebClient.builder()
-                .baseUrl(keycloak.getAuthServerUrl())
-                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED_VALUE)
-                .build()
-                .post()
-                .uri("/realms/your-realm/protocol/openid-connect/token")
-                .body(
-                            BodyInserters.fromFormData("grant_type", "password")
-                                .with("client_id", "test-client")
-                                .with("client_secret", "test-client-secret")
-                                .with("username", username)
-                                .with("password", "password")
-                )
-                .retrieve()
-                .bodyToMono(String.class)
-                .map(response -> {
-                    try {
-                        return new ObjectMapper().readTree(response).get("access_token").asText();
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
-                })
-                .block();
-    }
-
     protected HttpGraphQlClient newGraphQlClient(String authToken) {
         return newGraphQlClient().mutate().header(HttpHeaders.AUTHORIZATION, "Bearer " + authToken).build();
     }

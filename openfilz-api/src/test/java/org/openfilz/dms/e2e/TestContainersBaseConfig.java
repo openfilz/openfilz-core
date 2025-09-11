@@ -1,5 +1,6 @@
 package org.openfilz.dms.e2e;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dasniko.testcontainers.keycloak.KeycloakContainer;
 import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.config.RestApiVersion;
@@ -19,6 +20,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 
@@ -37,7 +39,6 @@ public abstract class TestContainersBaseConfig {
 
     protected final WebTestClient webTestClient;
 
-
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.r2dbc.url", () -> String.format("r2dbc:postgresql://%s:%d/%s",
@@ -48,6 +49,32 @@ public abstract class TestContainersBaseConfig {
         registry.add("spring.r2dbc.password", postgres::getPassword);
 
         registry.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", () -> keycloak.getAuthServerUrl() + "/realms/your-realm");
+    }
+
+    protected static String getAccessToken(String username) {
+        return WebClient.builder()
+                .baseUrl(keycloak.getAuthServerUrl())
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+                .build()
+                .post()
+                .uri("/realms/your-realm/protocol/openid-connect/token")
+                .body(
+                        BodyInserters.fromFormData("grant_type", "password")
+                                .with("client_id", "test-client")
+                                .with("client_secret", "test-client-secret")
+                                .with("username", username)
+                                .with("password", "password")
+                )
+                .retrieve()
+                .bodyToMono(String.class)
+                .map(response -> {
+                    try {
+                        return new ObjectMapper().readTree(response).get("access_token").asText();
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                })
+                .block();
     }
 
     protected HttpGraphQlClient newGraphQlClient() {
