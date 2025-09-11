@@ -139,7 +139,34 @@ public class DocumentDAOImpl implements DocumentDAO {
                 && !metadataCriteria) {
             return Flux.error(new IllegalArgumentException("All criteria cannot be empty."));
         }
+        return queryDocumentIds(authentication, request, metadataCriteria, nameCriteria, typeCriteria, parentFolderCriteria, rootOnlyCriteria);
+    }
+
+    protected Flux<UUID> queryDocumentIds(Authentication authentication, SearchByMetadataRequest request, boolean metadataCriteria, boolean nameCriteria, boolean typeCriteria, boolean parentFolderCriteria, boolean rootOnlyCriteria) {
         StringBuilder sql = new StringBuilder(selectDocumentIds);
+        appendMetadataFilter(sql, metadataCriteria, nameCriteria, typeCriteria, parentFolderCriteria, rootOnlyCriteria);
+        DatabaseClient.GenericExecuteSpec query = databaseClient.sql(sql.toString());
+        query = bindMetadataFilter(request, query, metadataCriteria, nameCriteria, typeCriteria, parentFolderCriteria);
+        return executeQuery(authentication, query, mapDocumentId());
+    }
+
+    protected DatabaseClient.GenericExecuteSpec bindMetadataFilter(SearchByMetadataRequest request, DatabaseClient.GenericExecuteSpec query, boolean metadataCriteria, boolean nameCriteria, boolean typeCriteria, boolean parentFolderCriteria) {
+        if(metadataCriteria) {
+            query = sqlUtils.bindMetadata(request.metadataCriteria(), query);
+        }
+        if(nameCriteria) {
+            query = sqlUtils.bindCriteria(NAME, request.name(), query);
+        }
+        if(typeCriteria) {
+            query = sqlUtils.bindCriteria(TYPE, request.type().toString(), query);
+        }
+        if(parentFolderCriteria) {
+            query = sqlUtils.bindCriteria(SqlColumnMapping.PARENT_ID, request.parentFolderId(), query);
+        }
+        return query;
+    }
+
+    protected void appendMetadataFilter(StringBuilder sql, boolean metadataCriteria, boolean nameCriteria, boolean typeCriteria, boolean parentFolderCriteria, boolean rootOnlyCriteria) {
         boolean first = isWhereNotInSelect();
         if(metadataCriteria) {
             first = isFirst(first, sql);
@@ -161,20 +188,6 @@ public class DocumentDAOImpl implements DocumentDAO {
             isFirst(first, sql);
             sqlUtils.appendIsNullCriteria(selectDocumentPrefix, SqlColumnMapping.PARENT_ID, sql);
         }
-        DatabaseClient.GenericExecuteSpec query = databaseClient.sql(sql.toString());
-        if(metadataCriteria) {
-            query = sqlUtils.bindMetadata(request.metadataCriteria(),  query);
-        }
-        if(nameCriteria) {
-            query = sqlUtils.bindCriteria(NAME, request.name(), query);
-        }
-        if(typeCriteria) {
-            query = sqlUtils.bindCriteria(TYPE, request.type().toString(), query);
-        }
-        if(parentFolderCriteria) {
-            query = sqlUtils.bindCriteria(SqlColumnMapping.PARENT_ID, request.parentFolderId(), query);
-        }
-        return executeQuery(authentication, query, mapDocumentId());
     }
 
     protected boolean isWhereNotInSelect() {

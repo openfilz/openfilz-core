@@ -77,7 +77,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
 
 
     @Test
-    void whenCountElements_thenKO() {
+    protected void whenCountElements_thenKO() {
 
         HttpGraphQlClient httpGraphQlClient = getGraphQlHttpClient();
         //create post
