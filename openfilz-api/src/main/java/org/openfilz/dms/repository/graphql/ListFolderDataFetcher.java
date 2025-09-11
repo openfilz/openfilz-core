@@ -2,6 +2,7 @@ package org.openfilz.dms.repository.graphql;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import graphql.schema.DataFetchingEnvironment;
+import io.r2dbc.spi.Readable;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.GraphQlQueryConfig;
 import org.openfilz.dms.dto.request.ListFolderRequest;
@@ -12,6 +13,7 @@ import org.springframework.r2dbc.core.DatabaseClient;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
+import java.util.function.Function;
 
 import static org.openfilz.dms.utils.SqlUtils.FROM_DOCUMENTS;
 import static org.openfilz.dms.utils.SqlUtils.SPACE;
@@ -60,7 +62,7 @@ public class ListFolderDataFetcher extends AbstractDataFetcher<Flux<FullDocument
             throw new IllegalArgumentException("At least paging information is required");
         }
         log.debug("GraphQL - SQL query : {}", query);
-        return sqlQuery.map(row -> mapResultRow(row, sqlFields))
+        return sqlQuery.map(mapResultFunction(sqlFields))
                 .all();
     }
 
@@ -77,13 +79,6 @@ public class ListFolderDataFetcher extends AbstractDataFetcher<Flux<FullDocument
             appendSort(query, request);
         }
     }
-
-    @Override
-    protected FullDocumentInfo mapResultRow(io.r2dbc.spi.Readable row, List<String> sqlFields) {
-        return mapper.toFullDocumentInfo(buildDocument(row, sqlFields));
-    }
-
-
 
     private void appendSort(StringBuilder query, ListFolderRequest request) {
         query.append(SqlUtils.ORDER_BY).append(getSortByField(request));

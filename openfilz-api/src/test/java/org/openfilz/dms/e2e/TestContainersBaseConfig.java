@@ -1,5 +1,6 @@
 package org.openfilz.dms.e2e;
 
+import dasniko.testcontainers.keycloak.KeycloakContainer;
 import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.MultipleUploadFileParameter;
@@ -30,6 +31,10 @@ public abstract class TestContainersBaseConfig {
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:17.6").withReuse(true);
 
+    @Container
+    static final KeycloakContainer keycloak = new KeycloakContainer()
+            .withRealmImportFile("keycloak/realm-export.json").withReuse(true);
+
     protected final WebTestClient webTestClient;
 
 
@@ -41,6 +46,8 @@ public abstract class TestContainersBaseConfig {
                 postgres.getDatabaseName()));
         registry.add("spring.r2dbc.username", postgres::getUsername);
         registry.add("spring.r2dbc.password", postgres::getPassword);
+
+        registry.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", () -> keycloak.getAuthServerUrl() + "/realms/your-realm");
     }
 
     protected HttpGraphQlClient newGraphQlClient() {

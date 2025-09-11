@@ -7,9 +7,11 @@ import graphql.schema.SelectedField;
 import io.r2dbc.postgresql.codec.Json;
 import io.r2dbc.spi.Readable;
 import lombok.RequiredArgsConstructor;
+import org.openfilz.dms.dto.response.FullDocumentInfo;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.mapper.DocumentMapper;
+import org.openfilz.dms.repository.SqlQueryUtils;
 import org.openfilz.dms.utils.SqlUtils;
 import org.springframework.data.util.ParsingUtils;
 import org.springframework.r2dbc.core.DatabaseClient;
@@ -19,12 +21,13 @@ import java.beans.IntrospectionException;
 import java.beans.Introspector;
 import java.time.OffsetDateTime;
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static org.openfilz.dms.entity.SqlColumnMapping.*;
 
 @RequiredArgsConstructor
-public abstract class AbstractDataFetcher<T, R> implements DataFetcher<T> {
+public abstract class AbstractDataFetcher<T, R> implements DataFetcher<T>, SqlQueryUtils {
 
     protected static final Map<String, String> DOCUMENT_FIELD_SQL_MAP;
 
@@ -58,8 +61,6 @@ public abstract class AbstractDataFetcher<T, R> implements DataFetcher<T> {
         return new StringBuilder(SqlUtils.SELECT).append(String.join(SqlUtils.COMMA, prefix == null ? fields : fields.stream().map(s->prefix + s).toList()));
     }
 
-    protected abstract R mapResultRow(io.r2dbc.spi.Readable row, List<String> sqlFields);
-
     protected Document buildDocument(Readable row, List<String> fields) {
         Document.DocumentBuilder builder = Document.builder();
         fields.forEach(field -> {
@@ -78,6 +79,10 @@ public abstract class AbstractDataFetcher<T, R> implements DataFetcher<T> {
             }
         });
         return builder.build();
+    }
+
+    protected Function<Readable, FullDocumentInfo> mapResultFunction(List<String> sqlFields) {
+        return row -> mapper.toFullDocumentInfo(buildDocument(row, sqlFields));
     }
 
 }

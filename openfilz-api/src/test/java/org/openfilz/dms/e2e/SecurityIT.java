@@ -45,9 +45,7 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 @TestConstructor(autowireMode = ALL)
 public class SecurityIT extends TestContainersBaseConfig {
 
-    @Container
-    static final KeycloakContainer keycloak = new KeycloakContainer()
-            .withRealmImportFile("keycloak/realm-export.json").withReuse(true);
+
 
     private static String noaccessAccessToken;
     private static String auditAccessToken;
@@ -62,8 +60,6 @@ public class SecurityIT extends TestContainersBaseConfig {
 
     @DynamicPropertySource
     static void registerResourceServerIssuerProperty(DynamicPropertyRegistry registry) {
-
-        registry.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", () -> keycloak.getAuthServerUrl() + "/realms/your-realm");
         registry.add("spring.security.no-auth", () -> false);
     }
 

@@ -11,6 +11,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Function;
 
 import static org.openfilz.dms.entity.SqlColumnMapping.ID;
 import static org.openfilz.dms.utils.SqlUtils.FROM_DOCUMENTS;
@@ -36,7 +37,7 @@ public class DocumentDataFetcher extends AbstractDataFetcher<Mono<FullDocumentIn
         sqlUtils.appendEqualsCriteria(null, ID, query);
         UUID uuid = (UUID) environment.getArguments().get(ID);
         return prepareQuery(environment, uuid, query)
-                .map(row -> mapResultRow(row, sqlFields))
+                .map(mapResultFunction(sqlFields))
                 .one();
     }
 
@@ -44,8 +45,4 @@ public class DocumentDataFetcher extends AbstractDataFetcher<Mono<FullDocumentIn
         return sqlUtils.bindCriteria(ID, uuid, databaseClient.sql(query.toString()));
     }
 
-    @Override
-    protected FullDocumentInfo mapResultRow(Readable row, List<String> sqlFields) {
-        return mapper.toFullDocumentInfo(buildDocument(row, sqlFields));
-    }
 }
