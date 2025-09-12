@@ -829,7 +829,7 @@ public class DocumentServiceImpl implements DocumentService {
         }
         DocumentType type = (onlyFiles != null && onlyFiles) ? FILE : (onlyFolders != null && onlyFolders) ? FOLDER : null;
         if(folderId == null) {
-            return documentDAO.listDocumentInfoInFolder(authentication, null, type);
+            return listRootElements(authentication, type);
         }
         return documentDAO.existsByIdAndType(authentication, folderId, DocumentType.FOLDER, AccessType.RO)
                 .flatMapMany(exists -> {
@@ -838,6 +838,10 @@ public class DocumentServiceImpl implements DocumentService {
                     }
                     return documentDAO.listDocumentInfoInFolder(authentication, folderId, type);
                 });
+    }
+
+    protected Flux<FolderElementInfo> listRootElements(Authentication authentication, DocumentType type) {
+        return documentDAO.listDocumentInfoInFolder(authentication, null, type);
     }
 
     @Override

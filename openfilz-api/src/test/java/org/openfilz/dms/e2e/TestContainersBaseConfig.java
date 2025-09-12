@@ -3,6 +3,7 @@ package org.openfilz.dms.e2e;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dasniko.testcontainers.keycloak.KeycloakContainer;
 import lombok.RequiredArgsConstructor;
+import org.junit.ClassRule;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.MultipleUploadFileParameter;
 import org.openfilz.dms.dto.response.UploadResponse;
@@ -82,6 +83,10 @@ public abstract class TestContainersBaseConfig {
                 .build();
     }
 
+    protected WebTestClient getWebTestClient() {
+        return webTestClient;
+    }
+
     protected WebTestClient.ResponseSpec getUploadDocumentExchange(MultipartBodyBuilder builder, String accessToken) {
         return uploadDocument(addAuthorization(getUploadDocumentHeader(builder), accessToken));
     }
@@ -111,7 +116,7 @@ public abstract class TestContainersBaseConfig {
     }
 
     protected WebTestClient.RequestHeadersSpec<?> getUploadDocumentHeader(MultipartBodyBuilder builder) {
-        return webTestClient.post().uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/upload")
+        return getWebTestClient().post().uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/upload")
                         .queryParam("allowDuplicateFileNames", true)
                         .build())
                 .contentType(MediaType.MULTIPART_FORM_DATA)
@@ -119,7 +124,7 @@ public abstract class TestContainersBaseConfig {
     }
 
     protected UploadResponse getUploadResponse(MultipartBodyBuilder builder) {
-        return webTestClient.post().uri(RestApiVersion.API_PREFIX + "/documents/upload")
+        return getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/documents/upload")
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(BodyInserters.fromMultipartData(builder.build()))
                 .exchange()
@@ -158,7 +163,7 @@ public abstract class TestContainersBaseConfig {
 
     private WebTestClient.RequestHeadersSpec<?> getUploadMultipleDocumentExchangeHeader(MultipleUploadFileParameter param1, MultipleUploadFileParameter param2, MultipartBodyBuilder builder) {
         builder.part("parametersByFilename", List.of(param1, param2));
-        return webTestClient.post().uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/upload-multiple")
+        return getWebTestClient().post().uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/upload-multiple")
                 .queryParam("allowDuplicateFileNames", true)
                 .build())
                 .contentType(MediaType.MULTIPART_FORM_DATA)

@@ -34,11 +34,15 @@ public class DocumentDataFetcher extends AbstractDataFetcher<Mono<FullDocumentIn
     public Mono<FullDocumentInfo> get(DataFetchingEnvironment environment) throws Exception {
         List<String> sqlFields = getSqlFields(environment);
         StringBuilder query = toSelect(sqlFields).append(fromDocumentsWhere);
-        sqlUtils.appendEqualsCriteria(null, ID, query);
+        applyFilter(query);
         UUID uuid = (UUID) environment.getArguments().get(ID);
         return prepareQuery(environment, uuid, query)
                 .map(mapResultFunction(sqlFields))
                 .one();
+    }
+
+    protected void applyFilter(StringBuilder query) {
+        sqlUtils.appendEqualsCriteria(prefix, ID, query);
     }
 
     protected DatabaseClient.GenericExecuteSpec prepareQuery(DataFetchingEnvironment environment, UUID uuid, StringBuilder query) {

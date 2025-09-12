@@ -78,7 +78,7 @@ public class SqlUtils {
     }
 
     public void appendLikeCriteria(String prefix, String criteria, StringBuilder sql) {
-        appendPrefix(prefix, sql).append("UPPER(").append(criteria).append(") LIKE :").append(criteria).append(SPACE);
+        sql.append("UPPER(").append(prefix == null ? criteria : prefix + criteria).append(") LIKE :").append(criteria).append(SPACE);
     }
 
     public void appendLessThanCriteria(String prefix, String criteria, StringBuilder sql) {
