@@ -1,6 +1,5 @@
 package org.openfilz.dms.e2e;
 
-import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,8 +46,6 @@ public class SecurityIT extends TestContainersBaseConfig {
     protected String auditAccessToken;
     protected String readerAccessToken;
     protected String contributorAccessToken;
-    protected String contrib1AccessToken;
-    protected String contrib2AccessToken;
     protected String cleanerAccessToken;
     protected String adminAccessToken;
 
@@ -324,7 +321,7 @@ public class SecurityIT extends TestContainersBaseConfig {
         addAuthorization(getMoveFileRequest(uploadResponse, folder), readerAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getMoveFileRequest(uploadResponse, folder), auditAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getMoveFileRequest(uploadResponse, folder), cleanerAccessToken).exchange().expectStatus().isForbidden();
-        addAuthorization(getMoveFileRequest(uploadResponse, folder), adminAccessToken).exchange().expectStatus().isOk();
+        addAuthorization(getMoveFileRequest(uploadResponse, createFolder()), adminAccessToken).exchange().expectStatus().isOk();
     }
 
     @Test
@@ -338,7 +335,7 @@ public class SecurityIT extends TestContainersBaseConfig {
         addAuthorization(getCopyRequest(uploadResponse, folder), readerAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getCopyRequest(uploadResponse, folder), auditAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getCopyRequest(uploadResponse, folder), cleanerAccessToken).exchange().expectStatus().isForbidden();
-        addAuthorization(getCopyRequest(uploadResponse, folder), adminAccessToken).exchange().expectStatus().isOk();
+        addAuthorization(getCopyRequest(uploadResponse, createFolder()), adminAccessToken).exchange().expectStatus().isOk();
     }
 
     @Test
@@ -386,7 +383,7 @@ public class SecurityIT extends TestContainersBaseConfig {
         addAuthorization(getMoveFolderRequest(folder1, folder2), readerAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getMoveFolderRequest(folder1, folder2), auditAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getMoveFolderRequest(folder1, folder2), cleanerAccessToken).exchange().expectStatus().isForbidden();
-        addAuthorization(getMoveFolderRequest(folder1, folder2), adminAccessToken).exchange().expectStatus().isOk();
+        addAuthorization(getMoveFolderRequest(folder1, createFolder()), adminAccessToken).exchange().expectStatus().isOk();
     }
 
     @Test
@@ -400,7 +397,7 @@ public class SecurityIT extends TestContainersBaseConfig {
         addAuthorization(getCopyFolderRequest(folder1, folder2), readerAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getCopyFolderRequest(folder1, folder2), auditAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getCopyFolderRequest(folder1, folder2), cleanerAccessToken).exchange().expectStatus().isForbidden();
-        addAuthorization(getCopyFolderRequest(folder1, folder2), adminAccessToken).exchange().expectStatus().isOk();
+        addAuthorization(getCopyFolderRequest(folder1, createFolder()), adminAccessToken).exchange().expectStatus().isOk();
     }
 
     @Test
@@ -426,7 +423,7 @@ public class SecurityIT extends TestContainersBaseConfig {
         addAuthorization(getDeleteFolderRequest(folder), readerAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getDeleteFolderRequest(folder), auditAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getDeleteFolderRequest(folder), cleanerAccessToken).exchange().expectStatus().isNoContent();
-        addAuthorization(getDeleteFolderRequest(folder), adminAccessToken).exchange().expectStatus().isNoContent();
+        addAuthorization(getDeleteFolderRequest(createFolder()), adminAccessToken).exchange().expectStatus().isNoContent();
     }
 
     @Test

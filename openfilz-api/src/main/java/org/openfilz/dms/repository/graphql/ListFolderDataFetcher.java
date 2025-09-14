@@ -2,7 +2,6 @@ package org.openfilz.dms.repository.graphql;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import graphql.schema.DataFetchingEnvironment;
-import io.r2dbc.spi.Readable;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.GraphQlQueryConfig;
 import org.openfilz.dms.dto.request.ListFolderRequest;
@@ -13,7 +12,6 @@ import org.springframework.r2dbc.core.DatabaseClient;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
-import java.util.function.Function;
 
 import static org.openfilz.dms.utils.SqlUtils.FROM_DOCUMENTS;
 import static org.openfilz.dms.utils.SqlUtils.SPACE;

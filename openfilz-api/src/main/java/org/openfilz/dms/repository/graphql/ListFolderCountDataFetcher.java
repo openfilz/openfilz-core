@@ -2,16 +2,12 @@ package org.openfilz.dms.repository.graphql;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import graphql.schema.DataFetchingEnvironment;
-import io.r2dbc.spi.Readable;
 import org.openfilz.dms.config.GraphQlQueryConfig;
 import org.openfilz.dms.dto.request.ListFolderRequest;
 import org.openfilz.dms.mapper.DocumentMapper;
 import org.openfilz.dms.utils.SqlUtils;
 import org.springframework.r2dbc.core.DatabaseClient;
 import reactor.core.publisher.Mono;
-
-import java.util.List;
-import java.util.function.Function;
 
 import static org.openfilz.dms.utils.SqlUtils.FROM_DOCUMENTS;
 

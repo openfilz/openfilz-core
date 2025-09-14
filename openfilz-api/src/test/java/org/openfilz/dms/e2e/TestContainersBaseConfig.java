@@ -3,7 +3,6 @@ package org.openfilz.dms.e2e;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dasniko.testcontainers.keycloak.KeycloakContainer;
 import lombok.RequiredArgsConstructor;
-import org.junit.ClassRule;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.MultipleUploadFileParameter;
 import org.openfilz.dms.dto.response.UploadResponse;
