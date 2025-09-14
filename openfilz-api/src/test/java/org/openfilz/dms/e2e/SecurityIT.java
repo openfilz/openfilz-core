@@ -1,9 +1,8 @@
 package org.openfilz.dms.e2e;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import dasniko.testcontainers.keycloak.KeycloakContainer;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.*;
@@ -24,14 +23,11 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.BodyInserters;
-import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
-import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -47,12 +43,14 @@ public class SecurityIT extends TestContainersBaseConfig {
 
 
 
-    private static String noaccessAccessToken;
-    private static String auditAccessToken;
-    private static String readerAccessToken;
-    private static String contributorAccessToken;
-    private static String cleanerAccessToken;
-    private static String adminAccessToken;
+    protected String noaccessAccessToken;
+    protected String auditAccessToken;
+    protected String readerAccessToken;
+    protected String contributorAccessToken;
+    protected String contrib1AccessToken;
+    protected String contrib2AccessToken;
+    protected String cleanerAccessToken;
+    protected String adminAccessToken;
 
     public SecurityIT(WebTestClient webTestClient) {
         super(webTestClient);
@@ -63,8 +61,8 @@ public class SecurityIT extends TestContainersBaseConfig {
         registry.add("spring.security.no-auth", () -> false);
     }
 
-    @BeforeAll
-    static void startContainersAndGetTokens() {
+    @BeforeEach
+    void startContainersAndGetTokens() {
         noaccessAccessToken = getAccessToken("test-user");
         auditAccessToken = getAccessToken("audit-user");
         readerAccessToken = getAccessToken("reader-user");
@@ -326,7 +324,7 @@ public class SecurityIT extends TestContainersBaseConfig {
         addAuthorization(getMoveFileRequest(uploadResponse, folder), readerAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getMoveFileRequest(uploadResponse, folder), auditAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getMoveFileRequest(uploadResponse, folder), cleanerAccessToken).exchange().expectStatus().isForbidden();
-        addAuthorization(getMoveFileRequest(uploadResponse, createFolder()), adminAccessToken).exchange().expectStatus().isOk();
+        addAuthorization(getMoveFileRequest(uploadResponse, folder), adminAccessToken).exchange().expectStatus().isOk();
     }
 
     @Test
@@ -340,7 +338,7 @@ public class SecurityIT extends TestContainersBaseConfig {
         addAuthorization(getCopyRequest(uploadResponse, folder), readerAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getCopyRequest(uploadResponse, folder), auditAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getCopyRequest(uploadResponse, folder), cleanerAccessToken).exchange().expectStatus().isForbidden();
-        addAuthorization(getCopyRequest(uploadResponse, createFolder()), adminAccessToken).exchange().expectStatus().isOk();
+        addAuthorization(getCopyRequest(uploadResponse, folder), adminAccessToken).exchange().expectStatus().isOk();
     }
 
     @Test
@@ -388,7 +386,7 @@ public class SecurityIT extends TestContainersBaseConfig {
         addAuthorization(getMoveFolderRequest(folder1, folder2), readerAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getMoveFolderRequest(folder1, folder2), auditAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getMoveFolderRequest(folder1, folder2), cleanerAccessToken).exchange().expectStatus().isForbidden();
-        addAuthorization(getMoveFolderRequest(folder1, createFolder()), adminAccessToken).exchange().expectStatus().isOk();
+        addAuthorization(getMoveFolderRequest(folder1, folder2), adminAccessToken).exchange().expectStatus().isOk();
     }
 
     @Test
@@ -402,7 +400,7 @@ public class SecurityIT extends TestContainersBaseConfig {
         addAuthorization(getCopyFolderRequest(folder1, folder2), readerAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getCopyFolderRequest(folder1, folder2), auditAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getCopyFolderRequest(folder1, folder2), cleanerAccessToken).exchange().expectStatus().isForbidden();
-        addAuthorization(getCopyFolderRequest(folder1, createFolder()), adminAccessToken).exchange().expectStatus().isOk();
+        addAuthorization(getCopyFolderRequest(folder1, folder2), adminAccessToken).exchange().expectStatus().isOk();
     }
 
     @Test
@@ -428,7 +426,7 @@ public class SecurityIT extends TestContainersBaseConfig {
         addAuthorization(getDeleteFolderRequest(folder), readerAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getDeleteFolderRequest(folder), auditAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getDeleteFolderRequest(folder), cleanerAccessToken).exchange().expectStatus().isNoContent();
-        addAuthorization(getDeleteFolderRequest(createFolder()), adminAccessToken).exchange().expectStatus().isNoContent();
+        addAuthorization(getDeleteFolderRequest(folder), adminAccessToken).exchange().expectStatus().isNoContent();
     }
 
     @Test
@@ -446,96 +444,105 @@ public class SecurityIT extends TestContainersBaseConfig {
         addAuthorization(getListFolderRequest(folder), adminAccessToken).exchange().expectStatus().isOk();
     }
 
-    private WebTestClient.RequestHeadersSpec<?> getListFolderRequest(UploadResponse folder) {
+    protected WebTestClient.RequestHeadersSpec<?> getListFolderRequest(UploadResponse folder) {
         return webTestClient.get().uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/folders/list").queryParam("folderId", folder.id()).build());
     }
 
-    private WebTestClient.RequestHeadersSpec<?> getDeleteFolderRequest(UploadResponse folder) {
+    protected WebTestClient.RequestHeadersSpec<?> getDeleteFolderRequest(UploadResponse folder) {
         DeleteRequest deleteRequest = new DeleteRequest(Collections.singletonList(folder.id()));
 
         return webTestClient.method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/folders")
                 .body(BodyInserters.fromValue(deleteRequest));
     }
 
-    private WebTestClient.RequestHeadersSpec<?> getRenameFolderRequest(UploadResponse folder) {
+    protected WebTestClient.RequestHeadersSpec<?> getRenameFolderRequest(UploadResponse folder) {
         RenameRequest renameRequest = new RenameRequest("renamed-folder-" + UUID.randomUUID());
 
         return webTestClient.put().uri(RestApiVersion.API_PREFIX + "/folders/{folderId}/rename", folder.id())
                 .body(BodyInserters.fromValue(renameRequest));
     }
 
-    private WebTestClient.RequestHeadersSpec<?> getCopyFolderRequest(UploadResponse folder1, UploadResponse folder2) {
+    protected WebTestClient.RequestHeadersSpec<?> getCopyFolderRequest(UploadResponse folder1, UploadResponse folder2) {
         CopyRequest copyRequest = new CopyRequest(Collections.singletonList(folder1.id()), folder2.id(), false);
 
         return webTestClient.post().uri(RestApiVersion.API_PREFIX + "/folders/copy")
                 .body(BodyInserters.fromValue(copyRequest));
     }
 
-    private WebTestClient.RequestHeadersSpec<?> getMoveFolderRequest(UploadResponse folder1, UploadResponse folder2) {
+    protected WebTestClient.RequestHeadersSpec<?> getMoveFolderRequest(UploadResponse folder1, UploadResponse folder2) {
         MoveRequest moveRequest = new MoveRequest(Collections.singletonList(folder1.id()), folder2.id(), false);
 
         return webTestClient.post().uri(RestApiVersion.API_PREFIX + "/folders/move")
                 .body(BodyInserters.fromValue(moveRequest));
     }
 
-    private WebTestClient.RequestHeadersSpec<?> getCreateFolderRequest() {
+    protected WebTestClient.RequestHeadersSpec<?> getCreateFolderRequest() {
         CreateFolderRequest createFolderRequest = new CreateFolderRequest("test-folder" + UUID.randomUUID(), null);
 
         return webTestClient.post().uri(RestApiVersion.API_PREFIX + "/folders")
                 .body(BodyInserters.fromValue(createFolderRequest));
     }
 
-    private WebTestClient.RequestHeadersSpec<?> getDeleteFileRequest(UploadResponse uploadResponse) {
+    protected WebTestClient.RequestHeadersSpec<?> getDeleteFileRequest(UploadResponse uploadResponse) {
         DeleteRequest deleteRequest = new DeleteRequest(List.of(uploadResponse.id()));
 
         return webTestClient.method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/files")
                 .body(BodyInserters.fromValue(deleteRequest));
     }
 
-    private WebTestClient.RequestHeadersSpec<?> getRenameFileRequest(UploadResponse uploadResponse) {
+    protected WebTestClient.RequestHeadersSpec<?> getRenameFileRequest(UploadResponse uploadResponse) {
         RenameRequest renameRequest = new RenameRequest("new-name" + UUID.randomUUID() + ".sql");
 
         return webTestClient.put().uri(RestApiVersion.API_PREFIX + "/files/{fileId}/rename", uploadResponse.id())
                 .body(BodyInserters.fromValue(renameRequest));
     }
 
-    private WebTestClient.RequestHeadersSpec<?> getCopyRequest(UploadResponse uploadResponse, UploadResponse folder) {
+    protected WebTestClient.RequestHeadersSpec<?> getCopyRequest(UploadResponse uploadResponse, UploadResponse folder) {
         CopyRequest copyRequest = new CopyRequest(Collections.singletonList(uploadResponse.id()), folder.id(), false);
 
         return webTestClient.post().uri(RestApiVersion.API_PREFIX + "/files/copy")
                 .body(BodyInserters.fromValue(copyRequest));
     }
 
-    private WebTestClient.RequestHeadersSpec<?> getMoveFileRequest(UploadResponse uploadResponse, UploadResponse folder) {
+    protected WebTestClient.RequestHeadersSpec<?> getMoveFileRequest(UploadResponse uploadResponse, UploadResponse folder) {
         MoveRequest moveRequest = new MoveRequest(Collections.singletonList(uploadResponse.id()), folder.id(), false);
 
         return webTestClient.post().uri(RestApiVersion.API_PREFIX + "/files/move")
                 .body(BodyInserters.fromValue(moveRequest));
     }
 
-    private UploadResponse createFolder() {
-        CreateFolderRequest createFolderRequest = new CreateFolderRequest("test-folder-" + UUID.randomUUID(), null);
+    protected UploadResponse createFolder() {
+        return createFolder(contributorAccessToken);
+    }
 
-        return addAuthorization(webTestClient.post().uri(RestApiVersion.API_PREFIX + "/folders").body(BodyInserters.fromValue(createFolderRequest)), contributorAccessToken)
-                .exchange()
+    protected UploadResponse createFolder(String token) {
+        WebTestClient.ResponseSpec response = getCreateFolderResponse(token);
+        return response
                 .expectStatus().isCreated()
                 .expectBody(UploadResponse.class)
                 .returnResult().getResponseBody();
     }
 
-    private WebTestClient.RequestHeadersSpec<?> getDocumentInfoRequest(UploadResponse uploadResponse) {
+    protected WebTestClient.ResponseSpec getCreateFolderResponse(String token) {
+        CreateFolderRequest createFolderRequest = new CreateFolderRequest("test-folder-" + UUID.randomUUID(), null);
+        return addAuthorization(webTestClient.post().uri(RestApiVersion.API_PREFIX + "/folders")
+                .body(BodyInserters.fromValue(createFolderRequest)), token)
+                .exchange();
+    }
+
+    protected WebTestClient.RequestHeadersSpec<?> getDocumentInfoRequest(UploadResponse uploadResponse) {
         return webTestClient.get().uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/{id}/info")
                 .build(uploadResponse.id()));
     }
 
-    private WebTestClient.RequestBodySpec getSearchMetadataRequest(UploadResponse uploadResponse) {
+    protected WebTestClient.RequestBodySpec getSearchMetadataRequest(UploadResponse uploadResponse) {
         Assertions.assertNotNull(uploadResponse);
 
         return webTestClient.post().uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/{id}/search/metadata")
                 .build(uploadResponse.id()));
     }
 
-    private WebTestClient.RequestHeadersSpec<?> getSearchIdsByMetadataRequest(UploadResponse uploadResponse, UUID uuid) {
+    protected WebTestClient.RequestHeadersSpec<?> getSearchIdsByMetadataRequest(UploadResponse uploadResponse, UUID uuid) {
         Assertions.assertNotNull(uploadResponse);
 
         SearchByMetadataRequest searchByMetadataRequest = new SearchByMetadataRequest(null, null, null, null, Map.of("appId", uuid.toString()));
@@ -567,17 +574,17 @@ public class SecurityIT extends TestContainersBaseConfig {
         addAuthorization(getDownloadMultipleRequest(uploadResponse1, uploadResponse2), adminAccessToken).exchange().expectStatus().isOk();
     }
 
-    private WebTestClient.RequestHeadersSpec<?> getDownloadMultipleRequest(UploadResponse uploadResponse1, UploadResponse uploadResponse2) {
+    protected WebTestClient.RequestHeadersSpec<?> getDownloadMultipleRequest(UploadResponse uploadResponse1, UploadResponse uploadResponse2) {
         return webTestClient.post().uri(RestApiVersion.API_PREFIX + "/documents/download-multiple")
                 .body(BodyInserters.fromValue(List.of(uploadResponse1.id(), uploadResponse2.id())));
     }
 
-    private WebTestClient.RequestHeadersSpec<?> getDownloadRequest(UploadResponse uploadResponse) {
+    protected WebTestClient.RequestHeadersSpec<?> getDownloadRequest(UploadResponse uploadResponse) {
         return webTestClient.get().uri(RestApiVersion.API_PREFIX + "/documents/{id}/download", uploadResponse.id());
     }
 
 
-    private WebTestClient.RequestHeadersSpec<?> getDeleteMetadataRequest(UploadResponse uploadResponse) {
+    protected WebTestClient.RequestHeadersSpec<?> getDeleteMetadataRequest(UploadResponse uploadResponse) {
         Assertions.assertNotNull(uploadResponse);
 
         DeleteMetadataRequest deleteRequest = new DeleteMetadataRequest(Collections.singletonList("owner"));
@@ -586,7 +593,7 @@ public class SecurityIT extends TestContainersBaseConfig {
                 .body(BodyInserters.fromValue(deleteRequest));
     }
 
-    private WebTestClient.RequestHeadersSpec<?> getPatchMetadataRequest(UploadResponse uploadResponse) {
+    protected WebTestClient.RequestHeadersSpec<?> getPatchMetadataRequest(UploadResponse uploadResponse) {
         Assertions.assertNotNull(uploadResponse);
 
         UpdateMetadataRequest updateMetadataRequest = new UpdateMetadataRequest(Map.of("owner", "Joe", "appId",  "MY_APP_2"));
@@ -595,7 +602,7 @@ public class SecurityIT extends TestContainersBaseConfig {
                 .body(BodyInserters.fromValue(updateMetadataRequest));
     }
 
-    private WebTestClient.RequestHeadersSpec<?> getReplaceMeatadataRequest(UploadResponse originalUploadResponse) {
+    protected WebTestClient.RequestHeadersSpec<?> getReplaceMeatadataRequest(UploadResponse originalUploadResponse) {
         Assertions.assertNotNull(originalUploadResponse);
         UUID id = originalUploadResponse.id();
         Long originalSize = originalUploadResponse.size();
@@ -606,7 +613,7 @@ public class SecurityIT extends TestContainersBaseConfig {
                 .body(BodyInserters.fromValue(newMetadata));
     }
 
-    private WebTestClient.RequestHeadersSpec<?> getReplaceContentRequest(UploadResponse originalUploadResponse) {
+    protected WebTestClient.RequestHeadersSpec<?> getReplaceContentRequest(UploadResponse originalUploadResponse) {
         UUID id = originalUploadResponse.id();
         Long originalSize = originalUploadResponse.size();
         Assertions.assertTrue(originalSize != null   && originalSize > 0);
@@ -618,20 +625,32 @@ public class SecurityIT extends TestContainersBaseConfig {
                 .body(BodyInserters.fromMultipartData(builder.build()));
     }
 
-    private UploadResponse uploadNewFile() {
-        return uploadNewFile(null);
+    protected UploadResponse uploadNewFile(String accessToken) {
+        return uploadNewFile(null, accessToken);
     }
 
-    private UploadResponse uploadNewFile(UUID parentFolderId) {
+    protected UploadResponse uploadNewFile(UUID parentFolderId) {
+        return uploadNewFile(parentFolderId, contributorAccessToken);
+    }
+
+    protected UploadResponse uploadNewFile() {
+        return uploadNewFile(null, contributorAccessToken);
+    }
+
+    protected UploadResponse uploadNewFile(UUID parentFolderId, String accessToken) {
         MultipartBodyBuilder builder = newFileBuilder();
         if(parentFolderId != null) {
             builder.part("parentFolderId", parentFolderId.toString());
         }
-        return newFile(builder);
+        return newFile(builder, accessToken);
     }
 
-    private UploadResponse newFile(MultipartBodyBuilder builder) {
-        return getUploadDocumentExchange(builder,  contributorAccessToken)
+    protected UploadResponse newFile(MultipartBodyBuilder builder) {
+        return newFile(builder, contributorAccessToken);
+    }
+
+    protected UploadResponse newFile(MultipartBodyBuilder builder, String accessToken) {
+        return getUploadDocumentExchange(builder,  accessToken)
                 .expectStatus().isCreated()
                 .expectBody(UploadResponse.class)
                 .returnResult().getResponseBody();

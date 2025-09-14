@@ -49,7 +49,9 @@ public class SecurityConfig {
     public AbstractSecurityService securityService() {
         if(authClassName != null) {
             try {
-                return (AbstractSecurityService) Class.forName(authClassName).getConstructor().newInstance();
+                return (AbstractSecurityService) Class.forName(authClassName)
+                        .getConstructor(RoleTokenLookup.class, String.class, String.class)
+                        .newInstance(roleTokenLookup, rootGroup, graphQlBaseUrl);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
