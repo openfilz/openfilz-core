@@ -1466,6 +1466,27 @@ public class LocalStorageIT extends TestContainersBaseConfig {
     }
 
     @Test
+    void whenCopyFolder_thenKO() {
+        CreateFolderRequest createFolderRequest1 = new CreateFolderRequest("test-folder-to-copy-9", null);
+
+        FolderResponse folderResponse1 = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/folders")
+                .body(BodyInserters.fromValue(createFolderRequest1))
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(FolderResponse.class)
+                .returnResult().getResponseBody();
+
+        CopyRequest copyRequest = new CopyRequest(Collections.singletonList(folderResponse1.id()), folderResponse1.id(), false);
+
+        getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/folders/copy")
+                .body(BodyInserters.fromValue(copyRequest))
+                .exchange()
+                .expectStatus().isForbidden();
+
+
+    }
+
+    @Test
     void whenCopyFolderRecursive_thenOk() {
         CreateFolderRequest createSourceFolderRequest = new CreateFolderRequest("test-folder-source", null);
 
