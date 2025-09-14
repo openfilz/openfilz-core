@@ -135,7 +135,7 @@ public abstract class TestContainersBaseConfig {
 
     protected MultipartBodyBuilder newFileBuilder() {
         MultipartBodyBuilder builder = new MultipartBodyBuilder();
-        builder.part("file", new ClassPathResource("schema.sql"));
+        builder.part("file", new ClassPathResource("test_file_1.sql"));
         return builder;
     }
 

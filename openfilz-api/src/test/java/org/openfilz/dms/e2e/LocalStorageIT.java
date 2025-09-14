@@ -325,7 +325,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
                 .expectBody(FolderResponse.class)
                 .returnResult().getResponseBody();
 
-        MultipartBodyBuilder builder = newFileBuilder("schema.sql", "test.txt");
+        MultipartBodyBuilder builder = newFileBuilder("test_file_1.sql", "test.txt");
 
 
         UUID uuid0 = UUID.randomUUID();
@@ -336,7 +336,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
         UUID uuid2 = UUID.randomUUID();
         Map<String, Object> metadata2 = Map.of("testId", uuid0.toString(), "appId", uuid2.toString());
 
-        MultipleUploadFileParameter param1 = new MultipleUploadFileParameter("schema.sql", new MultipleUploadFileParameterAttributes(folderResponse.id(), metadata1));
+        MultipleUploadFileParameter param1 = new MultipleUploadFileParameter("test_file_1.sql", new MultipleUploadFileParameterAttributes(folderResponse.id(), metadata1));
         MultipleUploadFileParameter param2 = new MultipleUploadFileParameter("test.txt", new MultipleUploadFileParameterAttributes(folderResponse.id(), metadata2));
 
         List<UploadResponse> uploadResponse = getUploadMultipleDocumentExchange(param1, param2, builder)
@@ -405,7 +405,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
                 .expectStatus().isCreated()
                 .expectBody(FolderResponse.class)
                 .returnResult().getResponseBody();
-        MultipartBodyBuilder builder = newFileBuilder("schema.sql", "test.txt");
+        MultipartBodyBuilder builder = newFileBuilder("test_file_1.sql", "test.txt");
 
         UUID uuid0 = UUID.randomUUID();
 
@@ -415,7 +415,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
         UUID uuid2 = UUID.randomUUID();
         Map<String, Object> metadata2 = Map.of("testId", uuid0.toString(), "appId", uuid2.toString());
 
-        MultipleUploadFileParameter param1 = new MultipleUploadFileParameter("schema.sql", new MultipleUploadFileParameterAttributes(folderResponse.id(), metadata1));
+        MultipleUploadFileParameter param1 = new MultipleUploadFileParameter("test_file_1.sql", new MultipleUploadFileParameterAttributes(folderResponse.id(), metadata1));
         MultipleUploadFileParameter param2 = new MultipleUploadFileParameter("test.txt", new MultipleUploadFileParameterAttributes(folderResponse.id(), metadata2));
 
         List<UploadResponse> uploadResponse = getUploadMultipleDocumentExchange(param1, param2, builder)
@@ -472,7 +472,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
 
     @Test
     void whenListFolderGraphQl_thenOK() {
-        MultipartBodyBuilder builder = newFileBuilder("schema.sql", "test.txt");
+        MultipartBodyBuilder builder = newFileBuilder("test_file_1.sql", "test.txt");
 
         UUID uuid0 = UUID.randomUUID();
 
@@ -482,7 +482,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
         UUID uuid2 = UUID.randomUUID();
         Map<String, Object> metadata2 = Map.of("testId", uuid0.toString(), "appId", uuid2.toString());
 
-        MultipleUploadFileParameter param1 = new MultipleUploadFileParameter("schema.sql", new MultipleUploadFileParameterAttributes(null, metadata1));
+        MultipleUploadFileParameter param1 = new MultipleUploadFileParameter("test_file_1.sql", new MultipleUploadFileParameterAttributes(null, metadata1));
         MultipleUploadFileParameter param2 = new MultipleUploadFileParameter("test.txt", new MultipleUploadFileParameterAttributes(null, metadata2));
 
         List<UploadResponse> uploadResponse = getUploadMultipleDocumentExchange(param1, param2, builder)
@@ -558,15 +558,15 @@ public class LocalStorageIT extends TestContainersBaseConfig {
 
         getUploadDocumentExchange(builder).expectStatus().isCreated()
                 .expectBody()
-                .jsonPath("$.name").isEqualTo("schema.sql");
+                .jsonPath("$.name").isEqualTo("test_file_1.sql");
     }
 
     @Test
     void whenUploadMultipleDocuments_thenCreated() {
-        MultipartBodyBuilder builder = newFileBuilder("schema.sql", "test.txt");
+        MultipartBodyBuilder builder = newFileBuilder("test_file_1.sql", "test.txt");
 
         Map<String, Object> metadata1 = Map.of("helmVersion", "1.0");
-        MultipleUploadFileParameter param1 = new MultipleUploadFileParameter("schema.sql", new MultipleUploadFileParameterAttributes(null, metadata1));
+        MultipleUploadFileParameter param1 = new MultipleUploadFileParameter("test_file_1.sql", new MultipleUploadFileParameterAttributes(null, metadata1));
         Map<String, Object> metadata2 = Map.of("owner", "OpenFilz");
         MultipleUploadFileParameter param2 = new MultipleUploadFileParameter("test.txt", new MultipleUploadFileParameterAttributes(null, metadata2));
 
@@ -708,7 +708,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
         Assertions.assertNotNull(uuids);
         Assertions.assertTrue(uuids.isEmpty());
 
-        searchByMetadataRequest = new SearchByMetadataRequest("schema.sql", DocumentType.FILE, null, null, Map.of("appId", uuid.toString()));
+        searchByMetadataRequest = new SearchByMetadataRequest("test_file_1.sql", DocumentType.FILE, null, null, Map.of("appId", uuid.toString()));
 
         uuids = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/documents/search/ids-by-metadata")
                 .body(BodyInserters.fromValue(searchByMetadataRequest))
@@ -722,7 +722,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
         Assertions.assertEquals(1, uuids.size());
         Assertions.assertEquals(uploadResponse.id(), uuids.getFirst());
 
-        searchByMetadataRequest = new SearchByMetadataRequest("schema.sql", DocumentType.FILE, null, true, Map.of("appId", uuid.toString()));
+        searchByMetadataRequest = new SearchByMetadataRequest("test_file_1.sql", DocumentType.FILE, null, true, Map.of("appId", uuid.toString()));
 
         uuids = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/documents/search/ids-by-metadata")
                 .body(BodyInserters.fromValue(searchByMetadataRequest))
@@ -736,7 +736,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
         Assertions.assertEquals(1, uuids.size());
         Assertions.assertEquals(uploadResponse.id(), uuids.getFirst());
 
-        searchByMetadataRequest = new SearchByMetadataRequest("schema.sql", DocumentType.FOLDER, null, true, Map.of("appId", uuid.toString()));
+        searchByMetadataRequest = new SearchByMetadataRequest("test_file_1.sql", DocumentType.FOLDER, null, true, Map.of("appId", uuid.toString()));
 
         uuids = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/documents/search/ids-by-metadata")
                 .body(BodyInserters.fromValue(searchByMetadataRequest))
@@ -749,7 +749,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
         Assertions.assertNotNull(uuids);
         Assertions.assertEquals(0, uuids.size());
 
-        searchByMetadataRequest = new SearchByMetadataRequest("schema.sql", DocumentType.FOLDER, UUID.randomUUID(), true, Map.of("appId", uuid.toString()));
+        searchByMetadataRequest = new SearchByMetadataRequest("test_file_1.sql", DocumentType.FOLDER, UUID.randomUUID(), true, Map.of("appId", uuid.toString()));
 
         getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/documents/search/ids-by-metadata")
                 .body(BodyInserters.fromValue(searchByMetadataRequest))
@@ -763,7 +763,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
                 .exchange()
                 .expectStatus().is4xxClientError();
 
-        searchByMetadataRequest = new SearchByMetadataRequest("schema.sql", DocumentType.FILE, null, true, null);
+        searchByMetadataRequest = new SearchByMetadataRequest("test_file_1.sql", DocumentType.FILE, null, true, null);
 
         uuids = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/documents/search/ids-by-metadata")
                 .body(BodyInserters.fromValue(searchByMetadataRequest))
@@ -776,7 +776,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
         Assertions.assertNotNull(uuids);
         Assertions.assertFalse(uuids.isEmpty());
 
-        searchByMetadataRequest = new SearchByMetadataRequest("schema.sql", DocumentType.FILE, null, null, null);
+        searchByMetadataRequest = new SearchByMetadataRequest("test_file_1.sql", DocumentType.FILE, null, null, null);
 
         uuids = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/documents/search/ids-by-metadata")
                 .body(BodyInserters.fromValue(searchByMetadataRequest))
@@ -789,7 +789,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
         Assertions.assertNotNull(uuids);
         Assertions.assertFalse(uuids.isEmpty());
 
-        searchByMetadataRequest = new SearchByMetadataRequest("schema.sql", null, null, null, null);
+        searchByMetadataRequest = new SearchByMetadataRequest("test_file_1.sql", null, null, null, null);
 
         uuids = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/documents/search/ids-by-metadata")
                 .body(BodyInserters.fromValue(searchByMetadataRequest))
@@ -805,7 +805,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
 
         //test if 2 files are retrieved
         builder = new MultipartBodyBuilder();
-        builder.part("file", new ClassPathResource("schema.sql"));
+        builder.part("file", new ClassPathResource("test_file_1.sql"));
         builder.part("metadata", Map.of("owner", "Joe", "appId", uuid.toString()));
 
         UploadResponse uploadResponse2 = uploadDocument(builder);
@@ -908,7 +908,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody()
-                .jsonPath("$.name").isEqualTo("schema.sql")
+                .jsonPath("$.name").isEqualTo("test_file_1.sql")
                 .jsonPath("$.type").isEqualTo(DocumentType.FILE)
                 .jsonPath("$.id").isEqualTo(id.toString());
 
@@ -1013,7 +1013,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody()
-                .jsonPath("$.name").isEqualTo("schema.sql")
+                .jsonPath("$.name").isEqualTo("test_file_1.sql")
                 .jsonPath("$.type").isEqualTo(DocumentType.FILE)
                 .jsonPath("$.id").isEqualTo(id.toString());
 
@@ -1039,7 +1039,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
                 .exchange()
                 .expectStatus().isOk()
                 .expectHeader().contentType("application/x-sql")
-                .expectBody(String.class).isEqualTo(new String(new ClassPathResource("schema.sql").getInputStream().readAllBytes()));
+                .expectBody(String.class).isEqualTo(new String(new ClassPathResource("test_file_1.sql").getInputStream().readAllBytes()));
     }
 
     @Test
@@ -1091,7 +1091,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
                 .expectBody(DocumentInfo.class)
                 .returnResult().getResponseBody();
         Assertions.assertNotNull(info);
-        Assertions.assertEquals("schema.sql", info.name());
+        Assertions.assertEquals("test_file_1.sql", info.name());
         Assertions.assertFalse(info.metadata().containsKey("owner"));
         Assertions.assertTrue(info.metadata().containsKey("appId"));
     }
@@ -1120,7 +1120,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
                 .expectBody(DocumentInfo.class)
                 .returnResult().getResponseBody();
         Assertions.assertNotNull(info);
-        Assertions.assertEquals("schema.sql", info.name());
+        Assertions.assertEquals("test_file_1.sql", info.name());
         Assertions.assertEquals("Joe", info.metadata().get("owner"));
         Assertions.assertEquals("MY_APP_2", info.metadata().get("appId"));
     }
@@ -1546,7 +1546,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
 
         Assertions.assertNotNull(targetFolderRootInfoList);
         Assertions.assertEquals(2, targetFolderRootInfoList.size());
-        Assertions.assertTrue(targetFolderRootInfoList.stream().anyMatch(resp->resp.type().equals(DocumentType.FILE) && resp.name().equals("schema.sql")));
+        Assertions.assertTrue(targetFolderRootInfoList.stream().anyMatch(resp->resp.type().equals(DocumentType.FILE) && resp.name().equals("test_file_1.sql")));
         Assertions.assertTrue(targetFolderRootInfoList.stream().anyMatch(resp->resp.type().equals(DocumentType.FOLDER) && resp.name().equals("test-subfolder-source")));
 
         FolderElementInfo subFolderInfo = targetFolderRootInfoList.stream().filter(resp -> resp.type().equals(DocumentType.FOLDER) && resp.name().equals("test-subfolder-source")).findAny().get();
@@ -1776,7 +1776,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
         Assertions.assertFalse(auditTrail.isEmpty());
 
         auditTrail = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/audit/search")
-                .body(BodyInserters.fromValue(new SearchByAuditLogRequest(null, null, null, null, Map.of("filename", "schema.sql"))))
+                .body(BodyInserters.fromValue(new SearchByAuditLogRequest(null, null, null, null, Map.of("filename", "test_file_1.sql"))))
                 .exchange()
                 .expectStatus().isOk()
                 .expectBodyList(AuditLog.class)
@@ -1881,7 +1881,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
     @Test
     void whenDownloadDocumentMultiple_thenOk() throws IOException {
         MultipartBodyBuilder builder = new MultipartBodyBuilder();
-        ClassPathResource file1 = new ClassPathResource("schema.sql");
+        ClassPathResource file1 = new ClassPathResource("test_file_1.sql");
         builder.part("file", file1);
         ClassPathResource file2 = new ClassPathResource("test.txt");
         builder.part("file", file2);

@@ -192,10 +192,10 @@ public class SecurityIT extends TestContainersBaseConfig {
 
     @Test
     void testUploadMultiple() {
-        MultipartBodyBuilder builder = newFileBuilder("schema.sql", "test.txt");
+        MultipartBodyBuilder builder = newFileBuilder("test_file_1.sql", "test.txt");
 
         Map<String, Object> metadata1 = Map.of("helmVersion", "1.0");
-        MultipleUploadFileParameter param1 = new MultipleUploadFileParameter("schema.sql", new MultipleUploadFileParameterAttributes(null, metadata1));
+        MultipleUploadFileParameter param1 = new MultipleUploadFileParameter("test_file_1.sql", new MultipleUploadFileParameterAttributes(null, metadata1));
         Map<String, Object> metadata2 = Map.of("owner", "OpenFilz");
         MultipleUploadFileParameter param2 = new MultipleUploadFileParameter("test.txt", new MultipleUploadFileParameterAttributes(null, metadata2));
 
@@ -546,9 +546,9 @@ public class SecurityIT extends TestContainersBaseConfig {
 
     @Test
     void testDownloadMultiple() {
-        MultipartBodyBuilder builder = newFileBuilder("schema.sql", "test.txt");
+        MultipartBodyBuilder builder = newFileBuilder("test_file_1.sql", "test.txt");
         Map<String, Object> metadata1 = Map.of("helmVersion", "1.0");
-        MultipleUploadFileParameter param1 = new MultipleUploadFileParameter("schema.sql", new MultipleUploadFileParameterAttributes(null, metadata1));
+        MultipleUploadFileParameter param1 = new MultipleUploadFileParameter("test_file_1.sql", new MultipleUploadFileParameterAttributes(null, metadata1));
         Map<String, Object> metadata2 = Map.of("owner", "OpenFilz");
         MultipleUploadFileParameter param2 = new MultipleUploadFileParameter("test.txt", new MultipleUploadFileParameterAttributes(null, metadata2));
 
