@@ -492,7 +492,7 @@ public class DocumentServiceImpl implements DocumentService {
                 .flatMapMany(sourceFolder -> {
                     // Generate unique name for the new folder in the target location
                     return raiseErrorIfExists(auth, sourceFolder.getName(), targetParentFolderId, allowDuplicateFileNames)
-                            .flatMap(__ -> doCreateFolder(new CreateFolderRequest(sourceFolder.getName(), targetParentFolderId), auth,
+                            .flatMap(_ -> doCreateFolder(new CreateFolderRequest(sourceFolder.getName(), targetParentFolderId), auth,
                                     jsonUtils.cloneOrNewEmptyJson(sourceFolder.getMetadata()), true, sourceFolderId))
                             .flatMap(savedNewFolder -> {
                                 UUID newFolderId = savedNewFolder.getId();
@@ -502,7 +502,7 @@ public class DocumentServiceImpl implements DocumentService {
                                         .flatMap(childFile -> {
                                             // For each child file, copy physical file and create DB entry under newFolderId
                                             return raiseErrorIfExists(auth, childFile.getName(), newFolderId, allowDuplicateFileNames)
-                                                    .flatMap(__ -> storageService.copyFile(childFile.getStoragePath())
+                                                    .flatMap(_ -> storageService.copyFile(childFile.getStoragePath())
                                                             .flatMap(newChildFileName -> {
                                                                 Document.DocumentBuilder documentBuilder = Document.builder()
                                                                         .name(childFile.getName())
