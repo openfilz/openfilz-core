@@ -147,7 +147,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
         appendMetadataFilter(sql, metadataCriteria, nameCriteria, typeCriteria, parentFolderCriteria, rootOnlyCriteria);
         DatabaseClient.GenericExecuteSpec query = databaseClient.sql(sql.toString());
         query = bindMetadataFilter(request, query, metadataCriteria, nameCriteria, typeCriteria, parentFolderCriteria);
-        return executeSearchDocumentIdsQuery(authentication, query, mapDocumentId());
+        return executeSearchDocumentIdsQuery(authentication, query, mapId());
     }
 
     protected DatabaseClient.GenericExecuteSpec bindMetadataFilter(SearchByMetadataRequest request, DatabaseClient.GenericExecuteSpec query, boolean metadataCriteria, boolean nameCriteria, boolean typeCriteria, boolean parentFolderCriteria) {
@@ -194,9 +194,6 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
         return true;
     }
 
-    protected Function<Readable, UUID> mapDocumentId() {
-        return row -> row.get(ID, UUID.class);
-    }
 
     public Flux<ChildElementInfo> getChildren(Flux<Tuple2<UUID, String>> folderIds) {
         return folderIds.flatMap(folders -> databaseClient.sql(SELECT_CHILDREN_2)

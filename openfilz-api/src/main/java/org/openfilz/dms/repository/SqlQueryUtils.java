@@ -11,8 +11,12 @@ import static org.openfilz.dms.entity.SqlColumnMapping.*;
 
 public interface SqlQueryUtils {
 
-    default Function<Readable, Long> getCountMappingFunction() {
+    default Function<Readable, Long> mapCount() {
         return row -> row.get(0, Long.class);
+    }
+
+    default Function<Readable, UUID> mapId() {
+        return row -> row.get(0, UUID.class);
     }
 
     default Function<Readable, FolderElementInfo> mapFolderElementInfo() {

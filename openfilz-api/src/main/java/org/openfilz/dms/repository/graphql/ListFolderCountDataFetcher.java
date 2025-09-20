@@ -50,7 +50,7 @@ public class ListFolderCountDataFetcher  extends AbstractDataFetcher<Mono<Long>,
             sqlQuery = databaseClient.sql(query.toString());
         }
         //log.debug("GraphQL - SQL query : {}", query);
-        return sqlQuery.map(getCountMappingFunction())
+        return sqlQuery.map(mapCount())
                 .one();
     }
 
