@@ -622,10 +622,6 @@ public class SecurityIT extends TestContainersBaseConfig {
                 .body(BodyInserters.fromMultipartData(builder.build()));
     }
 
-    protected UploadResponse uploadNewFile(String accessToken) {
-        return uploadNewFile(null, accessToken);
-    }
-
     protected UploadResponse uploadNewFile(UUID parentFolderId) {
         return uploadNewFile(parentFolderId, contributorAccessToken);
     }
