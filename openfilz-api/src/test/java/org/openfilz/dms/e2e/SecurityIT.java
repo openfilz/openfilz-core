@@ -513,15 +513,19 @@ public class SecurityIT extends TestContainersBaseConfig {
     }
 
     protected UploadResponse createFolder(String token) {
-        WebTestClient.ResponseSpec response = getCreateFolderResponse(token);
+       return createFolder(token, null);
+    }
+
+    protected UploadResponse createFolder(String token, UUID parentFolderId) {
+        WebTestClient.ResponseSpec response = getCreateFolderResponse(token, parentFolderId);
         return response
                 .expectStatus().isCreated()
                 .expectBody(UploadResponse.class)
                 .returnResult().getResponseBody();
     }
 
-    protected WebTestClient.ResponseSpec getCreateFolderResponse(String token) {
-        CreateFolderRequest createFolderRequest = new CreateFolderRequest("test-folder-" + UUID.randomUUID(), null);
+    protected WebTestClient.ResponseSpec getCreateFolderResponse(String token, UUID parentFolderId) {
+        CreateFolderRequest createFolderRequest = new CreateFolderRequest("test-folder-" + UUID.randomUUID(), parentFolderId);
         return addAuthorization(webTestClient.post().uri(RestApiVersion.API_PREFIX + "/folders")
                 .body(BodyInserters.fromValue(createFolderRequest)), token)
                 .exchange();

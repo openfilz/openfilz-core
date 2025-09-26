@@ -35,7 +35,7 @@ public class DocumentDataFetcher extends AbstractDataFetcher<Mono<FullDocumentIn
         applyFilter(query);
         UUID uuid = (UUID) environment.getArguments().get(ID);
         return prepareQuery(environment, uuid, query)
-                .map(mapResultFunction(sqlFields))
+                .map(mapFullDocumentInfo(sqlFields))
                 .one();
     }
 

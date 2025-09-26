@@ -81,7 +81,7 @@ public abstract class AbstractDataFetcher<T, R> implements DataFetcher<T>, SqlQu
         return builder.build();
     }
 
-    protected Function<Readable, FullDocumentInfo> mapResultFunction(List<String> sqlFields) {
+    protected Function<Readable, FullDocumentInfo> mapFullDocumentInfo(List<String> sqlFields) {
         return row -> mapper.toFullDocumentInfo(buildDocument(row, sqlFields));
     }
 

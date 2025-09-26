@@ -130,11 +130,19 @@ public class AuditDAOImpl implements AuditDAO {
                     DatabaseClient.GenericExecuteSpec executeSpec = databaseClient.sql(sql.toString())
                             .bind("ts", OffsetDateTime.now())
                             .bind("up", username != null ? username : "SYSTEM")
-                            .bind("act", action.toString())
-                            .bind("rt", resourceType.toString())
-                            .bind("rid", resourceId);
+                            .bind("act", action.toString());
                     if (details != null) {
                         executeSpec = executeSpec.bind("det", jsonUtils.toJson(details));
+                    }
+                    if(resourceType != null) {
+                        executeSpec = executeSpec.bind("rt", resourceType.toString());
+                    } else {
+                        executeSpec = executeSpec.bindNull("rt", String.class);
+                    }
+                    if(resourceId != null) {
+                        executeSpec = executeSpec.bind("rid", resourceId);
+                    } else {
+                        executeSpec = executeSpec.bindNull("rid", UUID.class);
                     }
                     return executeSpec.then();
                 })

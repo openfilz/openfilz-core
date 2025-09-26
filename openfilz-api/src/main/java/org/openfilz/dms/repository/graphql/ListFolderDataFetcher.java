@@ -60,7 +60,7 @@ public class ListFolderDataFetcher extends AbstractDataFetcher<Flux<FullDocument
             throw new IllegalArgumentException("At least paging information is required");
         }
         log.debug("GraphQL - SQL query : {}", query);
-        return sqlQuery.map(mapResultFunction(sqlFields))
+        return sqlQuery.map(mapFullDocumentInfo(sqlFields))
                 .all();
     }
 
