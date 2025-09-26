@@ -53,7 +53,7 @@ spring:
 ### Enabled Security (OIDC Resource Server)
 
 When security is enabled, the API acts as an OIDC resource server, validating JWT tokens for every request.
-~~~~
+
 #### Default Authorization
 
 The default authorization model uses roles extracted from the JWT token.
@@ -64,10 +64,10 @@ You can configure how roles are looked up using the `spring.security.role-token-
 For more advanced scenarios, you can provide a completely custom authorization model. To do this, you need to:
 
 1.  Provide a custom implementation of `org.openfilz.dms.config.DefaultAuthSecurityConfig`
-2.  Provide a custom implementation of and `org.openfilz.dms.service.impl.SecurityServiceImpl`.
+2.  Provide a custom implementation of and `org.openfilz.dms.service.impl.SecurityServiceImpl`
 3.  Set to true the `spring.security.custom-roles` property.
 
-```yaml~~~~~~~~~~~~~~~~
+```yaml
 spring:
   security:
     custom-roles: true
