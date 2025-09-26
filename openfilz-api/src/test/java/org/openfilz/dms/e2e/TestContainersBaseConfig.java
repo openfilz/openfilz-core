@@ -1,5 +1,7 @@
 package org.openfilz.dms.e2e;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import dasniko.testcontainers.keycloak.KeycloakContainer;
 import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.MultipleUploadFileParameter;
@@ -18,6 +20,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 
@@ -30,8 +33,11 @@ public abstract class TestContainersBaseConfig {
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:17.6").withReuse(true);
 
-    protected final WebTestClient webTestClient;
+    @Container
+    static final KeycloakContainer keycloak = new KeycloakContainer()
+            .withRealmImportFile("keycloak/realm-export.json").withReuse(true);
 
+    protected final WebTestClient webTestClient;
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
@@ -41,11 +47,43 @@ public abstract class TestContainersBaseConfig {
                 postgres.getDatabaseName()));
         registry.add("spring.r2dbc.username", postgres::getUsername);
         registry.add("spring.r2dbc.password", postgres::getPassword);
+
+        registry.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", () -> keycloak.getAuthServerUrl() + "/realms/your-realm");
+    }
+
+    protected static String getAccessToken(String username) {
+        return WebClient.builder()
+                .baseUrl(keycloak.getAuthServerUrl())
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+                .build()
+                .post()
+                .uri("/realms/your-realm/protocol/openid-connect/token")
+                .body(
+                        BodyInserters.fromFormData("grant_type", "password")
+                                .with("client_id", "test-client")
+                                .with("client_secret", "test-client-secret")
+                                .with("username", username)
+                                .with("password", "password")
+                )
+                .retrieve()
+                .bodyToMono(String.class)
+                .map(response -> {
+                    try {
+                        return new ObjectMapper().readTree(response).get("access_token").asText();
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                })
+                .block();
     }
 
     protected HttpGraphQlClient newGraphQlClient() {
         return HttpGraphQlClient.builder(WebClient.create(baseGraphQlHttpPath))
                 .build();
+    }
+
+    protected WebTestClient getWebTestClient() {
+        return webTestClient;
     }
 
     protected WebTestClient.ResponseSpec getUploadDocumentExchange(MultipartBodyBuilder builder, String accessToken) {
@@ -77,7 +115,7 @@ public abstract class TestContainersBaseConfig {
     }
 
     protected WebTestClient.RequestHeadersSpec<?> getUploadDocumentHeader(MultipartBodyBuilder builder) {
-        return webTestClient.post().uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/upload")
+        return getWebTestClient().post().uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/upload")
                         .queryParam("allowDuplicateFileNames", true)
                         .build())
                 .contentType(MediaType.MULTIPART_FORM_DATA)
@@ -85,7 +123,7 @@ public abstract class TestContainersBaseConfig {
     }
 
     protected UploadResponse getUploadResponse(MultipartBodyBuilder builder) {
-        return webTestClient.post().uri(RestApiVersion.API_PREFIX + "/documents/upload")
+        return getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/documents/upload")
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(BodyInserters.fromMultipartData(builder.build()))
                 .exchange()
@@ -96,7 +134,7 @@ public abstract class TestContainersBaseConfig {
 
     protected MultipartBodyBuilder newFileBuilder() {
         MultipartBodyBuilder builder = new MultipartBodyBuilder();
-        builder.part("file", new ClassPathResource("schema.sql"));
+        builder.part("file", new ClassPathResource("test_file_1.sql"));
         return builder;
     }
 
@@ -124,7 +162,7 @@ public abstract class TestContainersBaseConfig {
 
     private WebTestClient.RequestHeadersSpec<?> getUploadMultipleDocumentExchangeHeader(MultipleUploadFileParameter param1, MultipleUploadFileParameter param2, MultipartBodyBuilder builder) {
         builder.part("parametersByFilename", List.of(param1, param2));
-        return webTestClient.post().uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/upload-multiple")
+        return getWebTestClient().post().uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/upload-multiple")
                 .queryParam("allowDuplicateFileNames", true)
                 .build())
                 .contentType(MediaType.MULTIPART_FORM_DATA)

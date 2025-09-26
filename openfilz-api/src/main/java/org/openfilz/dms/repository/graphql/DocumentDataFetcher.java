@@ -2,7 +2,6 @@ package org.openfilz.dms.repository.graphql;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import graphql.schema.DataFetchingEnvironment;
-import io.r2dbc.spi.Readable;
 import org.openfilz.dms.dto.response.FullDocumentInfo;
 import org.openfilz.dms.mapper.DocumentMapper;
 import org.openfilz.dms.utils.SqlUtils;
@@ -33,19 +32,19 @@ public class DocumentDataFetcher extends AbstractDataFetcher<Mono<FullDocumentIn
     public Mono<FullDocumentInfo> get(DataFetchingEnvironment environment) throws Exception {
         List<String> sqlFields = getSqlFields(environment);
         StringBuilder query = toSelect(sqlFields).append(fromDocumentsWhere);
-        sqlUtils.appendEqualsCriteria(null, ID, query);
+        applyFilter(query);
         UUID uuid = (UUID) environment.getArguments().get(ID);
         return prepareQuery(environment, uuid, query)
-                .map(row -> mapResultRow(row, sqlFields))
+                .map(mapFullDocumentInfo(sqlFields))
                 .one();
+    }
+
+    protected void applyFilter(StringBuilder query) {
+        sqlUtils.appendEqualsCriteria(prefix, ID, query);
     }
 
     protected DatabaseClient.GenericExecuteSpec prepareQuery(DataFetchingEnvironment environment, UUID uuid, StringBuilder query) {
         return sqlUtils.bindCriteria(ID, uuid, databaseClient.sql(query.toString()));
     }
 
-    @Override
-    protected FullDocumentInfo mapResultRow(Readable row, List<String> sqlFields) {
-        return mapper.toFullDocumentInfo(buildDocument(row, sqlFields));
-    }
 }

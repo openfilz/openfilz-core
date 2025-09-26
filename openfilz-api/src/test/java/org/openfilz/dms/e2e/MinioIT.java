@@ -28,12 +28,12 @@ import java.util.UUID;
 
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-public class DocumentManagementMinioIT extends DocumentManagementLocalStorageIT {
+public class MinioIT extends LocalStorageIT {
 
     @Container
     static MinIOContainer minio = new MinIOContainer("minio/minio:latest");
 
-    public DocumentManagementMinioIT(WebTestClient webTestClient) {
+    public MinioIT(WebTestClient webTestClient) {
         super(webTestClient);
     }
 
@@ -58,12 +58,12 @@ public class DocumentManagementMinioIT extends DocumentManagementLocalStorageIT 
                 .returnResult().getResponseBody();
 
         MultipartBodyBuilder builder = new MultipartBodyBuilder();
-        ClassPathResource file1 = new ClassPathResource("schema.sql");
+        ClassPathResource file1 = new ClassPathResource("test_file_1.sql");
         ClassPathResource file2 = new ClassPathResource("test.txt");
         builder.part("file", file1);
         builder.part("file", file2);
 
-        MultipleUploadFileParameter param1 = new MultipleUploadFileParameter("schema.sql", new MultipleUploadFileParameterAttributes(folder.id(), null));
+        MultipleUploadFileParameter param1 = new MultipleUploadFileParameter("test_file_1.sql", new MultipleUploadFileParameterAttributes(folder.id(), null));
         MultipleUploadFileParameter param2 = new MultipleUploadFileParameter("test.txt", new MultipleUploadFileParameterAttributes(folder.id(), null));
 
         List<UploadResponse> uploadResponse = getUploadMultipleDocumentExchange(param1, param2, builder)
@@ -87,7 +87,7 @@ public class DocumentManagementMinioIT extends DocumentManagementLocalStorageIT 
         builder.part("file", file1);
         builder.part("file", file2);
 
-        param1 = new MultipleUploadFileParameter("schema.sql", new MultipleUploadFileParameterAttributes(subFolder.id(), null));
+        param1 = new MultipleUploadFileParameter("test_file_1.sql", new MultipleUploadFileParameterAttributes(subFolder.id(), null));
         param2 = new MultipleUploadFileParameter("test.txt", new MultipleUploadFileParameterAttributes(subFolder.id(), null));
 
         uploadResponse = getUploadMultipleDocumentExchange(param1, param2, builder)

@@ -5,6 +5,7 @@ import org.openfilz.dms.dto.request.SearchByMetadataRequest;
 import org.openfilz.dms.dto.response.ChildElementInfo;
 import org.openfilz.dms.dto.response.FolderElementInfo;
 import org.openfilz.dms.entity.Document;
+import org.openfilz.dms.enums.AccessType;
 import org.openfilz.dms.enums.DocumentType;
 import org.springframework.security.core.Authentication;
 import reactor.core.publisher.Flux;
@@ -18,7 +19,7 @@ public interface DocumentDAO {
 
     Flux<ChildElementInfo> getChildren(UUID folderId);
 
-    Flux<ChildElementInfo> getElementsAndChildren(List<UUID> documentIds);
+    Flux<ChildElementInfo> getElementsAndChildren(List<UUID> documentIds, Authentication auth);
 
     Flux<FolderElementInfo> listDocumentInfoInFolder(Authentication authentication, UUID parentFolderId, DocumentType type);
 
@@ -26,13 +27,13 @@ public interface DocumentDAO {
 
     Mono<Boolean> existsByNameAndParentId(Authentication authentication, String name, UUID parentId);
 
-    Mono<Boolean> existsByIdAndType(Authentication authentication, UUID id, DocumentType type);
+    Mono<Boolean> existsByIdAndType(Authentication authentication, UUID id, DocumentType type, AccessType accessType);
 
     Mono<Document> getFolderToDelete(Authentication auth, UUID folderId);
 
     Flux<Document> findDocumentsByParentIdAndType(Authentication auth, @Nonnull UUID folderId, @Nonnull DocumentType documentType);
 
-    Mono<Document> findById(UUID documentId, Authentication authentication);
+    Mono<Document> findById(UUID documentId, Authentication authentication, AccessType accessType);
 
     Mono<Document> update(Document document);
 

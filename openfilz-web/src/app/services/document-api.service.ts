@@ -3,18 +3,18 @@ import {HttpClient, HttpHeaders, HttpParams} from '@angular/common/http';
 import {map, Observable} from 'rxjs';
 import {Apollo, gql} from 'apollo-angular';
 import {
-  CopyRequest,
-  CreateFolderRequest,
-  DeleteRequest,
-  DocumentInfo,
-  ElementInfo,
-  FolderResponse,
-  ListFolderAndCountResponse,
-  MoveRequest,
-  MultipleUploadFileParameter,
-  RenameRequest,
-  SearchByMetadataRequest,
-  UploadResponse
+    CopyRequest,
+    CreateFolderRequest,
+    DeleteRequest,
+    DocumentInfo,
+    ElementInfo,
+    FolderResponse,
+    ListFolderAndCountResponse,
+    MoveRequest,
+    MultipleUploadFileParameter,
+    RenameRequest,
+    SearchByMetadataRequest,
+    UploadResponse
 } from '../models/document.models';
 import {environment} from "../../environments/environment";
 

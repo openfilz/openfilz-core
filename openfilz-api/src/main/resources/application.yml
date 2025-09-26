@@ -17,9 +17,9 @@ spring:
 
   security:
     no-auth: true # No authentication required
+    # custom-roles: default false - if true : you can provide a custom implementation of org.openfilz.dms.config.DefaultAuthSecurityConfig and org.openfilz.dms.service.impl.SecurityServiceImpl
     # cors-allowed-origins: http://localhost:4200/ # Comma-separated list of authorized origins
-    # auth-class: optional class name which must inherit org.openfilz.dms.service.impl.AbstractSecurityService - default value : org.openfilz.dms.service.impl.SecurityServiceImpl
-    # role-token-lookup: GROUPS or REALM_ACCESS (default value) : optional value used in org.openfilz.dms.service.impl.SecurityServiceImpl to retrieve Role information from Groups or from the Realm_access
+    # role-token-lookup: GROUPS or REALM_ACCESS (default value) : optional value used in org.openfilz.dms.service.impl.AbstractSecurityService to retrieve Role information from Groups or from the Realm_access
     # role-token-lookup: GROUPS
     # root-group: name of the root group holding the 3 Roles as subgroups : eg. 'GED' is the root group in the group /GED/AUDITORS
     # root-group: GED

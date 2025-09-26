@@ -2,7 +2,6 @@ package org.openfilz.dms.repository.graphql;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import graphql.schema.DataFetchingEnvironment;
-import io.r2dbc.spi.Readable;
 import org.openfilz.dms.config.GraphQlQueryConfig;
 import org.openfilz.dms.dto.request.ListFolderRequest;
 import org.openfilz.dms.mapper.DocumentMapper;
@@ -10,26 +9,29 @@ import org.openfilz.dms.utils.SqlUtils;
 import org.springframework.r2dbc.core.DatabaseClient;
 import reactor.core.publisher.Mono;
 
-import java.util.List;
+import static org.openfilz.dms.utils.SqlUtils.FROM_DOCUMENTS;
 
 public class ListFolderCountDataFetcher  extends AbstractDataFetcher<Mono<Long>, Long> {
 
     public static final String COUNT = "count(*)";
-    private final ListFolderCriteria criteria;
+
+    protected final ListFolderCriteria criteria;
+
+    protected String fromClause;
 
     public ListFolderCountDataFetcher(DatabaseClient databaseClient, DocumentMapper mapper, ObjectMapper objectMapper, SqlUtils sqlUtils, ListFolderCriteria listFolderCriteria) {
         super(databaseClient, mapper, objectMapper, sqlUtils);
         this.criteria = listFolderCriteria;
+        initFromClause();
     }
 
-    @Override
-    protected Long mapResultRow(Readable row, List<String> sqlFields) {
-        return row.get(0, Long.class);
+    protected void initFromClause() {
+        fromClause = FROM_DOCUMENTS;
     }
 
     @Override
     public Mono<Long> get(DataFetchingEnvironment environment) throws Exception {
-        StringBuilder query = new StringBuilder(SqlUtils.SELECT).append(COUNT).append(SqlUtils.FROM_DOCUMENTS);
+        StringBuilder query = new StringBuilder(SqlUtils.SELECT).append(COUNT).append(fromClause);
         ListFolderRequest filter = null;
         DatabaseClient.GenericExecuteSpec sqlQuery = null;
         if(environment.getArguments() != null) {
@@ -40,15 +42,25 @@ public class ListFolderCountDataFetcher  extends AbstractDataFetcher<Mono<Long>,
                     throw new IllegalArgumentException("Paging information must not be provided");
                 }
                 criteria.checkFilter(filter);
-                criteria.applyFilter(prefix, query, filter);
-                sqlQuery = criteria.bindCriteria(databaseClient.sql(query.toString()), filter);
+                applyFilter(query, filter);
+                sqlQuery = prepareQuery(environment, query, filter);
             }
         }
         if(sqlQuery == null) {
             sqlQuery = databaseClient.sql(query.toString());
         }
         //log.debug("GraphQL - SQL query : {}", query);
-        return sqlQuery.map(row -> mapResultRow(row, null))
+        return sqlQuery.map(mapCount())
                 .one();
     }
+
+    protected void applyFilter(StringBuilder query, ListFolderRequest filter) {
+        criteria.applyFilter(prefix, query, filter);
+    }
+
+    protected DatabaseClient.GenericExecuteSpec prepareQuery(DataFetchingEnvironment environment, StringBuilder query, ListFolderRequest filter) {
+        return criteria.bindCriteria(databaseClient.sql(query.toString()), filter);
+    }
+
+
 }

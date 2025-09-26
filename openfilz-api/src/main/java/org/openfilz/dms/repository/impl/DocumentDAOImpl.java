@@ -10,9 +10,11 @@ import org.openfilz.dms.dto.response.ChildElementInfo;
 import org.openfilz.dms.dto.response.FolderElementInfo;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.entity.SqlColumnMapping;
+import org.openfilz.dms.enums.AccessType;
 import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.repository.DocumentDAO;
 import org.openfilz.dms.repository.DocumentRepository;
+import org.openfilz.dms.repository.SqlQueryUtils;
 import org.openfilz.dms.utils.SqlUtils;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.r2dbc.core.DatabaseClient;
@@ -37,7 +39,7 @@ import static org.openfilz.dms.utils.SqlUtils.isFirst;
 @RequiredArgsConstructor
 @ConditionalOnProperty(name = "features.custom-access", matchIfMissing = true, havingValue = "false")
 @Slf4j
-public class DocumentDAOImpl implements DocumentDAO {
+public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
 
     protected static final String EQUALS_ID = " = :id";
     protected static final String IS_NULL = " is null";
@@ -137,7 +139,34 @@ public class DocumentDAOImpl implements DocumentDAO {
                 && !metadataCriteria) {
             return Flux.error(new IllegalArgumentException("All criteria cannot be empty."));
         }
+        return queryDocumentIds(authentication, request, metadataCriteria, nameCriteria, typeCriteria, parentFolderCriteria, rootOnlyCriteria);
+    }
+
+    protected Flux<UUID> queryDocumentIds(Authentication authentication, SearchByMetadataRequest request, boolean metadataCriteria, boolean nameCriteria, boolean typeCriteria, boolean parentFolderCriteria, boolean rootOnlyCriteria) {
         StringBuilder sql = new StringBuilder(selectDocumentIds);
+        appendMetadataFilter(sql, metadataCriteria, nameCriteria, typeCriteria, parentFolderCriteria, rootOnlyCriteria);
+        DatabaseClient.GenericExecuteSpec query = databaseClient.sql(sql.toString());
+        query = bindMetadataFilter(request, query, metadataCriteria, nameCriteria, typeCriteria, parentFolderCriteria);
+        return executeSearchDocumentIdsQuery(authentication, query, mapId());
+    }
+
+    protected DatabaseClient.GenericExecuteSpec bindMetadataFilter(SearchByMetadataRequest request, DatabaseClient.GenericExecuteSpec query, boolean metadataCriteria, boolean nameCriteria, boolean typeCriteria, boolean parentFolderCriteria) {
+        if(metadataCriteria) {
+            query = sqlUtils.bindMetadata(request.metadataCriteria(), query);
+        }
+        if(nameCriteria) {
+            query = sqlUtils.bindCriteria(NAME, request.name(), query);
+        }
+        if(typeCriteria) {
+            query = sqlUtils.bindCriteria(TYPE, request.type().toString(), query);
+        }
+        if(parentFolderCriteria) {
+            query = sqlUtils.bindCriteria(SqlColumnMapping.PARENT_ID, request.parentFolderId(), query);
+        }
+        return query;
+    }
+
+    protected void appendMetadataFilter(StringBuilder sql, boolean metadataCriteria, boolean nameCriteria, boolean typeCriteria, boolean parentFolderCriteria, boolean rootOnlyCriteria) {
         boolean first = isWhereNotInSelect();
         if(metadataCriteria) {
             first = isFirst(first, sql);
@@ -159,29 +188,12 @@ public class DocumentDAOImpl implements DocumentDAO {
             isFirst(first, sql);
             sqlUtils.appendIsNullCriteria(selectDocumentPrefix, SqlColumnMapping.PARENT_ID, sql);
         }
-        DatabaseClient.GenericExecuteSpec query = databaseClient.sql(sql.toString());
-        if(metadataCriteria) {
-            query = sqlUtils.bindMetadata(request.metadataCriteria(),  query);
-        }
-        if(nameCriteria) {
-            query = sqlUtils.bindCriteria(NAME, request.name(), query);
-        }
-        if(typeCriteria) {
-            query = sqlUtils.bindCriteria(TYPE, request.type().toString(), query);
-        }
-        if(parentFolderCriteria) {
-            query = sqlUtils.bindCriteria(SqlColumnMapping.PARENT_ID, request.parentFolderId(), query);
-        }
-        return executeQuery(authentication, query, mapDocumentId());
     }
 
     protected boolean isWhereNotInSelect() {
         return true;
     }
 
-    protected Function<Readable, UUID> mapDocumentId() {
-        return row -> row.get(ID, UUID.class);
-    }
 
     public Flux<ChildElementInfo> getChildren(Flux<Tuple2<UUID, String>> folderIds) {
         return folderIds.flatMap(folders -> databaseClient.sql(SELECT_CHILDREN_2)
@@ -197,21 +209,20 @@ public class DocumentDAOImpl implements DocumentDAO {
     }
 
     @Override
-    public Flux<ChildElementInfo> getElementsAndChildren(List<UUID> documentIds) {
+    public Flux<ChildElementInfo> getElementsAndChildren(List<UUID> documentIds, Authentication auth) {
         return databaseClient.sql("""
-            SELECT
-                id,
-                name,
-                type,
-                size,
-                storage_path
-            FROM documents
-            where id in (:ids)""")
+                SELECT
+                    id,
+                    name,
+                    type,
+                    size,
+                    storage_path
+                FROM documents
+                where id in (:ids)""")
                 .bind(IDS, documentIds)
                 .map(this::toRootChild)
                 .all()
                 .mergeWith(getChildren(getFolders(documentIds)));
-
     }
 
     @Override
@@ -224,10 +235,14 @@ public class DocumentDAOImpl implements DocumentDAO {
         if(type != null) {
             query = query.bind(TYPE, type.toString());
         }
-        return executeQuery(authentication, query, mapFolderElementInfo());
+        return executeListDocumentInfoQuery(authentication, query, mapFolderElementInfo());
     }
 
-    protected  <T> Flux<T> executeQuery(Authentication authentication, DatabaseClient.GenericExecuteSpec query, Function<Readable, T> mappingFunction) {
+    protected  <T> Flux<T> executeListDocumentInfoQuery(Authentication authentication, DatabaseClient.GenericExecuteSpec query, Function<Readable, T> mappingFunction) {
+        return query.map(mappingFunction).all();
+    }
+
+    protected  <T> Flux<T> executeSearchDocumentIdsQuery(Authentication authentication, DatabaseClient.GenericExecuteSpec query, Function<Readable, T> mappingFunction) {
        return query.map(mappingFunction).all();
     }
 
@@ -249,13 +264,8 @@ public class DocumentDAOImpl implements DocumentDAO {
 
     @Override
     public Mono<Long> countDocument(Authentication authentication, UUID parentId) {
-        return parentId == null ? documentRepository.countDocumentByParentIdIsNull() : documentRepository.countDocumentByParentIdEquals(parentId);
-    }
-
-    protected Function<Readable, FolderElementInfo> mapFolderElementInfo() {
-        return row -> new FolderElementInfo(row.get(ID, UUID.class),
-                DocumentType.valueOf(row.get(TYPE, String.class)),
-                row.get(NAME, String.class));
+        return parentId == null ? documentRepository.countDocumentByParentIdIsNull()
+                : documentRepository.countDocumentByParentIdEquals(parentId);
     }
 
     protected Flux<Tuple2<UUID, String>> getFolders(List<UUID> documentIds) {
@@ -292,7 +302,7 @@ public class DocumentDAOImpl implements DocumentDAO {
     }
 
     @Override
-    public Mono<Boolean> existsByIdAndType(Authentication authentication, UUID id, DocumentType type) {
+    public Mono<Boolean> existsByIdAndType(Authentication authentication, UUID id, DocumentType type, AccessType accessType) {
         return documentRepository.existsByIdAndType(id, type);
     }
 
@@ -307,7 +317,7 @@ public class DocumentDAOImpl implements DocumentDAO {
     }
 
     @Override
-    public Mono<Document> findById(UUID documentId, Authentication authentication) {
+    public Mono<Document> findById(UUID documentId, Authentication authentication, AccessType accessType) {
         return documentRepository.findById(documentId);
     }
 

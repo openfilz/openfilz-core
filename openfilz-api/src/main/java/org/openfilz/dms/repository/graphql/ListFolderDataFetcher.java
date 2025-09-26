@@ -60,7 +60,7 @@ public class ListFolderDataFetcher extends AbstractDataFetcher<Flux<FullDocument
             throw new IllegalArgumentException("At least paging information is required");
         }
         log.debug("GraphQL - SQL query : {}", query);
-        return sqlQuery.map(row -> mapResultRow(row, sqlFields))
+        return sqlQuery.map(mapFullDocumentInfo(sqlFields))
                 .all();
     }
 
@@ -77,13 +77,6 @@ public class ListFolderDataFetcher extends AbstractDataFetcher<Flux<FullDocument
             appendSort(query, request);
         }
     }
-
-    @Override
-    protected FullDocumentInfo mapResultRow(io.r2dbc.spi.Readable row, List<String> sqlFields) {
-        return mapper.toFullDocumentInfo(buildDocument(row, sqlFields));
-    }
-
-
 
     private void appendSort(StringBuilder query, ListFolderRequest request) {
         query.append(SqlUtils.ORDER_BY).append(getSortByField(request));
