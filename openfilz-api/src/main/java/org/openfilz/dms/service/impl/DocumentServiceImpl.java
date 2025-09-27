@@ -267,14 +267,14 @@ public class DocumentServiceImpl implements DocumentService {
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, folderId)))
                 .flatMap(folder -> {
                     // 1. Delete child files
-                    Mono<Void> deleteChildFiles = documentDAO.findDocumentsByParentIdAndType(auth, folderId, FILE)
+                    Mono<Void> deleteChildFiles = getChildrenDocumentsToDelete(folderId, FILE, auth)
                             .flatMap(file -> storageService.deleteFile(file.getStoragePath())
                                     .then(documentDAO.delete(file))
                                     .then(auditService.logAction(auth, DELETE_FILE_CHILD, FILE, file.getId(), new DeleteAudit(folderId)))
                             ).then();
 
                     // 2. Recursively delete child folders
-                    Mono<Void> deleteChildFolders = documentDAO.findDocumentsByParentIdAndType(auth, folderId, DocumentType.FOLDER)
+                    Mono<Void> deleteChildFolders = getChildrenDocumentsToDelete(folderId, FOLDER, auth)
                             .flatMap(childFolder -> deleteFolderRecursive(childFolder.getId(), auth))
                             .then();
 
@@ -283,6 +283,10 @@ public class DocumentServiceImpl implements DocumentService {
                             .then(documentDAO.delete(folder))
                             .then(auditService.logAction(auth, AuditAction.DELETE_FOLDER, FOLDER, folderId));
                 });
+    }
+
+    protected Flux<Document> getChildrenDocumentsToDelete(UUID folderId, DocumentType docType, Authentication auth) {
+        return documentDAO.findDocumentsByParentIdAndType(auth, folderId, docType);
     }
 
 
