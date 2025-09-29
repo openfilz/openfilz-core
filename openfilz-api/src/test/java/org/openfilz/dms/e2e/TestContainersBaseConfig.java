@@ -8,6 +8,7 @@ import org.openfilz.dms.dto.request.MultipleUploadFileParameter;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.graphql.client.ClientGraphQlResponse;
 import org.springframework.graphql.client.HttpGraphQlClient;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -23,6 +24,8 @@ import org.testcontainers.junit.jupiter.Container;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 @RequiredArgsConstructor
 public abstract class TestContainersBaseConfig {
@@ -169,4 +172,12 @@ public abstract class TestContainersBaseConfig {
                 .body(BodyInserters.fromMultipartData(builder.build()));
     }
 
+
+    protected boolean checkCountIsOK(ClientGraphQlResponse doc, Long expectedCount) {
+        return Objects.equals(((Integer) ((Map<String, Object>) doc.getData()).get("count")).longValue(), expectedCount);
+    }
+
+    protected boolean checkCountIsGreaterThanZero(ClientGraphQlResponse doc) {
+        return (Integer) ((Map<String, Object>) doc.getData()).get("count") > 0;
+    }
 }

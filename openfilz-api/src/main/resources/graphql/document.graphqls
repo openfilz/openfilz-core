@@ -38,12 +38,21 @@ type DocumentInfo {
     updatedBy : String
 }
 
+"""
+Filter Object used to list or count the content of a given folder
+"""
 input ListFolderRequest {
+    "Id of the folder"
     id : UUID
+    "Type (FILE or FOLDER) of the elements to filter"
     type : DocumentType
+    "Content-Type of the files to filter"
     contentType : String
+    "name of the elements to filter (exact match)"
     name : String
+    "name of the elements to filter (like clause)"
     nameLike : String
+    "metadata of the elements to filter (contains clause)"
     metadata : JSON
     size : Long
     createdAtAfter : DateTime

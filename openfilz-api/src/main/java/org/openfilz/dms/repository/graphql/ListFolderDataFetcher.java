@@ -17,7 +17,7 @@ import static org.openfilz.dms.utils.SqlUtils.FROM_DOCUMENTS;
 import static org.openfilz.dms.utils.SqlUtils.SPACE;
 
 @Slf4j
-public class ListFolderDataFetcher extends AbstractDataFetcher<Flux<FullDocumentInfo>, FullDocumentInfo> {
+public class ListFolderDataFetcher extends AbstractListDataFetcher<Flux<FullDocumentInfo>, FullDocumentInfo> {
 
 
     protected final ListFolderCriteria criteria;
@@ -37,38 +37,39 @@ public class ListFolderDataFetcher extends AbstractDataFetcher<Flux<FullDocument
 
     @Override
     public Flux<FullDocumentInfo> get(DataFetchingEnvironment environment) throws Exception {
-        List<String> sqlFields = getSqlFields(environment);
-        StringBuilder query = toSelect(sqlFields).append(fromClause);
-        ListFolderRequest filter = null;
-        DatabaseClient.GenericExecuteSpec sqlQuery = null;
-        if(environment.getArguments() != null) {
-            Object request = environment.getArguments().get(GraphQlQueryConfig.GRAPHQL_REQUEST);
-            if(request != null) {
-                filter = objectMapper.convertValue(request, ListFolderRequest.class);
-                if(filter.pageInfo() == null || filter.pageInfo().pageSize() == null || filter.pageInfo().pageNumber() == null) {
-                    throw new IllegalArgumentException("Paging information must be provided");
-                }
-                criteria.checkFilter(filter);
-                criteria.checkPageInfo(filter);
-                applyFilter(query, filter);
-                applySort(query, filter);
-                appendOffsetLimit(query, filter);
-                sqlQuery = prepareQuery(environment, query, filter);
-            }
+        if(environment.getArguments() == null) {
+            throw new IllegalArgumentException("Arguments are required");
         }
-        if(sqlQuery == null) {
+        Object request = environment.getArguments().get(GraphQlQueryConfig.GRAPHQL_REQUEST);
+        if(request == null) {
             throw new IllegalArgumentException("At least paging information is required");
         }
+        List<String> sqlFields = getSqlFields(environment);
+        ListFolderRequest filter = getFilter(request);
+        if(filter.pageInfo() == null || filter.pageInfo().pageSize() == null || filter.pageInfo().pageNumber() == null) {
+            throw new IllegalArgumentException("Paging information must be provided");
+        }
+        StringBuilder query = getSelectRequest(sqlFields);
+        criteria.checkFilter(filter);
+        criteria.checkPageInfo(filter);
+        applyFilter(query, filter);
+        applySort(query, filter);
+        appendOffsetLimit(query, filter);
+        DatabaseClient.GenericExecuteSpec sqlQuery = prepareQuery(environment, filter, query);
         log.debug("GraphQL - SQL query : {}", query);
         return sqlQuery.map(mapFullDocumentInfo(sqlFields))
                 .all();
+    }
+
+    protected StringBuilder getSelectRequest(List<String> sqlFields) {
+        return toSelect(sqlFields).append(fromClause);
     }
 
     protected void applyFilter(StringBuilder query, ListFolderRequest filter) {
         criteria.applyFilter(prefix, query, filter);
     }
 
-    protected DatabaseClient.GenericExecuteSpec prepareQuery(DataFetchingEnvironment environment, StringBuilder query, ListFolderRequest filter) {
+    protected DatabaseClient.GenericExecuteSpec prepareQuery(DataFetchingEnvironment environment, ListFolderRequest filter, StringBuilder query) {
         return criteria.bindCriteria(databaseClient.sql(query.toString()), filter);
     }
 

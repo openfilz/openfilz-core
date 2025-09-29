@@ -1,7 +1,6 @@
 package org.openfilz.dms.service.impl;
 
 import lombok.RequiredArgsConstructor;
-import org.jetbrains.annotations.NotNull;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.enums.Role;
 import org.openfilz.dms.enums.RoleTokenLookup;
