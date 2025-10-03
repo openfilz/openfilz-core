@@ -5,6 +5,6 @@ metadata:
 data:
   ngx-env.js: |
     globalThis._NGX_ENV_ = {
-      {{ printf "\"NG_APP_API_URL\": \"%s\"," .Values.app.apiUrl }}
-      {{ printf "\"NG_APP_GRAPHQL_URL\": \"%s\"" .Values.app.graphQlUrl }}
+      {{ printf "NG_APP_API_URL: \"%s\"," .Values.app.apiUrl }}
+      {{ printf "NG_APP_GRAPHQL_URL: \"%s\"" .Values.app.graphQlUrl }}
     };
