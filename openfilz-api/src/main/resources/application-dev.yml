@@ -1,7 +1,7 @@
 spring:
   security:
     no-auth: true
-    cors-allowed-origins: http://localhost:4200, http://localhost:4900 # Comma-separated list of authorized origins
+    cors-allowed-origins: ${CORS_ALLOWED_URLS:http://localhost:4200, http://localhost:4900} # Comma-separated list of authorized origins
   graphql:
     graphiql:
       enabled: true
