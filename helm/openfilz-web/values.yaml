@@ -59,8 +59,8 @@ image:
 # -- Application and server settings.
 # @param api.port The container port the application listens on.
 app:
-  apiUrl: http://openfilz-api/api/v1
-  graphQlUrl: http://openfilz-api/graphql/v1
+  apiUrl: http://localhost/api/v1
+  graphQlUrl: http://localhost/graphql/v1
 
 # -- Service resource configuration.
 # @param service.type The type of Kubernetes Service.
