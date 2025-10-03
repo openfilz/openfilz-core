@@ -1,4 +1,4 @@
-FROM nginx:alpine-perl
+FROM nginxinc/nginx-unprivileged:alpine-perl
 COPY dist/openfilz-ui/browser /usr/share/nginx/html
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
 
