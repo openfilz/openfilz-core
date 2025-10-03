@@ -109,6 +109,8 @@ ingress:
   # @param ingress.ingressClassName The class of the Ingress controller.
   ingressClassName: "nginx"
   # @param ingress.path The path for the Ingress rule.
+  swagger:
+    enabled: true
   paths:
     - /api
     - /graphql

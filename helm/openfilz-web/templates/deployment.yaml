@@ -22,12 +22,6 @@ spec:
             - name: http
               containerPort: 80
               protocol: TCP
-          env:
-            - name: NG_APP_API_URL
-              value: {{ .Values.app.apiUrl }}
-            - name: NG_APP_GRAPHQL_URL
-              value: {{ .Values.app.graphQlUrl }}
-
           volumeMounts:
             - name: ngx-env-volume
               mountPath: /usr/share/nginx/html/ngx-env.js

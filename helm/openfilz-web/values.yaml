@@ -59,8 +59,8 @@ image:
 # -- Application and server settings.
 # @param api.port The container port the application listens on.
 app:
-  apiUrl: http://localhost/api/v1
-  graphQlUrl: http://localhost/graphql/v1
+  apiUrl: http://localhost:80/api/v1
+  graphQlUrl: http://localhost:80/graphql/v1
 
 # -- Service resource configuration.
 # @param service.type The type of Kubernetes Service.
