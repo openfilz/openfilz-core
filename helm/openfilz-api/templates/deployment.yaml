@@ -25,6 +25,8 @@ spec:
           env:
             - name: SPRING_PROFILES_ACTIVE
               value: {{ .Values.spring.activeProfile }}
+            - name: CORS_ALLOWED_URLS
+              value: {{ .Values.api.corsAllowedUrls }}
             - name: DB_HOST
               value: {{ .Values.database.host }}
             - name: DB_PORT

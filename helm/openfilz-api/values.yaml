@@ -63,6 +63,8 @@ image:
 # @param api.port The container port the application listens on.
 api:
   port: 9984
+  # Comma-separated list of authorized origins
+  corsAllowedUrls: ""
 
 # -- Spring Boot profile settings.
 # @param spring.activeProfile The active Spring profile (e.g., kube, dev).
