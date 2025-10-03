@@ -4,9 +4,6 @@
 # @param global Namespace to deploy the chart. It's recommended to use `helm install --namespace` instead.
 global: {}
 
-route:
-  hostname: &route-hostname ""
-
 # -- Common labels and annotations to apply to all resources.
 # @param common.labels Custom labels to add to all resources.
 # @param common.annotations Custom annotations to add to all resources.
@@ -21,7 +18,7 @@ openshift:
   route:
     enabled: false
     # @param openshift.route.hostname The hostname for the Route (e.g., api.example.com). If empty, OpenShift will generate one.
-    hostname: *route-hostname
+    hostname: ""
     # -- TLS configuration for the Route.
     # For more info, see: https://docs.openshift.com/container-platform/latest/networking/routes/secured-routes.html
     tls:
@@ -54,44 +51,16 @@ replicaCount: 1
 # @param image.pullSecrets Secrets for pulling images from a private registry.
 image:
   registry: ghcr.io
-  repository: openfilz/openfilz-api
+  repository: openfilz/openfilz-web
   tag: latest
   pullPolicy: Always
   pullSecrets: []
 
 # -- Application and server settings.
 # @param api.port The container port the application listens on.
-api:
-  port: 9984
-
-# -- Spring Boot profile settings.
-# @param spring.activeProfile The active Spring profile (e.g., kube, dev).
-spring:
-  activeProfile: ""
-
-# -- Database connection configuration.
-database:
-  # @param database.host The hostname of the database server.
-  host: "localhost"
-  # @param database.port The port of the database server.
-  port: 5432
-  # @param database.name The name of the database.
-  name: "dms-db"
-  # @param database.existingSecret Name of an existing Secret with DB credentials (keys: `user`, `password`).
-  # If provided, `createUser` and `createPassword` are ignored.
-  existingSecret: ""
-  # @param database.createUser The database username to create in the new Secret.
-  createUser: "app"
-  # @param database.createPassword The database password to create. If empty, a random one is generated.
-  createPassword: ""
-
-# -- Storage configuration for the application.
-# These values are used to construct the JAVA_TOOL_OPTIONS environment variable.
-storage:
-  # @param storage.type The type of storage backend (e.g., 'local' or 'minio').
-  type: local
-  # @param storage.basePath The path within the container where the volume is mounted.
-  basePath: /var/data/ged
+app:
+  apiUrl: http://openfilz-api/api/v1
+  graphQlUrl: http://openfilz-api/graphql/v1
 
 # -- Service resource configuration.
 # @param service.type The type of Kubernetes Service.
@@ -109,9 +78,7 @@ ingress:
   # @param ingress.ingressClassName The class of the Ingress controller.
   ingressClassName: "nginx"
   # @param ingress.path The path for the Ingress rule.
-  paths:
-    - /api
-    - /graphql
+  path: "/"
   # @param ingress.annotations Annotations for the Ingress resource.
   # The rewrite-target is set to '/$1' or '/$2' depending on the path's regex.
   # For a simple path like '/', no rewrite is typically needed unless stripping the path.
@@ -126,20 +93,3 @@ ingress:
     nginx.org/client-max-body-size: "1024m"
     # rest of nginx config #
   labels: {}
-
-# -- Persistence configuration.
-persistence:
-  # @param persistence.enabled Enable persistence using a PersistentVolumeClaim.
-  enabled: true
-  # @param persistence.accessModes PVC access modes.
-  accessModes:
-    - ReadWriteOnce
-  # @param persistence.size PVC storage size.
-  size: 10Mi
-  # @param persistence.storageClass PVC StorageClass. For OpenShift, use a dynamic provisioner like 'thin-csi'.
-  # For manual PV on non-OpenShift, set to a matching class (e.g., 'manual').
-  storageClass: ""
-  # @param persistence.hostPath The host path for the manual PV. Used only when `openshift.enabled` is false.
-  hostPath: /tmp/kube-storage
-  # @param persistence.existingClaim Use an existing PVC instead of creating a new one.
-  existingClaim: ""

@@ -5,6 +5,9 @@ openshift:
   enabled: false
   route:
     enabled: false
+#
+#image:
+#  registry: "localhost:5001"
 
 # -- Enable and configure the Kubernetes Ingress resource.
 ingress:
@@ -14,11 +17,10 @@ persistence:
   size: 1Gi
 
 # -- For test purposes only. Database password should be set via --set or a secret in production.
-database:
-  host: dms-postgres-postgresql
-  createUser: dms_user
-  createPassword: dms_password
-  name: dms_db
+
+app:
+  apiUrl: http://dms-local-document-management-api/api/v1
+  graphQlUrl: http://dms-local-document-management-api/graphql/v1
 
 # -- Remaining values can inherit from the defaults in values.yaml or be set as needed.
 # replicaCount: 1
