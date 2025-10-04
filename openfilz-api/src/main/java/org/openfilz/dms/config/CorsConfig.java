@@ -24,17 +24,31 @@ public class CorsConfig implements WebFluxConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry corsRegistry) {
 
+        // REST API
         corsRegistry.addMapping(API_PREFIX + "/**")
-          .allowedOrigins(allowedOrigins)
-                .allowedMethods(HttpMethod.GET.name(),
+                .allowedOrigins(allowedOrigins)
+                .allowedMethods(
+                        HttpMethod.GET.name(),
                         HttpMethod.POST.name(),
                         HttpMethod.PUT.name(),
                         HttpMethod.PATCH.name(),
-                        HttpMethod.DELETE.name());
+                        HttpMethod.DELETE.name(),
+                        HttpMethod.OPTIONS.name()
+                );
+
+        // GraphQL (cover exact path and nested paths)
+        corsRegistry.addMapping(graphQlBaseUrl)
+                .allowedOrigins(allowedOrigins)
+                .allowedMethods(
+                        HttpMethod.POST.name(),
+                        HttpMethod.OPTIONS.name()
+                );
+
         corsRegistry.addMapping(graphQlBaseUrl + "/**")
                 .allowedOrigins(allowedOrigins)
-                .allowedMethods(HttpMethod.POST.name(),
-                        HttpMethod.OPTIONS.name())
-        ;
+                .allowedMethods(
+                        HttpMethod.POST.name(),
+                        HttpMethod.OPTIONS.name()
+                );
     }
 }
