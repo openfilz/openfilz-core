@@ -46,14 +46,6 @@ public class CorsConfig implements WebFluxConfigurer {
                         HttpMethod.OPTIONS.name()
                 );
 
-        // GraphQL (cover exact path and nested paths)
-        corsRegistry.addMapping(graphQlBaseUrl)
-                .allowedOrigins(allowedOrigins)
-                .allowedMethods(
-                        HttpMethod.POST.name(),
-                        HttpMethod.OPTIONS.name()
-                );
-
         corsRegistry.addMapping(graphQlBaseUrl + "/**")
                 .allowedOrigins(allowedOrigins)
                 .allowedMethods(

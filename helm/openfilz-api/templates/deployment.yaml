@@ -25,8 +25,6 @@ spec:
           env:
             - name: SPRING_PROFILES_ACTIVE
               value: {{ .Values.spring.activeProfile }}
-            - name: CORS_ALLOWED_URLS
-              value: {{ .Values.api.corsAllowedUrls }}
             - name: DB_HOST
               value: {{ .Values.database.host }}
             - name: DB_PORT
@@ -46,7 +44,7 @@ spec:
                   name: {{ .Values.database.existingSecret | default (printf "%s-db-credentials" (include "common.names.fullname" .)) }}
                   key: password
             - name: JAVA_TOOL_OPTIONS
-              value: "-Dserver.port={{ .Values.api.port }} -Dstorage.type={{ .Values.storage.type }} -Dstorage.local.basePath={{ .Values.storage.basePath }}"
+              value: "-Dspring.security.cors-allowed-origins={{ .Values.api.corsAllowedUrls }} -Dserver.port={{ .Values.api.port }} -Dstorage.type={{ .Values.storage.type }} -Dstorage.local.basePath={{ .Values.storage.basePath }}"
           {{- if .Values.persistence.enabled }}
           volumeMounts:
             - name: data
