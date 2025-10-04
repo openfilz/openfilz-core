@@ -18,7 +18,7 @@ spring:
   security:
     no-auth: true # No authentication required
     # custom-roles: default false - if true : you can provide a custom implementation of org.openfilz.dms.config.DefaultAuthSecurityConfig and org.openfilz.dms.service.impl.SecurityServiceImpl
-    cors-allowed-origins: ${CORS_ALLOWED_URLS:*} # Comma-separated list of authorized origins
+    cors-allowed-origins: ${CORS_ALLOWED_URLS:} # Comma-separated list of authorized origins
     # role-token-lookup: GROUPS or REALM_ACCESS (default value) : optional value used in org.openfilz.dms.service.impl.AbstractSecurityService to retrieve Role information from Groups or from the Realm_access
     # role-token-lookup: GROUPS
     # root-group: name of the root group holding the 3 Roles as subgroups : eg. 'GED' is the root group in the group /GED/AUDITORS
@@ -36,12 +36,6 @@ spring:
   graphql:
     http:
       path: /graphql/v1
-    cors:
-      allowed-origins: ${CORS_ALLOWED_URLS:*}
-      allowed-methods: OPTIONS,POST
-      allowed-headers: *
-      allow-credentials: true
-
 
 # Storage Configuration
 storage:
@@ -71,6 +65,8 @@ springdoc:
 logging:
   level:
     org.openfilz: DEBUG
+    org.springframework.security: TRACE
+    org.springframework.web.reactive: TRACE
     # io.r2dbc.postgresql.QUERY: DEBUG # for queries
     # io.r2dbc.postgresql.PARAM: DEBUG # for parameters
     # org.springframework: DEBUG

@@ -8,7 +8,5 @@ spring:
 logging:
   level:
     io.r2dbc.postgresql.QUERY: DEBUG # for queries
-    org:
-      springframework:
-        security: TRACE
+    org.springframework.security: TRACE
     # io.r2dbc.postgresql.PARAM: DEBUG # for parameters
