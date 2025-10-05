@@ -55,7 +55,7 @@ public class SecurityIT extends TestContainersBaseConfig {
 
     @DynamicPropertySource
     static void registerResourceServerIssuerProperty(DynamicPropertyRegistry registry) {
-        registry.add("spring.security.no-auth", () -> false);
+        registry.add("openfilz.security.no-auth", () -> false);
     }
 
     @BeforeEach

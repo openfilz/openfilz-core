@@ -22,7 +22,7 @@ public class GroupsSecurityIT extends SecurityIT {
     @DynamicPropertySource
     static void registerResourceServerIssuerProperty(DynamicPropertyRegistry registry) {
 
-        registry.add("spring.security.role-token-lookup", () -> GROUPS);
-        registry.add("spring.security.root-group", () -> "GED");
+        registry.add("openfilz.security.role-token-lookup", () -> GROUPS);
+        registry.add("openfilz.security.root-group", () -> "GED");
     }
 }

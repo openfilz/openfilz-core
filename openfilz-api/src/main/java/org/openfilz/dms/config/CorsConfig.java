@@ -16,11 +16,11 @@ import static org.openfilz.dms.config.RestApiVersion.API_PREFIX;
 
 @Slf4j
 @Configuration
-@ConditionalOnProperty(name = "spring.security.cors-allowed-origins")
+@ConditionalOnProperty(name = "openfilz.security.cors-allowed-origins")
 @EnableWebFlux
 public class CorsConfig implements WebFluxConfigurer {
 
-    @Value("${spring.security.cors-allowed-origins}")
+    @Value("${openfilz.security.cors-allowed-origins}")
     private String[] allowedOrigins;
 
     @Value("${spring.graphql.http.path:/graphql}")
@@ -33,24 +33,25 @@ public class CorsConfig implements WebFluxConfigurer {
 
     @Override
     public void addCorsMappings(CorsRegistry corsRegistry) {
-
-        // REST API
-        corsRegistry.addMapping(API_PREFIX + "/**")
-                .allowedOrigins(allowedOrigins)
-                .allowedMethods(
-                        HttpMethod.GET.name(),
-                        HttpMethod.POST.name(),
-                        HttpMethod.PUT.name(),
-                        HttpMethod.PATCH.name(),
-                        HttpMethod.DELETE.name(),
-                        HttpMethod.OPTIONS.name()
-                );
-
-        corsRegistry.addMapping(graphQlBaseUrl + "/**")
-                .allowedOrigins(allowedOrigins)
-                .allowedMethods(
-                        HttpMethod.POST.name(),
-                        HttpMethod.OPTIONS.name()
-                );
+        if(allowedOrigins != null && allowedOrigins.length > 0) {
+            // REST API
+            corsRegistry.addMapping(API_PREFIX + "/**")
+                    .allowedOrigins(allowedOrigins)
+                    .allowedMethods(
+                            HttpMethod.GET.name(),
+                            HttpMethod.POST.name(),
+                            HttpMethod.PUT.name(),
+                            HttpMethod.PATCH.name(),
+                            HttpMethod.DELETE.name(),
+                            HttpMethod.OPTIONS.name()
+                    );
+            //GraphQL API
+            corsRegistry.addMapping(graphQlBaseUrl + "/**")
+                    .allowedOrigins(allowedOrigins)
+                    .allowedMethods(
+                            HttpMethod.POST.name(),
+                            HttpMethod.OPTIONS.name()
+                    );
+        }
     }
 }

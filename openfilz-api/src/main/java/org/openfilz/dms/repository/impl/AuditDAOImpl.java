@@ -28,7 +28,7 @@ import static org.openfilz.dms.utils.SqlUtils.isFirst;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class AuditDAOImpl implements AuditDAO {
+public class AuditDAOImpl implements AuditDAO, UserInfoService {
 
     private static final String AUDIT_VALUES_SQL = ") VALUES (:ts, :up, :act, :rt, :rid";
     private static final String AUDIT_INSERT_SQL = "INSERT INTO audit_logs (timestamp, user_principal, action, resource_type, resource_id";
@@ -38,8 +38,6 @@ public class AuditDAOImpl implements AuditDAO {
     private  final ObjectMapper objectMapper;
 
     private final JsonUtils jsonUtils;
-
-    private final UserInfoService userInfoService;
 
     @Override
     public Flux<AuditLog> getAuditTrail(UUID resourceId, SortOrder sort) {
@@ -125,7 +123,7 @@ public class AuditDAOImpl implements AuditDAO {
         } else {
             sql.append(AUDIT_VALUES_SQL).append(")");
         }
-        return userInfoService.getConnectedUser(authentication)
+        return getConnectedUserEmail(authentication)
                 .flatMap(username -> {
                     DatabaseClient.GenericExecuteSpec executeSpec = databaseClient.sql(sql.toString())
                             .bind("ts", OffsetDateTime.now())

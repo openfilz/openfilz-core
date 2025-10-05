@@ -25,7 +25,7 @@ import static org.openfilz.dms.config.GraphQlQueryConfig.*;
 @RequiredArgsConstructor
 @Configuration
 @Slf4j
-@ConditionalOnProperty(name = "features.custom-access", matchIfMissing = true, havingValue = "false")
+@ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
 public class GraphQlConfig {
 
     protected final DatabaseClient databaseClient;

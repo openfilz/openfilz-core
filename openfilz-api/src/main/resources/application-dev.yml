@@ -1,7 +1,4 @@
 spring:
-  security:
-    no-auth: true
-    cors-allowed-origins: http://localhost:4200, http://localhost:4900 # Comma-separated list of authorized origins
   graphql:
     graphiql:
       enabled: true
@@ -10,3 +7,8 @@ logging:
     io.r2dbc.postgresql.QUERY: DEBUG # for queries
     org.springframework.security: TRACE
     # io.r2dbc.postgresql.PARAM: DEBUG # for parameters
+
+openfilz:
+  security:
+    no-auth: true
+    cors-allowed-origins: http://localhost:4200, http://localhost:4900 # Comma-separated list of authorized origins

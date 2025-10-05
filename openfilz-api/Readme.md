@@ -157,10 +157,10 @@ The OpenFilz API provides flexible security options.
 
 ### Disabling Security
 
-For development or testing purposes, security can be completely disabled by setting the `spring.security.no-auth` property to `true` in your `application.yml`.
+For development or testing purposes, security can be completely disabled by setting the `openfilz.security.no-auth` property to `true` in your `application.yml`.
 
 ```yaml
-spring:
+openfilz:
   security:
     no-auth: true
 ```
@@ -172,7 +172,7 @@ When security is enabled, the API acts as an OIDC resource server, validating JW
 #### Default Authorization
 
 The default authorization model uses roles extracted from the JWT token.
-You can configure how roles are looked up using the `spring.security.role-token-lookup` property.
+You can configure how roles are looked up using the `openfilz.security.role-token-lookup` property.
 
 #### Custom Authorization
 
@@ -180,10 +180,10 @@ For more advanced scenarios, you can provide a completely custom authorization m
 
 1.  Provide a custom implementation of `org.openfilz.dms.config.DefaultAuthSecurityConfig`
 2.  Provide a custom implementation of and `org.openfilz.dms.service.impl.SecurityServiceImpl`
-3.  Set to true the `spring.security.custom-roles` property.
+3.  Set to true the `openfilz.security.custom-roles` property.
 
 ```yaml
-spring:
+openfilz:
   security:
     custom-roles: true
 ```

@@ -64,7 +64,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
     @Autowired
     protected DatabaseClient databaseClient;
 
-    private HttpGraphQlClient graphQlHttpClient;
+    protected HttpGraphQlClient graphQlHttpClient;
 
     private static final Long testTxtSize;
 

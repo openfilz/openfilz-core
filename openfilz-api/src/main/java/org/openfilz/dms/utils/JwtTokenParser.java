@@ -17,7 +17,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Component
-@ConditionalOnProperty(name = "spring.security.no-auth", havingValue = "false")
+@ConditionalOnProperty(name = "openfilz.security.no-auth", havingValue = "false")
 @RequiredArgsConstructor
 public class JwtTokenParser {
 

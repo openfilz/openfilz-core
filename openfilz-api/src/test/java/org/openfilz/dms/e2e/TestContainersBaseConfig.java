@@ -51,6 +51,13 @@ public abstract class TestContainersBaseConfig {
         registry.add("spring.r2dbc.username", postgres::getUsername);
         registry.add("spring.r2dbc.password", postgres::getPassword);
 
+        registry.add("spring.flyway.url", () -> String.format("jdbc:postgresql://%s:%d/%s",
+                postgres.getHost(),
+                postgres.getFirstMappedPort(),
+                postgres.getDatabaseName()));
+        registry.add("spring.flyway.user", postgres::getUsername);
+        registry.add("spring.flyway.password", postgres::getPassword);
+
         registry.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", () -> keycloak.getAuthServerUrl() + "/realms/your-realm");
     }
 

@@ -25,7 +25,7 @@ public class CorsIT extends LocalStorageIT {
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.security.cors-allowed-origins", () -> "http://localhost:4200/");
+        registry.add("openfilz.security.cors-allowed-origins", () -> "http://localhost:4200/");
     }
 
     @Test

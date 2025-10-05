@@ -47,6 +47,11 @@
             <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+
         <!-- GraphQL -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -307,7 +312,7 @@
                                 <mainClass>org.openfilz.dms.DmsApiApplication</mainClass>
                             </container>
                             <from>
-                                <image>openjdk:24-jdk</image>
+                                <image>eclipse-temurin:25_36-jdk-noble</image>
                             </from>
                             <to>
                                 <image>${registry.hostname}:${registry.port}/${docker.context.path}${project.artifactId}</image>

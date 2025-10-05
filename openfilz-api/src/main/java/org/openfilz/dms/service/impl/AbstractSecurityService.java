@@ -24,10 +24,10 @@ public abstract class AbstractSecurityService implements SecurityService {
     protected static final String REALM_ACCESS = "realm_access";
     protected static final String GROUPS = "groups";
 
-    @Value("${spring.security.role-token-lookup:#{null}}")
+    @Value("${openfilz.security.role-token-lookup:#{null}}")
     protected RoleTokenLookup roleTokenLookup;
 
-    @Value("${spring.security.root-group:#{null}}")
+    @Value("${openfilz.security.root-group:#{null}}")
     protected String rootGroupName;
 
     @Value("${spring.graphql.http.path:/graphql}")

@@ -57,8 +57,8 @@ import static org.openfilz.dms.utils.FileConstants.SLASH;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "features.custom-access", matchIfMissing = true, havingValue = "false")
-public class DocumentServiceImpl implements DocumentService {
+@ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
+public class DocumentServiceImpl implements DocumentService, UserInfoService {
 
     public static final String APPLICATION_OCTET_STREAM = "application/octet-stream";
 
@@ -67,7 +67,6 @@ public class DocumentServiceImpl implements DocumentService {
     protected final AuditService auditService; // For auditing
     protected final JsonUtils jsonUtils;
     protected final DocumentDAO documentDAO;
-    protected final UserInfoService userInfoService;
 
     @Value("${piped.buffer.size:1024}")
     private Integer pipedBufferSize;
@@ -112,7 +111,7 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     private Mono<Document> doSaveDocument(Authentication auth, Function<String, Mono<Document>> documentFunction) {
-        return userInfoService.getConnectedUser(auth).flatMap(documentFunction);
+        return getConnectedUserEmail(auth).flatMap(documentFunction);
     }
 
     private Mono<Document> saveFolderInRepository(CreateFolderRequest request, Authentication auth, Json folderMetadata) {
