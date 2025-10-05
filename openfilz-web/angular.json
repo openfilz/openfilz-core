@@ -65,14 +65,70 @@
             "development": {
               "buildTarget": "openfilz-ui:build:development"
             },
-            "local-dev": {
-              "buildTarget": "openfilz-ui:build:local-dev"
-            },
             "production": {
               "buildTarget": "openfilz-ui:build:production"
             }
           },
           "defaultConfiguration": "development",
+          "options": {}
+        }
+      },
+      "prefix": "app",
+      "projectType": "application",
+      "root": "",
+      "schematics": {},
+      "sourceRoot": "src"
+    },
+    "openfilz-ui-local-dev": {
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "configurations": {
+            "local-dev": {
+              "extractLicenses": false,
+              "namedChunks": true,
+              "optimization": false,
+              "sourceMap": true,
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.local-dev.ts"
+                }
+              ]
+            },
+            "development": {
+              "extractLicenses": false,
+              "namedChunks": true,
+              "optimization": false,
+              "sourceMap": true
+            }
+          },
+          "options": {
+            "assets": [
+              "src/favicon.ico"
+            ],
+            "index": "src/index.html",
+            "browser": "src/main.ts",
+            "outputPath": "dist/openfilz-ui-local-dev",
+            "polyfills": [
+              "zone.js"
+            ],
+            "scripts": [],
+            "styles": [
+              "src/custom-theme.scss",
+              "src/global_styles.css"
+            ],
+            "tsConfig": "tsconfig.app.json"
+          }
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "configurations": {
+            "local-dev": {
+              "buildTarget": "openfilz-ui:build:local-dev"
+            }
+          },
+          "defaultConfiguration": "local-dev",
           "options": {}
         }
       },
