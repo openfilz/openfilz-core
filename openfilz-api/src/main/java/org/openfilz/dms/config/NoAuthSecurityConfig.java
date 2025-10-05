@@ -10,7 +10,7 @@ import org.springframework.security.web.server.SecurityWebFilterChain;
 
 @Configuration
 @EnableWebFluxSecurity
-@ConditionalOnProperty(name = "spring.security.no-auth", havingValue = "true")
+@ConditionalOnProperty(name = "openfilz.security.no-auth", havingValue = "true")
 public class NoAuthSecurityConfig {
 
     @Bean

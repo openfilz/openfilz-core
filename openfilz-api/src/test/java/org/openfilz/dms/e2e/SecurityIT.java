@@ -55,7 +55,7 @@ public class SecurityIT extends TestContainersBaseConfig {
 
     @DynamicPropertySource
     static void registerResourceServerIssuerProperty(DynamicPropertyRegistry registry) {
-        registry.add("spring.security.no-auth", () -> false);
+        registry.add("openfilz.security.no-auth", () -> false);
     }
 
     @BeforeEach
@@ -442,7 +442,10 @@ public class SecurityIT extends TestContainersBaseConfig {
     }
 
     protected WebTestClient.RequestHeadersSpec<?> getListFolderRequest(UploadResponse folder) {
-        return webTestClient.get().uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/folders/list").queryParam("folderId", folder.id()).build());
+        if(folder != null) {
+            return webTestClient.get().uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/folders/list").queryParam("folderId", folder.id()).build());
+        }
+        return webTestClient.get().uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/folders/list").build());
     }
 
     protected WebTestClient.RequestHeadersSpec<?> getDeleteFolderRequest(UploadResponse folder) {

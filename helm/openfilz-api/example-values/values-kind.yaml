@@ -6,9 +6,6 @@ openshift:
   route:
     enabled: false
 
-image:
-  registry: "localhost:5001"
-
 # -- Enable and configure the Kubernetes Ingress resource.
 ingress:
   enabled: true

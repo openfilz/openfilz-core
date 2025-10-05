@@ -15,7 +15,7 @@ import static org.openfilz.dms.entity.SqlColumnMapping.ID;
 import static org.openfilz.dms.utils.SqlUtils.FROM_DOCUMENTS;
 import static org.openfilz.dms.utils.SqlUtils.WHERE;
 
-public class DocumentDataFetcher extends AbstractDataFetcher<Mono<FullDocumentInfo>, FullDocumentInfo> {
+public class DocumentDataFetcher extends AbstractDataFetcher<Mono<FullDocumentInfo>, FullDocumentInfo, UUID> {
 
     protected String fromDocumentsWhere;
 

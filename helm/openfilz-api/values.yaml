@@ -63,6 +63,8 @@ image:
 # @param api.port The container port the application listens on.
 api:
   port: 9984
+  # Comma-separated list of authorized origins
+  corsAllowedUrls: ""
 
 # -- Spring Boot profile settings.
 # @param spring.activeProfile The active Spring profile (e.g., kube, dev).
@@ -109,7 +111,11 @@ ingress:
   # @param ingress.ingressClassName The class of the Ingress controller.
   ingressClassName: "nginx"
   # @param ingress.path The path for the Ingress rule.
-  path: "/"
+  swagger:
+    enabled: true
+  paths:
+    - /api
+    - /graphql
   # @param ingress.annotations Annotations for the Ingress resource.
   # The rewrite-target is set to '/$1' or '/$2' depending on the path's regex.
   # For a simple path like '/', no rewrite is typically needed unless stripping the path.

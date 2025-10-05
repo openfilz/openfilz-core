@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
 import static org.openfilz.dms.entity.SqlColumnMapping.*;
 
 @RequiredArgsConstructor
-public abstract class AbstractDataFetcher<T, R> implements DataFetcher<T>, SqlQueryUtils {
+public abstract class AbstractDataFetcher<T, R, Z> implements DataFetcher<T>, SqlQueryUtils {
 
     protected static final Map<String, String> DOCUMENT_FIELD_SQL_MAP;
 
@@ -84,5 +84,7 @@ public abstract class AbstractDataFetcher<T, R> implements DataFetcher<T>, SqlQu
     protected Function<Readable, FullDocumentInfo> mapFullDocumentInfo(List<String> sqlFields) {
         return row -> mapper.toFullDocumentInfo(buildDocument(row, sqlFields));
     }
+
+    protected abstract DatabaseClient.GenericExecuteSpec prepareQuery(DataFetchingEnvironment environment, Z requestCriteria, StringBuilder query);
 
 }

@@ -14,15 +14,14 @@ spring:
       enabled: true
       initial-size: 5
       max-size: 10
+  flyway:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:dms_db}
+    user: ${DB_USER:dms_user}
+    password: ${DB_PASSWORD:dms_password}
+    locations: classpath:db/migration
+    baseline-on-migrate: true
 
   security:
-    no-auth: true # No authentication required
-    # custom-roles: default false - if true : you can provide a custom implementation of org.openfilz.dms.config.DefaultAuthSecurityConfig and org.openfilz.dms.service.impl.SecurityServiceImpl
-    # cors-allowed-origins: http://localhost:4200/ # Comma-separated list of authorized origins
-    # role-token-lookup: GROUPS or REALM_ACCESS (default value) : optional value used in org.openfilz.dms.service.impl.AbstractSecurityService to retrieve Role information from Groups or from the Realm_access
-    # role-token-lookup: GROUPS
-    # root-group: name of the root group holding the 3 Roles as subgroups : eg. 'GED' is the root group in the group /GED/AUDITORS
-    # root-group: GED
     oauth2:
       resourceserver:
         jwt:
@@ -77,6 +76,15 @@ piped:
   buffer:
     size: 8192
 
+openfilz:
+  security:
+    no-auth: true # No authentication required
+    # custom-roles: default false - if true : you can provide a custom implementation of org.openfilz.dms.config.DefaultAuthSecurityConfig and org.openfilz.dms.service.impl.SecurityServiceImpl
+    # cors-allowed-origins: http://localhost:4200/ # Comma-separated list of authorized origins
+    # role-token-lookup: GROUPS or REALM_ACCESS (default value) : optional value used in org.openfilz.dms.service.impl.AbstractSecurityService to retrieve Role information from Groups or from the Realm_access
+    # role-token-lookup: GROUPS
+    # root-group: name of the root group holding the 3 Roles as subgroups : eg. 'GED' is the root group in the group /GED/AUDITORS
+    # root-group: GED
 
 # Database schema initialization (e.g., Flyway or Liquibase if preferred)
 # For simple R2DBC, you might use an InitializingBean to create tables

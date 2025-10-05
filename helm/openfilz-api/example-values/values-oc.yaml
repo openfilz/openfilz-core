@@ -1,10 +1,5 @@
 # Example values for an OpenShift deployment
 
-image:
-  registry: locahost:5000
-  pullSecrets:
-    - name: imagePullSecrets
-
 # -- Enable OpenShift-specific resources and logic.
 openshift:
   enabled: true

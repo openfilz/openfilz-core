@@ -37,7 +37,7 @@ import static org.openfilz.dms.utils.SqlUtils.isFirst;
 
 @Service
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "features.custom-access", matchIfMissing = true, havingValue = "false")
+@ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
 @Slf4j
 public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
 

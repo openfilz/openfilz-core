@@ -1,0 +1,54 @@
+{{- if and .Values.ingress.enabled (not .Values.openshift.enabled) .Values.ingress.swagger.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "common.names.fullname" . }}-swagger
+  labels: {{- include "common.labels.standard" . | nindent 4 }}
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- if .Values.ingress.ingressClassName }}
+  ingressClassName: {{ .Values.ingress.ingressClassName }}
+  {{- end }}
+  rules:
+    - http:
+        paths:
+          - path: /swagger-ui.*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: {{ include "common.names.fullname" . }}
+                port:
+                  name: http
+          - path: /v3/api-docs
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "common.names.fullname" . }}
+                port:
+                  name: http
+          - path: /v2/api-docs
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "common.names.fullname" . }}
+                port:
+                  name: http
+          - path: /swagger-resources
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "common.names.fullname" . }}
+                port:
+                  name: http
+          - path: /webjars
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "common.names.fullname" . }}
+                port:
+                  name: http
+{{- end }}

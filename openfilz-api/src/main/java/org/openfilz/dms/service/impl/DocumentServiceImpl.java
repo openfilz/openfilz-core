@@ -57,8 +57,8 @@ import static org.openfilz.dms.utils.FileConstants.SLASH;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "features.custom-access", matchIfMissing = true, havingValue = "false")
-public class DocumentServiceImpl implements DocumentService {
+@ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
+public class DocumentServiceImpl implements DocumentService, UserInfoService {
 
     public static final String APPLICATION_OCTET_STREAM = "application/octet-stream";
 
@@ -67,7 +67,6 @@ public class DocumentServiceImpl implements DocumentService {
     protected final AuditService auditService; // For auditing
     protected final JsonUtils jsonUtils;
     protected final DocumentDAO documentDAO;
-    protected final UserInfoService userInfoService;
 
     @Value("${piped.buffer.size:1024}")
     private Integer pipedBufferSize;
@@ -112,7 +111,7 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     private Mono<Document> doSaveDocument(Authentication auth, Function<String, Mono<Document>> documentFunction) {
-        return userInfoService.getConnectedUser(auth).flatMap(documentFunction);
+        return getConnectedUserEmail(auth).flatMap(documentFunction);
     }
 
     private Mono<Document> saveFolderInRepository(CreateFolderRequest request, Authentication auth, Json folderMetadata) {
@@ -267,14 +266,14 @@ public class DocumentServiceImpl implements DocumentService {
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, folderId)))
                 .flatMap(folder -> {
                     // 1. Delete child files
-                    Mono<Void> deleteChildFiles = documentDAO.findDocumentsByParentIdAndType(auth, folderId, FILE)
+                    Mono<Void> deleteChildFiles = getChildrenDocumentsToDelete(folderId, FILE, auth)
                             .flatMap(file -> storageService.deleteFile(file.getStoragePath())
                                     .then(documentDAO.delete(file))
                                     .then(auditService.logAction(auth, DELETE_FILE_CHILD, FILE, file.getId(), new DeleteAudit(folderId)))
                             ).then();
 
                     // 2. Recursively delete child folders
-                    Mono<Void> deleteChildFolders = documentDAO.findDocumentsByParentIdAndType(auth, folderId, DocumentType.FOLDER)
+                    Mono<Void> deleteChildFolders = getChildrenDocumentsToDelete(folderId, FOLDER, auth)
                             .flatMap(childFolder -> deleteFolderRecursive(childFolder.getId(), auth))
                             .then();
 
@@ -283,6 +282,10 @@ public class DocumentServiceImpl implements DocumentService {
                             .then(documentDAO.delete(folder))
                             .then(auditService.logAction(auth, AuditAction.DELETE_FOLDER, FOLDER, folderId));
                 });
+    }
+
+    protected Flux<Document> getChildrenDocumentsToDelete(UUID folderId, DocumentType docType, Authentication auth) {
+        return documentDAO.findDocumentsByParentIdAndType(auth, folderId, docType);
     }
 
 

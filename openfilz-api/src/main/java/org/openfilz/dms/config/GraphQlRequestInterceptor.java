@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
 @Component
-@ConditionalOnProperty(name = "spring.security.no-auth", havingValue = "false")
+@ConditionalOnProperty(name = "openfilz.security.no-auth", havingValue = "false")
 @RequiredArgsConstructor
 @Slf4j
 public class GraphQlRequestInterceptor implements WebGraphQlInterceptor {

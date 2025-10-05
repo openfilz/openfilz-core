@@ -7,8 +7,8 @@ import org.springframework.core.type.AnnotatedTypeMetadata;
 public class DefaultRolesCondition implements Condition {
     @Override
     public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
-        Boolean customRole = context.getEnvironment().getProperty("spring.security.custom-roles", Boolean.class,Boolean.FALSE);
-        Boolean noAuth = context.getEnvironment().getRequiredProperty("spring.security.no-auth", Boolean.class);
+        Boolean customRole = context.getEnvironment().getProperty("openfilz.security.custom-roles", Boolean.class,Boolean.FALSE);
+        Boolean noAuth = context.getEnvironment().getRequiredProperty("openfilz.security.no-auth", Boolean.class);
 
         return !noAuth && !customRole;
     }

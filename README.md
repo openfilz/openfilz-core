@@ -52,6 +52,19 @@ A web-based graphical user interface (GUI), similar to Google Drive, is currentl
 - **Pluggable Authorization:** Supports a default role-based authorization model using roles from the JWT, and allows for a fully custom authorization model to be implemented for advanced scenarios.
 - **Security Toggle:** Security can be disabled for development and testing environments.
 
+### GraphQL API
+
+In addition to the standard REST API, OpenFilz offers GraphQL endpoints for querying document lists and counts, providing a more flexible and efficient way to fetch data.
+
+-   **GraphQL Schema:** The complete schema for all available queries is defined in `openfilz-api/src/main/resources/graphql/document.graphqls`. This includes operations like `listFolder`, `documentById`, and `count`.
+-   **GraphiQL UI:** The interactive GraphiQL interface, available at the `/graphiql` endpoint, can be enabled by setting the `spring.graphql.graphiql.enabled` property to `true`. It is automatically enabled when the OpenFilz API is started with the `dev` Spring profile, allowing you to explore the schema and test queries directly in your browser.
+
+**Main Benefits of using GraphQL:**
+
+-   **Flexible Queries:** Request only the data you need, reducing payload size and improving application performance. For example, you can fetch a list of documents with only their `name` and `size`, ignoring other metadata.
+-   **Single Endpoint:** Access all your data needs through a single, smart endpoint, simplifying the client-side logic.
+-   **Strongly Typed Schema:** The schema serves as a clear contract between the client and server, enabling better developer tools and reducing the chance of bugs.
+
 ---
 
 ## Architecture

@@ -1,4 +1,4 @@
 export const environment = {
-    apiURL: 'https://test-openfilz-api-ged-lab.apps.lab.oddo.fr/api/v1',
-    graphQlURL: 'https://test-openfilz-api-ged-lab.apps.lab.oddo.fr/graphql/v1'
+    apiURL: import.meta.env['NG_APP_API_URL'],
+    graphQlURL: import.meta.env['NG_APP_GRAPHQL_URL']
 };

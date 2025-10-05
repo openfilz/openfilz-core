@@ -36,16 +36,131 @@ As a dedicated microservice, the API is built to be highly available and scalabl
 #### 6. **Promote a Decoupled Architecture**
 Frontend applications, backend microservices, and data processing pipelines can all interact with documents through the API without needing to know about the physical storage location or implementation details. This promotes a clean, decoupled architecture that is easier to maintain and evolve over time.
 
+## GraphQL API
+
+The OpenFilz API exposes a GraphQL endpoint for powerful and flexible querying of the document repository.
+
+### Queries
+
+The following queries are available:
+
+#### `listFolder(request: ListFolderRequest!): [FolderElementInfo]`
+
+Retrieves a paginated list of files and folders within a specified folder.
+
+*   **`request`**: A `ListFolderRequest` object used to filter and paginate the results.
+
+Returns an array of `FolderElementInfo` objects.
+
+#### `documentById(id: UUID!): DocumentInfo`
+
+Fetches a single document or folder by its unique identifier.
+
+*   **`id`**: The `UUID` of the document or folder to retrieve.
+
+Returns a `DocumentInfo` object.
+
+#### `count(request: ListFolderRequest): Long`
+
+Counts the number of files and folders within a folder that match the given filter criteria.
+
+*   **`request`**: A `ListFolderRequest` object used to filter the elements to be counted.
+
+Returns a `Long` representing the total count.
+
+### Input Types
+
+#### `ListFolderRequest`
+
+Used to filter and paginate folder content.
+
+| Field             | Type         | Description                                               |
+| ----------------- | ------------ | --------------------------------------------------------- |
+| `id`              | `UUID`       | The ID of the folder to query.                            |
+| `type`            | `DocumentType` | Filter by element type (`FILE` or `FOLDER`).              |
+| `contentType`     | `String`     | Filter by the content type of files.                      |
+| `name`            | `String`     | Filter by exact name match.                               |
+| `nameLike`        | `String`     | Filter by name using a `LIKE` clause (e.g., `%.txt`).      |
+| `metadata`        | `JSON`       | Filter by metadata fields (contains clause).              |
+| `size`            | `Long`       | Filter by size.                                           |
+| `createdAtAfter`  | `DateTime`   | Filter for elements created after this date.              |
+| `createdAtBefore` | `DateTime`   | Filter for elements created before this date.             |
+| `updatedAtAfter`  | `DateTime`   | Filter for elements updated after this date.              |
+| `updatedAtBefore` | `DateTime`   | Filter for elements updated before this date.             |
+| `createdBy`       | `String`     | Filter by the user who created the element.               |
+| `updatedBy`       | `String`     | Filter by the user who last updated the element.          |
+| `pageInfo`        | `PageInfo`   | Specifies pagination settings.                            |
+
+#### `PageInfo`
+
+Defines pagination parameters.
+
+| Field        | Type        | Description                               |
+| ------------ | ----------- | ----------------------------------------- |
+| `pageNumber` | `Int!`      | The page number to retrieve (0-indexed).  |
+| `pageSize`   | `Int!`      | The number of items per page.             |
+| `sortBy`     | `String`    | The field to sort by (e.g., `name`).      |
+| `sortOrder`  | `SortOrder` | The sort direction (`ASC` or `DESC`).     |
+
+### Object Types
+
+#### `FolderElementInfo`
+
+Represents a file or folder within a list.
+
+| Field         | Type         | Description                               |
+| ------------- | ------------ | ----------------------------------------- |
+| `id`          | `UUID`       | The unique identifier.                    |
+| `type`        | `DocumentType` | The type of the element (`FILE` or `FOLDER`). |
+| `contentType` | `String`     | The content type (MIME type) of the file. |
+| `name`        | `String`     | The name of the element.                  |
+| `metadata`    | `JSON`       | A JSON object for custom metadata.        |
+| `size`        | `Long`       | The size of the file in bytes.            |
+| `createdAt`   | `DateTime`   | The creation timestamp.                   |
+| `updatedAt`   | `DateTime`   | The last modification timestamp.          |
+| `createdBy`   | `String`     | The user who created the element.         |
+| `updatedBy`   | `String`     | The user who last updated the element.    |
+
+#### `DocumentInfo`
+
+Represents a detailed view of a document or folder, including its parent.
+
+| Field         | Type         | Description                               |
+| ------------- | ------------ | ----------------------------------------- |
+| `id`          | `UUID`       | The unique identifier.                    |
+| `parentId`    | `UUID`       | The ID of the parent folder.              |
+| `type`        | `DocumentType` | The type of the element (`FILE` or `FOLDER`). |
+| `contentType` | `String`     | The content type (MIME type) of the file. |
+| `name`        | `String`     | The name of the element.                  |
+| `metadata`    | `JSON`       | A JSON object for custom metadata.        |
+| `size`        | `Long`       | The size of the file in bytes.            |
+| `createdAt`   | `DateTime`   | The creation timestamp.                   |
+| `updatedAt`   | `DateTime`   | The last modification timestamp.          |
+| `createdBy`   | `String`     | The user who created the element.         |
+| `updatedBy`   | `String`     | The user who last updated the element.    |
+
+### Enums
+
+#### `DocumentType`
+
+*   `FILE`: Represents a file.
+*   `FOLDER`: Represents a folder.
+
+#### `SortOrder`
+
+*   `ASC`: Ascending order.
+*   `DESC`: Descending order.
+
 ## Security
 
 The OpenFilz API provides flexible security options.
 
 ### Disabling Security
 
-For development or testing purposes, security can be completely disabled by setting the `spring.security.no-auth` property to `true` in your `application.yml`.
+For development or testing purposes, security can be completely disabled by setting the `openfilz.security.no-auth` property to `true` in your `application.yml`.
 
 ```yaml
-spring:
+openfilz:
   security:
     no-auth: true
 ```
@@ -57,7 +172,7 @@ When security is enabled, the API acts as an OIDC resource server, validating JW
 #### Default Authorization
 
 The default authorization model uses roles extracted from the JWT token.
-You can configure how roles are looked up using the `spring.security.role-token-lookup` property.
+You can configure how roles are looked up using the `openfilz.security.role-token-lookup` property.
 
 #### Custom Authorization
 
@@ -65,10 +180,10 @@ For more advanced scenarios, you can provide a completely custom authorization m
 
 1.  Provide a custom implementation of `org.openfilz.dms.config.DefaultAuthSecurityConfig`
 2.  Provide a custom implementation of and `org.openfilz.dms.service.impl.SecurityServiceImpl`
-3.  Set to true the `spring.security.custom-roles` property.
+3.  Set to true the `openfilz.security.custom-roles` property.
 
 ```yaml
-spring:
+openfilz:
   security:
     custom-roles: true
 ```

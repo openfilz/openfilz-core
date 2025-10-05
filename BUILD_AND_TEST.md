@@ -59,7 +59,7 @@ The `openfilz-api` module requires the following configuration:
 
 *   **Database Connection**: The database connection details are configured in `application.yml`. For local development, you can configure it to connect to a local PostgreSQL instance or rely on Testcontainers for integration tests.
 *   **Storage**: The storage can be configured to use either the local filesystem or MinIO. For local testing, you can use the local filesystem by setting `storage.type` to `local`.
-*   **Keycloak** (optional): You can enable or disable the authentication by setting the value `(true|false)` to the parameter `spring.security.no-auth` (in `application.yml`). The Keycloak integration is configured in `application.yml`. For integration tests, Keycloak is managed by Testcontainers and configured via `realm-export.json` in `src/test/resources/keycloak`.
+*   **Keycloak** (optional): You can enable or disable the authentication by setting the value `(true|false)` to the parameter `openfilz.security.no-auth` (in `application.yml`). The Keycloak integration is configured in `application.yml`. For integration tests, Keycloak is managed by Testcontainers and configured via `realm-export.json` in `src/test/resources/keycloak`.
 
 #### `openfilz-gateway` (Optional)
 

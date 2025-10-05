@@ -44,7 +44,7 @@ spec:
                   name: {{ .Values.database.existingSecret | default (printf "%s-db-credentials" (include "common.names.fullname" .)) }}
                   key: password
             - name: JAVA_TOOL_OPTIONS
-              value: "-Dserver.port={{ .Values.api.port }} -Dstorage.type={{ .Values.storage.type }} -Dstorage.local.basePath={{ .Values.storage.basePath }}"
+              value: "-Dopenfilz.security.cors-allowed-origins={{ .Values.api.corsAllowedUrls }} -Dserver.port={{ .Values.api.port }} -Dstorage.type={{ .Values.storage.type }} -Dstorage.local.basePath={{ .Values.storage.basePath }}"
           {{- if .Values.persistence.enabled }}
           volumeMounts:
             - name: data

@@ -41,7 +41,10 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.OffsetDateTime;
-import java.util.*;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -61,7 +64,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
     @Autowired
     protected DatabaseClient databaseClient;
 
-    private HttpGraphQlClient graphQlHttpClient;
+    protected HttpGraphQlClient graphQlHttpClient;
 
     private static final Long testTxtSize;
 
@@ -468,6 +471,32 @@ public class LocalStorageIT extends TestContainersBaseConfig {
                 .expectNextMatches(doc -> checkListFoldersReturnedSize(doc, 1))
                 .expectComplete()
                 .verify();
+
+        request = new ListFolderRequest(
+                folderResponse.id(),
+                DocumentType.FILE,
+                "text/plain",
+                "test.txt",
+                null,
+                Map.of("testId", uuid0.toString()),
+                testTxtSize,
+                null,
+                SqlUtils.dateToString(OffsetDateTime.now().plusHours(1L)),
+                SqlUtils.dateToString(OffsetDateTime.now().minusHours(1L)),
+                null,
+                getUsername(),
+                getUsername(),
+                new PageCriteria(null, null, 1, 100));
+
+        response = getGraphQlHttpClient()
+                .document(graphQlRequest)
+                .variable("request",request)
+                .execute();
+
+        StepVerifier.create(response)
+                .expectNextMatches(doc -> checkListFoldersReturnedSize(doc, 1))
+                .expectComplete()
+                .verify();
     }
 
     @Test
@@ -537,13 +566,6 @@ public class LocalStorageIT extends TestContainersBaseConfig {
         return ((List<Map<String, Object>>) ((Map<String, Map<String, Object>>) doc.getData()).get("listFolder")).size() == expectedSize;
     }
 
-    private boolean checkCountIsOK(ClientGraphQlResponse doc, Long expectedCount) {
-        return Objects.equals(((Integer) ((Map<String, Object>) doc.getData()).get("count")).longValue(), expectedCount);
-    }
-
-    private boolean checkCountIsGreaterThanZero(ClientGraphQlResponse doc) {
-        return (Integer) ((Map<String, Object>) doc.getData()).get("count") > 0;
-    }
 
     private HttpGraphQlClient getGraphQlHttpClient() {
         if(graphQlHttpClient == null) {

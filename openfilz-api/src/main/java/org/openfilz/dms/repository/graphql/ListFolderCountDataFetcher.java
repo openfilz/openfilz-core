@@ -9,9 +9,11 @@ import org.openfilz.dms.utils.SqlUtils;
 import org.springframework.r2dbc.core.DatabaseClient;
 import reactor.core.publisher.Mono;
 
+import java.util.Map;
+
 import static org.openfilz.dms.utils.SqlUtils.FROM_DOCUMENTS;
 
-public class ListFolderCountDataFetcher  extends AbstractDataFetcher<Mono<Long>, Long> {
+public class ListFolderCountDataFetcher  extends AbstractListDataFetcher<Mono<Long>, Long> {
 
     public static final String COUNT = "count(*)";
 
@@ -31,24 +33,22 @@ public class ListFolderCountDataFetcher  extends AbstractDataFetcher<Mono<Long>,
 
     @Override
     public Mono<Long> get(DataFetchingEnvironment environment) throws Exception {
+        DatabaseClient.GenericExecuteSpec sqlQuery;
         StringBuilder query = new StringBuilder(SqlUtils.SELECT).append(COUNT).append(fromClause);
-        ListFolderRequest filter = null;
-        DatabaseClient.GenericExecuteSpec sqlQuery = null;
-        if(environment.getArguments() != null) {
-            Object request = environment.getArguments().get(GraphQlQueryConfig.GRAPHQL_REQUEST);
-            if(request != null) {
-                filter = objectMapper.convertValue(request, ListFolderRequest.class);
-                if(filter.pageInfo() != null &&  (filter.pageInfo().pageSize() != null || filter.pageInfo().pageNumber() != null)) {
-                    throw new IllegalArgumentException("Paging information must not be provided");
-                }
-                criteria.checkFilter(filter);
-                applyFilter(query, filter);
-                sqlQuery = prepareQuery(environment, query, filter);
-            }
-        }
-        if(sqlQuery == null) {
+        Map<String, Object> arguments = environment.getArguments();
+        if(arguments == null || arguments.get(GraphQlQueryConfig.GRAPHQL_REQUEST) == null) {
             sqlQuery = databaseClient.sql(query.toString());
+        } else {
+            Object request = arguments.get(GraphQlQueryConfig.GRAPHQL_REQUEST);
+            ListFolderRequest filter = getFilter(request);
+            if(filter.pageInfo() != null &&  (filter.pageInfo().pageSize() != null || filter.pageInfo().pageNumber() != null)) {
+                throw new IllegalArgumentException("Paging information must not be provided");
+            }
+            criteria.checkFilter(filter);
+            applyFilter(query, filter);
+            sqlQuery = prepareQuery(environment, filter, query);
         }
+
         //log.debug("GraphQL - SQL query : {}", query);
         return sqlQuery.map(mapCount())
                 .one();
@@ -58,7 +58,7 @@ public class ListFolderCountDataFetcher  extends AbstractDataFetcher<Mono<Long>,
         criteria.applyFilter(prefix, query, filter);
     }
 
-    protected DatabaseClient.GenericExecuteSpec prepareQuery(DataFetchingEnvironment environment, StringBuilder query, ListFolderRequest filter) {
+    protected DatabaseClient.GenericExecuteSpec prepareQuery(DataFetchingEnvironment environment, ListFolderRequest filter, StringBuilder query) {
         return criteria.bindCriteria(databaseClient.sql(query.toString()), filter);
     }
 

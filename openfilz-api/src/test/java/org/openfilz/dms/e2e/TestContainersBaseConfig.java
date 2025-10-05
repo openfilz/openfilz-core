@@ -8,6 +8,7 @@ import org.openfilz.dms.dto.request.MultipleUploadFileParameter;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.graphql.client.ClientGraphQlResponse;
 import org.springframework.graphql.client.HttpGraphQlClient;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -23,6 +24,8 @@ import org.testcontainers.junit.jupiter.Container;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 @RequiredArgsConstructor
 public abstract class TestContainersBaseConfig {
@@ -47,6 +50,13 @@ public abstract class TestContainersBaseConfig {
                 postgres.getDatabaseName()));
         registry.add("spring.r2dbc.username", postgres::getUsername);
         registry.add("spring.r2dbc.password", postgres::getPassword);
+
+        registry.add("spring.flyway.url", () -> String.format("jdbc:postgresql://%s:%d/%s",
+                postgres.getHost(),
+                postgres.getFirstMappedPort(),
+                postgres.getDatabaseName()));
+        registry.add("spring.flyway.user", postgres::getUsername);
+        registry.add("spring.flyway.password", postgres::getPassword);
 
         registry.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", () -> keycloak.getAuthServerUrl() + "/realms/your-realm");
     }
@@ -169,4 +179,12 @@ public abstract class TestContainersBaseConfig {
                 .body(BodyInserters.fromMultipartData(builder.build()));
     }
 
+
+    protected boolean checkCountIsOK(ClientGraphQlResponse doc, Long expectedCount) {
+        return Objects.equals(((Integer) ((Map<String, Object>) doc.getData()).get("count")).longValue(), expectedCount);
+    }
+
+    protected boolean checkCountIsGreaterThanZero(ClientGraphQlResponse doc) {
+        return (Integer) ((Map<String, Object>) doc.getData()).get("count") > 0;
+    }
 }

@@ -1,0 +1,30 @@
+# Example values for an OpenShift deployment
+
+# -- Enable OpenShift-specific resources and logic.
+openshift:
+  enabled: true
+  # -- Enable and configure the OpenShift Route for external access.
+  route:
+    enabled: true
+    # -- Set the desired hostname for your application.
+    # hostname: "dms-api.apps.my-cluster.com"
+    tls:
+      enabled: true
+      termination: "edge"
+      insecureEdgeTerminationPolicy: "Redirect"
+      # In production, provide certs via --set or secrets, not directly in this file.
+      # key: ""
+      # certificate: ""
+
+# -- Disable the Kubernetes Ingress, as we are using an OpenShift Route.
+ingress:
+  enabled: false
+
+app:
+  apiUrl: https://test-openfilz-api-ged-lab.openshift.cluster.com/api/v1
+  graphQlUrl: https://test-openfilz-api-ged-lab.openshift.cluster.com/graphql/v1
+
+# -- Remaining values can inherit from the defaults in values.yaml or be set as needed.
+# replicaCount: 2
+# image:
+#   tag: "1.2.3"
