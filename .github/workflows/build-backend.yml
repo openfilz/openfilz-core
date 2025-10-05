@@ -17,6 +17,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    if: github.actor != 'maven-release-bot'
     steps:
       - uses: actions/create-github-app-token@v2
         id: app-token
