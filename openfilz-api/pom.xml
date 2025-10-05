@@ -52,6 +52,15 @@
             <artifactId>flyway-core</artifactId>
         </dependency>
 
+        <!-- PostgreSQL JDBC Driver -->
+        <!-- REQUIRED by Flyway for its internal operations, even if your app uses R2DBC -->
+
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
         <!-- GraphQL -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
