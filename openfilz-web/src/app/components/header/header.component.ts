@@ -34,6 +34,8 @@ export class HeaderComponent {
   @Output() search = new EventEmitter<string>();
   @Output() viewModeChange = new EventEmitter<'grid' | 'list'>();
   @Output() downloadSelected = new EventEmitter<void>();
+  @Output() moveSelected = new EventEmitter<void>();
+  @Output() copySelected = new EventEmitter<void>();
   @Output() deleteSelected = new EventEmitter<void>();
   @Output() breadcrumbClick = new EventEmitter<ElementInfo>();
 
@@ -57,6 +59,14 @@ export class HeaderComponent {
 
   onDownloadSelected() {
     this.downloadSelected.emit();
+  }
+
+  onMoveSelected() {
+    this.moveSelected.emit();
+  }
+
+  onCopySelected() {
+    this.copySelected.emit();
   }
 
   onDeleteSelected() {

@@ -37,9 +37,24 @@
     <button mat-icon-button [disabled]="!hasSelection" (click)="onDownloadSelected()" title="Download selected">
       <mat-icon>cloud_download</mat-icon>
     </button>
-    
-    <button mat-icon-button [disabled]="!hasSelection" (click)="onDeleteSelected()" title="Delete selected">
-      <mat-icon>delete</mat-icon>
+
+    <button mat-icon-button [disabled]="!hasSelection" [matMenuTriggerFor]="bulkMenu" title="More actions">
+      <mat-icon>more_vert</mat-icon>
     </button>
+
+    <mat-menu #bulkMenu="matMenu">
+      <button mat-menu-item (click)="onMoveSelected()">
+        <mat-icon>drive_file_move</mat-icon>
+        <span>Move to...</span>
+      </button>
+      <button mat-menu-item (click)="onCopySelected()">
+        <mat-icon>file_copy</mat-icon>
+        <span>Copy to...</span>
+      </button>
+      <button mat-menu-item (click)="onDeleteSelected()">
+        <mat-icon>delete</mat-icon>
+        <span>Delete</span>
+      </button>
+    </mat-menu>
   </div>
 </mat-toolbar>
