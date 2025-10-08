@@ -74,12 +74,22 @@
         <mat-icon>cloud_download</mat-icon>
         Download
       </button>
-      
+
+      <button mat-raised-button class="move-btn" (click)="onMoveSelected()">
+        <mat-icon>drive_file_move</mat-icon>
+        Move
+      </button>
+
+      <button mat-raised-button class="copy-btn" (click)="onCopySelected()">
+        <mat-icon>file_copy</mat-icon>
+        Copy
+      </button>
+
       <button mat-raised-button color="warn" class="delete-btn" (click)="onDeleteSelected()">
         <mat-icon>delete</mat-icon>
         Delete
       </button>
-      
+
     }
   </div>
 </div>
