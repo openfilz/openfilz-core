@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.*;
+import org.openfilz.dms.dto.response.FolderResponse;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.enums.SortOrder;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -314,7 +315,7 @@ public class SecurityIT extends TestContainersBaseConfig {
     void testMoveFile() {
         UploadResponse uploadResponse = uploadNewFile();
 
-        UploadResponse folder = createFolder();
+        FolderResponse folder = createFolder();
 
         addAuthorization(getMoveFileRequest(uploadResponse, folder), noaccessAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getMoveFileRequest(uploadResponse, folder), contributorAccessToken).exchange().expectStatus().isOk();
@@ -328,7 +329,7 @@ public class SecurityIT extends TestContainersBaseConfig {
     void testCopyFile() {
         UploadResponse uploadResponse = uploadNewFile();
 
-        UploadResponse folder = createFolder();
+        FolderResponse folder = createFolder();
 
         addAuthorization(getCopyRequest(uploadResponse, folder), noaccessAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getCopyRequest(uploadResponse, folder), contributorAccessToken).exchange().expectStatus().isOk();
@@ -375,8 +376,8 @@ public class SecurityIT extends TestContainersBaseConfig {
     @Test
     void testMoveFolder() {
 
-        UploadResponse folder1 = createFolder();
-        UploadResponse folder2 = createFolder();
+        FolderResponse folder1 = createFolder();
+        FolderResponse folder2 = createFolder();
 
         addAuthorization(getMoveFolderRequest(folder1, folder2), noaccessAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getMoveFolderRequest(folder1, folder2), contributorAccessToken).exchange().expectStatus().isOk();
@@ -389,8 +390,8 @@ public class SecurityIT extends TestContainersBaseConfig {
     @Test
     void testCopyFolder() {
 
-        UploadResponse folder1 = createFolder();
-        UploadResponse folder2 = createFolder();
+        FolderResponse folder1 = createFolder();
+        FolderResponse folder2 = createFolder();
 
         addAuthorization(getCopyFolderRequest(folder1, folder2), noaccessAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getCopyFolderRequest(folder1, folder2), contributorAccessToken).exchange().expectStatus().isOk();
@@ -403,7 +404,7 @@ public class SecurityIT extends TestContainersBaseConfig {
     @Test
     void testRenameFolder() {
 
-        UploadResponse folder = createFolder();
+        FolderResponse folder = createFolder();
 
         addAuthorization(getRenameFolderRequest(folder), noaccessAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getRenameFolderRequest(folder), contributorAccessToken).exchange().expectStatus().isOk();
@@ -416,7 +417,7 @@ public class SecurityIT extends TestContainersBaseConfig {
     @Test
     void testDeleteFolder() {
 
-        UploadResponse folder = createFolder();
+        FolderResponse folder = createFolder();
 
         addAuthorization(getDeleteFolderRequest(folder), noaccessAccessToken).exchange().expectStatus().isForbidden();
         addAuthorization(getDeleteFolderRequest(folder), contributorAccessToken).exchange().expectStatus().isForbidden();
@@ -429,7 +430,7 @@ public class SecurityIT extends TestContainersBaseConfig {
     @Test
     void testListFolder() {
 
-        UploadResponse folder = createFolder();
+        FolderResponse folder = createFolder();
 
         uploadNewFile(folder.id());
 
@@ -441,35 +442,35 @@ public class SecurityIT extends TestContainersBaseConfig {
         addAuthorization(getListFolderRequest(folder), adminAccessToken).exchange().expectStatus().isOk();
     }
 
-    protected WebTestClient.RequestHeadersSpec<?> getListFolderRequest(UploadResponse folder) {
+    protected WebTestClient.RequestHeadersSpec<?> getListFolderRequest(FolderResponse folder) {
         if(folder != null) {
             return webTestClient.get().uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/folders/list").queryParam("folderId", folder.id()).build());
         }
         return webTestClient.get().uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/folders/list").build());
     }
 
-    protected WebTestClient.RequestHeadersSpec<?> getDeleteFolderRequest(UploadResponse folder) {
+    protected WebTestClient.RequestHeadersSpec<?> getDeleteFolderRequest(FolderResponse folder) {
         DeleteRequest deleteRequest = new DeleteRequest(Collections.singletonList(folder.id()));
 
         return webTestClient.method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/folders")
                 .body(BodyInserters.fromValue(deleteRequest));
     }
 
-    protected WebTestClient.RequestHeadersSpec<?> getRenameFolderRequest(UploadResponse folder) {
+    protected WebTestClient.RequestHeadersSpec<?> getRenameFolderRequest(FolderResponse folder) {
         RenameRequest renameRequest = new RenameRequest("renamed-folder-" + UUID.randomUUID());
 
         return webTestClient.put().uri(RestApiVersion.API_PREFIX + "/folders/{folderId}/rename", folder.id())
                 .body(BodyInserters.fromValue(renameRequest));
     }
 
-    protected WebTestClient.RequestHeadersSpec<?> getCopyFolderRequest(UploadResponse folder1, UploadResponse folder2) {
+    protected WebTestClient.RequestHeadersSpec<?> getCopyFolderRequest(FolderResponse folder1, FolderResponse folder2) {
         CopyRequest copyRequest = new CopyRequest(Collections.singletonList(folder1.id()), folder2.id(), false);
 
         return webTestClient.post().uri(RestApiVersion.API_PREFIX + "/folders/copy")
                 .body(BodyInserters.fromValue(copyRequest));
     }
 
-    protected WebTestClient.RequestHeadersSpec<?> getMoveFolderRequest(UploadResponse folder1, UploadResponse folder2) {
+    protected WebTestClient.RequestHeadersSpec<?> getMoveFolderRequest(FolderResponse folder1, FolderResponse folder2) {
         MoveRequest moveRequest = new MoveRequest(Collections.singletonList(folder1.id()), folder2.id(), false);
 
         return webTestClient.post().uri(RestApiVersion.API_PREFIX + "/folders/move")
@@ -497,33 +498,33 @@ public class SecurityIT extends TestContainersBaseConfig {
                 .body(BodyInserters.fromValue(renameRequest));
     }
 
-    protected WebTestClient.RequestHeadersSpec<?> getCopyRequest(UploadResponse uploadResponse, UploadResponse folder) {
+    protected WebTestClient.RequestHeadersSpec<?> getCopyRequest(UploadResponse uploadResponse, FolderResponse folder) {
         CopyRequest copyRequest = new CopyRequest(Collections.singletonList(uploadResponse.id()), folder.id(), false);
 
         return webTestClient.post().uri(RestApiVersion.API_PREFIX + "/files/copy")
                 .body(BodyInserters.fromValue(copyRequest));
     }
 
-    protected WebTestClient.RequestHeadersSpec<?> getMoveFileRequest(UploadResponse uploadResponse, UploadResponse folder) {
+    protected WebTestClient.RequestHeadersSpec<?> getMoveFileRequest(UploadResponse uploadResponse, FolderResponse folder) {
         MoveRequest moveRequest = new MoveRequest(Collections.singletonList(uploadResponse.id()), folder.id(), false);
 
         return webTestClient.post().uri(RestApiVersion.API_PREFIX + "/files/move")
                 .body(BodyInserters.fromValue(moveRequest));
     }
 
-    protected UploadResponse createFolder() {
+    protected FolderResponse createFolder() {
         return createFolder(contributorAccessToken);
     }
 
-    protected UploadResponse createFolder(String token) {
+    protected FolderResponse createFolder(String token) {
        return createFolder(token, null);
     }
 
-    protected UploadResponse createFolder(String token, UUID parentFolderId) {
+    protected FolderResponse createFolder(String token, UUID parentFolderId) {
         WebTestClient.ResponseSpec response = getCreateFolderResponse(token, parentFolderId);
         return response
                 .expectStatus().isCreated()
-                .expectBody(UploadResponse.class)
+                .expectBody(FolderResponse.class)
                 .returnResult().getResponseBody();
     }
 
@@ -535,6 +536,11 @@ public class SecurityIT extends TestContainersBaseConfig {
     }
 
     protected WebTestClient.RequestHeadersSpec<?> getDocumentInfoRequest(UploadResponse uploadResponse) {
+        return webTestClient.get().uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/{id}/info")
+                .build(uploadResponse.id()));
+    }
+
+    protected WebTestClient.RequestHeadersSpec<?> getDocumentInfoRequest(FolderResponse uploadResponse) {
         return webTestClient.get().uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/{id}/info")
                 .build(uploadResponse.id()));
     }
@@ -581,6 +587,10 @@ public class SecurityIT extends TestContainersBaseConfig {
     protected WebTestClient.RequestHeadersSpec<?> getDownloadMultipleRequest(UploadResponse uploadResponse1, UploadResponse uploadResponse2) {
         return webTestClient.post().uri(RestApiVersion.API_PREFIX + "/documents/download-multiple")
                 .body(BodyInserters.fromValue(List.of(uploadResponse1.id(), uploadResponse2.id())));
+    }
+
+    protected WebTestClient.RequestHeadersSpec<?> getDownloadRequest(FolderResponse uploadResponse) {
+        return webTestClient.get().uri(RestApiVersion.API_PREFIX + "/documents/{id}/download", uploadResponse.id());
     }
 
     protected WebTestClient.RequestHeadersSpec<?> getDownloadRequest(UploadResponse uploadResponse) {
