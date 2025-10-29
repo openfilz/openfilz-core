@@ -20,7 +20,7 @@ jobs:
         working-directory: ./openfilz-web
         run : |
           npm install
-          npm run build
+          npm run build openfilz-ui
           docker login --username ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }} ghcr.io
           docker build -t ghcr.io/openfilz/openfilz-web:latest . 
           docker push ghcr.io/openfilz/openfilz-web:latest

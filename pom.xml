@@ -47,7 +47,7 @@
         <org.projectlombok.version>1.18.38</org.projectlombok.version>
         <org.mapstruct.version>1.6.3</org.mapstruct.version>
         <springdoc-openapi.version>2.8.9</springdoc-openapi.version>
-        <r2dbc-postgresql.version>1.0.7.RELEASE</r2dbc-postgresql.version>
+        <r2dbc-postgresql.version>1.1.0.RELEASE</r2dbc-postgresql.version>
         <minio.version>8.5.17</minio.version>
         <jjwt.version>0.12.6</jjwt.version> <!-- For manual JWT parsing if needed -->
         <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
@@ -58,6 +58,12 @@
         <docker.context.path>snapshots/</docker.context.path>
         <project.scm.id>github-actions@github.com</project.scm.id>
         <delombok.output>${project.build.outputDirectory}/delombok</delombok.output>
+        <logback-core.version>1.5.19</logback-core.version>
+        <commons-compress.version>1.28.0</commons-compress.version>
+        <commons-lang3.version>3.19.0</commons-lang3.version>
+        <graphql-java.version>24.3</graphql-java.version>
+        <graphql-java-scalars.version>24.0</graphql-java-scalars.version>
+        <jackson.version>3.0.0</jackson.version>
     </properties>
 
     <modules>
@@ -106,6 +112,37 @@
                 <groupId>io.minio</groupId>
                 <artifactId>minio</artifactId>
                 <version>${minio.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>tools.jackson.core</groupId>
+                <artifactId>jackson-core</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.graphql-java</groupId>
+                <artifactId>graphql-java-extended-scalars</artifactId>
+                <version>${graphql-java-scalars.version}</version>
+            </dependency>
+            <!-- https://mvnrepository.com/artifact/ch.qos.logback/logback-classic -->
+            <dependency>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-classic</artifactId>
+                <version>${logback-core.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-core</artifactId>
+                <version>${logback-core.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-lang3</artifactId>
+                <version>${commons-lang3.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-compress</artifactId>
+                <version>${commons-compress.version}</version>
             </dependency>
             <dependency>
                 <groupId>io.jsonwebtoken</groupId>

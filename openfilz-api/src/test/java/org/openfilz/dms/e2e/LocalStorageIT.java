@@ -1745,10 +1745,10 @@ public class LocalStorageIT extends TestContainersBaseConfig {
 
         Assertions.assertEquals("folder-to-list", folderResponse.name());
 
-        List<FolderResponse> folders = getWebTestClient().get().uri(RestApiVersion.API_PREFIX + "/folders/list")
+        List<FolderElementInfo> folders = getWebTestClient().get().uri(RestApiVersion.API_PREFIX + "/folders/list")
                 .exchange()
                 .expectStatus().isOk()
-                .expectBodyList(FolderResponse.class)
+                .expectBodyList(FolderElementInfo.class)
                 .returnResult().getResponseBody();
 
         Assertions.assertTrue(folders.stream().anyMatch(f -> f.name().equals("folder-to-list")));

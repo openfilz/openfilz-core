@@ -60,12 +60,9 @@
           }
         },
         "serve": {
-          "builder": "@ngx-env/builder:dev-server",
+          "builder": "@angular/build:dev-server",
           "configurations": {
             "development": {
-              "buildTarget": "openfilz-ui:build:development"
-            },
-            "local-dev": {
               "buildTarget": "openfilz-ui:build:local-dev"
             },
             "production": {

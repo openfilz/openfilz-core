@@ -32,6 +32,8 @@ export class ToolbarComponent {
   @Output() uploadFiles = new EventEmitter<void>();
   @Output() viewModeChange = new EventEmitter<'grid' | 'list'>();
   @Output() downloadSelected = new EventEmitter<void>();
+  @Output() moveSelected = new EventEmitter<void>();
+  @Output() copySelected = new EventEmitter<void>();
   @Output() deleteSelected = new EventEmitter<void>();
   @Output() search = new EventEmitter<string>();
   
@@ -52,6 +54,14 @@ export class ToolbarComponent {
 
   onDownloadSelected() {
     this.downloadSelected.emit();
+  }
+
+  onMoveSelected() {
+    this.moveSelected.emit();
+  }
+
+  onCopySelected() {
+    this.copySelected.emit();
   }
 
   onDeleteSelected() {

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.CreateFolderRequest;
+import org.openfilz.dms.dto.response.FolderElementInfo;
 import org.openfilz.dms.dto.response.FolderResponse;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -43,11 +44,11 @@ public class CorsIT extends LocalStorageIT {
 
         Assertions.assertEquals(folderName, folderResponse.name());
 
-        List<FolderResponse> folders = getWebTestClient().get().uri(RestApiVersion.API_PREFIX + "/folders/list")
+        List<FolderElementInfo> folders = getWebTestClient().get().uri(RestApiVersion.API_PREFIX + "/folders/list")
                 .header("Origin", "http://localhost:4200")
                 .exchange()
                 .expectStatus().isOk()
-                .expectBodyList(FolderResponse.class)
+                .expectBodyList(FolderElementInfo.class)
                 .returnResult().getResponseBody();
 
         Assertions.assertTrue(folders.stream().anyMatch(f -> f.name().equals(folderName)));

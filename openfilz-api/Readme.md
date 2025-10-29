@@ -1,6 +1,6 @@
 ## The Challenge: The Pitfalls of Disparate Document Management
 
-In any large-scale enterprise, applications frequently need to handle files—from user-uploaded images and reports to system-generated documents and logs. Without a centralized strategy, this leads to a common set of problems:
+In any large-scale enterprise, applications frequently need to handle files—from user-uploaded images and reports to system-generated documents and logs. Without a centralized strategy, this leads to a common set of problems.
 
 *   **Duplicated Effort:** Each development team builds its own solution for uploading, storing, organizing, and securing files, wasting valuable time and resources reinventing the wheel.
 *   **Inconsistency:** Different applications implement folder structures, metadata handling, and access control in unique ways, creating data silos and making cross-system integration a nightmare.
@@ -16,7 +16,7 @@ By abstracting away the complexities of file storage, organization, and security
 
 ## Key Benefits
 
-Adopting this API provides significant advantages across the organization:
+Adopting this API provides significant advantages across the organization.
 
 #### 1. **Accelerate Development and Increase Productivity**
 Development teams no longer need to worry about the underlying storage technology, file I/O operations, or metadata indexing. They can integrate powerful document management capabilities into their applications with just a few API calls, drastically reducing development time and effort.
@@ -42,7 +42,7 @@ The OpenFilz API exposes a GraphQL endpoint for powerful and flexible querying o
 
 ### Queries
 
-The following queries are available:
+The following queries are available.
 
 #### `listFolder(request: ListFolderRequest!): [FolderElementInfo]`
 
@@ -174,13 +174,22 @@ When security is enabled, the API acts as an OIDC resource server, validating JW
 The default authorization model uses roles extracted from the JWT token.
 You can configure how roles are looked up using the `openfilz.security.role-token-lookup` property.
 
+The available roles are:
+
+| Role          | Description                                           |
+|---------------|-------------------------------------------------------|
+| `AUDITOR`     | Access to Audit trail                                 |
+| `CONTRIBUTOR` | Access to all endpoints except the "Delete" ones      |
+| `READER`      | Access only to read-only endpoints                    |
+| `CLEANER`     | Access to all "Delete" endpoints                      |
+
 #### Custom Authorization
 
 For more advanced scenarios, you can provide a completely custom authorization model. To do this, you need to:
 
 1.  Provide a custom implementation of `org.openfilz.dms.config.DefaultAuthSecurityConfig`
-2.  Provide a custom implementation of and `org.openfilz.dms.service.impl.SecurityServiceImpl`
-3.  Set to true the `openfilz.security.custom-roles` property.
+2.  Provide a custom implementation of `org.openfilz.dms.service.impl.SecurityServiceImpl`
+3.  Set to `true` the `openfilz.security.custom-roles` property.
 
 ```yaml
 openfilz:

@@ -204,6 +204,52 @@
   height: 16px;
 }
 
+.move-btn {
+  border-radius: 8px;
+  font-weight: 500;
+  text-transform: none;
+  padding: 0 16px;
+  height: 36px;
+  background-color: #3b82f6;
+  color: white;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+}
+
+.move-btn:hover {
+  background-color: #2563eb;
+}
+
+.move-btn mat-icon {
+  margin-right: 6px;
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+}
+
+.copy-btn {
+  border-radius: 8px;
+  font-weight: 500;
+  text-transform: none;
+  padding: 0 16px;
+  height: 36px;
+  background-color: #8b5cf6;
+  color: white;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+}
+
+.copy-btn:hover {
+  background-color: #7c3aed;
+}
+
+.copy-btn mat-icon {
+  margin-right: 6px;
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+}
+
 .delete-btn {
   border-radius: 8px;
   font-weight: 500;

@@ -1,0 +1,63 @@
+<h2 mat-dialog-title>{{ data.title }}</h2>
+
+<mat-dialog-content>
+  <div class="breadcrumb-container">
+    <div class="breadcrumb">
+      <mat-icon class="breadcrumb-icon">home</mat-icon>
+      @for (crumb of breadcrumbs; track $index; let last = $last) {
+        <span
+          class="breadcrumb-item"
+          [class.current]="last"
+          (click)="onBreadcrumbClick($index)">
+          {{ crumb.name }}
+        </span>
+        @if (!last) {
+          <span class="separator">/</span>
+        }
+      }
+    </div>
+  </div>
+
+  <div class="folder-grid-container" *ngIf="!loading">
+    @if (folders.length === 0) {
+      <div class="empty-state">
+        <mat-icon class="empty-icon">folder_open</mat-icon>
+        <p>No folders available</p>
+      </div>
+    }
+    @else {
+      <div class="folder-grid">
+        @for (folder of folders; track folder.id) {
+          <div class="folder-card" (dblclick)="onFolderDoubleClick(folder)">
+            <mat-icon class="folder-icon">folder</mat-icon>
+            <span class="folder-name">{{ folder.name }}</span>
+          </div>
+        }
+      </div>
+    }
+  </div>
+
+  <div class="loading-container" *ngIf="loading">
+    <mat-spinner diameter="40"></mat-spinner>
+  </div>
+
+  @if (totalItems > pageSize && !loading) {
+    <div class="pagination-container">
+      <mat-paginator
+        [length]="totalItems"
+        [pageSize]="pageSize"
+        [pageIndex]="pageIndex"
+        [pageSizeOptions]="pageSizeOptions"
+        (page)="onPageChange($event)"
+        aria-label="Select page">
+      </mat-paginator>
+    </div>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="onCancel()">Cancel</button>
+  <button mat-raised-button color="primary" (click)="onAction()">
+    {{ getActionButtonText() }}
+  </button>
+</mat-dialog-actions>
