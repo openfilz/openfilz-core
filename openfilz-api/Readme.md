@@ -36,6 +36,34 @@ As a dedicated microservice, the API is built to be highly available and scalabl
 #### 6. **Promote a Decoupled Architecture**
 Frontend applications, backend microservices, and data processing pipelines can all interact with documents through the API without needing to know about the physical storage location or implementation details. This promotes a clean, decoupled architecture that is easier to maintain and evolve over time.
 
+## Features
+
+### Checksum (SHA-256) Calculation
+
+This optional feature, when enabled, calculates the SHA-256 checksum for every file uploaded to the system. The checksum is then stored as a metadata property with the key `sha256`, ensuring data integrity and providing a reliable way to verify file contents.
+
+To activate this feature, set the following property in your `application.yml`:
+
+```yaml
+openfilz:
+  calculate-checksum: true
+```
+
+### WORM (Write Once Read Many) Mode
+
+Transform OpenFilz into a compliant archiving system with WORM mode. When enabled, this feature ensures that once a file is written, it cannot be modified or deleted, making it ideal for regulatory and long-term data retention requirements.
+
+To enable WORM mode, you must first activate the checksum calculation feature. Additionally, you need to configure an OIDC resource server for secure authentication.
+
+Set the following properties in your `application.yml`:
+
+```yaml
+openfilz:
+  calculate-checksum: true
+  security:
+    worm-mode: true
+```
+
 ## GraphQL API
 
 The OpenFilz API exposes a GraphQL endpoint for powerful and flexible querying of the document repository.
@@ -150,6 +178,46 @@ Represents a detailed view of a document or folder, including its parent.
 
 *   `ASC`: Ascending order.
 *   `DESC`: Descending order.
+
+## REST API
+
+The OpenFilz API provides a comprehensive RESTful interface for all document and folder management operations.
+
+### Document Management
+
+-   **`POST /v1/documents/upload`**: Upload a single file with optional metadata and parent folder ID.
+-   **`POST /v1/documents/upload-multiple`**: Upload multiple files simultaneously.
+-   **`PUT /v1/documents/{documentId}/replace-content`**: Replace the content of an existing file.
+-   **`PUT /v1/documents/{documentId}/replace-metadata`**: Replace all metadata for a document or folder.
+-   **`PATCH /v1/documents/{documentId}/metadata`**: Update or add specific metadata fields.
+-   **`DELETE /v1/documents/{documentId}/metadata`**: Delete specified metadata keys from a document.
+-   **`GET /v1/documents/{documentId}/download`**: Download a single file.
+-   **`POST /v1/documents/download-multiple`**: Download multiple documents as a single ZIP file.
+-   **`POST /v1/documents/search/ids-by-metadata`**: Find document IDs that match specified metadata criteria.
+-   **`POST /v1/documents/{documentId}/search/metadata`**: Retrieve metadata for a document, with an option to filter by keys.
+-   **`GET /v1/documents/{documentId}/info`**: Get detailed information for a specific document.
+
+### File Management
+
+-   **`POST /v1/files/move`**: Move a set of files to a different folder.
+-   **`POST /v1/files/copy`**: Copy a set of files to a different folder.
+-   **`PUT /v1/files/{fileId}/rename`**: Rename an existing file.
+-   **`DELETE /v1/files`**: Delete a set of files.
+
+### Folder Management
+
+-   **`POST /v1/folders`**: Create a new folder.
+-   **`POST /v1/folders/move`**: Move a set of folders (including their contents) to a different folder.
+-   **`POST /v1/folders/copy`**: Copy a set of folders (including their contents) to a different folder.
+-   **`PUT /v1/folders/{folderId}/rename`**: Rename an existing folder.
+-   **`DELETE /v1/folders`**: Delete a set of folders and their contents.
+-   **`GET /v1/folders/list`**: List the files and subfolders within a specific folder.
+-   **`GET /v1/folders/count`**: Count the number of files and subfolders within a specific folder.
+
+### Audit Trail
+
+-   **`GET /v1/audit/{id}`**: Retrieve the audit trail for a specific resource.
+-   **`POST /v1/audit/search`**: Search for audit trails based on specified parameters.
 
 ## Security
 
