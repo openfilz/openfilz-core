@@ -78,8 +78,10 @@ piped:
     size: 8192
 
 openfilz:
+  # calculate-checksum: default false - if true : calculate checksum of each new or modified file
   security:
     no-auth: true # No authentication required
+    # worm-mode: default false - if true : only read-only endPoints (for list, query and download) and upload (and upload-multiple) endPoints are accessible
     # custom-roles: default false - if true : you can provide a custom implementation of org.openfilz.dms.config.DefaultAuthSecurityConfig and org.openfilz.dms.service.impl.SecurityServiceImpl
     # cors-allowed-origins: http://localhost:4200/ # Comma-separated list of authorized origins
     # role-token-lookup: GROUPS or REALM_ACCESS (default value) : optional value used in org.openfilz.dms.service.impl.AbstractSecurityService to retrieve Role information from Groups or from the Realm_access

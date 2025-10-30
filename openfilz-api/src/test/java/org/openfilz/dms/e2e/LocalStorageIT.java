@@ -60,6 +60,11 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 public class LocalStorageIT extends TestContainersBaseConfig {
 
     protected String username = "anonymousUser";
+
+    protected String test_file_1_sql_sha = "36be9faa01295f0416c52234e8c03d77f6b16294173fc64e08f94fb1df2104fc";
+
+    protected String test_txt_sha = "662ce40a19604fae1a36dc9737598eb0e3b81a11e70aff50f190b6174ca72658";
+
     
     @Autowired
     protected DatabaseClient databaseClient;
@@ -602,14 +607,14 @@ public class LocalStorageIT extends TestContainersBaseConfig {
         UploadResponse uploadResponse2 = uploadResponse.get(1);
         Assertions.assertEquals(param2.filename(), uploadResponse2.name());
 
-        checkFileInfo(uploadResponse1, param1, metadata1);
-        checkFileInfo(uploadResponse2, param2, metadata2);
+        checkFileInfo(uploadResponse1, param1, metadata1, test_file_1_sql_sha);
+        checkFileInfo(uploadResponse2, param2, metadata2, test_txt_sha);
 
     }
 
 
 
-    private void checkFileInfo(UploadResponse uploadResponse, MultipleUploadFileParameter param, Map<String, Object> metadata) {
+    protected void checkFileInfo(UploadResponse uploadResponse, MultipleUploadFileParameter param, Map<String, Object> metadata, String checksum) {
         DocumentInfo info2 = getWebTestClient().get().uri(uri ->
                         uri.path(RestApiVersion.API_PREFIX + "/documents/{id}/info")
                                 .queryParam("withMetadata", true)
