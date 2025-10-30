@@ -23,6 +23,7 @@ import org.openfilz.dms.exception.StorageException;
 import org.openfilz.dms.repository.DocumentDAO;
 import org.openfilz.dms.service.AuditService;
 import org.openfilz.dms.service.DocumentService;
+import org.openfilz.dms.service.SaveDocumentService;
 import org.openfilz.dms.service.StorageService;
 import org.openfilz.dms.utils.JsonUtils;
 import org.openfilz.dms.utils.UserInfoService;
@@ -47,7 +48,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.function.Function;
 
 import static org.openfilz.dms.enums.AuditAction.*;
 import static org.openfilz.dms.enums.DocumentType.FILE;
@@ -60,13 +60,12 @@ import static org.openfilz.dms.utils.FileConstants.SLASH;
 @ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
 public class DocumentServiceImpl implements DocumentService, UserInfoService {
 
-    public static final String APPLICATION_OCTET_STREAM = "application/octet-stream";
-
     protected final StorageService storageService;
     protected final ObjectMapper objectMapper; // For JSONB processing
     protected final AuditService auditService; // For auditing
     protected final JsonUtils jsonUtils;
     protected final DocumentDAO documentDAO;
+    protected final SaveDocumentService saveDocumentService;
 
     @Value("${piped.buffer.size:1024}")
     private Integer pipedBufferSize;
@@ -110,9 +109,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
 
     }
 
-    private Mono<Document> doSaveDocument(Authentication auth, Function<String, Mono<Document>> documentFunction) {
-        return getConnectedUserEmail(auth).flatMap(documentFunction);
-    }
+
 
     private Mono<Document> saveFolderInRepository(CreateFolderRequest request, Authentication auth, Json folderMetadata) {
         Document.DocumentBuilder documentBuilder = Document.builder()
@@ -120,32 +117,12 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                 .type(FOLDER)
                 .parentId(request.parentId())
                 .metadata(folderMetadata);
-        return doSaveDocument(auth,  saveNewDocumentFunction(documentBuilder));
+        return saveDocumentService.doSaveDocument(auth,  saveDocumentService.saveNewDocumentFunction(documentBuilder));
     }
 
-    private Function<String, Mono<Document>> saveNewDocumentFunction(Document.DocumentBuilder request) {
-        return username -> {
-            Document document = request
-                    .createdAt(OffsetDateTime.now())
-                    .updatedAt(OffsetDateTime.now())
-                    .createdBy(username)
-                    .updatedBy(username)
-                    .build();
-            return documentDAO.create(document);
-        };
-    }
 
-    private Mono<Document> saveDocumentInDB(FilePart filePart, String storagePath, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, Authentication auth) {
-        Document.DocumentBuilder documentBuilder = Document.builder()
-                .name(originalFilename)
-                .type(FILE)
-                .contentType(filePart.headers().getContentType() != null ? filePart.headers().getContentType().toString() : APPLICATION_OCTET_STREAM)
-                .size(contentLength)
-                .parentId(parentFolderId)
-                .storagePath(storagePath)
-                .metadata(jsonUtils.toJson(metadata));
-        return doSaveDocument(auth,  saveNewDocumentFunction(documentBuilder));
-    }
+
+
 
     private Mono<Boolean> documentExists(Authentication auth, String documentName, UUID parentFolderId) {
         return documentDAO.existsByNameAndParentId(auth, documentName, parentFolderId);
@@ -170,34 +147,21 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
 
     private Mono<UploadResponse> doUploadDocument(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, Boolean allowDuplicateFileNames, Authentication auth) {
         if(allowDuplicateFileNames) {
-            return storageService.saveFile(filePart)
-                    .flatMap(storagePath -> saveDocumentInDatabase(filePart, contentLength, parentFolderId, metadata, originalFilename, auth, storagePath))
-                    .flatMap(savedDoc -> auditUploadActionAndReturnResponse(parentFolderId, metadata, auth, savedDoc));
+            return saveDocumentService.doSaveDocument(filePart, contentLength, parentFolderId, metadata, originalFilename, auth, storageService.saveFile(filePart));
         }
         Mono<Boolean> duplicateCheck = documentExists(auth, originalFilename, parentFolderId);
-        return duplicateCheck.flatMap(exists -> {
-                    if (exists) {
-                        return Mono.error(new DuplicateNameException(FILE, originalFilename));
-                    }
-                    return storageService.saveFile(filePart);
-                })
-                .flatMap(storagePath -> saveDocumentInDatabase(filePart, contentLength, parentFolderId, metadata, originalFilename, auth, storagePath))
-                .flatMap(savedDoc -> auditUploadActionAndReturnResponse(parentFolderId, metadata, auth, savedDoc));
-    }
-
-    private Mono<UploadResponse> auditUploadActionAndReturnResponse(UUID parentFolderId, Map<String, Object> metadata, Authentication auth, Document savedDoc) {
-        return auditService.logAction(auth, AuditAction.UPLOAD_DOCUMENT, FILE, savedDoc.getId(), new UploadAudit(savedDoc.getName(), parentFolderId, metadata))
-                .thenReturn(new UploadResponse(savedDoc.getId(), savedDoc.getName(), savedDoc.getContentType(), savedDoc.getSize()));
+        return saveDocumentService.doSaveDocument(filePart, contentLength, parentFolderId, metadata, originalFilename, auth, duplicateCheck.flatMap(exists -> {
+            if (exists) {
+                return Mono.error(new DuplicateNameException(FILE, originalFilename));
+            }
+            return storageService.saveFile(filePart);
+        }));
     }
 
 
-    private Mono<Document> saveDocumentInDatabase(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, Authentication auth, String storagePath) {
-        if(contentLength == null) {
-            return storageService.getFileLength(storagePath)
-                    .flatMap(fileLength -> saveDocumentInDB(filePart, storagePath, fileLength, parentFolderId, metadata, originalFilename, auth));
-        }
-        return saveDocumentInDB(filePart, storagePath, contentLength, parentFolderId, metadata, originalFilename, auth);
-    }
+
+
+
 
 
 
@@ -378,7 +342,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
     }
 
     private Mono<Document> doMoveDocuments(MoveRequest request, Authentication auth, Document documentToMove) {
-        return doSaveDocument(auth, username -> {
+        return saveDocumentService.doSaveDocument(auth, username -> {
             documentToMove.setParentId(request.targetFolderId());
             documentToMove.setUpdatedAt(OffsetDateTime.now());
             documentToMove.setUpdatedBy(username);
@@ -443,7 +407,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                                                     .parentId(request.targetFolderId())
                                                     .storagePath(newStoragePath)
                                                     .metadata(jsonUtils.cloneOrNewEmptyJson(originalFile.getMetadata()));
-                                            return doSaveDocument(auth, saveNewDocumentFunction(copiedFile));
+                                            return saveDocumentService.doSaveDocument(auth, saveDocumentService.saveNewDocumentFunction(copiedFile));
                                         })
                                         .flatMap(cf -> auditService.logAction(auth, COPY_FILE, FILE, cf.getId(),
                                                         new CopyAudit(fileIdToCopy, request.targetFolderId()))
@@ -515,7 +479,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                                                                         .parentId(newFolderId)
                                                                         .storagePath(newChildFileName)
                                                                         .metadata(jsonUtils.cloneOrNewEmptyJson(childFile.getMetadata()));
-                                                                return doSaveDocument(auth, saveNewDocumentFunction(documentBuilder));
+                                                                return saveDocumentService.doSaveDocument(auth, saveDocumentService.saveNewDocumentFunction(documentBuilder));
                                                             })
                                                             .flatMap(ccf -> auditService.logAction(auth, COPY_FILE_CHILD, FILE, ccf.getId(),
                                                                     new CopyAudit(childFile.getId(), newFolderId, sourceFolderId)).thenReturn(ccf)));
@@ -553,7 +517,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                 return Mono.error(new DuplicateNameException(
                         "A file/folder with name '" + request.newName() + "' already exists in the current location."));
             }
-            return doSaveDocument(auth, username -> {
+            return saveDocumentService.doSaveDocument(auth, username -> {
                 fileToRename.setName(request.newName());
                 fileToRename.setUpdatedAt(OffsetDateTime.now());
                 fileToRename.setUpdatedBy(username);
@@ -593,40 +557,11 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                     // 1. Save new file content
                     String oldStoragePath = document.getStoragePath();
 
-                    return storageService.saveFile(newFilePart)
-                            .flatMap(newStoragePath ->
-                                    replaceDocumentContentAndSave(newFilePart, contentLength, auth, document, newStoragePath, oldStoragePath));
+                    return saveDocumentService.saveAndReplaceDocument(newFilePart, contentLength, auth, document, oldStoragePath);
                 });
     }
 
-    private Mono<Document> replaceDocumentContentAndSave(FilePart newFilePart, Long contentLength, Authentication auth, Document document, String newStoragePath, String oldStoragePath) {
-        if(contentLength == null) {
-            return storageService.getFileLength(newStoragePath)
-                    .flatMap(fileLength -> replaceDocumentInDB(newFilePart, newStoragePath, oldStoragePath, fileLength, auth, document));
-        }
-        return replaceDocumentInDB(newFilePart, newStoragePath, oldStoragePath, contentLength, auth, document);
-    }
 
-    private Mono<Document> replaceDocumentInDB(FilePart newFilePart, String newStoragePath, String oldStoragePath, Long contentLength, Authentication auth, Document document) {
-        return doSaveDocument(auth, username -> {
-            document.setStoragePath(newStoragePath);
-            document.setContentType(newFilePart.headers().getContentType() != null ? newFilePart.headers().getContentType().toString() : APPLICATION_OCTET_STREAM);
-            document.setUpdatedAt(OffsetDateTime.now());
-            document.setUpdatedBy(username);
-            document.setSize(contentLength);
-            return documentDAO.update(document);
-        }).flatMap(savedDoc -> {
-                    // 3. Delete old file content from storage
-                    if (oldStoragePath != null && !oldStoragePath.equals(newStoragePath)) {
-                        return storageService.deleteFile(oldStoragePath).thenReturn(savedDoc);
-                    }
-                    return Mono.just(savedDoc);
-                })
-                .flatMap(updatedDoc -> auditService.logAction(auth, REPLACE_DOCUMENT_CONTENT, FILE, updatedDoc.getId(),
-                        new ReplaceAudit(newFilePart.filename())))
-                .thenReturn(document);
-
-    }
 
     @Override
     @Transactional
@@ -634,7 +569,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
 
         return documentDAO.findById(documentId, auth, AccessType.RW)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
-                .flatMap(document -> doSaveDocument(auth, username -> {
+                .flatMap(document -> saveDocumentService.doSaveDocument(auth, username -> {
                     document.setMetadata(newMetadata != null ? Json.of(objectMapper.valueToTree(newMetadata).toString()) : null);
                     document.setUpdatedAt(OffsetDateTime.now());
                     document.setUpdatedBy(username);
@@ -649,7 +584,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
     public Mono<Document> updateDocumentMetadata(UUID documentId, UpdateMetadataRequest request, Authentication auth) {
         return documentDAO.findById(documentId, auth, AccessType.RW)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
-                .flatMap(document -> doSaveDocument(auth, username -> {
+                .flatMap(document -> saveDocumentService.doSaveDocument(auth, username -> {
                     JsonNode currentMetadata = jsonUtils.toJsonNode(document.getMetadata());
                     ObjectNode updatedMetadataNode;
 
@@ -677,7 +612,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
     public Mono<Void> deleteDocumentMetadata(UUID documentId, DeleteMetadataRequest request, Authentication auth) {
         return documentDAO.findById(documentId, auth, AccessType.RW)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
-                .flatMap(document -> doSaveDocument(auth, username -> {
+                .flatMap(document -> saveDocumentService.doSaveDocument(auth, username -> {
                     Map<String, Object> currentMetadata = jsonUtils.toMap(document.getMetadata());
                     if (currentMetadata == null || currentMetadata.isEmpty() || request.metadataKeysToDelete().isEmpty()) {
                         return Mono.empty(); // No metadata to delete or nothing to do

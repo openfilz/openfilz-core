@@ -29,7 +29,7 @@ public class MinioStorageService implements StorageService {
     private final MinioClient minioClient;
     private final String bucketName;
 
-    @Value("${piped.buffer.size:1024}")
+    @Value("${piped.buffer.size:8192}")
     private Integer pipedBufferSize;
 
     public MinioStorageService(
