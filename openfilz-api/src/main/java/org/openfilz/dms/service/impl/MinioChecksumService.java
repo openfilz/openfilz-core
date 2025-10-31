@@ -157,7 +157,7 @@ public class MinioChecksumService implements ChecksumService {
                     try {
                         inputStream.close();
                     } catch (Exception e) {
-                        // Log if needed
+                        log.error("Error while closing stream", e);
                     }
                 }
             });
