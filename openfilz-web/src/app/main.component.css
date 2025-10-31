@@ -1,39 +1,83 @@
 .app-layout {
-  display: flex;
+  display: block;
   height: 100vh;
-  background-color: #f9fafb;
+  background-color: var(--bg-secondary);
+  overflow: hidden; /* Prevent body scroll */
+}
+
+/* Adjust header position when sidebar is collapsed */
+.sidebar-collapsed ::ng-deep app-header .header {
+  left: 60px;
+}
+
+/* Adjust breadcrumb position when sidebar is collapsed */
+.sidebar-collapsed ::ng-deep app-breadcrumb .breadcrumb {
+  left: 60px;
 }
 
 .main-content {
   flex-grow: 1;
-  margin-top: 64px; /* Header height */
-  margin-left: 180px; /* Sidebar width */
-  margin-bottom: 56px; /* Paginator height */
+  margin-top: 64px; /* Header height only */
+  margin-left: 240px; /* Updated to match new sidebar width */
+  margin-bottom: 0;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  height: calc(100vh - 120px); /* Full height - header - paginator */
+  height: calc(100vh - 64px); /* Full height - header */
+  background-color: var(--bg-secondary);
+  padding-top: 16px; /* Add some top padding for content */
+  overflow-y: auto; /* Main scrolling container */
+  transition: margin-left 0.3s ease;
 }
 
-mat-paginator {
-  position: fixed;
-  bottom: 0;
-  left: 180px; /* Sidebar width */
-  right: 0;
-  z-index: 1000; /* Ensure it's above other content */
-  border-top: 1px solid #e0e0e0;
+.sidebar-collapsed .main-content {
+  margin-left: 60px;
+}
+
+/* Dashboard view adjustments - no breadcrumb, no paginator */
+.dashboard-view .main-content,
+.main-content.dashboard-content {
+  margin-top: 64px; /* Only header height */
+  margin-bottom: 0;
+  height: calc(100vh - 64px); /* Full height minus header only */
+  overflow-y: visible; /* Let the main .main-content handle scrolling */
+}
+
+/* For non-dashboard content, breadcrumb is visible, so adjust accordingly */
+.main-content:not(.dashboard-content) {
+  margin-top: 104px; /* Header height (64px) + breadcrumb height (40px) */
+  height: calc(100vh - 104px); /* Include breadcrumb in calculation */
+}
+
+.main-content.center-content {
+  justify-content: center; /* Center content vertically */
+  align-items: center; /* Center content horizontally */
+}
+
+/* For wip content */
+.wip-content {
+    justify-content: center; /* Center content vertically */
+    align-items: center; /* Center content horizontally */
+}
+
+/* For non-dashboard content (file grid/list), main content handles scrolling */
+
+@media (max-width: 768px) {
+  .main-content {
+    margin-left: 0;
+    margin-top: 104px; /* Header height + breadcrumb height */
+  }
 }
 
 .empty-state {
   display: flex;
   justify-content: center;
   align-items: center;
-  height: calc(100vh - 200px);
+  height: calc(100vh - 240px); /* Adjusted for breadcrumb */
   text-align: center;
 }
 
 .empty-content {
-  color: #6b7280;
+  color: var(--text-tertiary);
 }
 
 .empty-icon {
@@ -41,18 +85,19 @@ mat-paginator {
   width: 64px;
   height: 64px;
   margin-bottom: 16px;
-  color: #d1d5db;
+  color: var(--border-color);
 }
 
 .empty-content h3 {
   margin: 16px 0 8px 0;
   font-weight: 500;
-  color: #374151;
+  color: var(--text-primary);
+  font-size: 18px;
 }
 
 .empty-content p {
   margin: 0;
-  color: #9ca3af;
+  color: var(--text-tertiary);
 }
 
 .loading-container {
@@ -60,17 +105,64 @@ mat-paginator {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  height: calc(100vh - 200px);
+  height: calc(100vh - 240px); /* Adjusted for breadcrumb */
   gap: 16px;
 }
 
 .loading-container p {
-  color: #6b7280;
+  color: var(--text-tertiary);
   margin: 0;
+}
+
+/* Upload Area */
+.upload-area {
+  border: 2px dashed var(--border-color);
+  border-radius: 8px;
+  padding: 48px 24px;
+  text-align: center;
+  transition: all 200ms ease-in-out;
+  cursor: pointer;
+  background-color: rgba(99, 102, 241, 0.02);
+  margin-bottom: 40px;
+}
+
+.upload-area:hover {
+  border-color: var(--primary);
+  background-color: rgba(99, 102, 241, 0.05);
+}
+
+.upload-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  background-color: rgba(99, 102, 241, 0.1);
+  border-radius: 8px;
+  color: var(--primary);
+  font-size: 24px;
+}
+
+.upload-area h3 {
+  margin-bottom: 8px;
+  color: var(--text-primary);
+  font-size: 16px;
+}
+
+.upload-area p {
+  margin-bottom: 16px;
+  color: var(--text-tertiary);
+  font-size: 14px;
 }
 
 @media (max-width: 768px) {
   .main-content {
-    margin-left: 60px;
+    margin-left: 0;
+    margin-top: 104px; /* Header height + breadcrumb height */
+  }
+  
+  app-breadcrumb {
+    left: 0;
   }
 }

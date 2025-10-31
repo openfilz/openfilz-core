@@ -1,24 +1,45 @@
-<h2 mat-dialog-title>Create New Folder</h2>
-
-<div mat-dialog-content>
-  <mat-form-field appearance="outline" style="width: 100%;">
-    <mat-label>Folder Name</mat-label>
-    <input 
-      matInput 
-      [(ngModel)]="folderName" 
-      placeholder="Enter folder name"
-      (keyup.enter)="onCreate()"
-      #nameInput>
-  </mat-form-field>
+<div class="dialog-header">
+  <div class="header-content">
+    <div class="icon-wrapper">
+      <i class="fas fa-folder-plus"></i>
+    </div>
+    <div class="header-text">
+      <h2 class="dialog-title">Create New Folder</h2>
+      <p class="dialog-subtitle">Enter a name for your new folder</p>
+    </div>
+  </div>
+  <button mat-icon-button class="close-btn" (click)="onCancel()">
+    <i class="fas fa-times"></i>
+  </button>
 </div>
 
-<div mat-dialog-actions align="end">
-  <button mat-button mat-dialog-close>Cancel</button>
-  <button 
-    mat-raised-button 
-    color="primary" 
+<div mat-dialog-content class="dialog-content">
+  <mat-form-field appearance="outline" class="folder-name-field">
+    <mat-label>Folder Name</mat-label>
+    <input
+      matInput
+      [(ngModel)]="folderName"
+      placeholder="e.g., Documents, Projects, Photos"
+      (keyup.enter)="onCreate()"
+      autocomplete="off"
+      #nameInput>
+    <mat-icon matPrefix class="input-icon">folder</mat-icon>
+  </mat-form-field>
+
+</div>
+
+<div mat-dialog-actions class="dialog-actions">
+  <button mat-stroked-button class="cancel-btn" (click)="onCancel()">
+    <i class="fas fa-times"></i>
+    <span>&nbsp;&nbsp;Cancel</span>
+  </button>
+  <button
+    mat-raised-button
+    color="primary"
+    class="create-btn"
     [disabled]="!folderName.trim()"
     (click)="onCreate()">
-    Create
+    <i class="fas fa-check"></i>
+    <span>&nbsp;&nbsp;Create Folder</span>
   </button>
 </div>

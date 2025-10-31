@@ -7,7 +7,6 @@ import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatPaginatorModule, PageEvent} from '@angular/material/paginator';
 
 import {DocumentApiService} from '../../services/document-api.service';
-import {ElementInfo} from '../../models/document.models';
 
 export interface FolderTreeDialogData {
   title: string;
@@ -118,6 +117,20 @@ export class FolderTreeDialogComponent implements OnInit {
 
   getActionButtonText(): string {
     return this.data.actionType === 'move' ? 'Move to here' : 'Copy to here';
+  }
+
+  getActionIcon(): string {
+    return this.data.actionType === 'move' ? 'drive_file_move' : 'content_copy';
+  }
+
+  getDialogIcon(): string {
+    return this.data.actionType === 'move' ? 'drive_file_move' : 'content_copy';
+  }
+
+  getDialogSubtitle(): string {
+    return this.data.actionType === 'move'
+      ? 'Select a destination folder to move the items to'
+      : 'Select a destination folder to copy the items to';
   }
 
   onAction() {

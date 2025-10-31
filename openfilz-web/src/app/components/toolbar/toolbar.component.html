@@ -1,60 +1,111 @@
-<mat-toolbar color="primary">
-  <span class="app-title">OpenFilz</span>
-  
-  <div class="toolbar-spacer"></div>
-  
-  <div class="search-container">
-    <mat-form-field appearance="outline" class="search-field">
-      <mat-icon matPrefix>search</mat-icon>
-      <input matInput placeholder="Search files and folders" [(ngModel)]="searchQuery" (keyup.enter)="onSearch()">
-    </mat-form-field>
-  </div>
-  
-  <div class="toolbar-actions">
-    <button mat-icon-button (click)="onCreateFolder()" title="Create folder">
-      <mat-icon>create_new_folder</mat-icon>
-    </button>
-    
-    <button mat-icon-button (click)="onUploadFiles()" title="Upload files">
-      <mat-icon>cloud_upload</mat-icon>
-    </button>
-    
-    <button mat-icon-button [matMenuTriggerFor]="viewMenu" title="View options">
-      <mat-icon>view_module</mat-icon>
-    </button>
-    
-    <mat-menu #viewMenu="matMenu">
-      <button mat-menu-item (click)="onViewChange('grid')" [class.active]="viewMode === 'grid'">
-        <mat-icon>view_module</mat-icon>
-        <span>Grid view</span>
-      </button>
-      <button mat-menu-item (click)="onViewChange('list')" [class.active]="viewMode === 'list'">
-        <mat-icon>view_list</mat-icon>
-        <span>List view</span>
-      </button>
-    </mat-menu>
-    
-    <button mat-icon-button [disabled]="!hasSelection" (click)="onDownloadSelected()" title="Download selected">
-      <mat-icon>cloud_download</mat-icon>
-    </button>
+<div class="toolbar">
+  <div class="toolbar-left">
+    <!-- Selection info -->
+    @if(hasSelection) {
+      <div class="selection-info">
+        <span>{{ selectionCount }} selected</span>
+        <button mat-icon-button class="clear-selection" (click)="onClearSelection()" matTooltip="Clear selection">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+    }
 
-    <button mat-icon-button [disabled]="!hasSelection" [matMenuTriggerFor]="bulkMenu" title="More actions">
-      <mat-icon>more_vert</mat-icon>
-    </button>
+    <!-- Action buttons (visible when no selection) -->
+    @if(!hasSelection) {
+      <button mat-raised-button color="primary" class="upload-btn" (click)="onUploadFiles()">
+        <i class="fas fa-upload"></i>
+        <span>Upload</span>
+      </button>
 
-    <mat-menu #bulkMenu="matMenu">
-      <button mat-menu-item (click)="onMoveSelected()">
-        <mat-icon>drive_file_move</mat-icon>
-        <span>Move to...</span>
+      <button mat-stroked-button class="new-folder-btn" (click)="onCreateFolder()">
+        <i class="fas fa-folder-plus"></i>
+        <span>New Folder</span>
       </button>
-      <button mat-menu-item (click)="onCopySelected()">
-        <mat-icon>file_copy</mat-icon>
-        <span>Copy to...</span>
-      </button>
-      <button mat-menu-item (click)="onDeleteSelected()">
-        <mat-icon>delete</mat-icon>
-        <span>Delete</span>
-      </button>
-    </mat-menu>
+    }
+
+    <!-- Selection actions (visible when items selected) -->
+    @if(hasSelection) {
+      <div class="selection-actions">
+        @if(selectionCount === 1) {
+          <button mat-stroked-button (click)="onRenameSelected()" matTooltip="Rename">
+            <i class="fas fa-edit"></i>
+            <span>Rename</span>
+          </button>
+        }
+        <button mat-stroked-button (click)="onDownloadSelected()" matTooltip="Download">
+          <i class="fas fa-download"></i>
+          <span>Download</span>
+        </button>
+        <button mat-stroked-button (click)="onMoveSelected()" matTooltip="Move">
+          <i class="fas fa-arrows-alt"></i>
+          <span>Move</span>
+        </button>
+        <button mat-stroked-button (click)="onCopySelected()" matTooltip="Copy">
+          <i class="fas fa-copy"></i>
+          <span>Copy</span>
+        </button>
+        <button mat-stroked-button color="warn" (click)="onDeleteSelected()" matTooltip="Delete">
+          <i class="fas fa-trash"></i>
+          <span>Delete</span>
+        </button>
+      </div>
+    }
   </div>
-</mat-toolbar>
+
+  <div class="toolbar-right">
+    <!-- Pagination -->
+    @if(totalItems > 0) {
+      <div class="pagination-controls">
+        <span class="pagination-info">{{ getStartIndex() }}-{{ getEndIndex() }} of {{ totalItems }}</span>
+
+        <!-- Page size selector -->
+        <button mat-button [matMenuTriggerFor]="pageSizeMenu" class="page-size-btn" matTooltip="Items per page">
+          <span>{{ pageSize }}</span>
+          <i class="fas fa-chevron-down"></i>
+        </button>
+        <mat-menu #pageSizeMenu="matMenu">
+          @for(size of pageSizeOptions; track size) {
+            <button mat-menu-item (click)="onPageSizeChange(size)" [class.active]="size === pageSize">
+              {{ size }} per page
+            </button>
+          }
+        </mat-menu>
+
+        <button
+          mat-icon-button
+          class="pagination-btn"
+          [disabled]="!hasPreviousPage()"
+          (click)="onPreviousPage()"
+          matTooltip="Previous page">
+          <i class="fas fa-chevron-left"></i>
+        </button>
+        <button
+          mat-icon-button
+          class="pagination-btn"
+          [disabled]="!hasNextPage()"
+          (click)="onNextPage()"
+          matTooltip="Next page">
+          <i class="fas fa-chevron-right"></i>
+        </button>
+      </div>
+    }
+
+    <!-- View toggle -->
+    <div class="view-toggle">
+      <button
+        mat-icon-button
+        [class.active]="viewMode === 'grid'"
+        (click)="viewMode !== 'grid' && toggleViewMode()"
+        matTooltip="Grid view">
+        <i class="fas fa-th"></i>
+      </button>
+      <button
+        mat-icon-button
+        [class.active]="viewMode === 'list'"
+        (click)="viewMode !== 'list' && toggleViewMode()"
+        matTooltip="List view">
+        <i class="fas fa-list"></i>
+      </button>
+    </div>
+  </div>
+</div>
