@@ -4,10 +4,8 @@ import {MatCardModule} from '@angular/material/card';
 import {MatIconModule} from '@angular/material/icon';
 import {MatButtonModule} from '@angular/material/button';
 import {MatCheckboxModule} from '@angular/material/checkbox';
-import {MatMenuModule} from '@angular/material/menu';
 import {FileItem} from '../../models/document.models';
 import {FileIconService} from '../../services/file-icon.service';
-import {MatDivider} from "@angular/material/divider";
 
 @Component({
   selector: 'app-file-grid',
@@ -19,9 +17,7 @@ import {MatDivider} from "@angular/material/divider";
     MatCardModule,
     MatIconModule,
     MatButtonModule,
-    MatCheckboxModule,
-    MatMenuModule,
-    MatDivider
+    MatCheckboxModule
   ],
 })
 export class FileGridComponent {

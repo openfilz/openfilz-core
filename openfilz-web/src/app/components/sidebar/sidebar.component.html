@@ -1,23 +1,65 @@
-<div class="sidebar">
+<div class="sidebar" [class.collapsed]="isCollapsed">
   <div class="sidebar-header">
-    <div class="logo">
-      <mat-icon class="logo-icon">folder</mat-icon>
-      <span class="logo-text">Openfilz</span>
+    <div class="logo-container">
+      <div class="logo">O</div>
+      @if(!isCollapsed) {
+        <div class="logo-text">OPENFILZ</div>
+      }
+    </div>
+    @if(!isCollapsed) {
+      <button
+        mat-icon-button
+        class="toggle-btn"
+        (click)="toggleSidebar()"
+        matTooltip="Collapse"
+        matTooltipPosition="right">
+        <i class="fas fa-chevron-left"></i>
+      </button>
+    }
+  </div>
+
+  <!-- Floating toggle button for collapsed state -->
+  @if(isCollapsed) {
+    <button
+      mat-icon-button
+      class="toggle-btn-floating"
+      (click)="toggleSidebar()"
+      matTooltip="Expand sidebar"
+      matTooltipPosition="right">
+      <i class="fas fa-chevron-right"></i>
+    </button>
+  }
+  
+  <div class="sidebar-nav">
+    @for(item of navigationItems; track item.id; let i = $index) {
+      @if(item.id !== 'logout') {
+        <div 
+          class="nav-item" 
+          [class.active]="item.active"
+          (click)="onNavigationClick(item.id)"
+          [matTooltip]="item.label"
+          [matTooltipPosition]="'right'"
+          [matTooltipDisabled]="!isCollapsed">
+          <div class="nav-icon"><i class="fas" [class]="'fa-' + getIconClass(item.id)"></i></div>
+          @if(!isCollapsed) {
+            <span>{{ item.label }}</span>
+          }
+        </div>
+      }
+    }
+  </div>
+
+  <div class="sidebar-footer">
+    <div
+      class="nav-item"
+      (click)="onNavigationClick('logout')"
+      [matTooltip]="'Log Out'"
+      [matTooltipPosition]="'right'"
+      [matTooltipDisabled]="!isCollapsed">
+      <div class="nav-icon"><i class="fas fa-sign-out-alt"></i></div>
+      @if(!isCollapsed) {
+        <span>Log Out</span>
+      }
     </div>
   </div>
-
-  <div class="sidebar-content">
-    <mat-nav-list>
-        @for(item of navigationItems; track item.id) {
-        <mat-list-item
-                [class.active]="item.active"
-                (click)="onNavigationClick(item.id)">
-            <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
-            <span matListItemTitle>{{ item.label }}</span>
-        </mat-list-item>
-        }
-    </mat-nav-list>
-  </div>
-
-  
 </div>

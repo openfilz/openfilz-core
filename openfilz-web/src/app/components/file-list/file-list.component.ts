@@ -4,10 +4,8 @@ import {MatTableModule} from '@angular/material/table';
 import {MatIconModule} from '@angular/material/icon';
 import {MatButtonModule} from '@angular/material/button';
 import {MatCheckboxModule} from '@angular/material/checkbox';
-import {MatMenuModule} from '@angular/material/menu';
 import {FileItem} from '../../models/document.models';
 import {FileIconService} from '../../services/file-icon.service';
-import {MatDivider} from "@angular/material/divider";
 
 @Component({
   selector: 'app-file-list',
@@ -19,9 +17,7 @@ import {MatDivider} from "@angular/material/divider";
         MatTableModule,
         MatIconModule,
         MatButtonModule,
-        MatCheckboxModule,
-        MatMenuModule,
-        MatDivider
+        MatCheckboxModule
     ],
 })
 export class FileListComponent {
@@ -38,7 +34,7 @@ export class FileListComponent {
   @Output() copy = new EventEmitter<FileItem>();
   @Output() delete = new EventEmitter<FileItem>();
 
-  displayedColumns: string[] = ['select', 'name', 'size', 'type', 'actions'];
+  displayedColumns: string[] = ['select', 'name', 'size', 'type'];
 
   constructor(private fileIconService: FileIconService) {}
 

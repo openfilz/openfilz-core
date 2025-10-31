@@ -1,0 +1,82 @@
+<div class="content" appDragDrop
+     (filesDropped)="onFilesDropped($event)"
+     (fileOverChange)="onFileOverChange($event)"
+     [class.file-over]="fileOver">
+
+  <!-- Recently Edited Section -->
+  <h2 class="section-title">Recently Edited</h2>
+  <div class="recently-edited">
+    @for(file of recentlyEditedFiles.slice(0, 4); track file.id) {
+      <div class="file-card">
+        <div class="file-preview" [style.background]="getGradientBackground(file.type)">
+          <div class="file-preview-content">
+            <div class="file-preview-icon">
+              <i class="fas" [class]="getFileIconClass(file.type)"></i>
+            </div>
+            <small>{{ getFileCategory(file.type) }}</small>
+          </div>
+          <div class="file-card-actions">
+            <i class="fas fa-ellipsis-h"></i>
+          </div>
+        </div>
+        <div class="file-card-body">
+          <div class="file-card-title">{{ file.name }}</div>
+          <div class="file-card-meta">{{ file.lastModified }}</div>
+        </div>
+      </div>
+    }
+  </div>
+
+  <!-- File Type Distribution Section -->
+  <h2 class="section-title">File Distribution</h2>
+  <div class="file-distribution">
+    @for(item of fileTypeDistribution; track item.type) {
+      <div class="distribution-item">
+        <div class="distribution-label">
+          <span class="distribution-type">{{ item.type }}</span>
+          <span class="distribution-count">{{ item.count }} files</span>
+        </div>
+        <div class="distribution-bar">
+          <div class="distribution-bar-fill"
+               [style.width.%]="item.percentage"
+               [style.background-color]="item.color">
+          </div>
+        </div>
+        <div class="distribution-percent">{{ item.percentage }}%</div>
+      </div>
+    }
+  </div>
+
+  <!-- Storage Stats -->
+  <h2 class="section-title">Storage</h2>
+  <div class="storage-widget">
+    <div class="storage-info">
+      <div class="storage-used">
+        <span class="storage-amount">{{ formatFileSize(storageUsed) }}</span>
+        <span class="storage-total">of {{ formatFileSize(storageTotal) }} used</span>
+      </div>
+      <div class="storage-percentage">{{ storagePercentage }}%</div>
+    </div>
+    <div class="storage-bar">
+      <div class="storage-bar-fill" [style.width.%]="storagePercentage"></div>
+    </div>
+    <div class="storage-breakdown">
+      <div class="breakdown-item">
+        <i class="fas fa-file" style="color: #667eea;"></i>
+        <span>Documents: {{ formatFileSize(documentsSize) }}</span>
+      </div>
+      <div class="breakdown-item">
+        <i class="fas fa-image" style="color: #f093fb;"></i>
+        <span>Images: {{ formatFileSize(imagesSize) }}</span>
+      </div>
+      <div class="breakdown-item">
+        <i class="fas fa-video" style="color: #4facfe;"></i>
+        <span>Videos: {{ formatFileSize(videosSize) }}</span>
+      </div>
+      <div class="breakdown-item">
+        <i class="fas fa-folder" style="color: #00f2fe;"></i>
+        <span>Other: {{ formatFileSize(otherSize) }}</span>
+      </div>
+    </div>
+  </div>
+</div>

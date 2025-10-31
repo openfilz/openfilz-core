@@ -6,19 +6,138 @@
 // custom components at https://material.angular.dev/guide/theming
 @use '@angular/material' as mat;
 
+// Define custom color palettes based on the newstyle.html design
+$primary-palette: (
+  50: #e0e1ff,
+  100: #c2c4ff,
+  200: #a3a6ff,
+  300: #8588ff,
+  400: #7275f1,
+  500: #6366f1,  // primary color from newstyle.html
+  600: #595ce5,
+  700: #4f46e5,  // primary-dark color from newstyle.html
+  800: #4435d9,
+  900: #331ac4,
+  A100: #d1d3ff,
+  A200: #a2a5ff,
+  A400: #7275f1,
+  A700: #595ce5,
+  contrast: (
+    50: rgba(black, 0.87),
+    100: rgba(black, 0.87),
+    200: rgba(black, 0.87),
+    300: rgba(black, 0.87),
+    400: white,
+    500: white,
+    600: white,
+    700: white,
+    800: white,
+    900: white,
+    A100: rgba(black, 0.87),
+    A200: white,
+    A400: white,
+    A700: white,
+  )
+);
+
+$accent-palette: (
+  50: #fdf7ee,
+  100: #fae8cc,
+  200: #f7d4a3,
+  300: #f4c07b,
+  400: #f2b15c,
+  500: #f59e0b,  // accent color from newstyle.html (amber)
+  600: #f5920b,
+  700: #f4820a,
+  800: #f37209,
+  900: #f15707,
+  A100: #ffffff,
+  A200: #fffaf3,
+  A400: #ffeecf,
+  A700: #ffdca3,
+  contrast: (
+    50: rgba(black, 0.87),
+    100: rgba(black, 0.87),
+    200: rgba(black, 0.87),
+    300: rgba(black, 0.87),
+    400: rgba(black, 0.87),
+    500: rgba(0, 0, 0, 0.87),
+    600: rgba(0, 0, 0, 0.87),
+    700: rgba(0, 0, 0, 0.87),
+    800: white,
+    900: white,
+    A100: rgba(0, 0, 0, 0.87),
+    A200: rgba(0, 0, 0, 0.87),
+    A400: rgba(0, 0, 0, 0.87),
+    A700: white,
+  )
+);
+
+$secondary-palette: (
+  50: #e7fbf8,
+  100: #c0f2ed,
+  200: #93e8e1,
+  300: #66ddda,
+  400: #45d5d4,
+  500: #14b8a6,  // secondary color from newstyle.html (teal)
+  600: #12a897,
+  700: #0f9585,
+  800: #0d8273,
+  900: #096256,
+  A100: #a8fff9,
+  A200: #75fff7,
+  A400: #42fff5,
+  A700: #1efff4,
+  contrast: (
+    50: rgba(0, 0, 0, 0.87),
+    100: rgba(0, 0, 0, 0.87),
+    200: rgba(0, 0, 0, 0.87),
+    300: rgba(0, 0, 0, 0.87),
+    400: rgba(0, 0, 0, 0.87),
+    500: white,
+    600: white,
+    700: white,
+    800: white,
+    900: white,
+    A100: rgba(0, 0, 0, 0.87),
+    A200: rgba(0, 0, 0, 0.87),
+    A400: rgba(0, 0, 0, 0.87),
+    A700: rgba(0, 0, 0, 0.87),
+  )
+);
+
+// Define background and text color variables for custom styling
+:root {
+  --primary: #6366f1;
+  --primary-light: #818cf8;
+  --primary-dark: #4f46e5;
+  --secondary: #14b8a6;
+  --accent: #f59e0b;
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --text-tertiary: #94a3b8;
+  --border-color: #e2e8f0;
+  --border-light: #f1f5f9;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
 html {
   @include mat.theme((
     color: (
-      primary: mat.$azure-palette,
-      tertiary: mat.$blue-palette,
+      primary: $primary-palette,
+      accent: $accent-palette,
+      tertiary: $secondary-palette,
     ),
-    typography: Roboto,
+    typography: 'Inter',
     density: 0,
   ));
 
-  // Default the application to a light color theme. This can be changed to
-  // `dark` to enable the dark color theme, or to `light dark` to defer to the
-  // user's system settings.
+  // Default the application to a light color theme
   color-scheme: light;
 
   // Set a default background, font and text colors for the application using
@@ -26,5 +145,112 @@ html {
   // variables at https://material.angular.dev/guide/system-variables
   background-color: var(--mat-sys-surface);
   color: var(--mat-sys-on-surface);
-  font: var(--mat-sys-body-medium);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+// Additional custom styles to match newstyle.html
+.mat-app-background {
+  background-color: var(--bg-secondary) !important;
+}
+
+.mat-sidenav-container {
+  background-color: var(--bg-secondary);
+}
+
+.mat-toolbar {
+  background-color: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+}
+
+.mat-card {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+  transition: all 200ms ease-in-out;
+}
+
+.mat-card:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--primary-light);
+}
+
+.mat-raised-button {
+  border-radius: 6px;
+  font-weight: 500;
+  text-transform: none;
+}
+
+.mat-raised-button.mat-primary {
+  background-color: var(--primary);
+  color: white;
+}
+
+.mat-raised-button.mat-primary:hover {
+  background-color: var(--primary-dark);
+}
+
+.mat-raised-button.mat-accent {
+  background-color: var(--accent);
+  color: white;
+}
+
+.mat-raised-button.mat-accent:hover {
+  background-color: #e69008; // darker variant of accent
+}
+
+.mat-raised-button.mat-basic {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.mat-raised-button.mat-basic:hover {
+  background-color: var(--border-light);
+}
+
+.mat-input-container {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+.mat-form-field-appearance-outline .mat-form-field-outline {
+  color: var(--border-color);
+}
+
+.mat-form-field-appearance-outline .mat-form-field-outline-thick {
+  color: var(--primary);
+}
+
+.mat-table {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.mat-header-row {
+  background-color: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.mat-header-cell {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.mat-row:hover {
+  background-color: rgba(99, 102, 241, 0.02);
+}
+
+.mat-cell {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.mat-paginator {
+  background-color: var(--bg-primary);
+  border-top: 1px solid var(--border-color);
 }
