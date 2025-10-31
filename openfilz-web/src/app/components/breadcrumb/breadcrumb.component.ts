@@ -18,4 +18,8 @@ export class BreadcrumbComponent {
   onNavigate(item?: ElementInfo) {
     this.navigate.emit(item != null ? item : Root.INSTANCE);
   }
+
+  onNavigateToHome() {
+    this.navigate.emit(Root.INSTANCE);
+  }
 }

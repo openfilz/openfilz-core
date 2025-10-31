@@ -120,6 +120,20 @@ export class FolderTreeDialogComponent implements OnInit {
     return this.data.actionType === 'move' ? 'Move to here' : 'Copy to here';
   }
 
+  getActionIcon(): string {
+    return this.data.actionType === 'move' ? 'drive_file_move' : 'content_copy';
+  }
+
+  getDialogIcon(): string {
+    return this.data.actionType === 'move' ? 'drive_file_move' : 'content_copy';
+  }
+
+  getDialogSubtitle(): string {
+    return this.data.actionType === 'move'
+      ? 'Select a destination folder to move the items to'
+      : 'Select a destination folder to copy the items to';
+  }
+
   onAction() {
     this.dialogRef.close(this.currentFolderId || null);
   }

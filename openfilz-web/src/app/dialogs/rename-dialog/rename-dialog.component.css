@@ -6,4 +6,22 @@ mat-form-field {
 [mat-dialog-content] {
   min-width: 300px;
   padding-top: 16px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+[mat-dialog-actions] {
+  background-color: var(--bg-primary);
+  border-top: 1px solid var(--border-color);
+  padding: 16px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+[mat-dialog-container] {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  border-radius: 8px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  box-shadow: var(--shadow-lg);
 }
