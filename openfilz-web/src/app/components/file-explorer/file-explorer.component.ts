@@ -195,15 +195,17 @@ export class FileExplorerComponent implements OnInit {
     return this.items.filter(item => item.selected);
   }
 
-  loadFolder(folder?: FileItem, fromBreadcrumb: boolean = false) {
+  loadFolder(folder?: FileItem, fromBreadcrumb: boolean = false, appendBreadCrumb: boolean = false) {
     this.loading = true;
     this.currentFolder = folder;
 
     // Update breadcrumb trail
     if (!fromBreadcrumb) {
       if (folder) {
-        // Add folder to breadcrumb trail
-        this.breadcrumbTrail.push(folder);
+          if(appendBreadCrumb) {
+              // Add folder to breadcrumb trail
+              this.breadcrumbTrail.push(folder);
+          }
       } else {
         // Reset to root
         this.breadcrumbTrail = [];
@@ -284,7 +286,7 @@ export class FileExplorerComponent implements OnInit {
 
   onItemDoubleClick(item: FileItem) {
     if (item.type === 'FOLDER') {
-      this.loadFolder(item);
+      this.loadFolder(item, false, true);
     } else {
       this.onDownloadItem(item);
     }
