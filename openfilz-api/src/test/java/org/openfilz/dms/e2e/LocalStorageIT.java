@@ -35,16 +35,17 @@ import reactor.test.StepVerifier;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.net.URLConnection;
+import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
-import java.nio.file.DirectoryStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.nio.file.*;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.OffsetDateTime;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -61,9 +62,9 @@ public class LocalStorageIT extends TestContainersBaseConfig {
 
     protected String username = "anonymousUser";
 
-    protected String test_file_1_sql_sha = "36be9faa01295f0416c52234e8c03d77f6b16294173fc64e08f94fb1df2104fc";
+    protected static String test_file_1_sql_sha;
 
-    protected String test_txt_sha = "662ce40a19604fae1a36dc9737598eb0e3b81a11e70aff50f190b6174ca72658";
+    protected static String test_txt_sha;
 
     
     @Autowired
@@ -75,10 +76,31 @@ public class LocalStorageIT extends TestContainersBaseConfig {
 
     static {
         try {
-             testTxtSize = (long) ClassLoader.getSystemResource("test.txt").openConnection().getContentLength();
-        } catch (IOException e) {
+            URL textFileUrl = ClassLoader.getSystemResource("test.txt");
+            testTxtSize = (long) textFileUrl.openConnection().getContentLength();
+            test_file_1_sql_sha = calculateSha256ChecksumNIO(Paths.get(ClassLoader.getSystemResource("test_file_1.sql").toURI()));
+            test_txt_sha = calculateSha256ChecksumNIO(Paths.get(textFileUrl.toURI()));
+        } catch (IOException | URISyntaxException | NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private static String calculateSha256ChecksumNIO(Path filePath) throws NoSuchAlgorithmException, IOException {
+
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            ByteBuffer buffer = ByteBuffer.allocate(8192);
+
+            try (var channel = java.nio.channels.FileChannel.open(filePath, StandardOpenOption.READ)) {
+                while (channel.read(buffer) > 0) {
+                    buffer.flip();
+                    digest.update(buffer);
+                    buffer.clear();
+                }
+            }
+
+            byte[] hashBytes = digest.digest();
+            return HexFormat.of().formatHex(hashBytes);
+
     }
 
     public LocalStorageIT(WebTestClient webTestClient) {
