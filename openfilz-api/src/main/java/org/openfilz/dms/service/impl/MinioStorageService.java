@@ -2,7 +2,9 @@
 package org.openfilz.dms.service.impl;
 
 import io.minio.*;
-import io.minio.errors.ErrorResponseException;
+import io.minio.errors.*;
+import io.minio.messages.ObjectLockConfiguration;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.exception.StorageException;
 import org.openfilz.dms.service.StorageService;
@@ -20,24 +22,36 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 
 @Slf4j
 @Service
 @ConditionalOnProperty(name = "storage.type", havingValue = "minio")
 public class MinioStorageService implements StorageService {
 
-    private final MinioClient minioClient;
-    private final String bucketName;
+    private MinioClient minioClient;
 
-    @Value("${piped.buffer.size:1024}")
+    @Value("${storage.minio.endpoint}")
+    private String endpoint;
+
+    @Value("${storage.minio.access-key}")
+    private String accessKey;
+
+    @Value("${storage.minio.secret-key}")
+    private String secretKey;
+
+    @Value("${storage.minio.bucket-name}")
+    private String bucketName;
+
+    @Value("${piped.buffer.size:8192}")
     private Integer pipedBufferSize;
 
-    public MinioStorageService(
-            @Value("${storage.minio.endpoint}") String endpoint,
-            @Value("${storage.minio.access-key}") String accessKey,
-            @Value("${storage.minio.secret-key}") String secretKey,
-            @Value("${storage.minio.bucket-name}") String bucketName
-    ) {
+    @Value("${openfilz.security.worm-mode:false}")
+    private Boolean wormMode;
+
+    @PostConstruct
+    public void init() {
         this.minioClient = MinioClient.builder()
                 .endpoint(endpoint)
                 .credentials(accessKey, secretKey)
@@ -50,14 +64,23 @@ public class MinioStorageService implements StorageService {
         try {
             boolean found = minioClient.bucketExists(BucketExistsArgs.builder().bucket(bucketName).build());
             if (!found) {
-                minioClient.makeBucket(MakeBucketArgs.builder().bucket(bucketName).build());
+                minioClient.makeBucket(MakeBucketArgs.builder().bucket(bucketName).objectLock(wormMode).build());
                 log.info("Bucket '{}' created successfully.", bucketName);
             } else {
                 log.info("Bucket '{}' already exists.", bucketName);
+                if(wormMode) {
+                    try {
+                        ObjectLockConfiguration objectLockConfiguration = minioClient.getObjectLockConfiguration(GetObjectLockConfigurationArgs.builder().bucket(bucketName).build());
+                        log.debug("Object Lock configuration: {}", objectLockConfiguration);
+                    } catch (Exception e) {
+                        log.error("Object Lock configuration is mandatory when WORM configuration is active (openfilz.security.worm-mode=true)", e);
+                        throw new RuntimeException(e);
+                    }
+                }
             }
         } catch (Exception e) {
             log.error("Error ensuring bucket '{}' exists", bucketName, e);
-            throw new RuntimeException("MinIO bucket initialization failed", e);
+            System.exit(-1);
         }
     }
 
@@ -113,6 +136,7 @@ public class MinioStorageService implements StorageService {
                     PutObjectArgs args = PutObjectArgs.builder()
                             .bucket(bucketName)
                             .object(objectName)
+                            .legalHold(wormMode)
                             .stream(pipedInputStream, -1, PutObjectArgs.MIN_MULTIPART_SIZE) // Min part size is 5MiB
                             .contentType(filePart.headers().getContentType() != null ?
                                     filePart.headers().getContentType().toString() : "application/octet-stream")
@@ -184,6 +208,7 @@ public class MinioStorageService implements StorageService {
                         CopyObjectArgs.builder()
                                 .bucket(bucketName)
                                 .object(destinationObjectName)
+                                .legalHold(wormMode)
                                 .source(CopySource.builder().bucket(bucketName).object(sourceStoragePath).build())
                                 .build());
                 log.info("File copied from {} to {} in MinIO bucket '{}'", sourceStoragePath, destinationObjectName, bucketName);

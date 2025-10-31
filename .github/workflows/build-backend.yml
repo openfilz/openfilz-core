@@ -13,11 +13,13 @@ on:
     branches: [ "develop" ]
     paths-ignore:
       - 'openfilz-web/**'
+      - '*.md'
+      - '**/*.md'
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    if: github.actor != 'maven-release-bot'
+    if: github.actor != 'maven-release-bot' && github.actor != 'maven-release-bot[bot]'
     steps:
       - uses: actions/create-github-app-token@v2
         id: app-token

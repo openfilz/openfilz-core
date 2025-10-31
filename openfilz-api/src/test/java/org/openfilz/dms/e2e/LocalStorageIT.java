@@ -35,16 +35,17 @@ import reactor.test.StepVerifier;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.net.URLConnection;
+import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
-import java.nio.file.DirectoryStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.nio.file.*;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.OffsetDateTime;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -60,6 +61,11 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 public class LocalStorageIT extends TestContainersBaseConfig {
 
     protected String username = "anonymousUser";
+
+    protected static String test_file_1_sql_sha;
+
+    protected static String test_txt_sha;
+
     
     @Autowired
     protected DatabaseClient databaseClient;
@@ -70,10 +76,31 @@ public class LocalStorageIT extends TestContainersBaseConfig {
 
     static {
         try {
-             testTxtSize = (long) ClassLoader.getSystemResource("test.txt").openConnection().getContentLength();
-        } catch (IOException e) {
+            URL textFileUrl = ClassLoader.getSystemResource("test.txt");
+            testTxtSize = (long) textFileUrl.openConnection().getContentLength();
+            test_file_1_sql_sha = calculateSha256ChecksumNIO(Paths.get(ClassLoader.getSystemResource("test_file_1.sql").toURI()));
+            test_txt_sha = calculateSha256ChecksumNIO(Paths.get(textFileUrl.toURI()));
+        } catch (IOException | URISyntaxException | NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private static String calculateSha256ChecksumNIO(Path filePath) throws NoSuchAlgorithmException, IOException {
+
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            ByteBuffer buffer = ByteBuffer.allocate(8192);
+
+            try (var channel = java.nio.channels.FileChannel.open(filePath, StandardOpenOption.READ)) {
+                while (channel.read(buffer) > 0) {
+                    buffer.flip();
+                    digest.update(buffer);
+                    buffer.clear();
+                }
+            }
+
+            byte[] hashBytes = digest.digest();
+            return HexFormat.of().formatHex(hashBytes);
+
     }
 
     public LocalStorageIT(WebTestClient webTestClient) {
@@ -602,14 +629,14 @@ public class LocalStorageIT extends TestContainersBaseConfig {
         UploadResponse uploadResponse2 = uploadResponse.get(1);
         Assertions.assertEquals(param2.filename(), uploadResponse2.name());
 
-        checkFileInfo(uploadResponse1, param1, metadata1);
-        checkFileInfo(uploadResponse2, param2, metadata2);
+        checkFileInfo(uploadResponse1, param1, metadata1, test_file_1_sql_sha);
+        checkFileInfo(uploadResponse2, param2, metadata2, test_txt_sha);
 
     }
 
 
 
-    private void checkFileInfo(UploadResponse uploadResponse, MultipleUploadFileParameter param, Map<String, Object> metadata) {
+    protected void checkFileInfo(UploadResponse uploadResponse, MultipleUploadFileParameter param, Map<String, Object> metadata, String checksum) {
         DocumentInfo info2 = getWebTestClient().get().uri(uri ->
                         uri.path(RestApiVersion.API_PREFIX + "/documents/{id}/info")
                                 .queryParam("withMetadata", true)
@@ -1745,10 +1772,10 @@ public class LocalStorageIT extends TestContainersBaseConfig {
 
         Assertions.assertEquals("folder-to-list", folderResponse.name());
 
-        List<FolderResponse> folders = getWebTestClient().get().uri(RestApiVersion.API_PREFIX + "/folders/list")
+        List<FolderElementInfo> folders = getWebTestClient().get().uri(RestApiVersion.API_PREFIX + "/folders/list")
                 .exchange()
                 .expectStatus().isOk()
-                .expectBodyList(FolderResponse.class)
+                .expectBodyList(FolderElementInfo.class)
                 .returnResult().getResponseBody();
 
         Assertions.assertTrue(folders.stream().anyMatch(f -> f.name().equals("folder-to-list")));

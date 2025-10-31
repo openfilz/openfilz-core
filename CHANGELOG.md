@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[a3ea9216c471236](https://github.com/openfilz/openfilz-core/commit/a3ea9216c471236) maven-release-bot[bot] *2025-10-05 11:37:22*
+[7679911d9ff0df9](https://github.com/openfilz/openfilz-core/commit/7679911d9ff0df9) maven-release-bot[bot] *2025-10-31 10:15:08*
 
 
-## v1.0.7
+## v1.0.11
 ### No issue
 
-**[maven-release-plugin] prepare release v1.0.7**
+**[maven-release-plugin] prepare release v1.0.11**
 
 
-[2d73386cdaf81f0](https://github.com/openfilz/openfilz-core/commit/2d73386cdaf81f0) maven-release-bot[bot] *2025-10-05 11:37:20*
+[3ba22ef3d0b045b](https://github.com/openfilz/openfilz-core/commit/3ba22ef3d0b045b) maven-release-bot[bot] *2025-10-31 10:15:06*
 
-**Merge pull request #15 from openfilz/develop**
+**Merge pull request #25 from openfilz/develop**
 
- * Develop
+ * Worm mode with Minio : set LegalHold&#x3D;true to uploaded documents
 
-[34bf6c37de807a6](https://github.com/openfilz/openfilz-core/commit/34bf6c37de807a6) Yann Demel *2025-10-05 11:35:37*
+[5f89569bcd0a66e](https://github.com/openfilz/openfilz-core/commit/5f89569bcd0a66e) Yann Demel *2025-10-31 10:13:51*
 
 

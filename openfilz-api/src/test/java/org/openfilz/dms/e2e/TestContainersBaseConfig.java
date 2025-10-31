@@ -34,7 +34,7 @@ public abstract class TestContainersBaseConfig {
     protected String baseGraphQlHttpPath;
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:17.6").withReuse(true);
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18").withReuse(true);
 
     @Container
     static final KeycloakContainer keycloak = new KeycloakContainer()
