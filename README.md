@@ -52,6 +52,15 @@ A web-based graphical user interface (GUI), similar to Google Drive, is currentl
 - **Pluggable Authorization:** Supports a default role-based authorization model using roles from the JWT, and allows for a fully custom authorization model to be implemented for advanced scenarios.
 - **Security Toggle:** Security can be disabled for development and testing environments.
 
+### Checksum (SHA-256) Calculation
+
+This optional feature, when enabled, calculates the SHA-256 checksum for every file uploaded to the system. The checksum is then stored as a metadata property with the key `sha256`, ensuring data integrity and providing a reliable way to verify file contents.
+
+### WORM (Write Once Read Many) Mode
+
+Transform OpenFilz into a compliant archiving system with WORM mode. When enabled, this feature ensures that once a file is written, it cannot be modified or deleted, making it ideal for regulatory and long-term data retention requirements.
+
+
 ### GraphQL API
 
 In addition to the standard REST API, OpenFilz offers GraphQL endpoints for querying document lists and counts, providing a more flexible and efficient way to fetch data.

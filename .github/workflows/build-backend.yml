@@ -13,6 +13,8 @@ on:
     branches: [ "develop" ]
     paths-ignore:
       - 'openfilz-web/**'
+      - '*.md'
+      - '**/*.md'
 
 jobs:
   build:
