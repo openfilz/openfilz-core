@@ -13,12 +13,11 @@
     </app-breadcrumb>
   }
 
-  <div class="main-content" [class.dashboard-content]="currentRoute === 'dashboard'"
-       [class.wip-content]="currentRoute === 'favorites'
-            || currentRoute === 'recycle-bin'
-            || currentRoute === 'settings'">
-    <router-outlet></router-outlet>
-  </div>
+<div class="main-content" 
+     [class.dashboard-content]="currentRoute === 'dashboard'"
+     [class.center-content]="isWipRoute">
+  <router-outlet></router-outlet>
+</div>
   
   @if (isDownloading) {
       <app-download-progress></app-download-progress>

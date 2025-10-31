@@ -1,3 +1,9 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
 .file-explorer-content ::ng-deep app-file-grid,
 .file-explorer-content ::ng-deep app-file-list {
   flex-grow: 1;

@@ -29,6 +29,7 @@ export class MainComponent implements OnInit {
   isDownloading = false;
   breadcrumbs: ElementInfo[] = [];
   currentRoute = '';
+  isWipRoute = false;
   isSidebarCollapsed = false;
 
   // This is needed for the header component
@@ -63,6 +64,7 @@ export class MainComponent implements OnInit {
   updateCurrentRoute() {
     const path = this.router.url.split('/')[1]; // Get the first part of the URL after the slash
     this.currentRoute = path || 'dashboard'; // Default to 'dashboard' if path is empty (root route)
+    this.isWipRoute = ['recycle-bin', 'favorites', 'settings'].includes(this.currentRoute);
   }
 
   onNavigate(item: any) {
