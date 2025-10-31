@@ -1,37 +1,34 @@
-import { Component, OnInit, ViewChild, ElementRef } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { MatDialog, MatDialogModule } from '@angular/material/dialog';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatIcon } from "@angular/material/icon";
+import {Component, ElementRef, OnInit, ViewChild} from '@angular/core';
+import {CommonModule} from '@angular/common';
+import {MatDialog, MatDialogModule} from '@angular/material/dialog';
+import {MatSnackBar, MatSnackBarModule} from '@angular/material/snack-bar';
+import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
+import {MatIcon} from "@angular/material/icon";
 
-import { FileGridComponent } from '../../components/file-grid/file-grid.component';
-import { FileListComponent } from '../../components/file-list/file-list.component';
-import { ToolbarComponent } from '../../components/toolbar/toolbar.component';
-import { CreateFolderDialogComponent } from '../../dialogs/create-folder-dialog/create-folder-dialog.component';
-import { RenameDialogComponent, RenameDialogData } from '../../dialogs/rename-dialog/rename-dialog.component';
-import { FolderTreeDialogComponent } from '../../dialogs/folder-tree-dialog/folder-tree-dialog.component';
+import {FileGridComponent} from '../../components/file-grid/file-grid.component';
+import {FileListComponent} from '../../components/file-list/file-list.component';
+import {ToolbarComponent} from '../../components/toolbar/toolbar.component';
+import {CreateFolderDialogComponent} from '../../dialogs/create-folder-dialog/create-folder-dialog.component';
+import {RenameDialogComponent, RenameDialogData} from '../../dialogs/rename-dialog/rename-dialog.component';
+import {FolderTreeDialogComponent} from '../../dialogs/folder-tree-dialog/folder-tree-dialog.component';
 
-import { DocumentApiService } from '../../services/document-api.service';
-import { FileIconService } from '../../services/file-icon.service';
-import { BreadcrumbService } from '../../services/breadcrumb.service';
+import {DocumentApiService} from '../../services/document-api.service';
+import {FileIconService} from '../../services/file-icon.service';
+import {BreadcrumbService} from '../../services/breadcrumb.service';
 
 import {
     CopyRequest,
     CreateFolderRequest,
     DeleteRequest,
-    DocumentType,
     ElementInfo,
     FileItem,
     ListFolderAndCountResponse,
     MoveRequest,
-    RenameRequest,
-    Root
+    RenameRequest
 } from '../../models/document.models';
 
-import { DragDropDirective } from "../../directives/drag-drop.directive";
-import { DownloadSnackbarComponent } from "../../components/download-snackbar/download-snackbar.component";
-import { DownloadProgressComponent } from "../../components/download-progress/download-progress.component";
+import {DragDropDirective} from "../../directives/drag-drop.directive";
+import {DownloadProgressComponent} from "../../components/download-progress/download-progress.component";
 
 @Component({
   selector: 'app-file-explorer',

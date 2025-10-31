@@ -8,8 +8,8 @@ import {HttpLink} from "apollo-angular/http";
 import {setContext} from "@apollo/client/link/context";
 import {ApolloLink, InMemoryCache} from "@apollo/client/core";
 import {environment} from "./environments/environment";
-import { provideRouter } from '@angular/router';
-import { routes } from './app/app.routes';
+import {provideRouter} from '@angular/router';
+import {routes} from './app/app.routes';
 
 @Component({
   selector: 'app-root',

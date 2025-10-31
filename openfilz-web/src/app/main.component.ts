@@ -1,14 +1,14 @@
-import { Component, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { Router, RouterOutlet, Event as RouterEvent, NavigationEnd } from '@angular/router';
+import {Component, OnInit} from '@angular/core';
+import {CommonModule} from '@angular/common';
+import {MatSnackBar, MatSnackBarModule} from '@angular/material/snack-bar';
+import {Event as RouterEvent, NavigationEnd, Router, RouterOutlet} from '@angular/router';
 
-import { SidebarComponent } from './components/sidebar/sidebar.component';
-import { HeaderComponent } from './components/header/header.component';
-import { BreadcrumbComponent } from './components/breadcrumb/breadcrumb.component';
-import { DownloadProgressComponent } from "./components/download-progress/download-progress.component";
-import { ElementInfo } from "./models/document.models";
-import { BreadcrumbService } from "./services/breadcrumb.service";
+import {SidebarComponent} from './components/sidebar/sidebar.component';
+import {HeaderComponent} from './components/header/header.component';
+import {BreadcrumbComponent} from './components/breadcrumb/breadcrumb.component';
+import {DownloadProgressComponent} from "./components/download-progress/download-progress.component";
+import {ElementInfo} from "./models/document.models";
+import {BreadcrumbService} from "./services/breadcrumb.service";
 
 @Component({
   selector: 'app-main',

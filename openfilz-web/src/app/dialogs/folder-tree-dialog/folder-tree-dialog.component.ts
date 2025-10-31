@@ -7,7 +7,6 @@ import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatPaginatorModule, PageEvent} from '@angular/material/paginator';
 
 import {DocumentApiService} from '../../services/document-api.service';
-import {ElementInfo} from '../../models/document.models';
 
 export interface FolderTreeDialogData {
   title: string;

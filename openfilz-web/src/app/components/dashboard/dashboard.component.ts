@@ -1,14 +1,14 @@
-import { Component, OnInit, ViewChild, ElementRef } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { MatIconModule } from '@angular/material/icon';
-import { MatButtonModule } from '@angular/material/button';
-import { MatTableModule } from '@angular/material/table';
-import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
-import { MatSnackBar } from '@angular/material/snack-bar';
-import { DragDropDirective } from '../../directives/drag-drop.directive';
-import { DocumentApiService } from '../../services/document-api.service';
-import { FileIconService } from '../../services/file-icon.service';
-import { ElementInfo, DocumentType, FileItem } from '../../models/document.models';
+import {Component, ElementRef, OnInit, ViewChild} from '@angular/core';
+import {CommonModule} from '@angular/common';
+import {MatIconModule} from '@angular/material/icon';
+import {MatButtonModule} from '@angular/material/button';
+import {MatTableModule} from '@angular/material/table';
+import {MatPaginatorModule, PageEvent} from '@angular/material/paginator';
+import {MatSnackBar} from '@angular/material/snack-bar';
+import {DragDropDirective} from '../../directives/drag-drop.directive';
+import {DocumentApiService} from '../../services/document-api.service';
+import {FileIconService} from '../../services/file-icon.service';
+import {DocumentType, ElementInfo, FileItem} from '../../models/document.models';
 
 export interface DashboardFileItem extends FileItem {
   owner: string;
