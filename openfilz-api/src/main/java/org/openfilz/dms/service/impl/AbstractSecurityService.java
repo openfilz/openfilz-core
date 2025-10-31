@@ -121,7 +121,7 @@ public abstract class AbstractSecurityService implements SecurityService {
         return request.getMethod().equals(HttpMethod.DELETE);
     }
 
-    protected final boolean isInsertOrUpdateAccess(HttpMethod method, String path) {
+    protected boolean isInsertOrUpdateAccess(HttpMethod method, String path) {
         return ((method.equals(HttpMethod.PATCH) || method.equals(HttpMethod.PUT))
                 && pathStartsWith(path, "/files", "/folders", "/documents")) ||
                 (method.equals(HttpMethod.POST) && (

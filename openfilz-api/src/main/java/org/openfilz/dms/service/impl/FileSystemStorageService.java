@@ -1,6 +1,7 @@
 // com/example/dms/service/impl/LocalStorageService.java
 package org.openfilz.dms.service.impl;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.exception.StorageException;
 import org.openfilz.dms.service.StorageService;
@@ -18,11 +19,12 @@ import java.nio.file.*;
 @Slf4j
 @Service
 @ConditionalOnProperty(name = "storage.type", havingValue = "local")
-public class LocalStorageService implements StorageService {
+public class FileSystemStorageService implements StorageService {
 
+    @Getter
     private final Path rootLocation;
 
-    public LocalStorageService(@Value("${storage.local.base-path:/tmp/dms-storage}") String basePath) {
+    public FileSystemStorageService(@Value("${storage.local.base-path:/tmp/dms-storage}") String basePath) {
         this.rootLocation = Paths.get(basePath);
         try {
             Files.createDirectories(rootLocation);
@@ -85,7 +87,6 @@ public class LocalStorageService implements StorageService {
 
         return Mono.fromRunnable(() -> {
             try {
-                //Files.createDirectories(destinationFolder);
                 Files.copy(sourceFile, destinationFile, StandardCopyOption.REPLACE_EXISTING);
                 log.info("File copied from {} to {}", sourceStoragePath, destinationFile);
             } catch (IOException e) {

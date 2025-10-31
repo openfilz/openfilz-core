@@ -9,6 +9,8 @@ logging:
     # io.r2dbc.postgresql.PARAM: DEBUG # for parameters
 
 openfilz:
+  calculate-checksum: true
   security:
-    no-auth: true
+    no-auth: false
+    worm-mode: true
     cors-allowed-origins: http://localhost:4200, http://localhost:4900 # Comma-separated list of authorized origins
