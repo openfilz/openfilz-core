@@ -1,4 +1,7 @@
-/* File Explorer Container */
+.file-explorer-content ::ng-deep app-file-grid,
+.file-explorer-content ::ng-deep app-file-list {
+  flex-grow: 1;
+}
 .file-explorer-container {
   display: flex;
   flex-direction: column;

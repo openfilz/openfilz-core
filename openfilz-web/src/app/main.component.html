@@ -13,7 +13,10 @@
     </app-breadcrumb>
   }
 
-  <div class="main-content" [class.dashboard-content]="currentRoute === 'dashboard'">
+  <div class="main-content" [class.dashboard-content]="currentRoute === 'dashboard'"
+       [class.wip-content]="currentRoute === 'favorites'
+            || currentRoute === 'recycle-bin'
+            || currentRoute === 'settings'">
     <router-outlet></router-outlet>
   </div>
   

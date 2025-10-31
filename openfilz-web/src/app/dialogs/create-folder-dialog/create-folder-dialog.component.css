@@ -83,10 +83,12 @@
   overflow-x: hidden;
 }
 
-/* Form Field */
+.folder-name-field ::ng-deep .mat-mdc-form-field-subscript-wrapper {
+  display: none;
+}
 .folder-name-field {
   width: 100%;
-  margin-bottom: 16px;
+
   max-width: 100%;
   overflow: hidden;
 }

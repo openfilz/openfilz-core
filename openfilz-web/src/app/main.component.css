@@ -48,6 +48,12 @@
   height: calc(100vh - 104px); /* Include breadcrumb in calculation */
 }
 
+/* For wip content */
+.wip-content {
+    justify-content: center; /* Center content vertically */
+    align-items: center; /* Center content horizontally */
+}
+
 /* For non-dashboard content (file grid/list), main content handles scrolling */
 
 @media (max-width: 768px) {

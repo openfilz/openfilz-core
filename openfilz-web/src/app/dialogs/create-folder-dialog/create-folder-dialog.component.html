@@ -26,16 +26,12 @@
     <mat-icon matPrefix class="input-icon">folder</mat-icon>
   </mat-form-field>
 
-  <div class="helper-text">
-    <i class="fas fa-info-circle"></i>
-    <span>The folder will be created in the current directory</span>
-  </div>
 </div>
 
 <div mat-dialog-actions class="dialog-actions">
   <button mat-stroked-button class="cancel-btn" (click)="onCancel()">
     <i class="fas fa-times"></i>
-    <span>Cancel</span>
+    <span>&nbsp;&nbsp;Cancel</span>
   </button>
   <button
     mat-raised-button
@@ -44,6 +40,6 @@
     [disabled]="!folderName.trim()"
     (click)="onCreate()">
     <i class="fas fa-check"></i>
-    <span>Create Folder</span>
+    <span>&nbsp;&nbsp;Create Folder</span>
   </button>
 </div>

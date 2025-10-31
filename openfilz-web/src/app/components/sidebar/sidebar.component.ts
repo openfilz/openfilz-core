@@ -28,8 +28,8 @@ export class SidebarComponent {
     { id: 'dashboard', label: 'Dashboard', active: true, route: '/dashboard' },
     { id: 'my-folder', label: 'My Folder', active: false, route: '/my-folder' },
     { id: 'recycle-bin', label: 'Recycle Bin', active: false, route: '/recycle-bin' },
-    { id: 'favourites', label: 'Favourites', active: false, route: '/favourites' },
-    { id: 'shared-files', label: 'Shared Files', active: false, route: '/shared-files' },
+    { id: 'favorites', label: 'Favorites', active: false, route: '/favorites' },
+    //{ id: 'shared-files', label: 'Shared Files', active: false, route: '/shared-files' },
     { id: 'settings', label: 'Settings', active: false, route: '/settings' },
     { id: 'logout', label: 'Log Out', active: false, route: '/logout' }
   ];
@@ -46,8 +46,8 @@ export class SidebarComponent {
       case 'dashboard': return 'chart-line';
       case 'my-folder': return 'folder';
       case 'recycle-bin': return 'trash';
-      case 'favourites': return 'heart';
-      case 'shared-files': return 'share-alt';
+      case 'favorites': return 'heart';
+      //case 'shared-files': return 'share-alt';
       case 'settings': return 'cog';
       case 'logout': return 'sign-out-alt';
       default: return 'question';
