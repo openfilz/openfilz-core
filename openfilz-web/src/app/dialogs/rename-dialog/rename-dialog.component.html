@@ -1,24 +1,44 @@
-<h2 mat-dialog-title>Rename {{ data.type === 'FOLDER' ? 'Folder' : 'File' }}</h2>
+<div class="dialog-header">
+  <div class="header-content">
+    <div class="icon-wrapper">
+      <i class="fas fa-i-cursor"></i>
+    </div>
+    <div class="header-text">
+      <h2 class="dialog-title">Rename {{ data.type === 'FOLDER' ? 'Folder' : 'File' }}</h2>
+      <p class="dialog-subtitle">Enter a new name for your item</p>
+    </div>
+  </div>
+  <button mat-icon-button class="close-btn" (click)="onCancel()">
+    <i class="fas fa-times"></i>
+  </button>
+</div>
 
-<div mat-dialog-content>
-  <mat-form-field appearance="outline" style="width: 100%;">
+<div mat-dialog-content class="dialog-content">
+  <mat-form-field appearance="outline" class="folder-name-field">
     <mat-label>{{ data.type === 'FOLDER' ? 'Folder' : 'File' }} Name</mat-label>
-    <input 
-      matInput 
-      [(ngModel)]="newName" 
+    <input
+      matInput
+      [(ngModel)]="newName"
       placeholder="Enter new name"
       (keyup.enter)="onRename()"
+      autocomplete="off"
       #nameInput>
+    <mat-icon matPrefix class="input-icon">{{ data.type === 'FOLDER' ? 'folder' : 'description' }}</mat-icon>
   </mat-form-field>
 </div>
 
-<div mat-dialog-actions align="end">
-  <button mat-button mat-dialog-close>Cancel</button>
-  <button 
-    mat-raised-button 
-    color="primary" 
+<div mat-dialog-actions class="dialog-actions">
+  <button mat-stroked-button class="cancel-btn" (click)="onCancel()">
+    <i class="fas fa-times"></i>
+    <span>&nbsp;&nbsp;Cancel</span>
+  </button>
+  <button
+    mat-raised-button
+    color="primary"
+    class="create-btn"
     [disabled]="!newName.trim() || newName.trim() === data.name"
     (click)="onRename()">
-    Rename
+    <i class="fas fa-check"></i>
+    <span>&nbsp;&nbsp;Rename</span>
   </button>
 </div>

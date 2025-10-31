@@ -1,10 +1,11 @@
-import {Component, Inject} from '@angular/core';
+import {Component, Inject, AfterViewInit, ViewChild, ElementRef} from '@angular/core';
 import {CommonModule} from '@angular/common';
 import {MAT_DIALOG_DATA, MatDialogModule, MatDialogRef} from '@angular/material/dialog';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {MatButtonModule} from '@angular/material/button';
 import {FormsModule} from '@angular/forms';
+import {MatIconModule} from "@angular/material/icon";
 
 export interface RenameDialogData {
   name: string;
@@ -22,11 +23,14 @@ export interface RenameDialogData {
     MatFormFieldModule,
     MatInputModule,
     MatButtonModule,
-    FormsModule
+    FormsModule,
+    MatIconModule
   ],
 })
-export class RenameDialogComponent {
+export class RenameDialogComponent implements AfterViewInit {
   newName: string;
+
+  @ViewChild('nameInput') nameInput!: ElementRef;
 
   constructor(
     public dialogRef: MatDialogRef<RenameDialogComponent>,
@@ -35,9 +39,19 @@ export class RenameDialogComponent {
     this.newName = data.name;
   }
 
+  ngAfterViewInit() {
+    setTimeout(() => {
+      this.nameInput?.nativeElement?.focus();
+    }, 100);
+  }
+
   onRename() {
     if (this.newName?.trim() && this.newName.trim() !== this.data.name) {
       this.dialogRef.close(this.newName.trim());
     }
+  }
+
+  onCancel() {
+    this.dialogRef.close();
   }
 }
