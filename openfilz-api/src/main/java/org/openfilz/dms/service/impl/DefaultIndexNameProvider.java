@@ -87,6 +87,7 @@ public class DefaultIndexNameProvider implements IndexNameProvider {
                                                 .properties(OpenSearchDocumentKey.createdBy.toString(), p -> p.keyword(k -> k))
                                                 .properties(OpenSearchDocumentKey.updatedBy.toString(), p -> p.keyword(k -> k))
                                                 .properties(OpenSearchDocumentKey.content.toString(), p -> p.text(tx -> tx))
+                                                .properties(OpenSearchDocumentKey.metadata.toString(), p -> p.object(tx -> tx))
                                         )
                                 // Vous pouvez ajouter d'autres settings ici, par exemple :
                                 // .settings(s -> s

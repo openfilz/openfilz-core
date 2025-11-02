@@ -1,12 +1,13 @@
 package org.openfilz.dms.service.impl;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.r2dbc.postgresql.codec.Json;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.OpenSearchDocumentKey;
 import org.openfilz.dms.service.IndexNameProvider;
 import org.openfilz.dms.service.IndexService;
+import org.openfilz.dms.utils.JsonUtils;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.opensearch.core.IndexRequest;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperties;
@@ -29,8 +30,8 @@ import java.util.Map;
 public class OpenSearchIndexService implements IndexService {
 
     private final OpenSearchAsyncClient openSearchAsyncClient;
-    private final ObjectMapper objectMapper;
     private final IndexNameProvider indexNameProvider;
+    private final JsonUtils jsonUtils;
 
     @Override
     public Mono<Void> indexDocument(Document document, Mono<String> textMono) {
@@ -75,6 +76,10 @@ public class OpenSearchIndexService implements IndexService {
         source.put(OpenSearchDocumentKey.updatedAt.toString(), document.getUpdatedAt().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
         source.put(OpenSearchDocumentKey.updatedBy.toString(), document.getUpdatedBy());
         source.put(OpenSearchDocumentKey.content.toString(), text);
+        Json metadata = document.getMetadata();
+        if(metadata != null) {
+            source.put(OpenSearchDocumentKey.metadata.toString(), jsonUtils.toMap(metadata));
+        }
         return source;
     }
 

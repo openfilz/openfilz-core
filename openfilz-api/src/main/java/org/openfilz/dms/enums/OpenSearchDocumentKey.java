@@ -10,5 +10,6 @@ public enum OpenSearchDocumentKey {
     updatedAt,
     createdBy,
     updatedBy,
-    content
+    content,
+    metadata
 }
