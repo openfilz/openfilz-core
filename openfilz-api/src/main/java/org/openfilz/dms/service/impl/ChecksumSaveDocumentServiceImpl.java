@@ -7,7 +7,7 @@ import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.repository.DocumentDAO;
 import org.openfilz.dms.service.AuditService;
 import org.openfilz.dms.service.ChecksumService;
-import org.openfilz.dms.service.FullTextService;
+import org.openfilz.dms.service.PostProcessorService;
 import org.openfilz.dms.service.StorageService;
 import org.openfilz.dms.utils.JsonUtils;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -26,8 +26,8 @@ public class ChecksumSaveDocumentServiceImpl extends SaveDocumentServiceImpl {
 
     public ChecksumSaveDocumentServiceImpl(StorageService storageService, ObjectMapper objectMapper,
                                            AuditService auditService, JsonUtils jsonUtils, DocumentDAO documentDAO,
-                                           ChecksumService checksumService, FullTextService fullTextService) {
-        super(storageService, objectMapper, auditService, jsonUtils, documentDAO, fullTextService);
+                                           ChecksumService checksumService, PostProcessorService postProcessorService) {
+        super(storageService, objectMapper, auditService, jsonUtils, documentDAO, postProcessorService);
         this.checksumService = checksumService;
     }
 

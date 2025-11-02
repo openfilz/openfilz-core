@@ -52,31 +52,27 @@ public class ReactiveStreamHelper {
                     }
                 })
                 .doOnError(error -> {
-                    try {
-                        pos.close(); // Close the output stream on error
-                    } catch (IOException e) {
-                        log.error("Error closing PipedOutputStream", e);
-                    }
+                    closePipedOutputStream(pos);
                 })
                 .doOnComplete(() -> {
-                    try {
-                        pos.close(); // Close the output stream when the Flux completes
-                    } catch (IOException e) {
-                        log.error("Error closing PipedOutputStream", e);
-                    }
+                    closePipedOutputStream(pos);
                 })
                 .doOnCancel(() -> {
-                    try {
-                        pos.close(); // Close on cancellation (e.g., InputStream closed prematurely)
-                    } catch (IOException e) {
-                        log.error("Error closing PipedOutputStream", e);
-                    }
+                    closePipedOutputStream(pos);
                 })
                 .subscribeOn(Schedulers.boundedElastic()) // Crucial: Run this on a blocking-friendly scheduler
                 .subscribe(); // Start the subscription
 
             return pis; // Return the InputStream immediately
         });
+    }
+
+    private static void closePipedOutputStream(PipedOutputStream pos) {
+        try {
+            pos.close(); // Close the output stream on error
+        } catch (IOException e) {
+            log.error("Error closing PipedOutputStream", e);
+        }
     }
 
     // You might also want a version that takes a byte array directly, though Flux<DataBuffer> is more common for uploads

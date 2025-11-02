@@ -44,10 +44,10 @@ public class OpenSearchConfig {
     @Bean
     public OpenSearchAsyncClient openSearchAsyncClient() throws NoSuchAlgorithmException, KeyStoreException, KeyManagementException {
         log.debug("Creating OpenSearchAsyncClient for host: {}, port: {}", host, port);
-        final HttpHost host = new HttpHost("https", "localhost", 9200);
+        final HttpHost httpHost = new HttpHost(scheme, host, port);
         final BasicCredentialsProvider credentialsProvider = new BasicCredentialsProvider();
         //Only for demo purposes. Don't specify your credentials in code.
-        credentialsProvider.setCredentials(new AuthScope(host), new UsernamePasswordCredentials(username, password.toCharArray()));
+        credentialsProvider.setCredentials(new AuthScope(httpHost), new UsernamePasswordCredentials(username, password.toCharArray()));
 
 
         final SSLContext sslcontext = SSLContextBuilder
@@ -55,7 +55,7 @@ public class OpenSearchConfig {
                 .loadTrustMaterial(null, (chains, authType) -> true)
                 .build();
 
-        final ApacheHttpClient5TransportBuilder builder = ApacheHttpClient5TransportBuilder.builder(host);
+        final ApacheHttpClient5TransportBuilder builder = ApacheHttpClient5TransportBuilder.builder(httpHost);
         builder.setHttpClientConfigCallback(httpClientBuilder -> {
             final var tlsStrategy = ClientTlsStrategyBuilder.create()
                     .setSslContext(sslcontext)

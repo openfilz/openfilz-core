@@ -19,9 +19,9 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestConstructor(autowireMode = ALL)
-public class WormsSecurityIT extends SecurityIT {
+public class WormSecurityIT extends SecurityIT {
 
-    public WormsSecurityIT(WebTestClient webTestClient) {
+    public WormSecurityIT(WebTestClient webTestClient) {
         super(webTestClient);
     }
 

@@ -26,18 +26,16 @@ import java.io.IOException;
 })
 public class DefaultIndexNameProvider implements IndexNameProvider {
 
-    private static final String OPENFILZ = "openfilz";
-
     private final OpenSearchAsyncClient openSearchAsyncClient;
 
     @PostConstruct
     public void init() {
-        createIndex(OPENFILZ).subscribe();
+        createIndex(DEFAULT_INDEX_NAME).subscribe();
     }
 
     @Override
     public String getIndexName(Document document) {
-        return OPENFILZ;
+        return DEFAULT_INDEX_NAME;
     }
 
     /**

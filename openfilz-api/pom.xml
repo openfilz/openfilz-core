@@ -209,9 +209,14 @@
         <dependency>
             <groupId>com.github.dasniko</groupId>
             <artifactId>testcontainers-keycloak</artifactId>
-            <version>3.8.0</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.opensearch</groupId>
+            <artifactId>opensearch-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>postgresql</artifactId>
@@ -300,7 +305,7 @@
             <plugin><!-- https://mvnrepository.com/artifact/org.jacoco/jacoco-maven-plugin -->
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.13</version>
+                <version>0.8.14</version>
                 <executions>
                     <!-- For unit tests -->
                     <execution>

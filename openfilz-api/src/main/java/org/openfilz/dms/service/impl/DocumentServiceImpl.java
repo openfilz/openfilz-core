@@ -159,12 +159,6 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
     }
 
 
-
-
-
-
-
-
     @Override
     @Transactional
     public Mono<? extends Resource> downloadDocument(Document doc, Authentication auth) {
@@ -613,11 +607,13 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
         return documentDAO.findById(documentId, auth, AccessType.RW)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
                 .flatMap(document -> saveDocumentService.doSaveDocument(auth, username -> {
+                    if(document.getMetadata() == null) {
+                        return Mono.empty();
+                    }
                     Map<String, Object> currentMetadata = jsonUtils.toMap(document.getMetadata());
                     if (currentMetadata == null || currentMetadata.isEmpty() || request.metadataKeysToDelete().isEmpty()) {
                         return Mono.empty(); // No metadata to delete or nothing to do
                     }
-
 
                     request.metadataKeysToDelete().forEach(currentMetadata::remove);
 

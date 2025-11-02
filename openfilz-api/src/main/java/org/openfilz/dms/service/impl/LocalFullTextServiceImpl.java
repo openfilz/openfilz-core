@@ -22,7 +22,7 @@ import reactor.core.scheduler.Schedulers;
 @RequiredArgsConstructor
 @ConditionalOnProperties({
         @ConditionalOnProperty(name = "openfilz.full-text.active", havingValue = "true"),
-        @ConditionalOnProperty(name = "openfilz.full-text.indexation-mode", havingValue = "local")
+        @ConditionalOnProperty(name = "openfilz.full-text.indexation-mode", havingValue = "local", matchIfMissing = true)
 })
 public class LocalFullTextServiceImpl implements FullTextService {
 

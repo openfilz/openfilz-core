@@ -8,13 +8,9 @@ import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.AuditAction;
 import org.openfilz.dms.repository.DocumentDAO;
-import org.openfilz.dms.service.AuditService;
-import org.openfilz.dms.service.FullTextService;
-import org.openfilz.dms.service.SaveDocumentService;
-import org.openfilz.dms.service.StorageService;
+import org.openfilz.dms.service.*;
 import org.openfilz.dms.utils.JsonUtils;
 import org.openfilz.dms.utils.UserInfoService;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.security.core.Authentication;
@@ -39,10 +35,7 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
     protected final AuditService auditService; // For auditing
     protected final JsonUtils jsonUtils;
     protected final DocumentDAO documentDAO;
-    protected final FullTextService fullTextService;
-
-    @Value("${openfilz.full-text.active:false}")
-    private boolean fullTextActive;
+    protected final PostProcessorService postProcessorService;
 
 
    public Mono<UploadResponse> doSaveDocument(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, Authentication auth, Mono<String> storagePathMono) {
@@ -51,10 +44,8 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
                         .doOnSuccess(_ -> postProcessDocument(filePart, savedDoc)));
     }
 
-    protected void postProcessDocument(FilePart filePart, Document savedDoc) {
-        if(fullTextActive) {
-            fullTextService.process(filePart, savedDoc);
-        }
+    protected void postProcessDocument(FilePart filePart, Document document) {
+       postProcessorService.process(filePart, document);
     }
 
     protected Mono<Document> replaceDocumentContentAndSave(FilePart newFilePart, Long contentLength, Authentication auth, Document document, String newStoragePath, String oldStoragePath) {

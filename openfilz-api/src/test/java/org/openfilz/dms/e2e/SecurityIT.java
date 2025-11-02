@@ -39,7 +39,7 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestConstructor(autowireMode = ALL)
-public class SecurityIT extends TestContainersBaseConfig {
+public class SecurityIT extends TestContainersKeyCloakConfig {
 
 
 
@@ -56,6 +56,7 @@ public class SecurityIT extends TestContainersBaseConfig {
 
     @DynamicPropertySource
     static void registerResourceServerIssuerProperty(DynamicPropertyRegistry registry) {
+        registry.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", () -> keycloak.getAuthServerUrl() + "/realms/your-realm");
         registry.add("openfilz.security.no-auth", () -> false);
     }
 
