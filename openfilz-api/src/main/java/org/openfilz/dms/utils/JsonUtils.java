@@ -14,13 +14,7 @@ import java.util.Map;
 @Component
 public class JsonUtils {
 
-    public static final String EMPTY_JSON = "{}";
-
     private final ObjectMapper objectMapper;
-
-    public Json emptyJson() {
-        return Json.of(EMPTY_JSON);
-    }
 
     public Json cloneJson(Json metadata) {
         return Json.of(metadata.asString());

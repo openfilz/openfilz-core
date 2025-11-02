@@ -4,9 +4,9 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.entity.Document;
+import org.openfilz.dms.enums.OpenSearchDocumentKey;
 import org.openfilz.dms.service.IndexNameProvider;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
-import org.opensearch.client.opensearch._types.mapping.TypeMapping;
 import org.opensearch.client.opensearch.indices.CreateIndexRequest;
 import org.opensearch.client.opensearch.indices.ExistsRequest;
 import org.opensearch.client.transport.endpoints.BooleanResponse;
@@ -16,8 +16,6 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 
 @Service
 @Slf4j
@@ -71,30 +69,24 @@ public class DefaultIndexNameProvider implements IndexNameProvider {
         return indexExists(indexName)
                 .flatMap(exists -> {
                     if (Boolean.TRUE.equals(exists)) {
-                        System.out.println("Index '" + indexName + "' already exists. Skipping creation.");
+                        log.debug("Index '{}' already exists. Skipping creation.", indexName);
                         return Mono.empty();
                     } else {
-                        System.out.println("Index '" + indexName + "' does not exist. Creating it...");
-
-                        // Définir le mapping des champs
-                        Map<String, TypeMapping> mappings = new HashMap<>();
-                        mappings.put("properties", TypeMapping.of(t -> t
-                                        .properties("id", p -> p.keyword(k -> k)) // ID comme keyword
-                                        .properties("title", p -> p.text(tx -> tx)) // Titre comme text
-                                        .properties("author", p -> p.keyword(k -> k)) // Auteur comme keyword
-                                        .properties("createdAt", p -> p.date(d -> d)) // Date comme date
-                                        .properties("content", p -> p.text(tx -> tx)) // Contenu comme text
-                                // Ajoutez d'autres champs si votre Document en a
-                        ));
+                        log.info("Index '{}' does not exist. Creating it...", indexName);
 
                         CreateIndexRequest createRequest = CreateIndexRequest.of(c -> c
                                         .index(indexName)
                                         .mappings(m -> m
-                                                .properties("id", p -> p.keyword(k -> k)) // ID comme keyword
-                                                .properties("title", p -> p.text(tx -> tx)) // Titre comme text
-                                                .properties("author", p -> p.keyword(k -> k)) // Auteur comme keyword
-                                                .properties("createdAt", p -> p.date(d -> d)) // Date comme date
-                                                .properties("content", p -> p.text(tx -> tx)) // Contenu comme text
+                                                .properties(OpenSearchDocumentKey.id.toString(), p -> p.keyword(k -> k))
+                                                .properties(OpenSearchDocumentKey.name.toString(), p -> p.text(tx -> tx))
+                                                .properties(OpenSearchDocumentKey.contentType.toString(), p -> p.keyword(k -> k))
+                                                .properties(OpenSearchDocumentKey.size.toString(), p -> p.long_(k -> k))
+                                                .properties(OpenSearchDocumentKey.parentId.toString(), p -> p.keyword(k -> k))
+                                                .properties(OpenSearchDocumentKey.createdAt.toString(), p -> p.date(k -> k))
+                                                .properties(OpenSearchDocumentKey.updatedAt.toString(), p -> p.date(k -> k))
+                                                .properties(OpenSearchDocumentKey.createdBy.toString(), p -> p.keyword(k -> k))
+                                                .properties(OpenSearchDocumentKey.updatedBy.toString(), p -> p.keyword(k -> k))
+                                                .properties(OpenSearchDocumentKey.content.toString(), p -> p.text(tx -> tx))
                                         )
                                 // Vous pouvez ajouter d'autres settings ici, par exemple :
                                 // .settings(s -> s
@@ -110,7 +102,7 @@ public class DefaultIndexNameProvider implements IndexNameProvider {
                                         throw new RuntimeException(e);
                                     }
                                 })
-                                .doOnSuccess(response -> System.out.println("Index '" + indexName + "' created successfully: " + response.acknowledged()))
+                                .doOnSuccess(response -> log.debug("Index '{}' created successfully: {}", indexName, response.acknowledged()))
                                 .onErrorResume(e -> Mono.error(new RuntimeException("Failed to create index " + indexName, e)))
                                 .then();
                     }

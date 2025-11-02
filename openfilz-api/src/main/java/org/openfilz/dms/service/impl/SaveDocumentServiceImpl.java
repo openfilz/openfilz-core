@@ -51,7 +51,7 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
                         .doOnSuccess(_ -> postProcessDocument(filePart, savedDoc)));
     }
 
-    private void postProcessDocument(FilePart filePart, Document savedDoc) {
+    protected void postProcessDocument(FilePart filePart, Document savedDoc) {
         if(fullTextActive) {
             fullTextService.process(filePart, savedDoc);
         }

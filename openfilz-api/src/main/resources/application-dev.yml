@@ -16,7 +16,7 @@ openfilz:
     opensearch:
       host: localhost
       port: 9200
-      scheme: http
+      scheme: https
       username: admin
       password: yourStrongPassword123!
   security:

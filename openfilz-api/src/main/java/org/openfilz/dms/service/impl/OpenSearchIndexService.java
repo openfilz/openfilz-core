@@ -2,7 +2,9 @@ package org.openfilz.dms.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.entity.Document;
+import org.openfilz.dms.enums.OpenSearchDocumentKey;
 import org.openfilz.dms.service.IndexNameProvider;
 import org.openfilz.dms.service.IndexService;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
@@ -13,8 +15,11 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
 import java.io.IOException;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.Map;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @ConditionalOnProperties({
@@ -36,8 +41,7 @@ public class OpenSearchIndexService implements IndexService {
         return textMono
                 .flatMap(text -> {
                     // Créer une map pour le document à indexer, incluant le texte
-                    Map<String, Object> source = objectMapper.convertValue(document, Map.class);
-                    source.put("content", text); // Ajouter le texte extrait
+                    Map<String, Object> source = newOpenSearchDocument(document, text);
 
                     IndexRequest<Map<String, Object>> request = IndexRequest.of(i -> i
                             .index(indexNameProvider.getIndexName(document))
@@ -53,10 +57,26 @@ public class OpenSearchIndexService implements IndexService {
                                     throw new RuntimeException(e);
                                 }
                             })
-                            .doOnSuccess(response -> System.out.println("Document " + response.id() + " indexed with version " + response.version()))
+                            .doOnSuccess(response -> log.debug("Document {} indexed with version {}", response.id(), response.version()))
                             .onErrorResume(e -> Mono.error(new RuntimeException("Failed to index document " + document.getId(), e)))
                             .then(); // Convertir le Mono<IndexResponse> en Mono<Void>
                 });
     }
+
+    private Map<String, Object> newOpenSearchDocument(Document document, String text) {
+        Map<String, Object> source = new HashMap<>(OpenSearchDocumentKey.values().length);
+        source.put(OpenSearchDocumentKey.id.toString(), document.getId());
+        source.put(OpenSearchDocumentKey.name.toString(), document.getName());
+        source.put(OpenSearchDocumentKey.contentType.toString(), document.getContentType());
+        source.put(OpenSearchDocumentKey.size.toString(), document.getSize());
+        source.put(OpenSearchDocumentKey.parentId.toString(), document.getParentId());
+        source.put(OpenSearchDocumentKey.createdAt.toString(), document.getCreatedAt().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
+        source.put(OpenSearchDocumentKey.createdBy.toString(), document.getCreatedBy());
+        source.put(OpenSearchDocumentKey.updatedAt.toString(), document.getUpdatedAt().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
+        source.put(OpenSearchDocumentKey.updatedBy.toString(), document.getUpdatedBy());
+        source.put(OpenSearchDocumentKey.content.toString(), text);
+        return source;
+    }
+
 
 }
