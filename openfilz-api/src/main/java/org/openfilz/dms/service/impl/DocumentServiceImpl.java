@@ -21,10 +21,7 @@ import org.openfilz.dms.exception.DuplicateNameException;
 import org.openfilz.dms.exception.OperationForbiddenException;
 import org.openfilz.dms.exception.StorageException;
 import org.openfilz.dms.repository.DocumentDAO;
-import org.openfilz.dms.service.AuditService;
-import org.openfilz.dms.service.DocumentService;
-import org.openfilz.dms.service.SaveDocumentService;
-import org.openfilz.dms.service.StorageService;
+import org.openfilz.dms.service.*;
 import org.openfilz.dms.utils.JsonUtils;
 import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.beans.factory.annotation.Value;
@@ -66,6 +63,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
     protected final JsonUtils jsonUtils;
     protected final DocumentDAO documentDAO;
     protected final SaveDocumentService saveDocumentService;
+    protected final MetadataPostProcessor metadataPostProcessor;
 
     @Value("${piped.buffer.size:1024}")
     private Integer pipedBufferSize;
@@ -570,7 +568,9 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                     return documentDAO.update(document);
                 }))
                 .flatMap(updatedDoc -> auditService.logAction(auth, REPLACE_DOCUMENT_METADATA, updatedDoc.getType(), updatedDoc.getId(),
-                        new ReplaceAudit(newMetadata)).thenReturn(updatedDoc));
+                        new ReplaceAudit(newMetadata))
+                        .doOnSuccess(_ -> metadataPostProcessor.process(updatedDoc))
+                        .thenReturn(updatedDoc));
     }
 
     @Override
@@ -597,7 +597,9 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                     return documentDAO.update(document);
                 }))
                 .flatMap(updatedDoc -> auditService.logAction(auth, UPDATE_DOCUMENT_METADATA, updatedDoc.getType(), updatedDoc.getId(),
-                        new UpdateMetadataAudit(request.metadataToUpdate())).thenReturn(updatedDoc));
+                        new UpdateMetadataAudit(request.metadataToUpdate()))
+                        .doOnSuccess(_ -> metadataPostProcessor.process(updatedDoc))
+                        .thenReturn(updatedDoc));
     }
 
 
@@ -623,7 +625,8 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                     return documentDAO.update(document);
                 }))
                 .flatMap(updatedDoc -> auditService.logAction(auth, DELETE_DOCUMENT_METADATA, updatedDoc.getType(), updatedDoc.getId(),
-                        new DeleteMetadataAudit(request.metadataKeysToDelete())));
+                        new DeleteMetadataAudit(request.metadataKeysToDelete()))
+                        .doOnSuccess(_ -> metadataPostProcessor.process(updatedDoc)));
     }
 
 

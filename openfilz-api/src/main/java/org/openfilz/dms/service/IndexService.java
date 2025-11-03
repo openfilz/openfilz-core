@@ -5,4 +5,6 @@ import reactor.core.publisher.Mono;
 
 public interface IndexService {
     Mono<Void> indexDocument(Document document, Mono<String> text);
+
+    Mono<Void> updateMetadata(Document document);
 }

@@ -5,5 +5,7 @@ import org.springframework.http.codec.multipart.FilePart;
 
 public interface FullTextService {
 
-    void process(FilePart filePart, Document document);
+    void indexDocument(FilePart filePart, Document document);
+
+    void indexDocumentMetadata(Document document);
 }

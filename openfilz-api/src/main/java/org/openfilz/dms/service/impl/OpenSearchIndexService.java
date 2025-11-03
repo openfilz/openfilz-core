@@ -35,10 +35,6 @@ public class OpenSearchIndexService implements IndexService {
 
     @Override
     public Mono<Void> indexDocument(Document document, Mono<String> textMono) {
-        if (document.getId() == null) {
-            return Mono.error(new IllegalArgumentException("Document ID cannot be null or empty for indexing."));
-        }
-
         return textMono
                 .flatMap(text -> {
                     // Créer une map pour le document à indexer, incluant le texte
@@ -64,7 +60,13 @@ public class OpenSearchIndexService implements IndexService {
                 });
     }
 
-    private Map<String, Object> newOpenSearchDocument(Document document, String text) {
+    @Override
+    public Mono<Void> updateMetadata(Document document) {
+        //UpdateRequest<Map<String, Object>, Map<String, Object>> request =  UpdateRequest.of()
+        return Mono.empty();
+    }
+
+    protected Map<String, Object> newOpenSearchDocument(Document document, String text) {
         Map<String, Object> source = new HashMap<>(OpenSearchDocumentKey.values().length);
         source.put(OpenSearchDocumentKey.id.toString(), document.getId());
         source.put(OpenSearchDocumentKey.name.toString(), document.getName());

@@ -35,7 +35,7 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
     protected final AuditService auditService; // For auditing
     protected final JsonUtils jsonUtils;
     protected final DocumentDAO documentDAO;
-    protected final PostProcessorService postProcessorService;
+    protected final DocumentPostProcessor documentPostProcessor;
 
 
    public Mono<UploadResponse> doSaveDocument(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, Authentication auth, Mono<String> storagePathMono) {
@@ -45,7 +45,7 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
     }
 
     protected void postProcessDocument(FilePart filePart, Document document) {
-       postProcessorService.process(filePart, document);
+       documentPostProcessor.process(filePart, document);
     }
 
     protected Mono<Document> replaceDocumentContentAndSave(FilePart newFilePart, Long contentLength, Authentication auth, Document document, String newStoragePath, String oldStoragePath) {

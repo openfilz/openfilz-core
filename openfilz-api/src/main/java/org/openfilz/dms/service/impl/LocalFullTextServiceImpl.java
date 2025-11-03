@@ -29,8 +29,8 @@ public class LocalFullTextServiceImpl implements FullTextService {
     private final IndexService indexService;
 
     @Override
-    public void process(FilePart filePart, Document document) {
-        Mono.fromCallable(() -> ReactiveStreamHelper.toInputStream(filePart.content())
+    public void indexDocument(FilePart filePart, Document document) {
+        Mono.fromCallable(() ->  ReactiveStreamHelper.toInputStream(filePart.content())
                 .flatMap(inputStream -> {
                     try {
                         var parser = new AutoDetectParser();
@@ -45,7 +45,16 @@ public class LocalFullTextServiceImpl implements FullTextService {
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(text -> indexService.indexDocument(document, text))
                 .doOnError(err ->
-                        log.error("Erreur d'extraction pour {} : {}", document.getId(), err.getMessage()))
+                        log.error("Text extraction error for {} : {}", document.getId(), err.getMessage()))
+                .subscribe();
+    }
+
+    @Override
+    public void indexDocumentMetadata(Document document) {
+        Mono.fromCallable(() -> indexService.updateMetadata(document))
+                .subscribeOn(Schedulers.boundedElastic())
+                .doOnError(err ->
+                        log.error("Metadata update error for {} : {}", document.getId(), err.getMessage()))
                 .subscribe();
     }
 

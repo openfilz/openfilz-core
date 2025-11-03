@@ -117,7 +117,7 @@ public class FullTextSearchIT extends TestContainersBaseConfig {
                 .build();
         CountDownLatch latch = new CountDownLatch(1);
         new Thread(() -> {
-            log.info("Waithing 3 seconds...");
+            log.info("Waiting 3 seconds...");
             try { Thread.sleep(3000); } catch (InterruptedException ignored) {}
             latch.countDown();
         }).start();
