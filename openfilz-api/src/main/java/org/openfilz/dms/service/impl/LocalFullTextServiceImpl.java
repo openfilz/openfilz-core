@@ -17,6 +17,8 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.util.UUID;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -54,7 +56,34 @@ public class LocalFullTextServiceImpl implements FullTextService {
         Mono.fromCallable(() -> indexService.updateMetadata(document))
                 .subscribeOn(Schedulers.boundedElastic())
                 .doOnError(err ->
-                        log.error("Metadata update error for {} : {}", document.getId(), err.getMessage()))
+                        log.error("indexDocumentMetadata error for {} : {}", document.getId(), err.getMessage()))
+                .subscribe();
+    }
+
+    @Override
+    public void copyIndex(UUID sourceFileId, Document createdDocument) {
+        indexService.copyIndex(sourceFileId, createdDocument)
+                .subscribeOn(Schedulers.boundedElastic())
+                .doOnError(err ->
+                        log.error("copyIndex error for {} : {}", createdDocument.getId(), err.getMessage()))
+                .subscribe();
+    }
+
+    @Override
+    public void updateIndexField(Document document, String openSearchDocumentKey, Object value) {
+        Mono.fromCallable(() -> indexService.updateIndexField(document, openSearchDocumentKey, value))
+                .subscribeOn(Schedulers.boundedElastic())
+                .doOnError(err ->
+                        log.error("updateIndexField error for {} : {}", document, err.getMessage()))
+                .subscribe();
+    }
+
+    @Override
+    public void deleteDocument(UUID id) {
+        Mono.fromCallable(() -> indexService.deleteDocument(id))
+                .subscribeOn(Schedulers.boundedElastic())
+                .doOnError(err ->
+                        log.error("deleteDocument error for {} : {}", id, err.getMessage()))
                 .subscribe();
     }
 

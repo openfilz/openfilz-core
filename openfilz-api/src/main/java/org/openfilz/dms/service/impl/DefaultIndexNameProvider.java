@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
 import java.io.IOException;
+import java.util.UUID;
 
 @Service
 @Slf4j
@@ -35,6 +36,11 @@ public class DefaultIndexNameProvider implements IndexNameProvider {
 
     @Override
     public String getIndexName(Document document) {
+        return DEFAULT_INDEX_NAME;
+    }
+
+    @Override
+    public String getIndexName(UUID documentId) {
         return DEFAULT_INDEX_NAME;
     }
 

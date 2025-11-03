@@ -12,6 +12,13 @@ import org.apache.hc.core5.ssl.SSLContextBuilder;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.openfilz.dms.config.RestApiVersion;
+import org.openfilz.dms.dto.request.CopyRequest;
+import org.openfilz.dms.dto.request.DeleteRequest;
+import org.openfilz.dms.dto.request.RenameRequest;
+import org.openfilz.dms.dto.request.UpdateMetadataRequest;
+import org.openfilz.dms.dto.response.CopyResponse;
+import org.openfilz.dms.dto.response.DocumentInfo;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.service.IndexNameProvider;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
@@ -20,11 +27,13 @@ import org.opensearch.client.opensearch.core.SearchRequest;
 import org.opensearch.client.transport.httpclient5.ApacheHttpClient5TransportBuilder;
 import org.opensearch.testcontainers.OpenSearchContainer;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import org.springframework.web.reactive.function.BodyInserters;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
@@ -34,9 +43,7 @@ import java.io.IOException;
 import java.security.KeyManagementException;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
-import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 
@@ -115,17 +122,103 @@ public class FullTextSearchIT extends TestContainersBaseConfig {
                         .field("metadata.owner")
                         .query(fv -> fv.stringValue("OpenFilz")).build()))
                 .build();
-        CountDownLatch latch = new CountDownLatch(1);
-        new Thread(() -> {
-            log.info("Waiting 3 seconds...");
-            try { Thread.sleep(3000); } catch (InterruptedException ignored) {}
-            latch.countDown();
-        }).start();
-        latch.await();
+        waitFor(3000);
 
         Assertions.assertEquals(1, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
 
 
+        UpdateMetadataRequest updateMetadataRequest = new UpdateMetadataRequest(Map.of("owner", "Joe"));
+
+        getWebTestClient().method(HttpMethod.PATCH).uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/{id}/metadata")
+                        .build(response.id()))
+                .body(BodyInserters.fromValue(updateMetadataRequest))
+                .exchange()
+                .expectStatus().isOk();
+
+        DocumentInfo info = getWebTestClient().get().uri(uri ->
+                        uri.path(RestApiVersion.API_PREFIX + "/documents/{id}/info")
+                                .queryParam("withMetadata", true)
+                                .build(response.id()))
+                .exchange()
+                .expectBody(DocumentInfo.class)
+                .returnResult().getResponseBody();
+        Assertions.assertNotNull(info);
+
+        Assertions.assertEquals("Joe", info.metadata().get("owner"));
+
+
+        waitFor(3000);
+
+        Assertions.assertEquals(0, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
+
+        searchRequest = new SearchRequest.Builder()
+                .index(IndexNameProvider.DEFAULT_INDEX_NAME)
+                .query(q -> q.match(MatchQuery.builder()
+                        .field("metadata.owner")
+                        .query(fv -> fv.stringValue("Joe")).build()))
+                .build();
+
+        Assertions.assertEquals(1, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
+
+        RenameRequest renameRequest = new RenameRequest("new-name.sql");
+
+        getWebTestClient().put().uri(RestApiVersion.API_PREFIX + "/files/{fileId}/rename", response.id())
+                .body(BodyInserters.fromValue(renameRequest))
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.name").isEqualTo("new-name.sql");
+
+        waitFor(3000);
+
+        searchRequest = new SearchRequest.Builder()
+                .index(IndexNameProvider.DEFAULT_INDEX_NAME)
+                .query(q -> q.match(MatchQuery.builder()
+                        .field("name")
+                        .query(fv -> fv.stringValue("new-name.sql")).build()))
+                .build();
+        Assertions.assertEquals(1, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
+
+
+        CopyRequest copyRequest = new CopyRequest(Collections.singletonList(response.id()), null, true);
+
+        List<CopyResponse> responseBody = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/files/copy")
+                .body(BodyInserters.fromValue(copyRequest))
+                .exchange()
+                .expectBodyList(CopyResponse.class)
+                .returnResult().getResponseBody();
+
+        searchRequest = new SearchRequest.Builder()
+                .index(IndexNameProvider.DEFAULT_INDEX_NAME)
+                .query(q -> q.match(MatchQuery.builder()
+                        .field("metadata.appId")
+                        .query(fv -> fv.stringValue(appId)).build()))
+                .build();
+
+        waitFor(3000);
+        Assertions.assertEquals(2, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
+
+        DeleteRequest deleteRequest = new DeleteRequest(Collections.singletonList(response.id()));
+
+        getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/files")
+                .body(BodyInserters.fromValue(deleteRequest))
+                .exchange()
+                .expectStatus().isNoContent();
+
+        waitFor(3000);
+        Assertions.assertEquals(1, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
+
     }
+
+    private void waitFor(long timeout) throws InterruptedException {
+        CountDownLatch latch2 = new CountDownLatch(1);
+        new Thread(() -> {
+            log.info("Waiting 3 seconds...");
+            try { Thread.sleep(timeout); } catch (InterruptedException ignored) {}
+            latch2.countDown();
+        }).start();
+        latch2.await();
+    }
+
 
 }

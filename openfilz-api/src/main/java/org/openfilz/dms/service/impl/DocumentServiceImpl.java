@@ -16,6 +16,7 @@ import org.openfilz.dms.entity.PhysicalDocument;
 import org.openfilz.dms.enums.AccessType;
 import org.openfilz.dms.enums.AuditAction;
 import org.openfilz.dms.enums.DocumentType;
+import org.openfilz.dms.enums.OpenSearchDocumentKey;
 import org.openfilz.dms.exception.DocumentNotFoundException;
 import org.openfilz.dms.exception.DuplicateNameException;
 import org.openfilz.dms.exception.OperationForbiddenException;
@@ -119,9 +120,6 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
     }
 
 
-
-
-
     private Mono<Boolean> documentExists(Authentication auth, String documentName, UUID parentFolderId) {
         return documentDAO.existsByNameAndParentId(auth, documentName, parentFolderId);
     }
@@ -205,6 +203,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                         .flatMap(document -> storageService.deleteFile(document.getStoragePath())
                                 .then(documentDAO.delete(document)))
                         .then(auditService.logAction(auth, AuditAction.DELETE_FILE, FILE, docId))
+                        .doOnSuccess(_ -> metadataPostProcessor.deleteDocument(docId))
                 )
                 .then();
     }
@@ -226,6 +225,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                             .flatMap(file -> storageService.deleteFile(file.getStoragePath())
                                     .then(documentDAO.delete(file))
                                     .then(auditService.logAction(auth, DELETE_FILE_CHILD, FILE, file.getId(), new DeleteAudit(folderId)))
+                                    .doOnSuccess(_ -> metadataPostProcessor.deleteDocument(file.getId()))
                             ).then();
 
                     // 2. Recursively delete child folders
@@ -272,7 +272,8 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                             // Check for name collision in target folder
                             return moveDocument(request, auth, fileToMove)
                                     .flatMap(movedFile -> auditService.logAction(auth, MOVE_FILE, FILE, movedFile.getId(),
-                                            new MoveAudit(request.targetFolderId())));
+                                            new MoveAudit(request.targetFolderId()))
+                                    .doOnSuccess(_ -> metadataPostProcessor.updateIndexField(movedFile, OpenSearchDocumentKey.parentId.toString(), request.targetFolderId())));
                         })
                 )
                 .then();
@@ -403,7 +404,9 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                                         })
                                         .flatMap(cf -> auditService.logAction(auth, COPY_FILE, FILE, cf.getId(),
                                                         new CopyAudit(fileIdToCopy, request.targetFolderId()))
-                                                .thenReturn(new CopyResponse(fileIdToCopy, cf.getId()))))
+                                                .thenReturn(new CopyResponse(fileIdToCopy, cf.getId()))
+                                                .doOnSuccess(_ -> metadataPostProcessor.copyIndex(fileIdToCopy, cf))
+                                        ))
                         )
                 );
     }
@@ -500,7 +503,9 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                     return saveFileToRename(request, auth, fileToRename, duplicateCheck);
                 })
                 .flatMap(renamedFile -> auditService.logAction(auth, RENAME_FILE, FILE, renamedFile.getId(),
-                        new RenameAudit(request.newName())).thenReturn(renamedFile));
+                        new RenameAudit(request.newName()))
+                        .thenReturn(renamedFile)
+                        .doOnSuccess(file -> metadataPostProcessor.updateIndexField(renamedFile, OpenSearchDocumentKey.name.toString(), file.getName())));
     }
 
     private Mono<Document> saveFileToRename(RenameRequest request, Authentication auth, Document fileToRename, Mono<Boolean> duplicateCheck) {
@@ -569,7 +574,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                 }))
                 .flatMap(updatedDoc -> auditService.logAction(auth, REPLACE_DOCUMENT_METADATA, updatedDoc.getType(), updatedDoc.getId(),
                         new ReplaceAudit(newMetadata))
-                        .doOnSuccess(_ -> metadataPostProcessor.process(updatedDoc))
+                        .doOnSuccess(_ -> metadataPostProcessor.processMetadata(updatedDoc))
                         .thenReturn(updatedDoc));
     }
 
@@ -598,7 +603,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                 }))
                 .flatMap(updatedDoc -> auditService.logAction(auth, UPDATE_DOCUMENT_METADATA, updatedDoc.getType(), updatedDoc.getId(),
                         new UpdateMetadataAudit(request.metadataToUpdate()))
-                        .doOnSuccess(_ -> metadataPostProcessor.process(updatedDoc))
+                        .doOnSuccess(_ -> metadataPostProcessor.processMetadata(updatedDoc))
                         .thenReturn(updatedDoc));
     }
 
@@ -626,7 +631,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                 }))
                 .flatMap(updatedDoc -> auditService.logAction(auth, DELETE_DOCUMENT_METADATA, updatedDoc.getType(), updatedDoc.getId(),
                         new DeleteMetadataAudit(request.metadataKeysToDelete()))
-                        .doOnSuccess(_ -> metadataPostProcessor.process(updatedDoc)));
+                        .doOnSuccess(_ -> metadataPostProcessor.processMetadata(updatedDoc)));
     }
 
 
