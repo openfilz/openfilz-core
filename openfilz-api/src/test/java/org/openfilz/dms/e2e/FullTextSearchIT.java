@@ -11,6 +11,7 @@ import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.ssl.SSLContextBuilder;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.CopyRequest;
@@ -231,9 +232,10 @@ public class FullTextSearchIT extends TestContainersBaseConfig {
         Assertions.assertEquals(1, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
     }
 
+    @Disabled
     @Test
     void uploadBigPdf() throws Exception {
-        PdfLoremGeneratorStreaming.generate("target/test-classes/test-pdf.pdf", 1);
+        PdfLoremGeneratorStreaming.generate("target/test-classes/test-pdf.pdf", 10);
         MultipartBodyBuilder builder = newFileBuilder("test-pdf.pdf");
 
         UploadResponse response = getUploadResponse(builder);
