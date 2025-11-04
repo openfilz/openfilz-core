@@ -11,6 +11,7 @@ import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.ssl.SSLContextBuilder;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.CopyRequest;
@@ -20,12 +21,14 @@ import org.openfilz.dms.dto.request.UpdateMetadataRequest;
 import org.openfilz.dms.dto.response.CopyResponse;
 import org.openfilz.dms.dto.response.DocumentInfo;
 import org.openfilz.dms.dto.response.UploadResponse;
+import org.openfilz.dms.e2e.util.PdfLoremGeneratorStreaming;
 import org.openfilz.dms.service.IndexNameProvider;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.opensearch._types.query_dsl.MatchQuery;
 import org.opensearch.client.opensearch.core.SearchRequest;
 import org.opensearch.client.transport.httpclient5.ApacheHttpClient5TransportBuilder;
 import org.opensearch.testcontainers.OpenSearchContainer;
+import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.client.MultipartBodyBuilder;
@@ -40,6 +43,8 @@ import org.testcontainers.utility.DockerImageName;
 
 import javax.net.ssl.SSLContext;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.security.KeyManagementException;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
@@ -53,6 +58,7 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Slf4j
 @TestConstructor(autowireMode = ALL)
+@AutoConfigureWebTestClient(timeout = "30000")//10 seconds
 public class FullTextSearchIT extends TestContainersBaseConfig {
 
 
@@ -210,16 +216,6 @@ public class FullTextSearchIT extends TestContainersBaseConfig {
 
     }
 
-    private void waitFor(long timeout) throws InterruptedException {
-        CountDownLatch latch2 = new CountDownLatch(1);
-        new Thread(() -> {
-            log.info("Waiting 3 seconds...");
-            try { Thread.sleep(timeout); } catch (InterruptedException ignored) {}
-            latch2.countDown();
-        }).start();
-        latch2.await();
-    }
-
     @Test
     void uploadPdfAndSearchText() throws IOException, ExecutionException, InterruptedException {
         MultipartBodyBuilder builder = newFileBuilder("pdf-example.pdf");
@@ -234,6 +230,35 @@ public class FullTextSearchIT extends TestContainersBaseConfig {
                 .build();
         waitFor(3000);
         Assertions.assertEquals(1, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
+    }
+
+    @Disabled
+    @Test
+    void uploadBigPdf() throws Exception {
+        PdfLoremGeneratorStreaming.generate("target/test-classes/test-pdf.pdf", 10);
+        MultipartBodyBuilder builder = newFileBuilder("test-pdf.pdf");
+
+        UploadResponse response = getUploadResponse(builder);
+
+        SearchRequest searchRequest = new SearchRequest.Builder()
+                .index(IndexNameProvider.DEFAULT_INDEX_NAME)
+                .query(q -> q.match(MatchQuery.builder()
+                        .field("content")
+                        .query(fv -> fv.stringValue("vestibulum")).build()))
+                .build();
+        waitFor(3000);
+        Files.delete(Paths.get("target/test-classes/test-pdf.pdf"));
+        Assertions.assertEquals(1, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
+    }
+
+    private void waitFor(long timeout) throws InterruptedException {
+        CountDownLatch latch2 = new CountDownLatch(1);
+        new Thread(() -> {
+            log.info("Waiting 3 seconds...");
+            try { Thread.sleep(timeout); } catch (InterruptedException ignored) {}
+            latch2.countDown();
+        }).start();
+        latch2.await();
     }
 
 
