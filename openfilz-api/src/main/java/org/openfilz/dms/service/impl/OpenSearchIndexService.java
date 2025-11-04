@@ -8,7 +8,10 @@ import org.openfilz.dms.enums.OpenSearchDocumentKey;
 import org.openfilz.dms.service.IndexNameProvider;
 import org.openfilz.dms.service.IndexService;
 import org.openfilz.dms.utils.JsonUtils;
+import org.opensearch.client.json.JsonData;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
+import org.opensearch.client.opensearch._types.InlineScript;
+import org.opensearch.client.opensearch._types.Script;
 import org.opensearch.client.opensearch.core.DeleteRequest;
 import org.opensearch.client.opensearch.core.IndexRequest;
 import org.opensearch.client.opensearch.core.IndexResponse;
@@ -16,6 +19,7 @@ import org.opensearch.client.opensearch.core.UpdateRequest;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.io.IOException;
@@ -34,6 +38,10 @@ import java.util.UUID;
         @ConditionalOnProperty(name = "openfilz.full-text.custom-index-service", havingValue = "false", matchIfMissing = true)
 })
 public class OpenSearchIndexService implements IndexService {
+
+    private static final int APPEND_RETRY_NUMBER = 3;
+    private static final String NEW_TEXT = "new_text";
+    private static final String APPEND_CONTENT_SCRIPT = "if (ctx._source.content != null) { ctx._source.content += ' ' + params.new_text; } else { ctx._source.content = params.new_text; }";
 
     private final OpenSearchAsyncClient openSearchAsyncClient;
     private final IndexNameProvider indexNameProvider;
@@ -176,6 +184,69 @@ public class OpenSearchIndexService implements IndexService {
             return Mono.error(new RuntimeException("Failed to index document with ID " + newDocumentId, e));
         }
 
+    }
+
+    /**
+     * Create metadata entry before streaming text.
+     */
+    public Mono<Void> indexMetadata(UUID documentId, Map<String, Object> metadata) {
+
+        IndexRequest<Map<String, Object>> request = new IndexRequest.Builder<Map<String, Object>>()
+                .index(indexNameProvider.getIndexName(documentId))
+                .id(documentId.toString())
+                .document(metadata)
+                .build();
+
+        return Mono.fromFuture(() -> {
+                    try {
+                        return openSearchAsyncClient.index(request);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                })
+                .doOnSuccess(_ -> log.info("Metadata indexed for document {}", documentId))
+                .then();
+    }
+
+    /**
+     * Stream and bulk index text fragments as partial updates.
+     */
+    public Mono<Void> indexDocumentStream(Flux<String> textFragments, UUID documentId) {
+        log.debug("Indexing document stream for document {}", documentId);
+        return textFragments
+                .bufferTimeout(50, java.time.Duration.ofSeconds(2)) // combine small fragments
+                .flatMapSequential(batch -> appendToContent(documentId, String.join("\n", batch)))
+                .then();
+    }
+
+    public Mono<Void> appendToContent(UUID documentId, String textToAppend)  {
+
+        Script script = new Script.Builder()
+                .inline(new InlineScript.Builder()
+                        .source(APPEND_CONTENT_SCRIPT)
+                        .params(Map.of(NEW_TEXT, JsonData.of(textToAppend)))
+                        .build()
+                ).build();
+        UpdateRequest<Void, Map<String, Object>> updateRequest = new UpdateRequest.Builder<Void, Map<String, Object>>()
+                .index(indexNameProvider.getIndexName(documentId))
+                .id(documentId.toString())
+                .script(script)
+                .retryOnConflict(APPEND_RETRY_NUMBER)
+                .build();
+
+        return Mono.fromFuture(() -> {
+                    try {
+                        return openSearchAsyncClient.update(updateRequest, Void.class);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                })
+                .doOnSuccess(r -> logUpdateMetadataSuccess(documentId))
+                .then();
+    }
+
+    private void logUpdateMetadataSuccess(UUID documentId) {
+        log.info("Metadata updated for document {}", documentId);
     }
 
 

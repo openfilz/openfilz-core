@@ -1,18 +1,25 @@
 package org.openfilz.dms.service.impl;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.tika.io.TikaInputStream;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.parser.AutoDetectParser;
 import org.apache.tika.parser.ParseContext;
-import org.apache.tika.sax.ContentHandlerDecorator;
-import org.springframework.core.io.buffer.DataBuffer;
-import org.springframework.core.io.buffer.DataBufferUtils;
+import org.apache.tika.parser.Parser;
+import org.openfilz.dms.utils.FluxSinkContentHandler;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.xml.sax.ContentHandler;
-import org.xml.sax.SAXException;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
-import java.io.InputStream;
+import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Extracts text from uploaded documents using Apache Tika and streams it as a Flux<String>.
@@ -21,81 +28,66 @@ import java.io.InputStream;
 @Slf4j
 public class TikaService {
 
-    private static final int FRAGMENT_SIZE = 2048; // characters per emitted chunk
+    private final Parser parser = new AutoDetectParser();
 
-    private final AutoDetectParser parser = new AutoDetectParser();
+    private final ExecutorService tikaExecutor = Executors.newVirtualThreadPerTaskExecutor(); // Or a custom bounded executor
 
     /**
-     * Reactive streaming text extraction.
+     * Parses a Resource (e.g., from a file upload, classpath, or URL) into a Flux of strings
+     * using Tika. This implementation is memory-safe for large PDFs by first spooling the
+     * resource to a temporary file on disk, allowing for random access without loading the
+     * entire file into the JVM heap.
      *
-     * @param dataBufferFlux the uploaded file content
-     * @return Flux<String> of textual fragments
+     * @param stableTempFile
+     * @param resourceMono A Mono emitting the Resource to be parsed.
+     * @return A Flux that emits text chunks as they are parsed from the document.
      */
-    public Flux<String> extractTextAsFlux(Flux<DataBuffer> dataBufferFlux) {
-        log.debug("Extracting text as flux");
-        return DataBufferUtils.join(dataBufferFlux)
-                .flatMapMany(dataBuffer -> {
-                    InputStream inputStream = dataBuffer.asInputStream();
+    public Flux<String> processResource(Path stableTempFile, Mono<? extends Resource> resourceMono) {
+        // First, we need the actual Resource. The flatMap operator lets us work within the Mono.
+        return resourceMono.flatMap(resource -> {
+            log.info("Starting memory-safe processing for resource: {}", resource.getDescription());
 
-                    return Flux.<String>create(sink -> {
-                                Thread parserThread = Thread.ofVirtual().start(() -> {
-                                    try {
-                                        Metadata metadata = new Metadata();
-                                        ParseContext context = new ParseContext();
-                                        ContentHandler handler = new StreamingContentHandler(sink);
+            // The usingWhen operator ensures our temporary file is created and cleaned up reliably.
+            // It will produce a Mono<Flux<String>> which we will unwrap later.
+            return copyResourceToPath(resource, stableTempFile)
+                .then(
+                    // Step B: Once the copy is complete, create the Tika parsing Flux.
+                    Mono.fromCallable(() -> Flux.<String>create(sink -> {
+                        tikaExecutor.submit(() -> {
+                            log.info("Starting Tika parsing from stable file path [{}].", stableTempFile);
+                            try (TikaInputStream tikaStream = TikaInputStream.get(stableTempFile)) {
+                                ContentHandler handler = new FluxSinkContentHandler(sink); // Your streaming handler
+                                parser.parse(tikaStream, handler, new Metadata(), new ParseContext());
+                                log.info("Tika parsing completed for stable file [{}].", stableTempFile);
+                                sink.complete();
+                            } catch (Exception e) {
+                                log.error("Error during Tika parsing of stable file [{}].", stableTempFile, e);
+                                sink.error(e);
+                            }
+                        });
+                    }))
+                );
 
-                                        parser.parse(inputStream, handler, metadata, context);
-                                    } catch (Exception e) {
-                                        sink.error(e);
-                                    } finally {
-                                        sink.complete();
-                                        DataBufferUtils.release(dataBuffer);
-                                        try {
-                                            inputStream.close();
-                                        } catch (Exception ignored) {
-                                            log.error("ignored exception", ignored);
-                                        }
-                                    }
-                                });
-
-                                sink.onCancel(parserThread::interrupt);
-                            })
-                            .doOnError(e -> log.error("Error during Tika parsing", e))
-                            .doOnComplete(() -> log.info("Tika parsing completed"));
-
-                });
+            })
+            // Finally, unwrap the Mono<Flux<String>> into the Flux<String> required by the method signature.
+            .flatMapMany(flux -> flux);
     }
 
     /**
-     * Custom SAX handler that streams text fragments directly into a FluxSink.
+     * A helper method that copies a Spring Resource to a Path reactively.
+     * It performs the blocking I/O on the boundedElastic scheduler.
      */
-    static class StreamingContentHandler extends ContentHandlerDecorator {
-        private final reactor.core.publisher.FluxSink<String> sink;
-        private final StringBuilder buffer = new StringBuilder(FRAGMENT_SIZE);
-
-        StreamingContentHandler(reactor.core.publisher.FluxSink<String> sink) {
-            this.sink = sink;
-        }
-
-        @Override
-        public void characters(char[] ch, int start, int length) throws SAXException {
-            buffer.append(ch, start, length);
-            if (buffer.length() >= FRAGMENT_SIZE) {
-                emit();
+    private Mono<Void> copyResourceToPath(Resource resource, Path destination) {
+        return Mono.fromRunnable(() -> {
+            try (InputStream inputStream = resource.getInputStream()) {
+                Files.copy(inputStream, destination, StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException e) {
+                // Wrap checked exception for reactive chain
+                throw new UncheckedIOException("Failed to copy resource " + resource.getDescription() + " to " + destination, e);
             }
-        }
-
-        @Override
-        public void endDocument() throws SAXException {
-            emit(); // flush remaining buffer
-            super.endDocument();
-        }
-
-        private void emit() {
-            if (buffer.isEmpty()) return;
-            String chunk = buffer.toString();
-            buffer.setLength(0);
-            sink.next(chunk);
-        }
+        }).subscribeOn(Schedulers.boundedElastic()).then();
     }
+
+
+
 }

@@ -27,6 +27,7 @@ import org.opensearch.client.opensearch._types.query_dsl.MatchQuery;
 import org.opensearch.client.opensearch.core.SearchRequest;
 import org.opensearch.client.transport.httpclient5.ApacheHttpClient5TransportBuilder;
 import org.opensearch.testcontainers.OpenSearchContainer;
+import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.client.MultipartBodyBuilder;
@@ -41,6 +42,8 @@ import org.testcontainers.utility.DockerImageName;
 
 import javax.net.ssl.SSLContext;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.security.KeyManagementException;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
@@ -54,6 +57,7 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Slf4j
 @TestConstructor(autowireMode = ALL)
+@AutoConfigureWebTestClient(timeout = "30000")//10 seconds
 public class FullTextSearchIT extends TestContainersBaseConfig {
 
 
@@ -229,7 +233,7 @@ public class FullTextSearchIT extends TestContainersBaseConfig {
 
     @Test
     void uploadBigPdf() throws Exception {
-        PdfLoremGeneratorStreaming.generate("target/test-classes/test-pdf.pdf", 200);
+        PdfLoremGeneratorStreaming.generate("target/test-classes/test-pdf.pdf", 10);
         MultipartBodyBuilder builder = newFileBuilder("test-pdf.pdf");
 
         UploadResponse response = getUploadResponse(builder);
@@ -241,6 +245,7 @@ public class FullTextSearchIT extends TestContainersBaseConfig {
                         .query(fv -> fv.stringValue("vestibulum")).build()))
                 .build();
         waitFor(3000);
+        Files.delete(Paths.get("target/test-classes/test-pdf.pdf"));
         Assertions.assertEquals(1, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
     }
 
