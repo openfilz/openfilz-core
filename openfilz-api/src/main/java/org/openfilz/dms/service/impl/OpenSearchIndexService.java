@@ -8,7 +8,10 @@ import org.openfilz.dms.enums.OpenSearchDocumentKey;
 import org.openfilz.dms.service.IndexNameProvider;
 import org.openfilz.dms.service.IndexService;
 import org.openfilz.dms.utils.JsonUtils;
+import org.opensearch.client.json.JsonData;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
+import org.opensearch.client.opensearch._types.InlineScript;
+import org.opensearch.client.opensearch._types.Script;
 import org.opensearch.client.opensearch.core.DeleteRequest;
 import org.opensearch.client.opensearch.core.IndexRequest;
 import org.opensearch.client.opensearch.core.IndexResponse;
@@ -16,6 +19,7 @@ import org.opensearch.client.opensearch.core.UpdateRequest;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.io.IOException;
@@ -35,36 +39,15 @@ import java.util.UUID;
 })
 public class OpenSearchIndexService implements IndexService {
 
+    private static final int APPEND_RETRY_NUMBER = 3;
+    private static final String NEW_TEXT = "new_text";
+    private static final String APPEND_CONTENT_SCRIPT = "if (ctx._source.content != null) { ctx._source.content += ' ' + params.new_text; } else { ctx._source.content = params.new_text; }";
+
     private final OpenSearchAsyncClient openSearchAsyncClient;
     private final IndexNameProvider indexNameProvider;
     private final JsonUtils jsonUtils;
 
-    @Override
-    public Mono<Void> indexDocument(Document document, Mono<String> textMono) {
-        return textMono
-                .flatMap(text -> {
-                    // Créer une map pour le document à indexer, incluant le texte
-                    Map<String, Object> source = newOpenSearchDocument(document, text);
 
-                    IndexRequest<Map<String, Object>> request = IndexRequest.of(i -> i
-                            .index(indexNameProvider.getIndexName(document))
-                            .id(document.getId().toString())
-                            .document(source)
-                    );
-
-                    // Convertir le CompletableFuture en Mono
-                    return Mono.fromFuture(() -> {
-                                try {
-                                    return openSearchAsyncClient.index(request);
-                                } catch (IOException e) {
-                                    throw new RuntimeException(e);
-                                }
-                            })
-                            .doOnSuccess(response -> log.debug("Document {} indexed with version {}", response.id(), response.version()))
-                            .onErrorResume(e -> Mono.error(new RuntimeException("Failed to index document " + document.getId(), e)))
-                            .then(); // Convertir le Mono<IndexResponse> en Mono<Void>
-                });
-    }
 
     @Override
     public Mono<Void> updateMetadata(Document document) {
@@ -98,6 +81,7 @@ public class OpenSearchIndexService implements IndexService {
             return Mono.error(e);
         }
     }
+
 
     private Object getValueToIndex(String key, Object value) {
         if(value == null) {
@@ -136,7 +120,9 @@ public class OpenSearchIndexService implements IndexService {
     }
 
 
-    protected Map<String, Object> newOpenSearchDocument(Document document, String text) {
+
+    @Override
+    public Map<String, Object> newOpenSearchDocumentMetadata(Document document) {
         Map<String, Object> source = new HashMap<>(OpenSearchDocumentKey.values().length);
         source.put(OpenSearchDocumentKey.id.toString(), document.getId());
         source.put(OpenSearchDocumentKey.name.toString(), document.getName());
@@ -147,7 +133,6 @@ public class OpenSearchIndexService implements IndexService {
         source.put(OpenSearchDocumentKey.createdBy.toString(), document.getCreatedBy());
         source.put(OpenSearchDocumentKey.updatedAt.toString(), document.getUpdatedAt().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
         source.put(OpenSearchDocumentKey.updatedBy.toString(), document.getUpdatedBy());
-        source.put(OpenSearchDocumentKey.content.toString(), text);
         Json metadata = document.getMetadata();
         if(metadata != null) {
             source.put(OpenSearchDocumentKey.metadata.toString(), jsonUtils.toMap(metadata));
@@ -199,6 +184,69 @@ public class OpenSearchIndexService implements IndexService {
             return Mono.error(new RuntimeException("Failed to index document with ID " + newDocumentId, e));
         }
 
+    }
+
+    /**
+     * Create metadata entry before streaming text.
+     */
+    public Mono<Void> indexMetadata(UUID documentId, Map<String, Object> metadata) {
+
+        IndexRequest<Map<String, Object>> request = new IndexRequest.Builder<Map<String, Object>>()
+                .index(indexNameProvider.getIndexName(documentId))
+                .id(documentId.toString())
+                .document(metadata)
+                .build();
+
+        return Mono.fromFuture(() -> {
+                    try {
+                        return openSearchAsyncClient.index(request);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                })
+                .doOnSuccess(_ -> log.info("Metadata indexed for document {}", documentId))
+                .then();
+    }
+
+    /**
+     * Stream and bulk index text fragments as partial updates.
+     */
+    public Mono<Void> indexDocumentStream(Flux<String> textFragments, UUID documentId) {
+        log.debug("Indexing document stream for document {}", documentId);
+        return textFragments
+                .bufferTimeout(50, java.time.Duration.ofSeconds(2)) // combine small fragments
+                .flatMapSequential(batch -> appendToContent(documentId, String.join("\n", batch)))
+                .then();
+    }
+
+    public Mono<Void> appendToContent(UUID documentId, String textToAppend)  {
+
+        Script script = new Script.Builder()
+                .inline(new InlineScript.Builder()
+                        .source(APPEND_CONTENT_SCRIPT)
+                        .params(Map.of(NEW_TEXT, JsonData.of(textToAppend)))
+                        .build()
+                ).build();
+        UpdateRequest<Void, Map<String, Object>> updateRequest = new UpdateRequest.Builder<Void, Map<String, Object>>()
+                .index(indexNameProvider.getIndexName(documentId))
+                .id(documentId.toString())
+                .script(script)
+                .retryOnConflict(APPEND_RETRY_NUMBER)
+                .build();
+
+        return Mono.fromFuture(() -> {
+                    try {
+                        return openSearchAsyncClient.update(updateRequest, Void.class);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                })
+                .doOnSuccess(r -> logUpdateMetadataSuccess(documentId))
+                .then();
+    }
+
+    private void logUpdateMetadataSuccess(UUID documentId) {
+        log.info("Metadata updated for document {}", documentId);
     }
 
 
