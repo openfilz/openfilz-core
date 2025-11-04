@@ -75,6 +75,12 @@ public class GlobalExceptionHandler {
         return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR.value(), "An unexpected error occurred. Please try again later.")));
     }
 
+    @ExceptionHandler(VirusFoundException.class)
+    public  Mono<ResponseEntity<ErrorResponse>> handleVirusFoundException(VirusFoundException ex) {
+        log.warn(ex.getMessage());
+        return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ErrorResponse(HttpStatus.BAD_REQUEST.value(), ex.getMessage())));
+    }
+
     // Simple ErrorResponse record
     public record ErrorResponse(int status, String message) {
     }
