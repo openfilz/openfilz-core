@@ -10,7 +10,16 @@ logging:
 
 openfilz:
   calculate-checksum: true
+  full-text:
+    active: true
+    indexation-mode: local # local (only choice for the moment) -> to be developed : redis | kafka | nats
+    opensearch:
+      host: localhost
+      port: 9200
+      scheme: https
+      username: admin
+      password: yourStrongPassword123!
   security:
-    no-auth: false
-    worm-mode: true
+    no-auth: true
+    worm-mode: false
     cors-allowed-origins: http://localhost:4200, http://localhost:4900 # Comma-separated list of authorized origins

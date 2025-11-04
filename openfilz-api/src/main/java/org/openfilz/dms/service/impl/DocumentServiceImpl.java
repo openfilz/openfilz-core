@@ -16,15 +16,13 @@ import org.openfilz.dms.entity.PhysicalDocument;
 import org.openfilz.dms.enums.AccessType;
 import org.openfilz.dms.enums.AuditAction;
 import org.openfilz.dms.enums.DocumentType;
+import org.openfilz.dms.enums.OpenSearchDocumentKey;
 import org.openfilz.dms.exception.DocumentNotFoundException;
 import org.openfilz.dms.exception.DuplicateNameException;
 import org.openfilz.dms.exception.OperationForbiddenException;
 import org.openfilz.dms.exception.StorageException;
 import org.openfilz.dms.repository.DocumentDAO;
-import org.openfilz.dms.service.AuditService;
-import org.openfilz.dms.service.DocumentService;
-import org.openfilz.dms.service.SaveDocumentService;
-import org.openfilz.dms.service.StorageService;
+import org.openfilz.dms.service.*;
 import org.openfilz.dms.utils.JsonUtils;
 import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.beans.factory.annotation.Value;
@@ -66,6 +64,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
     protected final JsonUtils jsonUtils;
     protected final DocumentDAO documentDAO;
     protected final SaveDocumentService saveDocumentService;
+    protected final MetadataPostProcessor metadataPostProcessor;
 
     @Value("${piped.buffer.size:1024}")
     private Integer pipedBufferSize;
@@ -121,9 +120,6 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
     }
 
 
-
-
-
     private Mono<Boolean> documentExists(Authentication auth, String documentName, UUID parentFolderId) {
         return documentDAO.existsByNameAndParentId(auth, documentName, parentFolderId);
     }
@@ -157,12 +153,6 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
             return storageService.saveFile(filePart);
         }));
     }
-
-
-
-
-
-
 
 
     @Override
@@ -213,6 +203,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                         .flatMap(document -> storageService.deleteFile(document.getStoragePath())
                                 .then(documentDAO.delete(document)))
                         .then(auditService.logAction(auth, AuditAction.DELETE_FILE, FILE, docId))
+                        .doOnSuccess(_ -> metadataPostProcessor.deleteDocument(docId))
                 )
                 .then();
     }
@@ -234,6 +225,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                             .flatMap(file -> storageService.deleteFile(file.getStoragePath())
                                     .then(documentDAO.delete(file))
                                     .then(auditService.logAction(auth, DELETE_FILE_CHILD, FILE, file.getId(), new DeleteAudit(folderId)))
+                                    .doOnSuccess(_ -> metadataPostProcessor.deleteDocument(file.getId()))
                             ).then();
 
                     // 2. Recursively delete child folders
@@ -280,7 +272,8 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                             // Check for name collision in target folder
                             return moveDocument(request, auth, fileToMove)
                                     .flatMap(movedFile -> auditService.logAction(auth, MOVE_FILE, FILE, movedFile.getId(),
-                                            new MoveAudit(request.targetFolderId())));
+                                            new MoveAudit(request.targetFolderId()))
+                                    .doOnSuccess(_ -> metadataPostProcessor.updateIndexField(movedFile, OpenSearchDocumentKey.parentId.toString(), request.targetFolderId())));
                         })
                 )
                 .then();
@@ -411,7 +404,9 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                                         })
                                         .flatMap(cf -> auditService.logAction(auth, COPY_FILE, FILE, cf.getId(),
                                                         new CopyAudit(fileIdToCopy, request.targetFolderId()))
-                                                .thenReturn(new CopyResponse(fileIdToCopy, cf.getId()))))
+                                                .thenReturn(new CopyResponse(fileIdToCopy, cf.getId()))
+                                                .doOnSuccess(_ -> metadataPostProcessor.copyIndex(fileIdToCopy, cf))
+                                        ))
                         )
                 );
     }
@@ -508,7 +503,9 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                     return saveFileToRename(request, auth, fileToRename, duplicateCheck);
                 })
                 .flatMap(renamedFile -> auditService.logAction(auth, RENAME_FILE, FILE, renamedFile.getId(),
-                        new RenameAudit(request.newName())).thenReturn(renamedFile));
+                        new RenameAudit(request.newName()))
+                        .thenReturn(renamedFile)
+                        .doOnSuccess(file -> metadataPostProcessor.updateIndexField(renamedFile, OpenSearchDocumentKey.name.toString(), file.getName())));
     }
 
     private Mono<Document> saveFileToRename(RenameRequest request, Authentication auth, Document fileToRename, Mono<Boolean> duplicateCheck) {
@@ -576,7 +573,9 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                     return documentDAO.update(document);
                 }))
                 .flatMap(updatedDoc -> auditService.logAction(auth, REPLACE_DOCUMENT_METADATA, updatedDoc.getType(), updatedDoc.getId(),
-                        new ReplaceAudit(newMetadata)).thenReturn(updatedDoc));
+                        new ReplaceAudit(newMetadata))
+                        .doOnSuccess(_ -> metadataPostProcessor.processMetadata(updatedDoc))
+                        .thenReturn(updatedDoc));
     }
 
     @Override
@@ -603,7 +602,9 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                     return documentDAO.update(document);
                 }))
                 .flatMap(updatedDoc -> auditService.logAction(auth, UPDATE_DOCUMENT_METADATA, updatedDoc.getType(), updatedDoc.getId(),
-                        new UpdateMetadataAudit(request.metadataToUpdate())).thenReturn(updatedDoc));
+                        new UpdateMetadataAudit(request.metadataToUpdate()))
+                        .doOnSuccess(_ -> metadataPostProcessor.processMetadata(updatedDoc))
+                        .thenReturn(updatedDoc));
     }
 
 
@@ -613,11 +614,13 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
         return documentDAO.findById(documentId, auth, AccessType.RW)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
                 .flatMap(document -> saveDocumentService.doSaveDocument(auth, username -> {
+                    if(document.getMetadata() == null) {
+                        return Mono.empty();
+                    }
                     Map<String, Object> currentMetadata = jsonUtils.toMap(document.getMetadata());
                     if (currentMetadata == null || currentMetadata.isEmpty() || request.metadataKeysToDelete().isEmpty()) {
                         return Mono.empty(); // No metadata to delete or nothing to do
                     }
-
 
                     request.metadataKeysToDelete().forEach(currentMetadata::remove);
 
@@ -627,7 +630,8 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                     return documentDAO.update(document);
                 }))
                 .flatMap(updatedDoc -> auditService.logAction(auth, DELETE_DOCUMENT_METADATA, updatedDoc.getType(), updatedDoc.getId(),
-                        new DeleteMetadataAudit(request.metadataKeysToDelete())));
+                        new DeleteMetadataAudit(request.metadataKeysToDelete()))
+                        .doOnSuccess(_ -> metadataPostProcessor.processMetadata(updatedDoc)));
     }
 
 

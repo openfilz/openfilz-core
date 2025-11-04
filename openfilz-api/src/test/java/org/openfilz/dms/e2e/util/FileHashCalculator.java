@@ -1,4 +1,4 @@
-package org.openfilz.dms.utils;
+package org.openfilz.dms.e2e.util;
 
 import lombok.experimental.UtilityClass;
 
