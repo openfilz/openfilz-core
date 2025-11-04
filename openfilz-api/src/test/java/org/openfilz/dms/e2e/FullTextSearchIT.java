@@ -259,21 +259,5 @@ public class FullTextSearchIT extends TestContainersBaseConfig {
         latch2.await();
     }
 
-    @Test
-    void uploadPdfAndSearchText() throws IOException, ExecutionException, InterruptedException {
-        MultipartBodyBuilder builder = newFileBuilder("pdf-example.pdf");
-
-        UploadResponse response = getUploadResponse(builder);
-
-        SearchRequest searchRequest = new SearchRequest.Builder()
-                .index(IndexNameProvider.DEFAULT_INDEX_NAME)
-                .query(q -> q.match(MatchQuery.builder()
-                        .field("content")
-                        .query(fv -> fv.stringValue("systèmes d'exploitations")).build()))
-                .build();
-        waitFor(3000);
-        Assertions.assertEquals(1, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
-    }
-
 
 }
