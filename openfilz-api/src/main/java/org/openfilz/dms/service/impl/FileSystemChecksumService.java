@@ -12,7 +12,6 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
-import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
@@ -67,8 +66,9 @@ public class FileSystemChecksumService implements ChecksumService {
                                 .doOnNext(dataBuffer -> {
                                     try {
                                         // Update digest with buffer content
-                                        ByteBuffer byteBuffer = dataBuffer.asByteBuffer();
-                                        digest.update(byteBuffer);
+                                        byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                                        dataBuffer.read(bytes); // Read data from DataBuffer into the byte array
+                                        digest.update(bytes);
                                     } finally {
                                         // CRITICAL: Release buffer to prevent memory leaks
                                         DataBufferUtils.release(dataBuffer);

@@ -37,7 +37,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.net.URLConnection;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
@@ -1143,6 +1142,72 @@ public class LocalStorageIT extends TestContainersBaseConfig {
         Assertions.assertEquals("test_file_1.sql", info.name());
         Assertions.assertFalse(info.metadata().containsKey("owner"));
         Assertions.assertTrue(info.metadata().containsKey("appId"));
+
+    }
+
+    @Test
+    void whenDeleteMetadata2_thenOk() {
+
+
+        MultipartBodyBuilder builder = newFileBuilder();
+
+        UploadResponse uploadResponse2 = uploadDocument(builder);
+
+        Assertions.assertNotNull(uploadResponse2);
+
+        DeleteMetadataRequest deleteRequest = new DeleteMetadataRequest(Collections.singletonList("owner"));
+
+        getWebTestClient().method(HttpMethod.DELETE).uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/{id}/metadata").build(uploadResponse2.id()))
+                .body(BodyInserters.fromValue(deleteRequest))
+                .exchange()
+                .expectStatus().isNoContent();
+
+        DocumentInfo info = getWebTestClient().get().uri(uri ->
+                        uri.path(RestApiVersion.API_PREFIX + "/documents/{id}/info")
+                                .queryParam("withMetadata", true)
+                                .build(uploadResponse2.id()))
+                .exchange()
+                .expectBody(DocumentInfo.class)
+                .returnResult().getResponseBody();
+        Assertions.assertNotNull(info);
+        Assertions.assertEquals("test_file_1.sql", info.name());
+        log.debug("info.metadata() = {}", info.metadata());
+        Assertions.assertTrue(info.metadata() == null
+                || info.metadata().isEmpty()
+                || (info.metadata().size() == 1 && info.metadata().containsKey("sha256")));
+
+    }
+
+    @Test
+    void whenDeleteMetadata3_thenOk() {
+
+
+        MultipartBodyBuilder builder = newFileBuilder();
+        builder.part("metadata", Map.of());
+        UploadResponse uploadResponse3 = uploadDocument(builder);
+
+        Assertions.assertNotNull(uploadResponse3);
+
+        DeleteMetadataRequest deleteRequest = new DeleteMetadataRequest(Collections.singletonList("owner"));
+
+        getWebTestClient().method(HttpMethod.DELETE).uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/{id}/metadata").build(uploadResponse3.id()))
+                .body(BodyInserters.fromValue(deleteRequest))
+                .exchange()
+                .expectStatus().isNoContent();
+
+        DocumentInfo info = getWebTestClient().get().uri(uri ->
+                        uri.path(RestApiVersion.API_PREFIX + "/documents/{id}/info")
+                                .queryParam("withMetadata", true)
+                                .build(uploadResponse3.id()))
+                .exchange()
+                .expectBody(DocumentInfo.class)
+                .returnResult().getResponseBody();
+        Assertions.assertNotNull(info);
+        Assertions.assertEquals("test_file_1.sql", info.name());
+        Assertions.assertTrue(info.metadata() == null
+                || info.metadata().isEmpty()
+                || (info.metadata().size() == 1 && info.metadata().containsKey("sha256")));
+
     }
 
     @Test
@@ -1165,6 +1230,31 @@ public class LocalStorageIT extends TestContainersBaseConfig {
                         uri.path(RestApiVersion.API_PREFIX + "/documents/{id}/info")
                                 .queryParam("withMetadata", true)
                                 .build(uploadResponse.id()))
+                .exchange()
+                .expectBody(DocumentInfo.class)
+                .returnResult().getResponseBody();
+        Assertions.assertNotNull(info);
+        Assertions.assertEquals("test_file_1.sql", info.name());
+        Assertions.assertEquals("Joe", info.metadata().get("owner"));
+        Assertions.assertEquals("MY_APP_2", info.metadata().get("appId"));
+
+        builder = newFileBuilder();
+
+        UploadResponse uploadResponse2 = uploadDocument(builder);
+
+        Assertions.assertNotNull(uploadResponse2);
+
+        updateMetadataRequest = new UpdateMetadataRequest(Map.of("owner", "Joe", "appId",  "MY_APP_2"));
+
+        getWebTestClient().method(HttpMethod.PATCH).uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/{id}/metadata").build(uploadResponse2.id()))
+                .body(BodyInserters.fromValue(updateMetadataRequest))
+                .exchange()
+                .expectStatus().isOk();
+
+        info = getWebTestClient().get().uri(uri ->
+                        uri.path(RestApiVersion.API_PREFIX + "/documents/{id}/info")
+                                .queryParam("withMetadata", true)
+                                .build(uploadResponse2.id()))
                 .exchange()
                 .expectBody(DocumentInfo.class)
                 .returnResult().getResponseBody();

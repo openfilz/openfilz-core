@@ -78,7 +78,18 @@ piped:
     size: 8192
 
 openfilz:
-  # calculate-checksum: default false - if true : calculate checksum of each new or modified file
+ #  calculate-checksum: default false - if true : calculate checksum of each new or modified file
+ #  full-text:
+ #openfilz.full-text.opensearch.host=localhost
+  #openfilz.full-text.opensearch.port=9200
+  #openfilz.full-text.opensearch.scheme=http
+  #openfilz.full-text.opensearch.username=admin # Si authentification de base
+  #openfilz.full-text.opensearch.password=admin # Si authentification de base
+ #    active: default : false
+ #    indexation-mode: local # local (only choice for the moment) -> to be developed : redis | kafka | nats
+ #    custom-index-service: default : false - if true : the
+ #    opensearch:  # URL of the OpenSearch Cluster used to perform full text search
+ #      url: http://localhost:9200
   security:
     no-auth: true # No authentication required
     # worm-mode: default false - if true : only read-only endPoints (for list, query and download) and upload (and upload-multiple) endPoints are accessible

@@ -14,13 +14,7 @@ import java.util.Map;
 @Component
 public class JsonUtils {
 
-    public static final String EMPTY_JSON = "{}";
-
     private final ObjectMapper objectMapper;
-
-    public Json emptyJson() {
-        return Json.of(EMPTY_JSON);
-    }
 
     public Json cloneJson(Json metadata) {
         return Json.of(metadata.asString());
@@ -39,11 +33,7 @@ public class JsonUtils {
         if(metadata == null || metadata.isEmpty()) {
             return null;
         }
-        try {
-            return Json.of(objectMapper.writeValueAsString(metadata));
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
-        }
+        return sneakyToJson(metadata);
     }
 
     public JsonNode toJsonNode(Json json) {
@@ -58,27 +48,31 @@ public class JsonUtils {
     }
 
     public Map<String, Object> toMap(Json json) {
-        try {
-            return objectMapper.convertValue(objectMapper.readTree(json.asString()), Map.class);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
-        }
+        return sneakyConvertValue(json.asString(), Map.class);
     }
 
     public AuditLogDetails toAudiLogDetails(Json json) {
         if(json ==null) {
             return null;
         }
+        return sneakyConvertValue(json.asString(), AuditLogDetails.class);
+    }
+
+    public Json toJson(AuditLogDetails details) {
+        return sneakyToJson(details);
+    }
+
+    private <T> T sneakyConvertValue(String json, Class<T> clazz) {
         try {
-            return objectMapper.convertValue(objectMapper.readTree(json.asString()), AuditLogDetails.class);
+            return objectMapper.convertValue(objectMapper.readTree(json), clazz);
         } catch (JsonProcessingException e) {
             throw new RuntimeException(e);
         }
     }
 
-    public Json toJson(AuditLogDetails details) {
+    private Json sneakyToJson(Object object) {
         try {
-            return Json.of(objectMapper.writeValueAsString(details));
+            return Json.of(objectMapper.writeValueAsString(object));
         } catch (JsonProcessingException e) {
             throw new RuntimeException(e);
         }
