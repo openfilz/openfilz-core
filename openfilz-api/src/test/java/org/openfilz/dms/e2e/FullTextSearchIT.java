@@ -20,6 +20,7 @@ import org.openfilz.dms.dto.request.UpdateMetadataRequest;
 import org.openfilz.dms.dto.response.CopyResponse;
 import org.openfilz.dms.dto.response.DocumentInfo;
 import org.openfilz.dms.dto.response.UploadResponse;
+import org.openfilz.dms.e2e.util.PdfLoremGeneratorStreaming;
 import org.openfilz.dms.service.IndexNameProvider;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.opensearch._types.query_dsl.MatchQuery;
@@ -208,6 +209,39 @@ public class FullTextSearchIT extends TestContainersBaseConfig {
         waitFor(3000);
         Assertions.assertEquals(1, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
 
+    }
+
+    @Test
+    void uploadPdfAndSearchText() throws IOException, ExecutionException, InterruptedException {
+        MultipartBodyBuilder builder = newFileBuilder("pdf-example.pdf");
+
+        UploadResponse response = getUploadResponse(builder);
+
+        SearchRequest searchRequest = new SearchRequest.Builder()
+                .index(IndexNameProvider.DEFAULT_INDEX_NAME)
+                .query(q -> q.match(MatchQuery.builder()
+                        .field("content")
+                        .query(fv -> fv.stringValue("systèmes d'exploitations")).build()))
+                .build();
+        waitFor(3000);
+        Assertions.assertEquals(1, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
+    }
+
+    @Test
+    void uploadBigPdf() throws Exception {
+        PdfLoremGeneratorStreaming.generate("target/test-classes/test-pdf.pdf", 200);
+        MultipartBodyBuilder builder = newFileBuilder("test-pdf.pdf");
+
+        UploadResponse response = getUploadResponse(builder);
+
+        SearchRequest searchRequest = new SearchRequest.Builder()
+                .index(IndexNameProvider.DEFAULT_INDEX_NAME)
+                .query(q -> q.match(MatchQuery.builder()
+                        .field("content")
+                        .query(fv -> fv.stringValue("vestibulum")).build()))
+                .build();
+        waitFor(3000);
+        Assertions.assertEquals(1, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
     }
 
     private void waitFor(long timeout) throws InterruptedException {

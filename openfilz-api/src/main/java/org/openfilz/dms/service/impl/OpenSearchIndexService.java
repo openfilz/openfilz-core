@@ -39,32 +39,7 @@ public class OpenSearchIndexService implements IndexService {
     private final IndexNameProvider indexNameProvider;
     private final JsonUtils jsonUtils;
 
-    @Override
-    public Mono<Void> indexDocument(Document document, Mono<String> textMono) {
-        return textMono
-                .flatMap(text -> {
-                    // Créer une map pour le document à indexer, incluant le texte
-                    Map<String, Object> source = newOpenSearchDocument(document, text);
 
-                    IndexRequest<Map<String, Object>> request = IndexRequest.of(i -> i
-                            .index(indexNameProvider.getIndexName(document))
-                            .id(document.getId().toString())
-                            .document(source)
-                    );
-
-                    // Convertir le CompletableFuture en Mono
-                    return Mono.fromFuture(() -> {
-                                try {
-                                    return openSearchAsyncClient.index(request);
-                                } catch (IOException e) {
-                                    throw new RuntimeException(e);
-                                }
-                            })
-                            .doOnSuccess(response -> log.debug("Document {} indexed with version {}", response.id(), response.version()))
-                            .onErrorResume(e -> Mono.error(new RuntimeException("Failed to index document " + document.getId(), e)))
-                            .then(); // Convertir le Mono<IndexResponse> en Mono<Void>
-                });
-    }
 
     @Override
     public Mono<Void> updateMetadata(Document document) {
@@ -98,6 +73,7 @@ public class OpenSearchIndexService implements IndexService {
             return Mono.error(e);
         }
     }
+
 
     private Object getValueToIndex(String key, Object value) {
         if(value == null) {
@@ -136,7 +112,9 @@ public class OpenSearchIndexService implements IndexService {
     }
 
 
-    protected Map<String, Object> newOpenSearchDocument(Document document, String text) {
+
+    @Override
+    public Map<String, Object> newOpenSearchDocumentMetadata(Document document) {
         Map<String, Object> source = new HashMap<>(OpenSearchDocumentKey.values().length);
         source.put(OpenSearchDocumentKey.id.toString(), document.getId());
         source.put(OpenSearchDocumentKey.name.toString(), document.getName());
@@ -147,7 +125,6 @@ public class OpenSearchIndexService implements IndexService {
         source.put(OpenSearchDocumentKey.createdBy.toString(), document.getCreatedBy());
         source.put(OpenSearchDocumentKey.updatedAt.toString(), document.getUpdatedAt().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
         source.put(OpenSearchDocumentKey.updatedBy.toString(), document.getUpdatedBy());
-        source.put(OpenSearchDocumentKey.content.toString(), text);
         Json metadata = document.getMetadata();
         if(metadata != null) {
             source.put(OpenSearchDocumentKey.metadata.toString(), jsonUtils.toMap(metadata));
