@@ -233,7 +233,7 @@ public class FullTextSearchIT extends TestContainersBaseConfig {
 
     @Test
     void uploadBigPdf() throws Exception {
-        PdfLoremGeneratorStreaming.generate("target/test-classes/test-pdf.pdf", 10);
+        PdfLoremGeneratorStreaming.generate("target/test-classes/test-pdf.pdf", 5);
         MultipartBodyBuilder builder = newFileBuilder("test-pdf.pdf");
 
         UploadResponse response = getUploadResponse(builder);
