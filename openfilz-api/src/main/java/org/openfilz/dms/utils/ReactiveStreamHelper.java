@@ -75,8 +75,4 @@ public class ReactiveStreamHelper {
         }
     }
 
-    // You might also want a version that takes a byte array directly, though Flux<DataBuffer> is more common for uploads
-    public static InputStream fromByteArray(byte[] data) {
-        return new ByteArrayInputStream(data);
-    }
 }
