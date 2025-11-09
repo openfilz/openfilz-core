@@ -6,7 +6,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.openfilz.dms.controller.DocumentController;
+import org.openfilz.dms.controller.rest.DocumentController;
 import org.openfilz.dms.dto.request.DeleteMetadataRequest;
 import org.openfilz.dms.dto.request.SearchMetadataRequest;
 import org.openfilz.dms.dto.response.DocumentInfo;

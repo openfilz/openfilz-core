@@ -1,4 +1,4 @@
-package org.openfilz.dms.controller;
+package org.openfilz.dms.controller.rest;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,7 +35,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static org.openfilz.dms.controller.ApiDescription.ALLOW_DUPLICATE_FILE_NAME_PARAM_DESCRIPTION;
+import static org.openfilz.dms.controller.rest.ApiDescription.ALLOW_DUPLICATE_FILE_NAME_PARAM_DESCRIPTION;
 import static org.openfilz.dms.enums.DocumentType.FILE;
 
 @Slf4j

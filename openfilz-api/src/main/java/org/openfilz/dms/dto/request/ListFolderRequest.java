@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.openfilz.dms.enums.DocumentType;
 
+import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.UUID;
 
@@ -15,10 +16,10 @@ public record ListFolderRequest(
     String nameLike,
     Map<String, Object> metadata,
     Long size,
-    String createdAtAfter,
-    String createdAtBefore,
-    String updatedAtAfter,
-    String updatedAtBefore,
+    OffsetDateTime createdAtAfter,
+    OffsetDateTime createdAtBefore,
+    OffsetDateTime updatedAtAfter,
+    OffsetDateTime updatedAtBefore,
     String createdBy,
     String updatedBy,
     @NotNull @Valid PageCriteria pageInfo

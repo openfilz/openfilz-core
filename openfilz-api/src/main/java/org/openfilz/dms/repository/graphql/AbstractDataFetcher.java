@@ -1,18 +1,17 @@
 package org.openfilz.dms.repository.graphql;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import graphql.schema.DataFetcher;
 import graphql.schema.DataFetchingEnvironment;
 import graphql.schema.SelectedField;
 import io.r2dbc.postgresql.codec.Json;
 import io.r2dbc.spi.Readable;
-import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.dto.response.FullDocumentInfo;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.mapper.DocumentMapper;
 import org.openfilz.dms.repository.SqlQueryUtils;
 import org.openfilz.dms.utils.SqlUtils;
+import org.reactivestreams.Publisher;
 import org.springframework.data.util.ParsingUtils;
 import org.springframework.r2dbc.core.DatabaseClient;
 
@@ -23,11 +22,11 @@ import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.openfilz.dms.entity.SqlColumnMapping.*;
 
-@RequiredArgsConstructor
-public abstract class AbstractDataFetcher<T, R, Z> implements DataFetcher<T>, SqlQueryUtils {
+public abstract class AbstractDataFetcher<T, R> implements SqlQueryUtils {
 
     protected static final Map<String, String> DOCUMENT_FIELD_SQL_MAP;
 
@@ -49,9 +48,28 @@ public abstract class AbstractDataFetcher<T, R, Z> implements DataFetcher<T>, Sq
     protected final ObjectMapper objectMapper;
     protected final SqlUtils sqlUtils;
 
+    public AbstractDataFetcher(DatabaseClient databaseClient, DocumentMapper mapper, ObjectMapper objectMapper, SqlUtils sqlUtils) {
+        this.databaseClient = databaseClient;
+        this.mapper = mapper;
+        this.objectMapper = objectMapper;
+        this.sqlUtils = sqlUtils;
+        initFromWhereClause();
+    }
+
+    protected abstract void initFromWhereClause();
+
+    private Stream<SelectedField> getSelectedFields(DataFetchingEnvironment environment) {
+        return environment
+                .getSelectionSet()
+                .getFieldsGroupedByResultKey()
+                .values()
+                .stream()
+                .flatMap(List::stream);
+    }
+
     protected List<String> getSqlFields(DataFetchingEnvironment environment) {
-        List<SelectedField> objectFields = environment.getSelectionSet().getFields();
-        return objectFields.stream()
+        Stream<SelectedField> objectFields = getSelectedFields(environment);
+        return objectFields
                 .map(field -> DOCUMENT_FIELD_SQL_MAP.get(field.getName()))
                 .filter(Objects::nonNull)
                 .toList();
@@ -85,6 +103,7 @@ public abstract class AbstractDataFetcher<T, R, Z> implements DataFetcher<T>, Sq
         return row -> mapper.toFullDocumentInfo(buildDocument(row, sqlFields));
     }
 
-    protected abstract DatabaseClient.GenericExecuteSpec prepareQuery(DataFetchingEnvironment environment, Z requestCriteria, StringBuilder query);
+    protected abstract DatabaseClient.GenericExecuteSpec prepareQuery(DataFetchingEnvironment environment, T requestCriteria, StringBuilder query);
 
+    protected abstract Publisher<R> get(T parameters, DataFetchingEnvironment environment);
 }

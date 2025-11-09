@@ -9,6 +9,7 @@ import org.apache.hc.client5.http.impl.nio.PoolingAsyncClientConnectionManagerBu
 import org.apache.hc.client5.http.ssl.ClientTlsStrategyBuilder;
 import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.ssl.SSLContextBuilder;
+import org.opensearch.client.json.jackson.JacksonJsonpMapper;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.transport.httpclient5.ApacheHttpClient5TransportBuilder;
 import org.springframework.beans.factory.annotation.Value;
@@ -56,6 +57,7 @@ public class OpenSearchConfig {
                 .build();
 
         final ApacheHttpClient5TransportBuilder builder = ApacheHttpClient5TransportBuilder.builder(httpHost);
+
         builder.setHttpClientConfigCallback(httpClientBuilder -> {
             final var tlsStrategy = ClientTlsStrategyBuilder.create()
                     .setSslContext(sslcontext)
@@ -69,7 +71,8 @@ public class OpenSearchConfig {
             return httpClientBuilder
                     .setDefaultCredentialsProvider(credentialsProvider)
                     .setConnectionManager(connectionManager);
-        });
+        })
+        .setMapper(new JacksonJsonpMapper());
         return new OpenSearchAsyncClient(builder.build());
     }
 

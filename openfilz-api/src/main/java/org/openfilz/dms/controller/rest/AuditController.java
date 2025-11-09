@@ -1,4 +1,4 @@
-package org.openfilz.dms.controller;
+package org.openfilz.dms.controller.rest;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
