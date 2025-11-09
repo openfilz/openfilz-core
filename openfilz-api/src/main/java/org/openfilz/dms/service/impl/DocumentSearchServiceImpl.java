@@ -8,6 +8,7 @@ import org.openfilz.dms.dto.response.DocumentSearchResult;
 import org.openfilz.dms.enums.SortOrder;
 import org.openfilz.dms.exception.OpenSearchException;
 import org.openfilz.dms.service.DocumentSearchService;
+import org.openfilz.dms.service.IndexNameProvider;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.opensearch._types.FieldValue;
 import org.opensearch.client.opensearch._types.query_dsl.BoolQuery;
@@ -32,8 +33,8 @@ import java.util.stream.Collectors;
 @ConditionalOnProperty(name = "openfilz.full-text.active", havingValue = "true")
 public class DocumentSearchServiceImpl implements DocumentSearchService {
 
-    private static final String DOCUMENTS_INDEX = "documents"; // Your OpenSearch index name
-
+    public static final String KEYWORD = ".keyword";
+    private final IndexNameProvider indexNameProvider;
     private final OpenSearchAsyncClient client;
 
     /**
@@ -46,7 +47,7 @@ public class DocumentSearchServiceImpl implements DocumentSearchService {
 
         // 1. Build the main Search Request
         SearchRequest.Builder requestBuilder = new SearchRequest.Builder();
-        requestBuilder.index(DOCUMENTS_INDEX);
+        requestBuilder.index(indexNameProvider.getDocumentsIndexName());
 
         // 2. Build the Bool Query (the container for all clauses)
         BoolQuery.Builder boolQueryBuilder = new BoolQuery.Builder();
@@ -68,7 +69,7 @@ public class DocumentSearchServiceImpl implements DocumentSearchService {
                 // IMPORTANT: For exact matching on text fields, you must use the '.keyword' sub-field.
                 // This assumes your OpenSearch mapping for text fields includes a keyword multi-field.
                 // For fields like 'parentId' that might already be of type 'keyword', this is still safe.
-                String fieldName = filter.field().endsWith(".keyword") ? filter.field() : filter.field() + ".keyword";
+                String fieldName = filter.field().endsWith(KEYWORD) ? filter.field() : filter.field() + KEYWORD;
 
                 boolQueryBuilder.filter(f -> f.term(t -> t
                         .field(fieldName)
@@ -91,7 +92,7 @@ public class DocumentSearchServiceImpl implements DocumentSearchService {
             // Again, use .keyword for sorting on text fields to sort alphabetically, not by relevance.
             String sortField = sort.field();
             if ("name".equals(sortField) || "contentType".equals(sortField) || "createdBy".equals(sortField)) {
-                sortField += ".keyword";
+                sortField += KEYWORD;
             }
 
             String finalSortField = sortField;

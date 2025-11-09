@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.dto.request.ListFolderRequest;
 import org.openfilz.dms.dto.response.FullDocumentInfo;
 import org.openfilz.dms.repository.DocumentQueryService;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.graphql.data.method.annotation.Argument;
 import org.springframework.graphql.data.method.annotation.QueryMapping;
 import org.springframework.stereotype.Controller;
@@ -16,9 +17,10 @@ import java.util.UUID;
 
 @Controller
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
 public class DocumentQueryController {
 
-    private final DocumentQueryService documentService; // Your existing service
+    protected final DocumentQueryService documentService;
 
     @QueryMapping
     public Mono<FullDocumentInfo> documentById(@Argument @NotNull UUID id,
@@ -26,7 +28,6 @@ public class DocumentQueryController {
         return documentService.findById(id, environment);
     }
 
-    // This replaces your "listAllDocuments" DataFetcher
     @QueryMapping
     public Flux<FullDocumentInfo> listFolder(@Argument @NotNull ListFolderRequest request,
                                              DataFetchingEnvironment environment) {

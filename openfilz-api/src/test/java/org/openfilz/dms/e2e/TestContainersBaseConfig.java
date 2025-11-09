@@ -38,7 +38,7 @@ public abstract class TestContainersBaseConfig {
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18").withReuse(true);
 
     protected final WebTestClient webTestClient;
-    private final Jackson2JsonEncoder customJackson2JsonEncoder;
+    protected final Jackson2JsonEncoder customJackson2JsonEncoder;
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
