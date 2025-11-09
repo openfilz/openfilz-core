@@ -5,16 +5,19 @@ import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.MultipleUploadFileParameter;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Import;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.graphql.client.ClientGraphQlResponse;
 import org.springframework.graphql.client.HttpGraphQlClient;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
+import org.springframework.http.codec.json.Jackson2JsonEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.BodyInserters;
+import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -25,6 +28,7 @@ import java.util.Map;
 import java.util.Objects;
 
 @RequiredArgsConstructor
+@Import(GraphQlTestConfig.class)
 public abstract class TestContainersBaseConfig {
 
     @Value("http://localhost:${local.server.port}${spring.graphql.http.path:/graphql}")
@@ -34,6 +38,7 @@ public abstract class TestContainersBaseConfig {
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18").withReuse(true);
 
     protected final WebTestClient webTestClient;
+    private final Jackson2JsonEncoder customJackson2JsonEncoder;
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
@@ -54,9 +59,38 @@ public abstract class TestContainersBaseConfig {
     }
 
     protected HttpGraphQlClient newGraphQlClient() {
-        return HttpGraphQlClient.builder(WebClient.create(baseGraphQlHttpPath))
+
+        // 1. Define the ExchangeStrategies to include your custom encoder
+        ExchangeStrategies strategies = ExchangeStrategies.builder()
+                .codecs(configurer -> {
+
+                    // Add the default String/Resource/Form data encoders
+                    configurer.defaultCodecs().jackson2JsonEncoder(customJackson2JsonEncoder);
+
+                    // You might need to re-add other required codecs here,
+                    // or better: selectively replace just the encoder.
+
+                    // Simple replacement approach: replace the existing Jackson encoder
+                    // This is more robust in a typical setup:
+                    configurer.defaultCodecs().
+                            maxInMemorySize(-1); // Or some other max size
+
+                    configurer.defaultCodecs().
+                            jackson2JsonEncoder(customJackson2JsonEncoder);
+
+                })
                 .build();
+
+        // 2. Create the WebClient using the strategies
+        WebClient webClient = WebClient.builder()
+                .baseUrl(baseGraphQlHttpPath)
+                .exchangeStrategies(strategies) // <-- Apply the strategies here
+                .build();
+
+        // 3. Build the HttpGraphQlClient with the configured WebClient
+        return HttpGraphQlClient.builder(webClient).build();
     }
+
 
     protected WebTestClient getWebTestClient() {
         return webTestClient;

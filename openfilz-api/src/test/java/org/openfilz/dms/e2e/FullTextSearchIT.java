@@ -32,6 +32,7 @@ import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWeb
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.client.MultipartBodyBuilder;
+import org.springframework.http.codec.json.Jackson2JsonEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
@@ -67,8 +68,8 @@ public class FullTextSearchIT extends TestContainersBaseConfig {
     @Container
     static OpenSearchContainer<?> openSearch = new OpenSearchContainer<>(DockerImageName.parse("opensearchproject/opensearch:latest"));
 
-    public FullTextSearchIT(WebTestClient webTestClient) {
-        super(webTestClient);
+    public FullTextSearchIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
+        super(webTestClient, customJackson2JsonEncoder);
     }
 
     @DynamicPropertySource
