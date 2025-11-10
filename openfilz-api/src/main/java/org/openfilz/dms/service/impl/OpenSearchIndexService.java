@@ -126,6 +126,7 @@ public class OpenSearchIndexService implements IndexService {
         Map<String, Object> source = new HashMap<>(OpenSearchDocumentKey.values().length);
         source.put(OpenSearchDocumentKey.id.toString(), document.getId());
         source.put(OpenSearchDocumentKey.name.toString(), document.getName());
+        source.put(OpenSearchDocumentKey.name_suggest.toString(), removeFileExtension(document.getName()));
         source.put(OpenSearchDocumentKey.contentType.toString(), document.getContentType());
         source.put(OpenSearchDocumentKey.size.toString(), document.getSize());
         source.put(OpenSearchDocumentKey.parentId.toString(), document.getParentId());

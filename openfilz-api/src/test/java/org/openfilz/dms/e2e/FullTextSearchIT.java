@@ -30,6 +30,7 @@ import org.opensearch.client.transport.httpclient5.ApacheHttpClient5TransportBui
 import org.opensearch.testcontainers.OpenSearchContainer;
 import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.http.codec.json.Jackson2JsonEncoder;
@@ -233,10 +234,67 @@ public class FullTextSearchIT extends TestContainersBaseConfig {
         Assertions.assertEquals(1, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
     }
 
+    @Test
+    void testSuggestions() throws Exception {
+        String f1 = "a sample data file of december.pdf";
+        String f2 = "a sample data file of november.pdf";
+        String f3 = "Meeting with the boss.pdf";
+
+        PdfLoremGeneratorStreaming.generate("target/test-classes/" + f1, 1L);
+        MultipartBodyBuilder builder = newFileBuilder(f1);
+        UploadResponse r1 = getUploadResponse(builder);
+
+        PdfLoremGeneratorStreaming.generate("target/test-classes/" + f2, 1L);
+        builder = newFileBuilder(f2);
+        UploadResponse r2 = getUploadResponse(builder);
+
+        PdfLoremGeneratorStreaming.generate("target/test-classes/" + f3, 1L);
+        builder = newFileBuilder(f3);
+        UploadResponse r3 = getUploadResponse(builder);
+
+        waitFor(3000);
+
+        List<String> suggestions = getWebTestClient().get().uri(uri ->
+                        uri.path(RestApiVersion.API_PREFIX + "/suggestions")
+                                .queryParam("q", "sample file")
+                                .build())
+                .exchange()
+                .expectBody(new ParameterizedTypeReference<List<String>>() {
+                })
+                .returnResult().getResponseBody();
+
+        Assertions.assertNotNull(suggestions);
+        Assertions.assertEquals(2, suggestions.size());
+
+        suggestions = getWebTestClient().get().uri(uri ->
+                        uri.path(RestApiVersion.API_PREFIX + "/suggestions")
+                                .queryParam("q", "meeting boss")
+                                .build())
+                .exchange()
+                .expectBody(new ParameterizedTypeReference<List<String>>() {
+                })
+                .returnResult().getResponseBody();
+
+        Assertions.assertNotNull(suggestions);
+        Assertions.assertEquals(1, suggestions.size());
+
+        suggestions = getWebTestClient().get().uri(uri ->
+                        uri.path(RestApiVersion.API_PREFIX + "/suggestions")
+                                .queryParam("q", "")
+                                .build())
+                .exchange()
+                .expectBody(new ParameterizedTypeReference<List<String>>() {
+                })
+                .returnResult().getResponseBody();
+
+        Assertions.assertNotNull(suggestions);
+        Assertions.assertEquals(0, suggestions.size());
+    }
+
     @Disabled
     @Test
     void uploadBigPdf() throws Exception {
-        PdfLoremGeneratorStreaming.generate("target/test-classes/test-pdf.pdf", 10);
+        PdfLoremGeneratorStreaming.generate("target/test-classes/test-pdf.pdf", 10 * 1024L);
         MultipartBodyBuilder builder = newFileBuilder("test-pdf.pdf");
 
         UploadResponse response = getUploadResponse(builder);

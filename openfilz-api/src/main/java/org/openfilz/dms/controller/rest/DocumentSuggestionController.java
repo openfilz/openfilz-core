@@ -1,6 +1,7 @@
-package org.openfilz.dms.controller.graphql;
+package org.openfilz.dms.controller.rest;
 
 import lombok.RequiredArgsConstructor;
+import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.service.DocumentSuggestionService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,7 +15,7 @@ import java.util.List;
 @RestController
 @RequiredArgsConstructor
 @ConditionalOnProperty(name = "openfilz.full-text.active", havingValue = "true")
-@RequestMapping("/api/v1/suggestions")
+@RequestMapping(RestApiVersion.API_PREFIX + "/suggestions")
 public class DocumentSuggestionController {
 
     private final DocumentSuggestionService suggestionService;
@@ -22,7 +23,6 @@ public class DocumentSuggestionController {
 
     @GetMapping
     public Mono<List<String>> getSuggestions(@RequestParam("q") String query) {
-        // We only return a simple list of strings, which is ideal for autocomplete.
         return suggestionService.getSuggestions(query);
     }
 }

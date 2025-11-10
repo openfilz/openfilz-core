@@ -16,7 +16,7 @@ import java.util.List;
 
 @Controller
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "openfilz.full-text.active", havingValue = "true", matchIfMissing = false)
+@ConditionalOnProperty(name = "openfilz.full-text.active", havingValue = "true")
 public class DocumentSearchGraphQlController {
 
     private final DocumentSearchService documentSearchService; // You can reuse the service logic
