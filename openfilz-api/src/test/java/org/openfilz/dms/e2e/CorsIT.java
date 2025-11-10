@@ -7,6 +7,7 @@ import org.openfilz.dms.dto.request.CreateFolderRequest;
 import org.openfilz.dms.dto.response.FolderElementInfo;
 import org.openfilz.dms.dto.response.FolderResponse;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.codec.json.Jackson2JsonEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
@@ -20,8 +21,8 @@ import java.util.UUID;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 public class CorsIT extends LocalStorageIT {
 
-    public CorsIT(WebTestClient webTestClient) {
-        super(webTestClient);
+    public CorsIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
+        super(webTestClient, customJackson2JsonEncoder);
     }
 
     @DynamicPropertySource

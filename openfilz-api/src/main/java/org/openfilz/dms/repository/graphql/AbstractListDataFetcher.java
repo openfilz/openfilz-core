@@ -7,7 +7,7 @@ import org.openfilz.dms.utils.SqlUtils;
 import org.springframework.r2dbc.core.DatabaseClient;
 
 
-public abstract class AbstractListDataFetcher<T, R> extends AbstractDataFetcher<T, R, ListFolderRequest> {
+public abstract class AbstractListDataFetcher<T> extends AbstractDataFetcher<ListFolderRequest, T> {
 
     public AbstractListDataFetcher(DatabaseClient databaseClient, DocumentMapper mapper, ObjectMapper objectMapper, SqlUtils sqlUtils) {
         super(databaseClient, mapper, objectMapper, sqlUtils);

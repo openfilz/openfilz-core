@@ -7,6 +7,7 @@ import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.OpenSearchDocumentKey;
 import org.openfilz.dms.service.IndexNameProvider;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
+import org.opensearch.client.opensearch._types.mapping.DynamicMapping;
 import org.opensearch.client.opensearch.indices.CreateIndexRequest;
 import org.opensearch.client.opensearch.indices.ExistsRequest;
 import org.opensearch.client.transport.endpoints.BooleanResponse;
@@ -41,6 +42,11 @@ public class DefaultIndexNameProvider implements IndexNameProvider {
 
     @Override
     public String getIndexName(UUID documentId) {
+        return DEFAULT_INDEX_NAME;
+    }
+
+    @Override
+    public String getDocumentsIndexName() {
         return DEFAULT_INDEX_NAME;
     }
 
@@ -82,7 +88,8 @@ public class DefaultIndexNameProvider implements IndexNameProvider {
                                         .index(indexName)
                                         .mappings(m -> m
                                                 .properties(OpenSearchDocumentKey.id.toString(), p -> p.keyword(k -> k))
-                                                .properties(OpenSearchDocumentKey.name.toString(), p -> p.text(tx -> tx))
+                                                .properties(OpenSearchDocumentKey.name.toString(), p -> p.text(tx -> tx.fields("keyword", b-> b.keyword(builder -> builder))))
+                                                .properties(OpenSearchDocumentKey.name_suggest.toString(), p -> p.searchAsYouType(builder ->  builder))
                                                 .properties(OpenSearchDocumentKey.contentType.toString(), p -> p.keyword(k -> k))
                                                 .properties(OpenSearchDocumentKey.size.toString(), p -> p.long_(k -> k))
                                                 .properties(OpenSearchDocumentKey.parentId.toString(), p -> p.keyword(k -> k))
@@ -91,7 +98,7 @@ public class DefaultIndexNameProvider implements IndexNameProvider {
                                                 .properties(OpenSearchDocumentKey.createdBy.toString(), p -> p.keyword(k -> k))
                                                 .properties(OpenSearchDocumentKey.updatedBy.toString(), p -> p.keyword(k -> k))
                                                 .properties(OpenSearchDocumentKey.content.toString(), p -> p.text(tx -> tx))
-                                                .properties(OpenSearchDocumentKey.metadata.toString(), p -> p.object(tx -> tx))
+                                                .properties(OpenSearchDocumentKey.metadata.toString(), p -> p.object(tx -> tx.dynamic(DynamicMapping.True)))
                                         )
                                 // Vous pouvez ajouter d'autres settings ici, par exemple :
                                 // .settings(s -> s

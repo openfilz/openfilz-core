@@ -1,6 +1,7 @@
 package org.openfilz.dms.e2e;
 
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.codec.json.Jackson2JsonEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
@@ -15,8 +16,8 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 @TestConstructor(autowireMode = ALL)
 public class GroupsSecurityIT extends SecurityIT {
 
-    public GroupsSecurityIT(WebTestClient webTestClient) {
-        super(webTestClient);
+    public GroupsSecurityIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
+        super(webTestClient, customJackson2JsonEncoder);
     }
 
     @DynamicPropertySource

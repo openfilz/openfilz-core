@@ -5,7 +5,9 @@ import graphql.schema.DataFetchingEnvironment;
 import org.openfilz.dms.dto.response.FullDocumentInfo;
 import org.openfilz.dms.mapper.DocumentMapper;
 import org.openfilz.dms.utils.SqlUtils;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.r2dbc.core.DatabaseClient;
+import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -15,25 +17,26 @@ import static org.openfilz.dms.entity.SqlColumnMapping.ID;
 import static org.openfilz.dms.utils.SqlUtils.FROM_DOCUMENTS;
 import static org.openfilz.dms.utils.SqlUtils.WHERE;
 
-public class DocumentDataFetcher extends AbstractDataFetcher<Mono<FullDocumentInfo>, FullDocumentInfo, UUID> {
+@Service
+@ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
+public class DocumentDataFetcher extends AbstractDataFetcher<UUID, FullDocumentInfo> {
 
     protected String fromDocumentsWhere;
 
     public DocumentDataFetcher(DatabaseClient databaseClient, DocumentMapper mapper, ObjectMapper objectMapper, SqlUtils sqlUtils) {
         super(databaseClient, mapper, objectMapper, sqlUtils);
-        initFromWhereClause();
     }
 
+    @Override
     protected void initFromWhereClause() {
         fromDocumentsWhere = FROM_DOCUMENTS + WHERE;
     }
 
     @Override
-    public Mono<FullDocumentInfo> get(DataFetchingEnvironment environment) throws Exception {
+    public Mono<FullDocumentInfo> get(UUID uuid, DataFetchingEnvironment environment) {
         List<String> sqlFields = getSqlFields(environment);
         StringBuilder query = toSelect(sqlFields).append(fromDocumentsWhere);
         applyFilter(query);
-        UUID uuid = (UUID) environment.getArguments().get(ID);
         return prepareQuery(environment, uuid, query)
                 .map(mapFullDocumentInfo(sqlFields))
                 .one();

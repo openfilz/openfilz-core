@@ -35,12 +35,12 @@ public class PdfLoremGeneratorStreaming {
     private static final int QUEUE_CAPACITY = 64;
 
     public static void main(String[] args) throws Exception {
-        generate("test.pdf", 5000);
+        generate("test fichier.pdf", 2L);
     }
 
-    public static void generate(String outputFile, long targetSizeMB) throws Exception {
+    public static void generate(String outputFile, long targetSizeKB) throws Exception {
 
-        long targetBytes = targetSizeMB * 1024L * 1024L;
+        long targetBytes = targetSizeKB * 1024L;
 
         long start = System.currentTimeMillis();
         BlockingQueue<String> queue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
@@ -62,7 +62,7 @@ public class PdfLoremGeneratorStreaming {
 
         long duration = System.currentTimeMillis() - start;
         System.out.printf("✅ PDF '%s' généré (~%d MB) en %.2f secondes%n",
-                outputFile, targetSizeMB, duration / 1000.0);
+                outputFile, targetSizeKB, duration / 1000.0);
     }
 
     private static void produceLorem(BlockingQueue<String> queue, long targetBytes, AtomicBoolean producing) {

@@ -1,6 +1,7 @@
 package org.openfilz.dms.e2e;
 
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.codec.json.Jackson2JsonEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
@@ -15,9 +16,10 @@ public class MinioWithSignatureIT extends AbstractStorageWithSignatureIT {
     @Container
     static MinIOContainer minio = new MinIOContainer("minio/minio:latest");
 
-    public MinioWithSignatureIT(WebTestClient webTestClient) {
-        super(webTestClient);
+    public MinioWithSignatureIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
+        super(webTestClient, customJackson2JsonEncoder);
     }
+
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
