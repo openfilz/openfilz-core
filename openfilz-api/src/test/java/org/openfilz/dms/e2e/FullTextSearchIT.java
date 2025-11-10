@@ -31,6 +31,8 @@ import org.opensearch.testcontainers.OpenSearchContainer;
 import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.graphql.client.ClientGraphQlResponse;
+import org.springframework.graphql.client.HttpGraphQlClient;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.http.codec.json.Jackson2JsonEncoder;
@@ -42,6 +44,8 @@ import org.springframework.web.reactive.function.BodyInserters;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 import javax.net.ssl.SSLContext;
 import java.io.IOException;
@@ -65,6 +69,8 @@ public class FullTextSearchIT extends TestContainersBaseConfig {
 
 
     private static OpenSearchAsyncClient openSearchAsyncClient;
+
+    protected HttpGraphQlClient graphQlHttpClient;
 
     @Container
     static OpenSearchContainer<?> openSearch = new OpenSearchContainer<>(DockerImageName.parse("opensearchproject/opensearch:latest"));
@@ -120,7 +126,7 @@ public class FullTextSearchIT extends TestContainersBaseConfig {
 
         MultipartBodyBuilder builder = newFileBuilder();
         String appId = UUID.randomUUID().toString();
-        builder.part("metadata", Map.of("owner", "OpenFilz", "appId", appId));
+        builder.part("metadata", Map.of("owner", "OpenFilz1", "appId", appId));
 
         UploadResponse response = getUploadResponse(builder);
 
@@ -128,7 +134,7 @@ public class FullTextSearchIT extends TestContainersBaseConfig {
                 .index(IndexNameProvider.DEFAULT_INDEX_NAME)
                 .query(q -> q.match(MatchQuery.builder()
                         .field("metadata.owner")
-                        .query(fv -> fv.stringValue("OpenFilz")).build()))
+                        .query(fv -> fv.stringValue("OpenFilz1")).build()))
                 .build();
         waitFor(3000);
 
@@ -232,10 +238,20 @@ public class FullTextSearchIT extends TestContainersBaseConfig {
                 .build();
         waitFor(3000);
         Assertions.assertEquals(1, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
+
+        DeleteRequest deleteRequest = new DeleteRequest(Collections.singletonList(response.id()));
+
+        getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/files")
+                .body(BodyInserters.fromValue(deleteRequest))
+                .exchange()
+                .expectStatus().isNoContent();
+
+        waitFor(3000);
+        Assertions.assertEquals(0, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
     }
 
     @Test
-    void testSuggestions() throws Exception {
+    void testSuggestionsRestAPI() throws Exception {
         String f1 = "a sample data file of december.pdf";
         String f2 = "a sample data file of november.pdf";
         String f3 = "Meeting with the boss.pdf";
@@ -289,6 +305,128 @@ public class FullTextSearchIT extends TestContainersBaseConfig {
 
         Assertions.assertNotNull(suggestions);
         Assertions.assertEquals(0, suggestions.size());
+
+        DeleteRequest deleteRequest = new DeleteRequest(List.of(r1.id(), r2.id(),  r3.id()));
+        getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/files")
+                .body(BodyInserters.fromValue(deleteRequest))
+                .exchange()
+                .expectStatus().isNoContent();
+
+        waitFor(3000);
+
+    }
+
+    @Test
+    void testSearchGraphQL() throws Exception {
+
+        String f0 = "pdf-example.pdf";
+        String f1 = "a sample data file of september.pdf";
+        String f2 = "a sample data file of october.pdf";
+        String f3 = "Meeting with another guy - 2025.pdf";
+
+        MultipartBodyBuilder builder = newFileBuilder(f0);
+        builder.part("metadata", Map.of("owner", "OpenFilz"));
+        UploadResponse r0 = getUploadResponse(builder);
+
+        PdfLoremGeneratorStreaming.generate("target/test-classes/" + f1, 1L);
+        builder = newFileBuilder(f1);
+        builder.part("metadata", Map.of("owner", "OpenFilz"));
+        UploadResponse r1 = getUploadResponse(builder);
+
+        PdfLoremGeneratorStreaming.generate("target/test-classes/" + f2, 1L);
+        builder = newFileBuilder(f2);
+        builder.part("metadata", Map.of("owner", "OpenFilz"));
+        UploadResponse r2 = getUploadResponse(builder);
+
+        PdfLoremGeneratorStreaming.generate("target/test-classes/" + f3, 1L);
+        builder = newFileBuilder(f3);
+        builder.part("metadata", Map.of("owner", "Nobody"));
+        UploadResponse r3 = getUploadResponse(builder);
+
+        waitFor(3000);
+
+        HttpGraphQlClient httpGraphQlClient = getGraphQlHttpClient();
+
+        var graphQlRequest = """
+                query {
+                  searchDocuments(
+                    query: "sample file",
+                    filters: [
+                      { field: "metadata.owner", value: "OpenFilz" }
+                    ],
+                    sort: { field: "updatedAt", order: DESC },
+                    page: 0,
+                    size: 20
+                  ) {
+                    totalHits
+                    documents {
+                      id
+                      name
+                      contentType
+                      updatedAt
+                      updatedBy
+                    }
+                  }
+                }""".trim();
+
+        Mono<ClientGraphQlResponse> response = httpGraphQlClient
+                .document(graphQlRequest)
+                .execute();
+
+        StepVerifier.create(response)
+                .expectNextMatches(doc->{
+                    Map<String, Object> searchDocuments = (Map<String, Object>) ((Map<String, Object>) doc.getData()).get("searchDocuments");
+                    List<Map<String, String>> documents = (List<Map<String, String>>) searchDocuments.get("documents");
+                    return  searchDocuments.get("totalHits").toString().equals("2")
+                            && documents.get(0).get("id").equals(r2.id().toString())
+                            && documents.get(1).get("id").equals(r1.id().toString())
+                            && documents.get(0).get("contentType").equals("application/pdf")
+                            && documents.get(1).get("contentType").equals("application/pdf")
+                            && documents.get(0).get("updatedBy").equals("anonymousUser")
+                            && documents.get(1).get("updatedBy").equals("anonymousUser")
+                            && documents.get(0).get("name").equals(f2)
+                            && documents.get(1).get("name").equals(f1);
+                })
+                .expectComplete()
+                .verify();
+
+
+        graphQlRequest = """
+                query {
+                  searchDocuments(
+                    query: "systèmes d'exploitations",
+                    page: 0,
+                    size: 20
+                  ) {
+                    totalHits
+                    documents {
+                      id                      
+                    }
+                  }
+                }""".trim();
+
+        response = httpGraphQlClient
+                .document(graphQlRequest)
+                .execute();
+
+        StepVerifier.create(response)
+                .expectNextMatches(doc->{
+                    Map<String, Object> searchDocuments = (Map<String, Object>) ((Map<String, Object>) doc.getData()).get("searchDocuments");
+                    List<Map<String, String>> documents = (List<Map<String, String>>) searchDocuments.get("documents");
+                    return  searchDocuments.get("totalHits").toString().equals("1")
+                            && documents.get(0).get("id").equals(r0.id().toString());
+                })
+                .expectComplete()
+                .verify();
+
+        DeleteRequest deleteRequest = new DeleteRequest(List.of(r0.id(), r1.id(), r2.id(),  r3.id()));
+        getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/files")
+                .body(BodyInserters.fromValue(deleteRequest))
+                .exchange()
+                .expectStatus().isNoContent();
+
+        waitFor(3000);
+
     }
 
     @Disabled
@@ -320,5 +458,11 @@ public class FullTextSearchIT extends TestContainersBaseConfig {
         latch2.await();
     }
 
+    private HttpGraphQlClient getGraphQlHttpClient() {
+        if(graphQlHttpClient == null) {
+            graphQlHttpClient = newGraphQlClient();
+        }
+        return graphQlHttpClient;
+    }
 
 }

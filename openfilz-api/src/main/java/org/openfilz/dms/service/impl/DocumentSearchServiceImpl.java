@@ -103,7 +103,7 @@ public class DocumentSearchServiceImpl implements DocumentSearchService {
         requestBuilder.from(page * size).size(size);
 
         // 7. Execute the request asynchronously
-        SearchRequest searchRequest = requestBuilder.build();
+        SearchRequest searchRequest = requestBuilder.source(fn -> fn.filter(v -> v.excludes("name_suggest", "metadata", "content"))).build();
         try {
             return Mono.fromFuture(client.search(searchRequest, DocumentSearchInfo.class))
                     .map(this::toDocumentSearchResult); // Convert the response to our DTO
