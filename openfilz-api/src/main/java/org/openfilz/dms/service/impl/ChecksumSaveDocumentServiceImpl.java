@@ -12,7 +12,6 @@ import org.openfilz.dms.service.StorageService;
 import org.openfilz.dms.utils.JsonUtils;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.codec.multipart.FilePart;
-import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
@@ -32,21 +31,21 @@ public class ChecksumSaveDocumentServiceImpl extends SaveDocumentServiceImpl {
     }
 
     @Override
-    public Mono<UploadResponse> doSaveDocument(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, Authentication auth, Mono<String> storagePathMono) {
+    public Mono<UploadResponse> doSaveDocument(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, Mono<String> storagePathMono) {
         return storagePathMono
                 .flatMap(storagePath -> checksumService.calculateChecksum(storagePath, metadata))
-                .flatMap(checksum -> saveDocumentInDatabase(filePart, contentLength, parentFolderId, checksum.metadataWithChecksum(), originalFilename, auth, checksum.storagePath()))
-                .flatMap(savedDoc -> auditUploadActionAndReturnResponse(parentFolderId, metadata, auth, savedDoc)
+                .flatMap(checksum -> saveDocumentInDatabase(filePart, contentLength, parentFolderId, checksum.metadataWithChecksum(), originalFilename, checksum.storagePath()))
+                .flatMap(savedDoc -> auditUploadActionAndReturnResponse(parentFolderId, metadata, savedDoc)
                         .doOnSuccess(_ -> postProcessDocument(filePart, savedDoc)));
     }
 
     @Override
-    protected Mono<Document> replaceDocumentContentAndSave(FilePart newFilePart, Long contentLength, Authentication auth, Document document, String newStoragePath, String oldStoragePath) {
+    protected Mono<Document> replaceDocumentContentAndSave(FilePart newFilePart, Long contentLength, Document document, String newStoragePath, String oldStoragePath) {
         Json metadata = document.getMetadata();
         return checksumService.calculateChecksum(newStoragePath, metadata != null ? jsonUtils.toMap(metadata) : null)
                 .flatMap(checksum -> {
                     document.setMetadata(jsonUtils.toJson(checksum.metadataWithChecksum()));
-                    return super.replaceDocumentContentAndSave(newFilePart, contentLength, auth, document, newStoragePath, oldStoragePath);
+                    return super.replaceDocumentContentAndSave(newFilePart, contentLength, document, newStoragePath, oldStoragePath);
                 })
                 .doOnSuccess(savedDoc -> postProcessDocument(newFilePart, savedDoc));
     }

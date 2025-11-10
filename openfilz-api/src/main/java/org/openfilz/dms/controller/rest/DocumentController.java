@@ -24,7 +24,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.multipart.FilePart;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -60,10 +59,10 @@ public class DocumentController {
             @Parameter(description = "Target parent folder ID to store the file; if not sent or null, the file is stored at the root level") @RequestPart(name = "parentFolderId", required = false) String parentFolderId,
             @RequestPart(name = "metadata", required = false) String metadataJson,
             @Parameter(hidden = true) @RequestHeader(name = "Content-Length", required = false) Long contentLength,
-            @Parameter(description = ALLOW_DUPLICATE_FILE_NAME_PARAM_DESCRIPTION) @RequestParam(required = false, defaultValue = "false") Boolean allowDuplicateFileNames,
-            Authentication authentication) {
+            @Parameter(description = ALLOW_DUPLICATE_FILE_NAME_PARAM_DESCRIPTION) @RequestParam(required = false, defaultValue = "false") Boolean allowDuplicateFileNames
+            ) {
 
-        return documentService.uploadDocument(filePart, contentLength, parentFolderId != null ? UUID.fromString(parentFolderId) : null, parseMetadata(metadataJson), allowDuplicateFileNames, authentication)
+        return documentService.uploadDocument(filePart, contentLength, parentFolderId != null ? UUID.fromString(parentFolderId) : null, parseMetadata(metadataJson), allowDuplicateFileNames)
                 .map(uploadResponse -> ResponseEntity.status(HttpStatus.CREATED).body(uploadResponse));
     }
 
@@ -73,8 +72,7 @@ public class DocumentController {
     public Flux<UploadResponse> uploadDocument(
             @RequestPart("file") Flux<FilePart> filePartFlux,
             @RequestPart(value = "parametersByFilename", required = false) List<MultipleUploadFileParameter> multipleUploadFileParameters,
-            @Parameter(description = ALLOW_DUPLICATE_FILE_NAME_PARAM_DESCRIPTION) @RequestParam(required = false, defaultValue = "false") Boolean allowDuplicateFileNames,
-            Authentication authentication) {
+            @Parameter(description = ALLOW_DUPLICATE_FILE_NAME_PARAM_DESCRIPTION) @RequestParam(required = false, defaultValue = "false") Boolean allowDuplicateFileNames) {
         final Map<String, MultipleUploadFileParameterAttributes> parametersByFilename = (multipleUploadFileParameters == null
                 || multipleUploadFileParameters.isEmpty() ? Collections.emptyMap()
                 : multipleUploadFileParameters.stream().collect(Collectors.toMap(MultipleUploadFileParameter::filename, MultipleUploadFileParameter::fileAttributes)));
@@ -84,14 +82,14 @@ public class DocumentController {
 
                     if(fileParameters == null) {
                         log.debug("Processing file: {}", filePart.filename());
-                        return documentService.uploadDocument(filePart,  null, null, null, allowDuplicateFileNames, authentication);
+                        return documentService.uploadDocument(filePart,  null, null, null, allowDuplicateFileNames);
                     }
                     log.debug("Processing file: {}, parentId: {}, metadata: {}",
                             filePart.filename(),
                             fileParameters.parentFolderId(),
                             fileParameters.metadata());
 
-                    return documentService.uploadDocument(filePart,  null, fileParameters.parentFolderId(), fileParameters.metadata(), allowDuplicateFileNames, authentication);
+                    return documentService.uploadDocument(filePart,  null, fileParameters.parentFolderId(), fileParameters.metadata(), allowDuplicateFileNames);
                 })
                 .doOnComplete(() -> log.info("Finished processing all files for /upload-multiple"))
                 .doOnError(error -> log.error("Error during /upload-multiple processing stream: {}", error.getMessage(), error));
@@ -117,9 +115,8 @@ public class DocumentController {
     public Mono<ResponseEntity<ElementInfo>> replaceDocumentContent(
             @PathVariable UUID documentId,
             @RequestPart("file") Mono<FilePart> newFilePartMono,
-            @Parameter(hidden = true) @RequestHeader(name = "Content-Length", required = false) Long contentLength,
-            Authentication authentication) {
-        return newFilePartMono.flatMap(filePart -> documentService.replaceDocumentContent(documentId, filePart, contentLength, authentication))
+            @Parameter(hidden = true) @RequestHeader(name = "Content-Length", required = false) Long contentLength) {
+        return newFilePartMono.flatMap(filePart -> documentService.replaceDocumentContent(documentId, filePart, contentLength))
                 .map(doc -> new ElementInfo(doc.getId(), doc.getName(), doc.getType().name()))
                 .map(ResponseEntity::ok);
     }
@@ -130,9 +127,8 @@ public class DocumentController {
             @Parameter(name = "documentId") @PathVariable UUID documentId,
             @RequestBody(description = "New metadata map. Replaces all existing metadata.", required = true,
                     content = @Content(schema = @Schema(type = "object", additionalProperties = Schema.AdditionalPropertiesValue.TRUE)))
-            @org.springframework.web.bind.annotation.RequestBody Map<String, Object> newMetadata, // Spring's RequestBody
-            Authentication authentication) {
-        return documentService.replaceDocumentMetadata(documentId, newMetadata, authentication)
+            @org.springframework.web.bind.annotation.RequestBody Map<String, Object> newMetadata) {
+        return documentService.replaceDocumentMetadata(documentId, newMetadata)
                 .map(doc -> new ElementInfo(doc.getId(), doc.getName(), doc.getType().name()))
                 .map(ResponseEntity::ok);
     }
@@ -142,9 +138,8 @@ public class DocumentController {
     @Operation(summary = "Update document metadata", description = "Updates or adds specific metadata fields for a document.")
     public Mono<ResponseEntity<ElementInfo>> updateDocumentMetadata(
             @PathVariable UUID documentId,
-            @Valid @org.springframework.web.bind.annotation.RequestBody UpdateMetadataRequest request,
-            Authentication authentication) {
-        return documentService.updateDocumentMetadata(documentId, request, authentication)
+            @Valid @org.springframework.web.bind.annotation.RequestBody UpdateMetadataRequest request) {
+        return documentService.updateDocumentMetadata(documentId, request)
                 .map(doc -> new ElementInfo(doc.getId(), doc.getName(), doc.getType().name()))
                 .map(ResponseEntity::ok);
     }
@@ -153,17 +148,16 @@ public class DocumentController {
     @Operation(summary = "Delete specific metadata keys", description = "Deletes specified metadata keys from a document.")
     public Mono<ResponseEntity<Void>> deleteDocumentMetadata(
             @PathVariable UUID documentId,
-            @Valid @org.springframework.web.bind.annotation.RequestBody DeleteMetadataRequest request,
-            Authentication authentication) {
-        return documentService.deleteDocumentMetadata(documentId, request, authentication)
+            @Valid @org.springframework.web.bind.annotation.RequestBody DeleteMetadataRequest request) {
+        return documentService.deleteDocumentMetadata(documentId, request)
                 .thenReturn(ResponseEntity.noContent().build());
     }
 
     @GetMapping("/{documentId}/download")
     @Operation(summary = "Download a document", description = "Downloads a single file document.")
-    public Mono<ResponseEntity<Resource>> downloadDocument(@PathVariable UUID documentId, Authentication authentication) {
-        return documentService.findDocumentToDownloadById(documentId, authentication) // First get metadata like name
-                .flatMap(docInfo -> documentService.downloadDocument(docInfo, authentication)
+    public Mono<ResponseEntity<Resource>> downloadDocument(@PathVariable UUID documentId) {
+        return documentService.findDocumentToDownloadById(documentId) // First get metadata like name
+                .flatMap(docInfo -> documentService.downloadDocument(docInfo)
                         .map(resource -> sendDownloadResponse(docInfo, resource))
                 );
     }
@@ -178,9 +172,8 @@ public class DocumentController {
     @PostMapping("/download-multiple")
     @Operation(summary = "Download multiple documents as ZIP", description = "Downloads multiple documents as a single ZIP file.")
     public Mono<ResponseEntity<Resource>> downloadMultipleDocumentsAsZip(
-            @org.springframework.web.bind.annotation.RequestBody List<UUID> documentIds,
-            Authentication authentication) {
-        return documentService.downloadMultipleDocumentsAsZip(documentIds, authentication)
+            @org.springframework.web.bind.annotation.RequestBody List<UUID> documentIds) {
+        return documentService.downloadMultipleDocumentsAsZip(documentIds)
                 .map(resource -> ResponseEntity.ok()
                         .header(HttpHeaders.CONTENT_DISPOSITION, ATTACHMENT_ZIP)
                         .contentType(MediaType.APPLICATION_OCTET_STREAM)
@@ -190,19 +183,17 @@ public class DocumentController {
     @PostMapping("/search/ids-by-metadata")
     @Operation(summary = "Search document IDs by metadata", description = "Finds document IDs matching all provided metadata criteria.")
     public Flux<UUID> searchDocumentIdsByMetadata(
-            @Valid @org.springframework.web.bind.annotation.RequestBody SearchByMetadataRequest request,
-            Authentication authentication) {
-        return documentService.searchDocumentIdsByMetadata(request, authentication);
+            @Valid @org.springframework.web.bind.annotation.RequestBody SearchByMetadataRequest request) {
+        return documentService.searchDocumentIdsByMetadata(request);
     }
 
     @PostMapping("/{documentId}/search/metadata") // POST to allow body for keys
     @Operation(summary = "Search metadata of a document", description = "Retrieves metadata for a document. Can filter by keys.")
     public Mono<ResponseEntity<Map<String, Object>>> getDocumentMetadata(
             @PathVariable UUID documentId,
-            @org.springframework.web.bind.annotation.RequestBody(required = false) SearchMetadataRequest request, // Optional body
-            Authentication authentication) {
+            @org.springframework.web.bind.annotation.RequestBody(required = false) SearchMetadataRequest request) {
         SearchMetadataRequest actualRequest = (request == null) ? new SearchMetadataRequest(Collections.emptyList()) : request;
-        return documentService.getDocumentMetadata(documentId, actualRequest, authentication)
+        return documentService.getDocumentMetadata(documentId, actualRequest)
                 .map(ResponseEntity::ok);
     }
 
@@ -210,9 +201,8 @@ public class DocumentController {
     @Operation(summary = "Get information of a document", description = "Retrieves information for a document.")
     public Mono<ResponseEntity<DocumentInfo>> getDocumentInfo(
             @PathVariable UUID documentId,
-            @Parameter(description = "if false : only name, type and parentId are sent (when not null) - if true : metadata and size are added in the response") @RequestParam(required = false) Boolean withMetadata,
-            Authentication authentication) {
-        return documentService.getDocumentInfo(documentId, withMetadata, authentication)
+            @Parameter(description = "if false : only name, type and parentId are sent (when not null) - if true : metadata and size are added in the response") @RequestParam(required = false) Boolean withMetadata) {
+        return documentService.getDocumentInfo(documentId, withMetadata)
                 .map(ResponseEntity::ok);
     }
 }

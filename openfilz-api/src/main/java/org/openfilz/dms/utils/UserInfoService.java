@@ -1,7 +1,8 @@
-// com/example/dms/utils/UserPrincipalExtractor.java
 package org.openfilz.dms.utils;
 
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.ReactiveSecurityContextHolder;
+import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import reactor.core.publisher.Mono;
@@ -29,7 +30,14 @@ public interface UserInfoService {
         return authentication.getName();
     }
 
-    default Mono<String> getConnectedUserEmail(Authentication auth) {
-        return Mono.just(getUserAttribute(auth, EMAIL));
+    default Mono<String> getConnectedUserEmail() {
+        return getAuthenticationMono()
+                .map(auth -> getUserAttribute(auth, EMAIL))
+                .switchIfEmpty(Mono.just(ANONYMOUS_USER));
+    }
+
+    default Mono<Authentication> getAuthenticationMono() {
+        return ReactiveSecurityContextHolder.getContext()
+                .map(SecurityContext::getAuthentication);
     }
 }

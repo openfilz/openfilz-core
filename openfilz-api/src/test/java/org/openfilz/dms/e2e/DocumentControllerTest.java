@@ -14,11 +14,8 @@ import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.exception.DocumentNotFoundException;
 import org.openfilz.dms.service.DocumentService;
-import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.codec.multipart.FilePart;
-import org.springframework.security.authentication.TestingAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -42,14 +39,9 @@ class DocumentControllerTest {
     @Mock
     private FilePart filePart;
 
-    @Mock
-    private Resource resource;
-
-    private Authentication authentication;
 
     @BeforeEach
     void setUp() {
-        authentication = new TestingAuthenticationToken("testuser", "password");
     }
 
     @Test
@@ -58,10 +50,10 @@ class DocumentControllerTest {
         String filename = "test.txt";
         UUID parentId = UUID.randomUUID();
 
-        when(documentService.uploadDocument(any(), any(), any(), any(), any(), any()))
+        when(documentService.uploadDocument(any(), any(), any(), any(), any()))
                 .thenReturn(Mono.just(new UploadResponse(documentId, filename, null, null)));
 
-        StepVerifier.create(documentController.uploadDocument(filePart, parentId.toString(), null, 100L, false, authentication))
+        StepVerifier.create(documentController.uploadDocument(filePart, parentId.toString(), null, 100L, false))
                 .expectNextMatches(response ->
                     response.getStatusCode().is2xxSuccessful() &&
                     response.getBody().id().equals(documentId) &&
@@ -77,10 +69,10 @@ class DocumentControllerTest {
         Map<String, Object> metadata = Map.of("key1", "value1", "key2", "value2");
         SearchMetadataRequest request = new SearchMetadataRequest(null);
 
-        when(documentService.getDocumentMetadata(documentId, request, authentication))
+        when(documentService.getDocumentMetadata(documentId, request))
                 .thenReturn(Mono.just(metadata));
 
-        StepVerifier.create(documentController.getDocumentMetadata(documentId, request, authentication))
+        StepVerifier.create(documentController.getDocumentMetadata(documentId, request))
                 .expectNextMatches(response ->
                     response.getStatusCode().is2xxSuccessful() &&
                             Objects.equals(response.getBody(), metadata)
@@ -93,10 +85,10 @@ class DocumentControllerTest {
         UUID documentId = UUID.randomUUID();
         DocumentInfo info = new DocumentInfo(DocumentType.FILE, "test.txt", null, null, null);
 
-        when(documentService.getDocumentInfo(documentId, false, authentication))
+        when(documentService.getDocumentInfo(documentId, false))
                 .thenReturn(Mono.just(info));
 
-        StepVerifier.create(documentController.getDocumentInfo(documentId, false, authentication))
+        StepVerifier.create(documentController.getDocumentInfo(documentId, false))
                 .expectNextMatches(response ->
                     response.getStatusCode().is2xxSuccessful() &&
                     Objects.requireNonNull(response.getBody()).type().equals(DocumentType.FILE) &&
@@ -110,10 +102,10 @@ class DocumentControllerTest {
         UUID documentId = UUID.randomUUID();
         DeleteMetadataRequest request = new DeleteMetadataRequest(List.of("key1"));
 
-        when(documentService.deleteDocumentMetadata(any(), any(), any()))
+        when(documentService.deleteDocumentMetadata(any(), any()))
                 .thenReturn(Mono.empty());
 
-        StepVerifier.create(documentController.deleteDocumentMetadata(documentId, request, authentication))
+        StepVerifier.create(documentController.deleteDocumentMetadata(documentId, request))
                 .expectNextMatches(response -> response.getStatusCode().equals(HttpStatus.NO_CONTENT))
                 .verifyComplete();
     }
@@ -122,9 +114,9 @@ class DocumentControllerTest {
     void downloadDocument_NotFound_ShouldReturnNotFound() {
         UUID documentId = UUID.randomUUID();
 
-        when(documentService.findDocumentToDownloadById(documentId, authentication)).thenReturn(Mono.error(new DocumentNotFoundException(documentId)));
+        when(documentService.findDocumentToDownloadById(documentId)).thenReturn(Mono.error(new DocumentNotFoundException(documentId)));
 
-        StepVerifier.create(documentController.downloadDocument(documentId, authentication))
+        StepVerifier.create(documentController.downloadDocument(documentId))
                 .expectError(DocumentNotFoundException.class)
                 .verify();
     }
@@ -133,10 +125,10 @@ class DocumentControllerTest {
     void updateDocumentMetadata_InvalidRequest_ShouldReturnBadRequest() {
         UUID documentId = UUID.randomUUID();
 
-        when(documentService.updateDocumentMetadata(any(), any(), any()))
+        when(documentService.updateDocumentMetadata(any(), any()))
                 .thenReturn(Mono.error(new IllegalArgumentException("Invalid metadata update request")));
 
-        StepVerifier.create(documentController.updateDocumentMetadata(documentId, null, authentication))
+        StepVerifier.create(documentController.updateDocumentMetadata(documentId, null))
                 .expectErrorMatches(throwable ->
                         throwable instanceof IllegalArgumentException &&
                         throwable.getMessage().equals("Invalid metadata update request"))

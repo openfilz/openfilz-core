@@ -15,7 +15,6 @@ import org.openfilz.dms.repository.AuditDAO;
 import org.openfilz.dms.utils.JsonUtils;
 import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.r2dbc.core.DatabaseClient;
-import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -116,14 +115,14 @@ public class AuditDAOImpl implements AuditDAO, UserInfoService {
     }
 
     @Override
-    public Mono<Void> logAction(Authentication authentication, AuditAction action, DocumentType resourceType, UUID resourceId, AuditLogDetails details) {
+    public Mono<Void> logAction(AuditAction action, DocumentType resourceType, UUID resourceId, AuditLogDetails details) {
         StringBuilder sql = new StringBuilder(AUDIT_INSERT_SQL);
         if (details != null) {
             sql.append(", details ").append(AUDIT_VALUES_SQL).append(", :det)");
         } else {
             sql.append(AUDIT_VALUES_SQL).append(")");
         }
-        return getConnectedUserEmail(authentication)
+        return getConnectedUserEmail()
                 .flatMap(username -> {
                     DatabaseClient.GenericExecuteSpec executeSpec = databaseClient.sql(sql.toString())
                             .bind("ts", OffsetDateTime.now())

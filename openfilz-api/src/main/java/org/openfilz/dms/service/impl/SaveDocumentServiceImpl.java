@@ -8,12 +8,14 @@ import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.AuditAction;
 import org.openfilz.dms.repository.DocumentDAO;
-import org.openfilz.dms.service.*;
+import org.openfilz.dms.service.AuditService;
+import org.openfilz.dms.service.MetadataPostProcessor;
+import org.openfilz.dms.service.SaveDocumentService;
+import org.openfilz.dms.service.StorageService;
 import org.openfilz.dms.utils.JsonUtils;
 import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.codec.multipart.FilePart;
-import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
@@ -38,9 +40,9 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
     protected final MetadataPostProcessor metadataPostProcessor;
 
 
-   public Mono<UploadResponse> doSaveDocument(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, Authentication auth, Mono<String> storagePathMono) {
-        return storagePathMono.flatMap(storagePath -> saveDocumentInDatabase(filePart, contentLength, parentFolderId, metadata, originalFilename, auth, storagePath))
-                .flatMap(savedDoc -> auditUploadActionAndReturnResponse(parentFolderId, metadata, auth, savedDoc)
+   public Mono<UploadResponse> doSaveDocument(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, Mono<String> storagePathMono) {
+        return storagePathMono.flatMap(storagePath -> saveDocumentInDatabase(filePart, contentLength, parentFolderId, metadata, originalFilename, storagePath))
+                .flatMap(savedDoc -> auditUploadActionAndReturnResponse(parentFolderId, metadata,savedDoc)
                         .doOnSuccess(_ -> postProcessDocument(filePart, savedDoc)));
     }
 
@@ -48,34 +50,34 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
        metadataPostProcessor.processDocument(filePart, document);
     }
 
-    protected Mono<Document> replaceDocumentContentAndSave(FilePart newFilePart, Long contentLength, Authentication auth, Document document, String newStoragePath, String oldStoragePath) {
+    protected Mono<Document> replaceDocumentContentAndSave(FilePart newFilePart, Long contentLength, Document document, String newStoragePath, String oldStoragePath) {
         if(contentLength == null) {
             return storageService.getFileLength(newStoragePath)
                     .flatMap(fileLength -> replaceDocumentInDB(newFilePart,
-                            newStoragePath, oldStoragePath, fileLength, auth, document))
+                            newStoragePath, oldStoragePath, fileLength,document))
                     .doOnSuccess(savedDoc -> postProcessDocument(newFilePart, savedDoc));
         }
-        return replaceDocumentInDB(newFilePart, newStoragePath, oldStoragePath, contentLength, auth, document)
+        return replaceDocumentInDB(newFilePart, newStoragePath, oldStoragePath, contentLength,document)
                 .doOnSuccess(savedDoc -> postProcessDocument(newFilePart, savedDoc));
     }
 
-    public Mono<Document> saveAndReplaceDocument(FilePart newFilePart, Long contentLength, Authentication auth, Document document, String oldStoragePath) {
+    public Mono<Document> saveAndReplaceDocument(FilePart newFilePart, Long contentLength, Document document, String oldStoragePath) {
         return storageService.saveFile(newFilePart)
                 .flatMap(newStoragePath ->
-                        replaceDocumentContentAndSave(newFilePart, contentLength, auth, document, newStoragePath, oldStoragePath));
+                        replaceDocumentContentAndSave(newFilePart, contentLength,document, newStoragePath, oldStoragePath));
     }
 
 
 
-    protected Mono<Document> saveDocumentInDatabase(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, Authentication auth, String storagePath) {
+    protected Mono<Document> saveDocumentInDatabase(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, String storagePath) {
         if(contentLength == null) {
             return storageService.getFileLength(storagePath)
-                    .flatMap(fileLength -> saveDocumentInDB(filePart, storagePath, fileLength, parentFolderId, metadata, originalFilename, auth));
+                    .flatMap(fileLength -> saveDocumentInDB(filePart, storagePath, fileLength, parentFolderId, metadata, originalFilename));
         }
-        return saveDocumentInDB(filePart, storagePath, contentLength, parentFolderId, metadata, originalFilename, auth);
+        return saveDocumentInDB(filePart, storagePath, contentLength, parentFolderId, metadata, originalFilename);
     }
 
-    private Mono<Document> saveDocumentInDB(FilePart filePart, String storagePath, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, Authentication auth) {
+    private Mono<Document> saveDocumentInDB(FilePart filePart, String storagePath, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename) {
         Document.DocumentBuilder documentBuilder = Document.builder()
                 .name(originalFilename)
                 .type(FILE)
@@ -84,7 +86,7 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
                 .parentId(parentFolderId)
                 .storagePath(storagePath)
                 .metadata(jsonUtils.toJson(metadata));
-        return doSaveDocument(auth,  saveNewDocumentFunction(documentBuilder));
+        return doSaveDocument(saveNewDocumentFunction(documentBuilder));
     }
 
     public Function<String, Mono<Document>> saveNewDocumentFunction(Document.DocumentBuilder request) {
@@ -99,21 +101,21 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
         };
     }
 
-    public Mono<Document> doSaveDocument(Authentication auth, Function<String, Mono<Document>> documentFunction) {
-        return getConnectedUserEmail(auth).flatMap(documentFunction);
+    public Mono<Document> doSaveDocument(Function<String, Mono<Document>> documentFunction) {
+        return getConnectedUserEmail().flatMap(documentFunction);
     }
 
 
 
-    protected Mono<UploadResponse> auditUploadActionAndReturnResponse(UUID parentFolderId, Map<String, Object> metadata, Authentication auth, Document savedDoc) {
-        return auditService.logAction(auth, AuditAction.UPLOAD_DOCUMENT, FILE, savedDoc.getId(), new UploadAudit(savedDoc.getName(), parentFolderId, metadata))
+    protected Mono<UploadResponse> auditUploadActionAndReturnResponse(UUID parentFolderId, Map<String, Object> metadata, Document savedDoc) {
+        return auditService.logAction(AuditAction.UPLOAD_DOCUMENT, FILE, savedDoc.getId(), new UploadAudit(savedDoc.getName(), parentFolderId, metadata))
                 .thenReturn(new UploadResponse(savedDoc.getId(), savedDoc.getName(), savedDoc.getContentType(), savedDoc.getSize()));
     }
 
 
 
-    protected Mono<Document> replaceDocumentInDB(FilePart newFilePart, String newStoragePath, String oldStoragePath, Long contentLength, Authentication auth, Document document) {
-        return doSaveDocument(auth, username -> {
+    protected Mono<Document> replaceDocumentInDB(FilePart newFilePart, String newStoragePath, String oldStoragePath, Long contentLength, Document document) {
+        return doSaveDocument(username -> {
             document.setStoragePath(newStoragePath);
             document.setContentType(newFilePart.headers().getContentType() != null ? newFilePart.headers().getContentType().toString() : APPLICATION_OCTET_STREAM);
             document.setUpdatedAt(OffsetDateTime.now());
@@ -127,7 +129,7 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
                     }
                     return Mono.just(savedDoc);
                 })
-                .flatMap(updatedDoc -> auditService.logAction(auth, REPLACE_DOCUMENT_CONTENT, FILE, updatedDoc.getId(),
+                .flatMap(updatedDoc -> auditService.logAction(REPLACE_DOCUMENT_CONTENT, FILE, updatedDoc.getId(),
                         new ReplaceAudit(newFilePart.filename())))
                 .thenReturn(document);
 

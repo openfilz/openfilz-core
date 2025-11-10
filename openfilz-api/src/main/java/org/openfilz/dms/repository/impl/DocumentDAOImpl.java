@@ -18,7 +18,6 @@ import org.openfilz.dms.repository.SqlQueryUtils;
 import org.openfilz.dms.utils.SqlUtils;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.r2dbc.core.DatabaseClient;
-import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -125,7 +124,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
     }
 
     @Override
-    public Flux<UUID> listDocumentIds(Authentication authentication, SearchByMetadataRequest request) {
+    public Flux<UUID> listDocumentIds(SearchByMetadataRequest request) {
         boolean metadataCriteria = request.metadataCriteria() != null && !request.metadataCriteria().isEmpty();
         boolean nameCriteria = request.name() != null && !request.name().isEmpty();
         boolean typeCriteria = request.type() != null;
@@ -139,15 +138,15 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
                 && !metadataCriteria) {
             return Flux.error(new IllegalArgumentException("All criteria cannot be empty."));
         }
-        return queryDocumentIds(authentication, request, metadataCriteria, nameCriteria, typeCriteria, parentFolderCriteria, rootOnlyCriteria);
+        return queryDocumentIds(request, metadataCriteria, nameCriteria, typeCriteria, parentFolderCriteria, rootOnlyCriteria);
     }
 
-    protected Flux<UUID> queryDocumentIds(Authentication authentication, SearchByMetadataRequest request, boolean metadataCriteria, boolean nameCriteria, boolean typeCriteria, boolean parentFolderCriteria, boolean rootOnlyCriteria) {
+    protected Flux<UUID> queryDocumentIds(SearchByMetadataRequest request, boolean metadataCriteria, boolean nameCriteria, boolean typeCriteria, boolean parentFolderCriteria, boolean rootOnlyCriteria) {
         StringBuilder sql = new StringBuilder(selectDocumentIds);
         appendMetadataFilter(sql, metadataCriteria, nameCriteria, typeCriteria, parentFolderCriteria, rootOnlyCriteria);
         DatabaseClient.GenericExecuteSpec query = databaseClient.sql(sql.toString());
         query = bindMetadataFilter(request, query, metadataCriteria, nameCriteria, typeCriteria, parentFolderCriteria);
-        return executeSearchDocumentIdsQuery(authentication, query, mapId());
+        return executeSearchDocumentIdsQuery(query, mapId());
     }
 
     protected DatabaseClient.GenericExecuteSpec bindMetadataFilter(SearchByMetadataRequest request, DatabaseClient.GenericExecuteSpec query, boolean metadataCriteria, boolean nameCriteria, boolean typeCriteria, boolean parentFolderCriteria) {
@@ -209,7 +208,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
     }
 
     @Override
-    public Flux<ChildElementInfo> getElementsAndChildren(List<UUID> documentIds, Authentication auth) {
+    public Flux<ChildElementInfo> getElementsAndChildren(List<UUID> documentIds) {
         return databaseClient.sql("""
                 SELECT
                     id,
@@ -226,7 +225,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
     }
 
     @Override
-    public Flux<FolderElementInfo> listDocumentInfoInFolder(Authentication authentication, UUID parentFolderId, DocumentType type) {
+    public Flux<FolderElementInfo> listDocumentInfoInFolder(UUID parentFolderId, DocumentType type) {
         StringBuilder sql = buildListDocumentInfoInFolderQuery(parentFolderId, type);
         DatabaseClient.GenericExecuteSpec query = databaseClient.sql(sql.toString());
         if(parentFolderId != null) {
@@ -235,14 +234,14 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
         if(type != null) {
             query = query.bind(TYPE, type.toString());
         }
-        return executeListDocumentInfoQuery(authentication, query, mapFolderElementInfo());
+        return executeListDocumentInfoQuery(query, mapFolderElementInfo());
     }
 
-    protected  <T> Flux<T> executeListDocumentInfoQuery(Authentication authentication, DatabaseClient.GenericExecuteSpec query, Function<Readable, T> mappingFunction) {
+    protected  <T> Flux<T> executeListDocumentInfoQuery(DatabaseClient.GenericExecuteSpec query, Function<Readable, T> mappingFunction) {
         return query.map(mappingFunction).all();
     }
 
-    protected  <T> Flux<T> executeSearchDocumentIdsQuery(Authentication authentication, DatabaseClient.GenericExecuteSpec query, Function<Readable, T> mappingFunction) {
+    protected  <T> Flux<T> executeSearchDocumentIdsQuery(DatabaseClient.GenericExecuteSpec query, Function<Readable, T> mappingFunction) {
        return query.map(mappingFunction).all();
     }
 
@@ -263,7 +262,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
     }
 
     @Override
-    public Mono<Long> countDocument(Authentication authentication, UUID parentId) {
+    public Mono<Long> countDocument(UUID parentId) {
         return parentId == null ? documentRepository.countDocumentByParentIdIsNull()
                 : documentRepository.countDocumentByParentIdEquals(parentId);
     }
@@ -297,27 +296,27 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
     }
 
     @Override
-    public Mono<Boolean> existsByNameAndParentId(Authentication authentication, String name, UUID parentId) {
+    public Mono<Boolean> existsByNameAndParentId(String name, UUID parentId) {
         return parentId == null ? documentRepository.existsByNameAndParentIdIsNull(name) : documentRepository.existsByNameAndParentId(name, parentId);
     }
 
     @Override
-    public Mono<Boolean> existsByIdAndType(Authentication authentication, UUID id, DocumentType type, AccessType accessType) {
+    public Mono<Boolean> existsByIdAndType(UUID id, DocumentType type, AccessType accessType) {
         return documentRepository.existsByIdAndType(id, type);
     }
 
     @Override
-    public Mono<Document> getFolderToDelete(Authentication auth, UUID folderId) {
+    public Mono<Document> getFolderToDelete(UUID folderId) {
         return documentRepository.findByIdAndType(folderId, FOLDER);
     }
 
     @Override
-    public Flux<Document> findDocumentsByParentIdAndType(Authentication auth, @Nonnull UUID folderId, @Nonnull DocumentType documentType) {
+    public Flux<Document> findDocumentsByParentIdAndType(@Nonnull UUID folderId, @Nonnull DocumentType documentType) {
         return documentRepository.findByParentIdAndType(folderId, documentType);
     }
 
     @Override
-    public Mono<Document> findById(UUID documentId, Authentication authentication, AccessType accessType) {
+    public Mono<Document> findById(UUID documentId, AccessType accessType) {
         return documentRepository.findById(documentId);
     }
 
