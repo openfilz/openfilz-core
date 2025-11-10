@@ -7,16 +7,15 @@ import org.openfilz.dms.dto.request.SearchByAuditLogRequest;
 import org.openfilz.dms.enums.AuditAction;
 import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.enums.SortOrder;
-import org.springframework.security.core.Authentication;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.UUID;
 
 public interface AuditService {
-    Mono<Void> logAction(Authentication authentication, AuditAction action, DocumentType resourceType, UUID resourceId, AuditLogDetails details);
+    Mono<Void> logAction(AuditAction action, DocumentType resourceType, UUID resourceId, AuditLogDetails details);
 
-    Mono<Void> logAction(Authentication authentication, AuditAction action, DocumentType resourceType, UUID resourceId);
+    Mono<Void> logAction(AuditAction action, DocumentType resourceType, UUID resourceId);
 
     Flux<AuditLog> getAuditTrail(UUID resourceId, SortOrder sort);
 

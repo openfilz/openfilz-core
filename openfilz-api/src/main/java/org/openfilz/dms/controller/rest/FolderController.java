@@ -14,7 +14,6 @@ import org.openfilz.dms.dto.response.FolderResponse;
 import org.openfilz.dms.service.DocumentService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -31,37 +30,37 @@ public class FolderController {
 
     @PostMapping
     @Operation(summary = "Create a new folder", description = "Creates a new folder, optionally under a parent folder.")
-    public Mono<ResponseEntity<FolderResponse>> createFolder(@Valid @RequestBody CreateFolderRequest request, Authentication authentication) {
-        return documentService.createFolder(request, authentication)
+    public Mono<ResponseEntity<FolderResponse>> createFolder(@Valid @RequestBody CreateFolderRequest request) {
+        return documentService.createFolder(request)
                 .map(folderResponse -> ResponseEntity.status(HttpStatus.CREATED).body(folderResponse));
     }
 
     @PostMapping("/move")
     @Operation(summary = "Move folders", description = "Moves a set of folders (and their contents) into an existing target folder.")
-    public Mono<ResponseEntity<Void>> moveFolders(@Valid @RequestBody MoveRequest request, Authentication authentication) {
-        return documentService.moveFolders(request, authentication)
+    public Mono<ResponseEntity<Void>> moveFolders(@Valid @RequestBody MoveRequest request) {
+        return documentService.moveFolders(request)
                 .thenReturn(ResponseEntity.ok().build());
     }
 
     @PostMapping("/copy")
     @Operation(summary = "Copy folders", description = "Copies a set of folders (and their contents) into an existing target folder.")
-    public Mono<ResponseEntity<Void>> copyFolders(@Valid @RequestBody CopyRequest request, Authentication authentication) {
-        return documentService.copyFolders(request, authentication)
+    public Mono<ResponseEntity<Void>> copyFolders(@Valid @RequestBody CopyRequest request) {
+        return documentService.copyFolders(request)
                 .last().thenReturn(ResponseEntity.ok().build());
     }
 
     @PutMapping("/{folderId}/rename")
     @Operation(summary = "Rename a folder", description = "Renames an existing folder.")
-    public Mono<ResponseEntity<ElementInfo>> renameFolder(@PathVariable UUID folderId, @Valid @RequestBody RenameRequest request, Authentication authentication) {
-        return documentService.renameFolder(folderId, request, authentication)
+    public Mono<ResponseEntity<ElementInfo>> renameFolder(@PathVariable UUID folderId, @Valid @RequestBody RenameRequest request) {
+        return documentService.renameFolder(folderId, request)
                 .map(doc -> new ElementInfo(doc.getId(), doc.getName(), doc.getType().name()))
                 .map(ResponseEntity::ok);
     }
 
     @DeleteMapping
     @Operation(summary = "Delete folders", description = "Deletes a set of folders and their contents from storage and database.")
-    public Mono<ResponseEntity<Void>> deleteFolders(@Valid @RequestBody DeleteRequest request, Authentication authentication) {
-        return documentService.deleteFolders(request, authentication)
+    public Mono<ResponseEntity<Void>> deleteFolders(@Valid @RequestBody DeleteRequest request) {
+        return documentService.deleteFolders(request)
                 .thenReturn(ResponseEntity.noContent().build());
     }
 
@@ -72,9 +71,8 @@ public class FolderController {
     public Flux<FolderElementInfo> listFolder(
             @RequestParam(required = false) @Parameter(description = "if null, empty or not provided, then lists the content of the root folder") UUID folderId,
             @RequestParam(required = false, defaultValue = "false") @Parameter(description = "if true, only files are listed") Boolean onlyFiles,
-            @RequestParam(required = false, defaultValue = "false") @Parameter(description = "if true, only folders are listed") Boolean onlyFolders,
-            Authentication authentication) {
-        return documentService.listFolderInfo(folderId, onlyFiles, onlyFolders, authentication);
+            @RequestParam(required = false, defaultValue = "false") @Parameter(description = "if true, only folders are listed") Boolean onlyFolders) {
+        return documentService.listFolderInfo(folderId, onlyFiles, onlyFolders);
     }
 
     @Deprecated
@@ -82,7 +80,7 @@ public class FolderController {
     @Operation(summary = "Count files and subfolders contained in a given folder - return 0 if empty or not exists",
             description = "Retrieves the number of elements (files and folders) contained in a given folder - return 0 if empty or not exists" +
                     "(no recursive count, just count the flat list of objects at the root level of a folder)")
-    public Mono<Long> countFolderElements(@RequestParam(required = false) @Parameter(description = "ID of the folder or to count elements at the root level") UUID folderId, Authentication authentication) {
-        return documentService.countFolderElements(folderId, authentication);
+    public Mono<Long> countFolderElements(@RequestParam(required = false) @Parameter(description = "ID of the folder or to count elements at the root level") UUID folderId) {
+        return documentService.countFolderElements(folderId);
     }
 }

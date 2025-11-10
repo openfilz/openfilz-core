@@ -11,7 +11,6 @@ import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.enums.SortOrder;
 import org.openfilz.dms.repository.AuditDAO;
 import org.openfilz.dms.service.AuditService;
-import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -26,13 +25,13 @@ public class AuditServiceImpl implements AuditService {
     private final AuditDAO auditDAO;
 
     @Override
-    public Mono<Void> logAction(Authentication auth, AuditAction action, DocumentType resourceType, UUID resourceId, AuditLogDetails details) {
-        return auditDAO.logAction(auth, action, resourceType, resourceId, details);
+    public Mono<Void> logAction(AuditAction action, DocumentType resourceType, UUID resourceId, AuditLogDetails details) {
+        return auditDAO.logAction(action, resourceType, resourceId, details);
     }
 
     @Override
-    public Mono<Void> logAction(Authentication auth, AuditAction action, DocumentType resourceType, UUID resourceId) {
-        return auditDAO.logAction(auth, action, resourceType, resourceId, null);
+    public Mono<Void> logAction(AuditAction action, DocumentType resourceType, UUID resourceId) {
+        return auditDAO.logAction(action, resourceType, resourceId, null);
     }
 
     @Override

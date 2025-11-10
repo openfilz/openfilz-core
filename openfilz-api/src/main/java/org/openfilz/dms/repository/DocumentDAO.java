@@ -7,7 +7,6 @@ import org.openfilz.dms.dto.response.FolderElementInfo;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.AccessType;
 import org.openfilz.dms.enums.DocumentType;
-import org.springframework.security.core.Authentication;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -15,25 +14,25 @@ import java.util.List;
 import java.util.UUID;
 
 public interface DocumentDAO {
-    Flux<UUID> listDocumentIds(Authentication authentication, SearchByMetadataRequest request);
+    Flux<UUID> listDocumentIds(SearchByMetadataRequest request);
 
     Flux<ChildElementInfo> getChildren(UUID folderId);
 
-    Flux<ChildElementInfo> getElementsAndChildren(List<UUID> documentIds, Authentication auth);
+    Flux<ChildElementInfo> getElementsAndChildren(List<UUID> documentIds);
 
-    Flux<FolderElementInfo> listDocumentInfoInFolder(Authentication authentication, UUID parentFolderId, DocumentType type);
+    Flux<FolderElementInfo> listDocumentInfoInFolder(UUID parentFolderId, DocumentType type);
 
-    Mono<Long> countDocument(Authentication authentication, UUID parentId);
+    Mono<Long> countDocument(UUID parentId);
 
-    Mono<Boolean> existsByNameAndParentId(Authentication authentication, String name, UUID parentId);
+    Mono<Boolean> existsByNameAndParentId(String name, UUID parentId);
 
-    Mono<Boolean> existsByIdAndType(Authentication authentication, UUID id, DocumentType type, AccessType accessType);
+    Mono<Boolean> existsByIdAndType(UUID id, DocumentType type, AccessType accessType);
 
-    Mono<Document> getFolderToDelete(Authentication auth, UUID folderId);
+    Mono<Document> getFolderToDelete(UUID folderId);
 
-    Flux<Document> findDocumentsByParentIdAndType(Authentication auth, @Nonnull UUID folderId, @Nonnull DocumentType documentType);
+    Flux<Document> findDocumentsByParentIdAndType(@Nonnull UUID folderId, @Nonnull DocumentType documentType);
 
-    Mono<Document> findById(UUID documentId, Authentication authentication, AccessType accessType);
+    Mono<Document> findById(UUID documentId, AccessType accessType);
 
     Mono<Document> update(Document document);
 
