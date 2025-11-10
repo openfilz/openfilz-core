@@ -3,7 +3,6 @@ package org.openfilz.dms.e2e;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.openfilz.dms.config.GraphQlQueryConfig;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.audit.AuditLog;
 import org.openfilz.dms.dto.request.*;
@@ -13,7 +12,6 @@ import org.openfilz.dms.dto.response.FolderResponse;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.enums.SortOrder;
-import org.openfilz.dms.utils.SqlUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.ParameterizedTypeReference;
@@ -25,6 +23,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
+import org.springframework.http.codec.json.Jackson2JsonEncoder;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.test.web.reactive.server.WebTestClient;
@@ -84,6 +83,10 @@ public class LocalStorageIT extends TestContainersBaseConfig {
         }
     }
 
+    public LocalStorageIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
+        super(webTestClient, customJackson2JsonEncoder);
+    }
+
     private static String calculateSha256ChecksumNIO(Path filePath) throws NoSuchAlgorithmException, IOException {
 
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -102,9 +105,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
 
     }
 
-    public LocalStorageIT(WebTestClient webTestClient) {
-        super(webTestClient);
-    }
+
 
     protected String getUsername() {
         return username;
@@ -339,7 +340,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
     }
 
     private boolean checkDocById(ClientGraphQlResponse doc, UploadResponse uploadedFile) {
-        Map<String, Object> items = ((Map<String, Map<String, Object>>) doc.getData()).get(GraphQlQueryConfig.DOCUMENT_BY_ID);
+        Map<String, Object> items = ((Map<String, Map<String, Object>>) doc.getData()).get("documentById");
         return items.get("id").equals(uploadedFile.id().toString()) && items.get("name").equals(uploadedFile.name()) && items.get("contentType").equals(uploadedFile.contentType()) && Long.valueOf(items.get("size").toString()).equals(uploadedFile.size());
     }
 
@@ -386,10 +387,10 @@ public class LocalStorageIT extends TestContainersBaseConfig {
                 "tes",
                 Map.of("testId", uuid0.toString()),
                 testTxtSize,
-                SqlUtils.dateToString(OffsetDateTime.now().minusDays(1L)),
+                OffsetDateTime.now().minusDays(1L),
                 null, //OffsetDateTime.now().plusHours(1L),
                 null, //OffsetDateTime.now().minusHours(1L),
-                SqlUtils.dateToString(OffsetDateTime.now().plusDays(1L)),
+                OffsetDateTime.now().plusDays(1L),
                 getUsername()
                 , getUsername(),
                 new PageCriteria(null, null, 1, 100));
@@ -464,10 +465,10 @@ public class LocalStorageIT extends TestContainersBaseConfig {
                 null,
                 Map.of("testId", uuid0.toString()),
                 testTxtSize,
-                SqlUtils.dateToString(OffsetDateTime.now().minusHours(1L)),
-                SqlUtils.dateToString(OffsetDateTime.now().plusHours(1L)),
-                SqlUtils.dateToString(OffsetDateTime.now().minusHours(1L)),
-                SqlUtils.dateToString( OffsetDateTime.now().plusHours(1L)),
+                OffsetDateTime.now().minusHours(1L),
+                OffsetDateTime.now().plusHours(1L),
+                OffsetDateTime.now().minusHours(1L),
+                OffsetDateTime.now().plusHours(1L),
                 getUsername(),
                 getUsername(),
                 new PageCriteria(null, null, 1, 100));
@@ -507,8 +508,8 @@ public class LocalStorageIT extends TestContainersBaseConfig {
                 Map.of("testId", uuid0.toString()),
                 testTxtSize,
                 null,
-                SqlUtils.dateToString(OffsetDateTime.now().plusHours(1L)),
-                SqlUtils.dateToString(OffsetDateTime.now().minusHours(1L)),
+                OffsetDateTime.now().plusHours(1L),
+                OffsetDateTime.now().minusHours(1L),
                 null,
                 getUsername(),
                 getUsername(),

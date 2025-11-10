@@ -3,12 +3,13 @@ package org.openfilz.dms.repository.graphql;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import graphql.schema.DataFetchingEnvironment;
 import lombok.extern.slf4j.Slf4j;
-import org.openfilz.dms.config.GraphQlQueryConfig;
 import org.openfilz.dms.dto.request.ListFolderRequest;
 import org.openfilz.dms.dto.response.FullDocumentInfo;
 import org.openfilz.dms.mapper.DocumentMapper;
 import org.openfilz.dms.utils.SqlUtils;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.r2dbc.core.DatabaseClient;
+import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
@@ -17,7 +18,9 @@ import static org.openfilz.dms.utils.SqlUtils.FROM_DOCUMENTS;
 import static org.openfilz.dms.utils.SqlUtils.SPACE;
 
 @Slf4j
-public class ListFolderDataFetcher extends AbstractListDataFetcher<Flux<FullDocumentInfo>, FullDocumentInfo> {
+@Service
+@ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
+public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentInfo> {
 
 
     protected final ListFolderCriteria criteria;
@@ -27,25 +30,16 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<Flux<FullDocu
     public ListFolderDataFetcher(DatabaseClient databaseClient, DocumentMapper mapper, ObjectMapper objectMapper, SqlUtils sqlUtils, ListFolderCriteria listFolderCriteria) {
         super(databaseClient, mapper, objectMapper, sqlUtils);
         this.criteria = listFolderCriteria;
-        initFromClause();
     }
 
-    protected void initFromClause() {
+    @Override
+    protected void initFromWhereClause() {
         fromClause = FROM_DOCUMENTS;
     }
 
-
     @Override
-    public Flux<FullDocumentInfo> get(DataFetchingEnvironment environment) throws Exception {
-        if(environment.getArguments() == null) {
-            throw new IllegalArgumentException("Arguments are required");
-        }
-        Object request = environment.getArguments().get(GraphQlQueryConfig.GRAPHQL_REQUEST);
-        if(request == null) {
-            throw new IllegalArgumentException("At least paging information is required");
-        }
+    public Flux<FullDocumentInfo> get(ListFolderRequest filter, DataFetchingEnvironment environment) {
         List<String> sqlFields = getSqlFields(environment);
-        ListFolderRequest filter = getFilter(request);
         if(filter.pageInfo() == null || filter.pageInfo().pageSize() == null || filter.pageInfo().pageNumber() == null) {
             throw new IllegalArgumentException("Paging information must be provided");
         }

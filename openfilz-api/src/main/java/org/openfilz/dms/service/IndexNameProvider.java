@@ -11,4 +11,6 @@ public interface IndexNameProvider {
     String getIndexName(Document document);
 
     String getIndexName(UUID documentId);
+
+    String getDocumentsIndexName();
 }

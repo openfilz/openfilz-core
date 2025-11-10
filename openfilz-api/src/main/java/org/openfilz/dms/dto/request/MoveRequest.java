@@ -5,7 +5,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.UUID;
 
-import static org.openfilz.dms.controller.ApiDescription.ALLOW_DUPLICATE_FILE_NAME_PARAM_DESCRIPTION;
+import static org.openfilz.dms.controller.rest.ApiDescription.ALLOW_DUPLICATE_FILE_NAME_PARAM_DESCRIPTION;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record MoveRequest(

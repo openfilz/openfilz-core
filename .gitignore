@@ -1,1 +1,10 @@
-
+/**/target/*
+/.idea/**
+/**/dist/**
+/**/node_modules/**
+/**/.angular/**
+.gitignore
+.gitmodules
+/**/*.iml
+/**/logs/**
+/**/dist/*

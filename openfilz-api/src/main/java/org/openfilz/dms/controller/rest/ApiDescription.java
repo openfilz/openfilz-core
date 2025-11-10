@@ -1,4 +1,4 @@
-package org.openfilz.dms.controller;
+package org.openfilz.dms.controller.rest;
 
 public interface ApiDescription {
 

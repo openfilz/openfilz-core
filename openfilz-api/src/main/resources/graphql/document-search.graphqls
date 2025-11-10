@@ -1,0 +1,41 @@
+# The document type returned by the search
+type DocumentSearchInfo {
+    id: ID!
+    name: String!
+    contentType: String
+    size: Long
+    parentId: ID
+    createdAt: DateTime
+    updatedAt: DateTime
+    createdBy: String
+    updatedBy: String
+    contentSnippet: String # return a snippet instead of the full content
+}
+
+# The response object containing results and pagination info
+type DocumentSearchResult {
+    totalHits: Int!
+    documents: [DocumentSearchInfo!]!
+}
+
+# Input for filtering
+input FilterInput {
+    field: String!
+    value: String!
+}
+
+# Input for sorting
+input SortInput {
+    field: String!
+    order: SortOrder = DESC
+}
+
+extend type Query {
+    searchDocuments(
+        query: String,
+        filters: [FilterInput!],
+        sort: SortInput,
+        page: Int = 0,
+        size: Int = 20
+    ): DocumentSearchResult
+}

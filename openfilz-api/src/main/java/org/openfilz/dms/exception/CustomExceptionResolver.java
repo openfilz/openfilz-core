@@ -27,7 +27,8 @@ public class CustomExceptionResolver extends DataFetcherExceptionResolverAdapter
     }
 
     private ErrorClassification getErrorType(Throwable ex) {
-        if(ex instanceof IllegalArgumentException || ex instanceof WebExchangeBindException || ex instanceof AuditException) {
+        if(ex instanceof IllegalArgumentException || ex instanceof WebExchangeBindException
+                || ex instanceof AuditException || ex instanceof VirusFoundException) {
             return ErrorType.BAD_REQUEST;
         }
         if(ex instanceof DocumentNotFoundException) {

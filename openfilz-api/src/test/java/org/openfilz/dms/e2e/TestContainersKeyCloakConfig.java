@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dasniko.testcontainers.keycloak.KeycloakContainer;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.codec.json.Jackson2JsonEncoder;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -16,6 +17,10 @@ public abstract class TestContainersKeyCloakConfig extends TestContainersBaseCon
     @Container
     static final KeycloakContainer keycloak = new KeycloakContainer()
             .withRealmImportFile("keycloak/realm-export.json").withReuse(true);
+
+    public TestContainersKeyCloakConfig(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
+        super(webTestClient, customJackson2JsonEncoder);
+    }
 
     protected static String getAccessToken(String username) {
         return WebClient.builder()
@@ -43,7 +48,4 @@ public abstract class TestContainersKeyCloakConfig extends TestContainersBaseCon
                 .block();
     }
 
-    public TestContainersKeyCloakConfig(WebTestClient webTestClient) {
-        super(webTestClient);
-    }
 }

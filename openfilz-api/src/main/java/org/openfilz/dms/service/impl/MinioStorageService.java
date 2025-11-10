@@ -2,7 +2,7 @@
 package org.openfilz.dms.service.impl;
 
 import io.minio.*;
-import io.minio.errors.*;
+import io.minio.errors.ErrorResponseException;
 import io.minio.messages.ObjectLockConfiguration;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -22,8 +22,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
-import java.security.InvalidKeyException;
-import java.security.NoSuchAlgorithmException;
 
 @Slf4j
 @Service
@@ -56,7 +54,6 @@ public class MinioStorageService implements StorageService {
                 .endpoint(endpoint)
                 .credentials(accessKey, secretKey)
                 .build();
-        this.bucketName = bucketName;
         ensureBucketExists();
     }
 

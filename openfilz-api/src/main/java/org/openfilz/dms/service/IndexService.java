@@ -9,6 +9,14 @@ import java.util.UUID;
 
 public interface IndexService {
 
+    default String removeFileExtension(String name) {
+        int endIndex = name.lastIndexOf(".");
+        if(endIndex > 0) {
+            return name.substring(0, endIndex);
+        }
+        return name;
+    }
+
     Mono<Void> updateMetadata(Document document);
 
     Mono<Void> copyIndex(UUID sourceFileId, Document createdDocument);
