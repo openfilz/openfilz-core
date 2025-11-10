@@ -744,7 +744,6 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                 });
     }
 
-    // Utility method to find a document
     @Override
     public Mono<Document> findDocumentToDownloadById(UUID documentId) {
         return documentDAO.findById(documentId, AccessType.RO)

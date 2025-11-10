@@ -52,11 +52,11 @@ public interface DocumentService {
 
     Mono<Map<String, Object>> getDocumentMetadata(UUID documentId, SearchMetadataRequest request);
 
-    Mono<Document> findDocumentToDownloadById(UUID documentIdentication); // Utility
+    Mono<Document> findDocumentToDownloadById(UUID documentId); // Utility
 
-    Mono<DocumentInfo> getDocumentInfo(UUID documentId, Boolean withMetadataentication);
+    Mono<DocumentInfo> getDocumentInfo(UUID documentId, Boolean withMetadata);
 
-    Flux<FolderElementInfo> listFolderInfo(UUID folderId, Boolean onlyFiles, Boolean onlyFoldersentication);
+    Flux<FolderElementInfo> listFolderInfo(UUID folderId, Boolean onlyFiles, Boolean onlyFolders);
 
-    Mono<Long> countFolderElements(UUID folderIdentication);
+    Mono<Long> countFolderElements(UUID folderId);
 }
