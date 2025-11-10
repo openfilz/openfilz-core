@@ -19,7 +19,7 @@ import java.util.List;
 @ConditionalOnProperty(name = "openfilz.full-text.active", havingValue = "true")
 public class DocumentSearchGraphQlController {
 
-    private final DocumentSearchService documentSearchService; // You can reuse the service logic
+    private final DocumentSearchService documentSearchService;
 
     @QueryMapping
     public Mono<DocumentSearchResult> searchDocuments(
@@ -29,8 +29,6 @@ public class DocumentSearchGraphQlController {
             @Argument int page,
             @Argument int size) {
         
-        // The service method would be adapted to take these typed inputs
-        // instead of a raw MultiValueMap. This is much cleaner.
         return documentSearchService.search(query, filters, sort, page, size);
     }
 }
