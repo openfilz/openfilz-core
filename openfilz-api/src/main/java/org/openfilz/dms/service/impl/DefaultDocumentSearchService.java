@@ -105,7 +105,7 @@ public class DefaultDocumentSearchService implements DocumentSearchService {
                 toDocumentType(map),
                 ContentTypeMapper.getContentType(map.get(FILTER_EXTENSION)),
                 null,
-                query != null ? query.toLowerCase() : null,
+                query,
                 totMetadataMap(map),
                 toLong(map),
                 toDate(map, FILTER_CREATED_AT_AFTER),
