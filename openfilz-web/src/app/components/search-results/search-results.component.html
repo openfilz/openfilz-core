@@ -1,0 +1,29 @@
+<div class="search-results-container">
+  <app-toolbar
+    [viewMode]="viewMode"
+    [totalItems]="totalItems"
+    (viewModeChange)="onViewModeChange($event)">
+  </app-toolbar>
+
+  <div class="search-results-content">
+    <h2>Search results for "{{ searchQuery }}"</h2>
+    @if(!loading) {
+      @if(items.length === 0) {
+        <div class="empty-state">
+          <p>No results found.</p>
+        </div>
+      }
+      @if(viewMode === 'grid' && items.length > 0) {
+        <app-file-grid [items]="items"></app-file-grid>
+      }
+      @if(viewMode === 'list' && items.length > 0) {
+        <app-file-list [items]="items"></app-file-list>
+      }
+    } @else {
+      <div class="loading-container">
+        <mat-spinner></mat-spinner>
+        <p>Searching...</p>
+      </div>
+    }
+  </div>
+</div>
