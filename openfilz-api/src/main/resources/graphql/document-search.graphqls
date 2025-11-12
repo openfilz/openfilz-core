@@ -2,7 +2,7 @@
 type DocumentSearchInfo {
     id: ID!
     name: String!
-    contentType: String
+    extension: String
     size: Long
     parentId: ID
     createdAt: DateTime

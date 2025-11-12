@@ -1,5 +1,11 @@
 export enum DocumentType {FILE = "FILE", FOLDER = "FOLDER"}
 
+export interface Suggestion {
+    id: string;
+    s: string;
+    ext?: string;
+}
+
 export interface ElementInfo {
   id: string;
   name: string;

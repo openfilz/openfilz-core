@@ -7,7 +7,7 @@ import java.util.UUID;
 
 public interface MetadataPostProcessor {
 
-    void processDocument(FilePart filePart, Document document);
+    void processDocument(Document document);
 
     void processMetadata(Document document);
 

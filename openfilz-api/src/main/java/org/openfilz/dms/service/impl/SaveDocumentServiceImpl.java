@@ -26,6 +26,7 @@ import java.util.function.Function;
 
 import static org.openfilz.dms.enums.AuditAction.REPLACE_DOCUMENT_CONTENT;
 import static org.openfilz.dms.enums.DocumentType.FILE;
+import static org.openfilz.dms.enums.DocumentType.FOLDER;
 
 @Service
 @RequiredArgsConstructor
@@ -43,11 +44,11 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
    public Mono<UploadResponse> doSaveDocument(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, Mono<String> storagePathMono) {
         return storagePathMono.flatMap(storagePath -> saveDocumentInDatabase(filePart, contentLength, parentFolderId, metadata, originalFilename, storagePath))
                 .flatMap(savedDoc -> auditUploadActionAndReturnResponse(parentFolderId, metadata,savedDoc)
-                        .doOnSuccess(_ -> postProcessDocument(filePart, savedDoc)));
+                        .doOnSuccess(_ -> postProcessDocument(savedDoc)));
     }
 
-    protected void postProcessDocument(FilePart filePart, Document document) {
-       metadataPostProcessor.processDocument(filePart, document);
+    protected void postProcessDocument(Document document) {
+       metadataPostProcessor.processDocument(document);
     }
 
     protected Mono<Document> replaceDocumentContentAndSave(FilePart newFilePart, Long contentLength, Document document, String newStoragePath, String oldStoragePath) {
@@ -55,10 +56,10 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
             return storageService.getFileLength(newStoragePath)
                     .flatMap(fileLength -> replaceDocumentInDB(newFilePart,
                             newStoragePath, oldStoragePath, fileLength,document))
-                    .doOnSuccess(savedDoc -> postProcessDocument(newFilePart, savedDoc));
+                    .doOnSuccess(savedDoc -> postProcessDocument(savedDoc));
         }
         return replaceDocumentInDB(newFilePart, newStoragePath, oldStoragePath, contentLength,document)
-                .doOnSuccess(savedDoc -> postProcessDocument(newFilePart, savedDoc));
+                .doOnSuccess(savedDoc -> postProcessDocument(savedDoc));
     }
 
     public Mono<Document> saveAndReplaceDocument(FilePart newFilePart, Long contentLength, Document document, String oldStoragePath) {
@@ -97,7 +98,11 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
                     .createdBy(username)
                     .updatedBy(username)
                     .build();
-            return documentDAO.create(document);
+            Mono<Document> documentMono = documentDAO.create(document);
+            if(document.getType() == FOLDER) {
+                return documentMono.doOnSuccess(this::postProcessDocument);
+            }
+            return documentMono;
         };
     }
 

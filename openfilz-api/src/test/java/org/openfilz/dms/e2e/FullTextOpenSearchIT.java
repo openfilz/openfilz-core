@@ -30,7 +30,6 @@ import org.opensearch.client.transport.httpclient5.ApacheHttpClient5TransportBui
 import org.opensearch.testcontainers.OpenSearchContainer;
 import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.graphql.client.ClientGraphQlResponse;
 import org.springframework.graphql.client.HttpGraphQlClient;
 import org.springframework.http.HttpMethod;
@@ -55,7 +54,6 @@ import java.security.KeyManagementException;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 
 import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
@@ -65,17 +63,15 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 @Slf4j
 @TestConstructor(autowireMode = ALL)
 @AutoConfigureWebTestClient(timeout = "30000")//10 seconds
-public class FullTextSearchIT extends TestContainersBaseConfig {
+public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
 
 
     private static OpenSearchAsyncClient openSearchAsyncClient;
 
-    protected HttpGraphQlClient graphQlHttpClient;
-
     @Container
     static OpenSearchContainer<?> openSearch = new OpenSearchContainer<>(DockerImageName.parse("opensearchproject/opensearch:latest"));
 
-    public FullTextSearchIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
+    public FullTextOpenSearchIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
         super(webTestClient, customJackson2JsonEncoder);
     }
 
@@ -119,6 +115,68 @@ public class FullTextSearchIT extends TestContainersBaseConfig {
                     .setConnectionManager(connectionManager);
         });
         openSearchAsyncClient = new OpenSearchAsyncClient(builder.build());
+    }
+
+    protected String getSuggestionQuery1() {
+        return "sample file";
+    }
+
+    protected String getSuggestionQuery2() {
+        return "meeting boss";
+    }
+
+    protected String getSearchQuery() {
+        return "wonderful day";
+    }
+
+    @Test
+    void testFullTextInPdf() throws InterruptedException {
+
+        String f0 = "pdf-example.pdf";
+
+        MultipartBodyBuilder builder = newFileBuilder(f0);
+        builder.part("metadata", Map.of("owner", "OpenFilz"));
+        UploadResponse r0 = getUploadResponse(builder);
+
+        waitFor(3000);
+
+        HttpGraphQlClient httpGraphQlClient = getGraphQlHttpClient();
+
+        var graphQlRequest = """
+                query {
+                  searchDocuments(
+                    query: "systèmes d'exploitations",
+                    page: 1,
+                    size: 20
+                  ) {
+                    totalHits
+                    documents {
+                      id                      
+                    }
+                  }
+                }""".trim();
+
+        Mono<ClientGraphQlResponse> response = httpGraphQlClient
+                .document(graphQlRequest)
+                .execute();
+
+        StepVerifier.create(response)
+                .expectNextMatches(doc->{
+                    Map<String, Object> searchDocuments = (Map<String, Object>) ((Map<String, Object>) doc.getData()).get("searchDocuments");
+                    List<Map<String, String>> documents = (List<Map<String, String>>) searchDocuments.get("documents");
+                    return  searchDocuments.get("totalHits").toString().equals("1")
+                            && documents.get(0).get("id").equals(r0.id().toString());
+                })
+                .expectComplete()
+                .verify();
+
+        DeleteRequest deleteRequest = new DeleteRequest(List.of(r0.id()));
+        getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/files")
+                .body(BodyInserters.fromValue(deleteRequest))
+                .exchange()
+                .expectStatus().isNoContent();
+
+        waitFor(3000);
     }
 
     @Test
@@ -250,185 +308,6 @@ public class FullTextSearchIT extends TestContainersBaseConfig {
         Assertions.assertEquals(0, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
     }
 
-    @Test
-    void testSuggestionsRestAPI() throws Exception {
-        String f1 = "a sample data file of december.pdf";
-        String f2 = "a sample data file of november.pdf";
-        String f3 = "Meeting with the boss.pdf";
-
-        PdfLoremGeneratorStreaming.generate("target/test-classes/" + f1, 1L);
-        MultipartBodyBuilder builder = newFileBuilder(f1);
-        UploadResponse r1 = getUploadResponse(builder);
-
-        PdfLoremGeneratorStreaming.generate("target/test-classes/" + f2, 1L);
-        builder = newFileBuilder(f2);
-        UploadResponse r2 = getUploadResponse(builder);
-
-        PdfLoremGeneratorStreaming.generate("target/test-classes/" + f3, 1L);
-        builder = newFileBuilder(f3);
-        UploadResponse r3 = getUploadResponse(builder);
-
-        waitFor(3000);
-
-        List<String> suggestions = getWebTestClient().get().uri(uri ->
-                        uri.path(RestApiVersion.API_PREFIX + "/suggestions")
-                                .queryParam("q", "sample file")
-                                .build())
-                .exchange()
-                .expectBody(new ParameterizedTypeReference<List<String>>() {
-                })
-                .returnResult().getResponseBody();
-
-        Assertions.assertNotNull(suggestions);
-        Assertions.assertEquals(2, suggestions.size());
-
-        suggestions = getWebTestClient().get().uri(uri ->
-                        uri.path(RestApiVersion.API_PREFIX + "/suggestions")
-                                .queryParam("q", "meeting boss")
-                                .build())
-                .exchange()
-                .expectBody(new ParameterizedTypeReference<List<String>>() {
-                })
-                .returnResult().getResponseBody();
-
-        Assertions.assertNotNull(suggestions);
-        Assertions.assertEquals(1, suggestions.size());
-
-        suggestions = getWebTestClient().get().uri(uri ->
-                        uri.path(RestApiVersion.API_PREFIX + "/suggestions")
-                                .queryParam("q", "")
-                                .build())
-                .exchange()
-                .expectBody(new ParameterizedTypeReference<List<String>>() {
-                })
-                .returnResult().getResponseBody();
-
-        Assertions.assertNotNull(suggestions);
-        Assertions.assertEquals(0, suggestions.size());
-
-        DeleteRequest deleteRequest = new DeleteRequest(List.of(r1.id(), r2.id(),  r3.id()));
-        getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/files")
-                .body(BodyInserters.fromValue(deleteRequest))
-                .exchange()
-                .expectStatus().isNoContent();
-
-        waitFor(3000);
-
-    }
-
-    @Test
-    void testSearchGraphQL() throws Exception {
-
-        String f0 = "pdf-example.pdf";
-        String f1 = "a sample data file of september.pdf";
-        String f2 = "a sample data file of october.pdf";
-        String f3 = "Meeting with another guy - 2025.pdf";
-
-        MultipartBodyBuilder builder = newFileBuilder(f0);
-        builder.part("metadata", Map.of("owner", "OpenFilz"));
-        UploadResponse r0 = getUploadResponse(builder);
-
-        PdfLoremGeneratorStreaming.generate("target/test-classes/" + f1, 1L);
-        builder = newFileBuilder(f1);
-        builder.part("metadata", Map.of("owner", "OpenFilz"));
-        UploadResponse r1 = getUploadResponse(builder);
-
-        PdfLoremGeneratorStreaming.generate("target/test-classes/" + f2, 1L);
-        builder = newFileBuilder(f2);
-        builder.part("metadata", Map.of("owner", "OpenFilz"));
-        UploadResponse r2 = getUploadResponse(builder);
-
-        PdfLoremGeneratorStreaming.generate("target/test-classes/" + f3, 1L);
-        builder = newFileBuilder(f3);
-        builder.part("metadata", Map.of("owner", "Nobody"));
-        UploadResponse r3 = getUploadResponse(builder);
-
-        waitFor(3000);
-
-        HttpGraphQlClient httpGraphQlClient = getGraphQlHttpClient();
-
-        var graphQlRequest = """
-                query {
-                  searchDocuments(
-                    query: "sample file",
-                    filters: [
-                      { field: "metadata.owner", value: "OpenFilz" }
-                    ],
-                    sort: { field: "updatedAt", order: DESC },
-                    page: 0,
-                    size: 20
-                  ) {
-                    totalHits
-                    documents {
-                      id
-                      name
-                      contentType
-                      updatedAt
-                      updatedBy
-                    }
-                  }
-                }""".trim();
-
-        Mono<ClientGraphQlResponse> response = httpGraphQlClient
-                .document(graphQlRequest)
-                .execute();
-
-        StepVerifier.create(response)
-                .expectNextMatches(doc->{
-                    Map<String, Object> searchDocuments = (Map<String, Object>) ((Map<String, Object>) doc.getData()).get("searchDocuments");
-                    List<Map<String, String>> documents = (List<Map<String, String>>) searchDocuments.get("documents");
-                    return  searchDocuments.get("totalHits").toString().equals("2")
-                            && documents.get(0).get("id").equals(r2.id().toString())
-                            && documents.get(1).get("id").equals(r1.id().toString())
-                            && documents.get(0).get("contentType").equals("application/pdf")
-                            && documents.get(1).get("contentType").equals("application/pdf")
-                            && documents.get(0).get("updatedBy").equals("anonymousUser")
-                            && documents.get(1).get("updatedBy").equals("anonymousUser")
-                            && documents.get(0).get("name").equals(f2)
-                            && documents.get(1).get("name").equals(f1);
-                })
-                .expectComplete()
-                .verify();
-
-
-        graphQlRequest = """
-                query {
-                  searchDocuments(
-                    query: "systèmes d'exploitations",
-                    page: 0,
-                    size: 20
-                  ) {
-                    totalHits
-                    documents {
-                      id                      
-                    }
-                  }
-                }""".trim();
-
-        response = httpGraphQlClient
-                .document(graphQlRequest)
-                .execute();
-
-        StepVerifier.create(response)
-                .expectNextMatches(doc->{
-                    Map<String, Object> searchDocuments = (Map<String, Object>) ((Map<String, Object>) doc.getData()).get("searchDocuments");
-                    List<Map<String, String>> documents = (List<Map<String, String>>) searchDocuments.get("documents");
-                    return  searchDocuments.get("totalHits").toString().equals("1")
-                            && documents.get(0).get("id").equals(r0.id().toString());
-                })
-                .expectComplete()
-                .verify();
-
-        DeleteRequest deleteRequest = new DeleteRequest(List.of(r0.id(), r1.id(), r2.id(),  r3.id()));
-        getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/files")
-                .body(BodyInserters.fromValue(deleteRequest))
-                .exchange()
-                .expectStatus().isNoContent();
-
-        waitFor(3000);
-
-    }
-
     @Disabled
     @Test
     void uploadBigPdf() throws Exception {
@@ -448,21 +327,6 @@ public class FullTextSearchIT extends TestContainersBaseConfig {
         Assertions.assertEquals(1, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
     }
 
-    private void waitFor(long timeout) throws InterruptedException {
-        CountDownLatch latch2 = new CountDownLatch(1);
-        new Thread(() -> {
-            log.info("Waiting 3 seconds...");
-            try { Thread.sleep(timeout); } catch (InterruptedException ignored) {}
-            latch2.countDown();
-        }).start();
-        latch2.await();
-    }
 
-    private HttpGraphQlClient getGraphQlHttpClient() {
-        if(graphQlHttpClient == null) {
-            graphQlHttpClient = newGraphQlClient();
-        }
-        return graphQlHttpClient;
-    }
 
 }

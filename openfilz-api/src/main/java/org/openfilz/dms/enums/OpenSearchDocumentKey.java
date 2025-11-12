@@ -4,7 +4,7 @@ public enum OpenSearchDocumentKey {
     id,
     name,
     name_suggest,
-    contentType,
+    extension,
     size,
     parentId,
     createdAt,
