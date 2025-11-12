@@ -1,5 +1,7 @@
 import {Component, ElementRef, OnInit, ViewChild} from '@angular/core';
 import {CommonModule} from '@angular/common';
+import {ActivatedRoute, Router} from '@angular/router';
+import {take} from 'rxjs';
 import {MatDialog, MatDialogModule} from '@angular/material/dialog';
 import {MatSnackBar, MatSnackBarModule} from '@angular/material/snack-bar';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
@@ -20,6 +22,7 @@ import {
     CopyRequest,
     CreateFolderRequest,
     DeleteRequest,
+    DocumentType,
     ElementInfo,
     FileItem,
     ListFolderAndCountResponse,
@@ -156,7 +159,9 @@ export class FileExplorerComponent implements OnInit {
     private fileIconService: FileIconService,
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
-    private breadcrumbService: BreadcrumbService
+    private breadcrumbService: BreadcrumbService,
+    private route: ActivatedRoute,
+    private router: Router
   ) {}
 
   ngOnInit() {
@@ -164,7 +169,15 @@ export class FileExplorerComponent implements OnInit {
     if (storedItemsPerPage) {
       this.pageSize = parseInt(storedItemsPerPage, 10);
     }
-    this.loadFolder();
+
+    this.route.queryParams.pipe(take(1)).subscribe(params => {
+      const folderId = params['folderId'];
+      if (folderId) {
+        this.loadFolderById(folderId);
+      } else {
+        this.loadFolder();
+      }
+    });
 
     // Listen for breadcrumb navigation
     this.breadcrumbService.navigation$.subscribe(folder => {
@@ -180,6 +193,38 @@ export class FileExplorerComponent implements OnInit {
           this.breadcrumbTrail = this.breadcrumbTrail.slice(0, index + 1);
           this.loadFolder(this.breadcrumbTrail[index], true);
         }
+      }
+    });
+  }
+
+  private loadFolderById(folderId: string) {
+    this.loading = true;
+    this.documentApi.getDocumentInfo(folderId).subscribe({
+      next: (folderInfo) => {
+        const folderItem: FileItem = {
+          id: folderId,
+          name: folderInfo.name,
+          type: DocumentType.FOLDER,
+          size: folderInfo.size,
+          icon: this.fileIconService.getFileIcon(folderInfo.name, 'FOLDER'),
+          selected: false
+        };
+        // This is a deep link, so we reset the breadcrumb trail
+        this.breadcrumbTrail = [folderItem];
+        this.loadFolder(folderItem, true); // fromBreadcrumb = true to use the new trail
+
+        // Clean up the URL
+        this.router.navigate([], {
+            relativeTo: this.route,
+            queryParams: {folderId: null},
+            queryParamsHandling: 'merge',
+        });
+      },
+      error: (err) => {
+        this.snackBar.open('Could not load the specified folder.', 'Close', { duration: 3000 });
+        this.loading = false;
+        this.router.navigate(['/my-folder']);
+        this.loadFolder(); // Load root folder as a fallback
       }
     });
   }
