@@ -3,6 +3,7 @@ package org.openfilz.dms.service.impl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.entity.Document;
+import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.service.FullTextService;
 import org.openfilz.dms.service.IndexService;
 import org.openfilz.dms.service.StorageService;
@@ -32,10 +33,27 @@ public class LocalFullTextServiceImpl implements FullTextService {
     private final StorageService storageService;
 
     @Override
-    public void indexDocument(FilePart filePart, Document document) {
+    public void indexDocument(Document document) {
+        if(document.getType() == DocumentType.FILE) {
+            indexFile(document);
+        } else {
+            indexFolder(document);
+        }
+    }
+
+    private void indexFolder(Document document) {
+        indexDocMetadataMono(document)
+                .subscribe();
+    }
+
+    private Mono<Void> indexDocMetadataMono(Document document) {
+        return indexService.indexMetadata(document.getId(), indexService.newOpenSearchDocumentMetadata(document));
+    }
+
+    private void indexFile(Document document) {
         try {
             Path tempFile = Files.createTempFile("upload-opf", ".tmp");
-            indexService.indexMetadata(document.getId(), indexService.newOpenSearchDocumentMetadata(document))
+            indexDocMetadataMono(document)
                     .then(tikaService.processResource(tempFile, storageService.loadFile(document.getStoragePath()))
                             .as(flux -> indexService.indexDocumentStream(flux, document.getId()))
                     )

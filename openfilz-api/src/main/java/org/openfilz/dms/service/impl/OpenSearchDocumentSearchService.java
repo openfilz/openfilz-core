@@ -1,10 +1,12 @@
 package org.openfilz.dms.service.impl;
 
+import graphql.schema.DataFetchingEnvironment;
 import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.dto.request.FilterInput;
 import org.openfilz.dms.dto.request.SortInput;
 import org.openfilz.dms.dto.response.DocumentSearchInfo;
 import org.openfilz.dms.dto.response.DocumentSearchResult;
+import org.openfilz.dms.enums.OpenSearchDocumentKey;
 import org.openfilz.dms.enums.SortOrder;
 import org.openfilz.dms.exception.OpenSearchException;
 import org.openfilz.dms.service.DocumentSearchService;
@@ -31,9 +33,14 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @ConditionalOnProperty(name = "openfilz.full-text.active", havingValue = "true")
-public class DocumentSearchServiceImpl implements DocumentSearchService {
+public class OpenSearchDocumentSearchService implements DocumentSearchService {
 
     public static final String KEYWORD = ".keyword";
+    public static final String CONTENT = OpenSearchDocumentKey.content.toString();
+    public static final String NAME = OpenSearchDocumentKey.name.toString();
+    public static final String EXTENSION = OpenSearchDocumentKey.extension.toString();
+    public static final String CREATED_BY = OpenSearchDocumentKey.createdBy.toString();
+    public static final String UPDATED_BY = OpenSearchDocumentKey.updatedBy.toString();
     private final IndexNameProvider indexNameProvider;
     private final OpenSearchAsyncClient client;
 
@@ -43,8 +50,10 @@ public class DocumentSearchServiceImpl implements DocumentSearchService {
      * @return A Mono emitting the search result.
      */
     @Override
-    public Mono<DocumentSearchResult> search(String query, List<FilterInput> filters, SortInput sort, int page, int size) {
-
+    public Mono<DocumentSearchResult> search(String query, List<FilterInput> filters, SortInput sort, int page, int size, DataFetchingEnvironment environment) {
+        if(page < 1 ) {
+            throw new IllegalArgumentException("page must be equals or greater than 1");
+        }
         // 1. Build the main Search Request
         SearchRequest.Builder requestBuilder = new SearchRequest.Builder();
         requestBuilder.index(indexNameProvider.getDocumentsIndexName());
@@ -57,7 +66,7 @@ public class DocumentSearchServiceImpl implements DocumentSearchService {
         if (StringUtils.hasText(query)) {
             boolQueryBuilder.must(m -> m.multiMatch(mm -> mm
                     .query(query)
-                    .fields("content", "name") // Search in both content and name
+                    .fields(CONTENT, NAME) // Search in both content and name
             ));
         }
 
@@ -91,7 +100,8 @@ public class DocumentSearchServiceImpl implements DocumentSearchService {
 
             // Again, use .keyword for sorting on text fields to sort alphabetically, not by relevance.
             String sortField = sort.field();
-            if ("name".equals(sortField) || "contentType".equals(sortField) || "createdBy".equals(sortField)) {
+            if (NAME.equals(sortField) || EXTENSION.equals(sortField)
+                    || CREATED_BY.equals(sortField) || UPDATED_BY.equals(sortField)) {
                 sortField += KEYWORD;
             }
 
@@ -100,10 +110,12 @@ public class DocumentSearchServiceImpl implements DocumentSearchService {
         }
 
         // 6. Add Pagination
-        requestBuilder.from(page * size).size(size);
+        requestBuilder.from((page - 1) * size).size(size);
 
         // 7. Execute the request asynchronously
-        SearchRequest searchRequest = requestBuilder.source(fn -> fn.filter(v -> v.excludes("name_suggest", "metadata", "content"))).build();
+        SearchRequest searchRequest = requestBuilder
+                .source(fn -> fn.filter(v ->
+                        v.excludes("name_suggest", "metadata", "content"))).build();
         try {
             return Mono.fromFuture(client.search(searchRequest, DocumentSearchInfo.class))
                     .map(this::toDocumentSearchResult); // Convert the response to our DTO

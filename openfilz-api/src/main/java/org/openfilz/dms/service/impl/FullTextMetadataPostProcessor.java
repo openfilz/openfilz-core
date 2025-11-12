@@ -18,8 +18,8 @@ public class FullTextMetadataPostProcessor implements MetadataPostProcessor {
     protected final FullTextService fullTextService;
 
     @Override
-    public void processDocument(FilePart filePart, Document document) {
-        fullTextService.indexDocument(filePart, document);
+    public void processDocument(Document document) {
+        fullTextService.indexDocument(document);
     }
 
     @Override

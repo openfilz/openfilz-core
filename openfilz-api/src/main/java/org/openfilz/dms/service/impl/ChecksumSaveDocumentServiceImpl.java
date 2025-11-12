@@ -36,7 +36,7 @@ public class ChecksumSaveDocumentServiceImpl extends SaveDocumentServiceImpl {
                 .flatMap(storagePath -> checksumService.calculateChecksum(storagePath, metadata))
                 .flatMap(checksum -> saveDocumentInDatabase(filePart, contentLength, parentFolderId, checksum.metadataWithChecksum(), originalFilename, checksum.storagePath()))
                 .flatMap(savedDoc -> auditUploadActionAndReturnResponse(parentFolderId, metadata, savedDoc)
-                        .doOnSuccess(_ -> postProcessDocument(filePart, savedDoc)));
+                        .doOnSuccess(_ -> postProcessDocument(savedDoc)));
     }
 
     @Override
@@ -47,7 +47,7 @@ public class ChecksumSaveDocumentServiceImpl extends SaveDocumentServiceImpl {
                     document.setMetadata(jsonUtils.toJson(checksum.metadataWithChecksum()));
                     return super.replaceDocumentContentAndSave(newFilePart, contentLength, document, newStoragePath, oldStoragePath);
                 })
-                .doOnSuccess(savedDoc -> postProcessDocument(newFilePart, savedDoc));
+                .doOnSuccess(savedDoc -> postProcessDocument(savedDoc));
     }
 
 }

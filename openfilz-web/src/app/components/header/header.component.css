@@ -1,89 +1,207 @@
 .header {
-  background-color: var(--bg-primary);
-  border-bottom: 1px solid var(--border-color);
-  padding: 16px 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 64px;
-  box-shadow: var(--shadow-sm);
-  margin-bottom: 0;
-  position: fixed;
-  top: 0;
-  left: 240px; /* Sidebar width */
-  right: 0;
-  transition: left 0.3s ease;
+    background-color: var(--bg-primary);
+    border-bottom: 1px solid var(--border-color);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 64px;
+    box-shadow: var(--shadow-sm);
+    z-index: 101;
+    margin-bottom: 0;
+    position: fixed;
+    top: 0;
+    left: 240px; /* Sidebar width */
+    right: 0;
+    transition: left 0.3s ease;
+    overflow: visible; /* Ensure suggestions are not clipped */
 }
 
 .header-left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex: 1 1 auto; /* Allow to grow and shrink but with a base width */
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex: 1 1 auto; /* Allow to grow and shrink but with a base width */
 }
 
 .search-box {
-  position: relative;
-  max-width: 600px;
-  flex: 1;
-  min-width: 200px; /* Ensure minimum width for visibility */
-  margin: 0 16px; /* Add some side margins */
+    position: relative;
+    max-width: 600px;
+    flex: 1;
+    min-width: 200px; /* Ensure minimum width for visibility */
+    margin: 0 16px; /* Add some side margins */
+    overflow: visible; /* Ensure suggestions are not clipped */
 }
 
 .search-box input {
-  width: 100%;
-  padding: 12px 16px 12px 44px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  font-size: 15px;
-  transition: all 150ms ease-in-out;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-  color: var(--text-primary);
+    width: 100%;
+    padding: 12px 16px 12px 44px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 15px;
+    transition: all 150ms ease-in-out;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    color: var(--text-primary);
 }
 
 .search-box input:focus {
-  outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 .search-icon {
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 16px;
-  height: 16px;
-  color: var(--text-tertiary);
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    color: var(--text-tertiary);
 }
 
+
+/* 2. Style the main clickable area */
+.suggestion-info {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    flex-grow: 1; /* Allow this section to take up available space */
+    min-width: 0; /* Important for flexbox to allow text to truncate */
+}
+
+.suggestion-info:hover {
+    /* You can add a subtle hover effect here if desired */
+    text-decoration: underline;
+}
+
+.suggestions-list {
+    max-height: 442px;
+    overflow-y: auto;
+    height: auto;
+    display: block;
+    visibility: visible;
+    opacity: 1;
+    position: absolute;
+    top: 45px;
+    left: 0;
+    width: 600px;
+    z-index: 1000;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+    box-shadow: var(--shadow-md);
+}
+
+.suggestions-list li {
+    display: flex;
+    align-items: center;
+    /* REMOVED: justify-content: space-between; */
+    /* The default is 'flex-start', which aligns all items to the beginning (left). */
+    padding: 10px 12px;
+    border-bottom: 1px solid #eee;
+}
+
+.suggestions-list li:last-child {
+    border-bottom: none;
+}
+
+/* 2. The info block no longer needs to 'grow' */
+.suggestion-info {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    /* REMOVED: flex-grow: 1; */
+    min-width: 0; /* Still good practice for text truncation */
+}
+
+.suggestion-info:hover .suggestion-text {
+    text-decoration: underline;
+}
+
+.suggestion-icon {
+    margin-right: 12px;
+    font-size: 1.2em;
+    width: 20px;
+    text-align: center;
+}
+
+.suggestion-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 3. The actions block now pushes itself to the right */
+.suggestion-actions {
+    display: flex;
+    align-items: center;
+    padding-left: 15px; /* Keeps a safe distance from the text */
+    margin-left: auto;  /* THIS IS THE MAGIC KEY! Pushes this block to the far right. */
+}
+
+/* 4. Action icon styling remains the same */
+.suggestion-actions i {
+    cursor: pointer;
+    font-size: 1em;
+    color: #555;
+    transition: color 0.2s ease-in-out;
+    padding: 5px;
+}
+
+.suggestion-actions i:hover {
+    color: #007bff;
+}
+
+.suggestion-actions i:first-child {
+    margin-right: 8px;
+}
+
+/* Bonus: Add some color to the icons! */
+.suggestion-icon.fa-folder { color: #f9ca24; }
+.suggestion-icon.fa-file-pdf { color: #e74c3c; }
+.suggestion-icon.fa-file-word { color: #2980b9; }
+.suggestion-icon.fa-file-excel { color: #27ae60; }
+.suggestion-icon.fa-file-image { color: #8e44ad; }
+.suggestion-icon.fa-file { color: #95a5a6; }
+
+
+
 .header-right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex: 0 0 auto; /* Don't grow, fixed width */
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex: 0 0 auto; /* Don't grow, fixed width */
 }
 
 .avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--primary);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  cursor: pointer;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    cursor: pointer;
 }
 
 @media (max-width: 768px) {
-  .header {
-    left: 0;
-    padding: 16px;
-  }
-  
-  .search-box {
-    max-width: 100%;
-  }
+    .header {
+        left: 0;
+        padding: 16px;
+    }
+
+    .search-box {
+        max-width: 100%;
+    }
+
+    .suggestions-list {
+        left: 16px;
+        width: calc(100% - 32px);
+    }
 }

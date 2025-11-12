@@ -421,7 +421,7 @@ export class FileExplorerComponent implements OnInit {
 
   onDownloadSelected() {
     const selectedItems = this.selectedItems;
-    if (selectedItems.length === 1 && selectedItems[0].type === 'FILE') {
+    if (selectedItems.length === 1) {
       this.onDownloadItem(selectedItems[0]);
     } else if (selectedItems.length > 1) {
       this.isDownloading = true;
