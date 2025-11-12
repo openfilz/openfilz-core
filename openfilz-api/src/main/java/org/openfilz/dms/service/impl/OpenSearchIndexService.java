@@ -7,6 +7,7 @@ import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.OpenSearchDocumentKey;
 import org.openfilz.dms.service.IndexNameProvider;
 import org.openfilz.dms.service.IndexService;
+import org.openfilz.dms.utils.FileUtils;
 import org.openfilz.dms.utils.JsonUtils;
 import org.opensearch.client.json.JsonData;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
@@ -126,8 +127,8 @@ public class OpenSearchIndexService implements IndexService {
         Map<String, Object> source = new HashMap<>(OpenSearchDocumentKey.values().length);
         source.put(OpenSearchDocumentKey.id.toString(), document.getId());
         source.put(OpenSearchDocumentKey.name.toString(), document.getName());
-        source.put(OpenSearchDocumentKey.name_suggest.toString(), removeFileExtension(document.getName()));
-        source.put(OpenSearchDocumentKey.contentType.toString(), document.getContentType());
+        source.put(OpenSearchDocumentKey.name_suggest.toString(), FileUtils.removeFileExtension(document.getName()));
+        source.put(OpenSearchDocumentKey.extension.toString(), FileUtils.getFileExtension(document.getType(), document.getName()));
         source.put(OpenSearchDocumentKey.size.toString(), document.getSize());
         source.put(OpenSearchDocumentKey.parentId.toString(), document.getParentId());
         source.put(OpenSearchDocumentKey.createdAt.toString(), document.getCreatedAt().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));

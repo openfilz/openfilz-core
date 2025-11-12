@@ -211,7 +211,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
     @Transactional
     public Mono<Void> deleteFolders(DeleteRequest request) {
         return Flux.fromIterable(request.documentIds())
-                .flatMap(folderId -> deleteFolderRecursive(folderId))
+                .flatMap(this::deleteFolderRecursive)
                 .then();
     }
 
@@ -235,7 +235,8 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                     // 3. Delete the folder itself from DB (and storage if it had a physical representation)
                     return Mono.when(deleteChildFiles, deleteChildFolders)
                             .then(documentDAO.delete(folder))
-                            .then(auditService.logAction(AuditAction.DELETE_FOLDER, FOLDER, folderId));
+                            .then(auditService.logAction(AuditAction.DELETE_FOLDER, FOLDER, folderId))
+                            .doOnSuccess(_ -> metadataPostProcessor.deleteDocument(folder.getId()));
                 });
     }
 
@@ -271,8 +272,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                             // Check for name collision in target folder
                             return moveDocument(request, fileToMove)
                                     .flatMap(movedFile -> auditService.logAction(MOVE_FILE, FILE, movedFile.getId(),
-                                            new MoveAudit(request.targetFolderId()))
-                                    .doOnSuccess(_ -> metadataPostProcessor.updateIndexField(movedFile, OpenSearchDocumentKey.parentId.toString(), request.targetFolderId())));
+                                            new MoveAudit(request.targetFolderId())));
                         })
                 )
                 .then();
@@ -339,7 +339,8 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
             documentToMove.setUpdatedAt(OffsetDateTime.now());
             documentToMove.setUpdatedBy(username);
             return documentDAO.update(documentToMove);
-        });
+        }).doOnSuccess(movedDoc -> metadataPostProcessor
+                .updateIndexField(movedDoc, OpenSearchDocumentKey.parentId.toString(), request.targetFolderId()));
     }
 
     // Helper to check if 'potentialChildId' is a descendant of 'potentialParentId'
@@ -503,8 +504,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                 })
                 .flatMap(renamedFile -> auditService.logAction(RENAME_FILE, FILE, renamedFile.getId(),
                         new RenameAudit(request.newName()))
-                        .thenReturn(renamedFile)
-                        .doOnSuccess(file -> metadataPostProcessor.updateIndexField(renamedFile, OpenSearchDocumentKey.name.toString(), file.getName())));
+                        .thenReturn(renamedFile));
     }
 
     private Mono<Document> saveFileToRename(RenameRequest request, Document fileToRename, Mono<Boolean> duplicateCheck) {
@@ -518,7 +518,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                 fileToRename.setUpdatedAt(OffsetDateTime.now());
                 fileToRename.setUpdatedBy(username);
                 return documentDAO.update(fileToRename);
-            });
+            }).doOnSuccess(file -> metadataPostProcessor.updateIndexField(file, OpenSearchDocumentKey.name.toString(), file.getName()));
         });
     }
 
@@ -744,7 +744,6 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                 });
     }
 
-    // Utility method to find a document
     @Override
     public Mono<Document> findDocumentToDownloadById(UUID documentId) {
         return documentDAO.findById(documentId, AccessType.RO)

@@ -12,7 +12,7 @@ import java.util.UUID;
 @ConditionalOnProperty(name = "openfilz.full-text.active", havingValue = "false", matchIfMissing = true)
 public class DefaultMetadataPostProcessor implements MetadataPostProcessor {
     @Override
-    public void processDocument(FilePart filePart, Document document) {
+    public void processDocument(Document document) {
 
     }
 

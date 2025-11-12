@@ -90,7 +90,7 @@ public class DefaultIndexNameProvider implements IndexNameProvider {
                                                 .properties(OpenSearchDocumentKey.id.toString(), p -> p.keyword(k -> k))
                                                 .properties(OpenSearchDocumentKey.name.toString(), p -> p.text(tx -> tx.fields("keyword", b-> b.keyword(builder -> builder))))
                                                 .properties(OpenSearchDocumentKey.name_suggest.toString(), p -> p.searchAsYouType(builder ->  builder))
-                                                .properties(OpenSearchDocumentKey.contentType.toString(), p -> p.keyword(k -> k))
+                                                .properties(OpenSearchDocumentKey.extension.toString(), p -> p.keyword(k -> k))
                                                 .properties(OpenSearchDocumentKey.size.toString(), p -> p.long_(k -> k))
                                                 .properties(OpenSearchDocumentKey.parentId.toString(), p -> p.keyword(k -> k))
                                                 .properties(OpenSearchDocumentKey.createdAt.toString(), p -> p.date(k -> k))
