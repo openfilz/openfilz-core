@@ -16,6 +16,7 @@ import org.openfilz.dms.repository.DocumentQueryService;
 import org.openfilz.dms.service.DocumentSearchService;
 import org.openfilz.dms.utils.ContentTypeMapper;
 import org.openfilz.dms.utils.FileUtils;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
@@ -29,11 +30,14 @@ import java.util.stream.Collectors;
 
 @Service
 @Slf4j
-@RequiredArgsConstructor
 @ConditionalOnProperty(name = "openfilz.full-text.active", havingValue = "false", matchIfMissing = true)
 public class DefaultDocumentSearchService implements DocumentSearchService {
 
     private final DocumentQueryService documentQueryService;
+
+    public DefaultDocumentSearchService(@Qualifier("allFoldersDocumentQueryService") DocumentQueryService documentQueryService) {
+        this.documentQueryService = documentQueryService;
+    }
 
 
     @Override
@@ -85,7 +89,7 @@ public class DefaultDocumentSearchService implements DocumentSearchService {
                     null,
                     null,
                     null,
-                    query != null ? query.toLowerCase() : null,
+                    query != null ? query.trim() : null,
                     null,
                     null,
                     null,

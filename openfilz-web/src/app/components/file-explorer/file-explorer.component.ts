@@ -1,34 +1,32 @@
-import {Component, ElementRef, OnInit, ViewChild} from '@angular/core';
-import {CommonModule} from '@angular/common';
-import {MatDialog, MatDialogModule} from '@angular/material/dialog';
-import {MatSnackBar, MatSnackBarModule} from '@angular/material/snack-bar';
-import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
-import {MatIcon} from "@angular/material/icon";
+import { Component, ElementRef, OnInit, ViewChild } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { ActivatedRoute, Router } from '@angular/router';
+import { take } from 'rxjs';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatIcon } from "@angular/material/icon";
 
-import {FileGridComponent} from '../../components/file-grid/file-grid.component';
-import {FileListComponent} from '../../components/file-list/file-list.component';
-import {ToolbarComponent} from '../../components/toolbar/toolbar.component';
-import {CreateFolderDialogComponent} from '../../dialogs/create-folder-dialog/create-folder-dialog.component';
-import {RenameDialogComponent, RenameDialogData} from '../../dialogs/rename-dialog/rename-dialog.component';
-import {FolderTreeDialogComponent} from '../../dialogs/folder-tree-dialog/folder-tree-dialog.component';
+import { FileGridComponent } from '../file-grid/file-grid.component';
+import { FileListComponent } from '../file-list/file-list.component';
+import { ToolbarComponent } from '../toolbar/toolbar.component';
+import { CreateFolderDialogComponent } from '../../dialogs/create-folder-dialog/create-folder-dialog.component';
+import { FileOperationsComponent } from '../base/file-operations.component';
 
-import {DocumentApiService} from '../../services/document-api.service';
-import {FileIconService} from '../../services/file-icon.service';
-import {BreadcrumbService} from '../../services/breadcrumb.service';
+import { DocumentApiService } from '../../services/document-api.service';
+import { FileIconService } from '../../services/file-icon.service';
+import { BreadcrumbService } from '../../services/breadcrumb.service';
 
 import {
-    CopyRequest,
     CreateFolderRequest,
-    DeleteRequest,
     ElementInfo,
     FileItem,
     ListFolderAndCountResponse,
-    MoveRequest,
-    RenameRequest
+    DocumentType
 } from '../../models/document.models';
 
-import {DragDropDirective} from "../../directives/drag-drop.directive";
-import {DownloadProgressComponent} from "../../components/download-progress/download-progress.component";
+import { DragDropDirective } from "../../directives/drag-drop.directive";
+import { DownloadProgressComponent } from "../download-progress/download-progress.component";
 
 @Component({
   selector: 'app-file-explorer',
@@ -132,51 +130,54 @@ import {DownloadProgressComponent} from "../../components/download-progress/down
     DownloadProgressComponent
   ],
 })
-export class FileExplorerComponent implements OnInit {
+export class FileExplorerComponent extends FileOperationsComponent implements OnInit {
   static itemsPerPage = 'itemsPerPage';
-  viewMode: 'grid' | 'list' = 'grid';
-  loading = false;
-  isDownloading = false;
   showUploadZone = false;
   fileOver: boolean = false;
 
-  items: FileItem[] = [];
-  breadcrumbs: ElementInfo[] = [];
   breadcrumbTrail: FileItem[] = []; // Track full path
   currentFolder?: FileItem;
 
-  totalItems = 0;
   pageSize = 70;
   pageIndex = 0;
 
   @ViewChild('fileInput') fileInput!: ElementRef;
 
   constructor(
-    private documentApi: DocumentApiService,
     private fileIconService: FileIconService,
-    private dialog: MatDialog,
-    private snackBar: MatSnackBar,
-    private breadcrumbService: BreadcrumbService
-  ) {}
+    private breadcrumbService: BreadcrumbService,
+    private route: ActivatedRoute,
+    private router: Router,
+    documentApi: DocumentApiService,
+    dialog: MatDialog,
+    snackBar: MatSnackBar
+  ) {
+    super(documentApi, dialog, snackBar);
+  }
 
-  ngOnInit() {
+  override ngOnInit() {
+    super.ngOnInit();
     const storedItemsPerPage = localStorage.getItem(FileExplorerComponent.itemsPerPage);
     if (storedItemsPerPage) {
       this.pageSize = parseInt(storedItemsPerPage, 10);
     }
-    this.loadFolder();
 
-    // Listen for breadcrumb navigation
+    this.route.queryParams.pipe(take(1)).subscribe(params => {
+      const folderId = params['folderId'];
+      if (folderId) {
+        this.loadFolderById(folderId);
+      } else {
+        this.loadFolder();
+      }
+    });
+
     this.breadcrumbService.navigation$.subscribe(folder => {
       if (folder === null) {
-        // Navigate to root
         this.breadcrumbTrail = [];
         this.loadFolder(undefined, true);
       } else {
-        // Navigate to specific folder in breadcrumb trail
         const index = this.breadcrumbTrail.findIndex(f => f.id === folder.id);
         if (index !== -1) {
-          // Remove all folders after this one in the trail
           this.breadcrumbTrail = this.breadcrumbTrail.slice(0, index + 1);
           this.loadFolder(this.breadcrumbTrail[index], true);
         }
@@ -184,27 +185,50 @@ export class FileExplorerComponent implements OnInit {
     });
   }
 
-  get hasSelectedItems(): boolean {
-    return this.items.some(item => item.selected);
+  reloadData(): void {
+    this.loadFolder(this.currentFolder);
   }
 
-  get selectedItems(): FileItem[] {
-    return this.items.filter(item => item.selected);
+  private loadFolderById(folderId: string) {
+    this.loading = true;
+    this.documentApi.getDocumentInfo(folderId).subscribe({
+      next: (folderInfo) => {
+        const folderItem: FileItem = {
+          id: folderId,
+          name: folderInfo.name,
+          type: DocumentType.FOLDER,
+          size: folderInfo.size,
+          icon: this.fileIconService.getFileIcon(folderInfo.name, 'FOLDER'),
+          selected: false
+        };
+        this.breadcrumbTrail = [folderItem];
+        this.loadFolder(folderItem, true);
+
+        this.router.navigate([], {
+            relativeTo: this.route,
+            queryParams: {folderId: null},
+            queryParamsHandling: 'merge',
+        });
+      },
+      error: (err) => {
+        this.snackBar.open('Could not load the specified folder.', 'Close', { duration: 3000 });
+        this.loading = false;
+        this.router.navigate(['/my-folder']);
+        this.loadFolder();
+      }
+    });
   }
 
   loadFolder(folder?: FileItem, fromBreadcrumb: boolean = false, appendBreadCrumb: boolean = false) {
     this.loading = true;
     this.currentFolder = folder;
 
-    // Update breadcrumb trail
     if (!fromBreadcrumb) {
       if (folder) {
-          if(appendBreadCrumb) {
-              // Add folder to breadcrumb trail
-              this.breadcrumbTrail.push(folder);
-          }
+        if (appendBreadCrumb) {
+          this.breadcrumbTrail.push(folder);
+        }
       } else {
-        // Reset to root
         this.breadcrumbTrail = [];
       }
     }
@@ -247,7 +271,6 @@ export class FileExplorerComponent implements OnInit {
   }
 
   private updateBreadcrumbs() {
-    // Update breadcrumbs with the full path
     this.breadcrumbService.updateBreadcrumbs(this.breadcrumbTrail);
   }
 
@@ -269,16 +292,12 @@ export class FileExplorerComponent implements OnInit {
   onPageSizeChange(newPageSize: number) {
     this.pageSize = newPageSize;
     localStorage.setItem(FileExplorerComponent.itemsPerPage, newPageSize.toString());
-    this.pageIndex = 0; // Reset to first page when page size changes
+    this.pageIndex = 0;
     this.loadItems();
   }
 
   onFileOverChange(isOver: boolean) {
     this.fileOver = isOver;
-  }
-
-  onItemClick(item: FileItem) {
-    item.selected = !item.selected;
   }
 
   onItemDoubleClick(item: FileItem) {
@@ -287,18 +306,6 @@ export class FileExplorerComponent implements OnInit {
     } else {
       this.onDownloadItem(item);
     }
-  }
-
-  onSelectionChange(event: { item: FileItem, selected: boolean }) {
-    event.item.selected = event.selected;
-  }
-
-  onSelectAll(selected: boolean) {
-    this.items.forEach(item => item.selected = selected);
-  }
-
-  onViewModeChange(mode: 'grid' | 'list') {
-    this.viewMode = mode;
   }
 
   onCreateFolder() {
@@ -314,7 +321,6 @@ export class FileExplorerComponent implements OnInit {
           name: folderName,
           parentId: this.currentFolder?.id
         };
-
         this.documentApi.createFolder(request).subscribe({
           next: () => {
             this.snackBar.open('Folder created successfully', 'Close', { duration: 3000 });
@@ -326,402 +332,6 @@ export class FileExplorerComponent implements OnInit {
         });
       }
     });
-  }
-
-  onRenameItem(item: FileItem) {
-    const dialogRef = this.dialog.open(RenameDialogComponent, {
-      width: '400px',
-      data: { name: item.name, type: item.type } as RenameDialogData
-    });
-
-    dialogRef.afterClosed().subscribe(newName => {
-      if (newName) {
-        const request: RenameRequest = { newName };
-
-        const renameObservable = item.type === 'FOLDER'
-          ? this.documentApi.renameFolder(item.id, request)
-          : this.documentApi.renameFile(item.id, request);
-
-        renameObservable.subscribe({
-          next: () => {
-            this.snackBar.open('Item renamed successfully', 'Close', { duration: 3000 });
-            this.loadFolder(this.currentFolder);
-          },
-          error: (error) => {
-            this.snackBar.open('Failed to rename item', 'Close', { duration: 3000 });
-          }
-        });
-      }
-    });
-  }
-
-  onDownloadItem(item: FileItem) {
-    this.isDownloading = true;
-    item.selected = false;
-    this.documentApi.downloadDocument(item.id).subscribe({
-      next: (blob) => {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = item.name + ((item.type == 'FILE' ? '' : '.zip'));
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-        this.isDownloading = false;
-      },
-      error: (error) => {
-        this.snackBar.open('Failed to download file', 'Close', { duration: 3000 });
-        this.isDownloading = false;
-      }
-    });
-  }
-
-  onMoveItem(item: FileItem) {
-    const dialogRef = this.dialog.open(FolderTreeDialogComponent, {
-      width: '700px',
-      data: {
-        title: 'Move item',
-        actionType: 'move',
-        currentFolderId: this.currentFolder?.id,
-        excludeIds: [item.id]
-      }
-    });
-
-    dialogRef.afterClosed().subscribe(targetFolderId => {
-      if (targetFolderId !== undefined) {
-        this.performMoveWithRetry(item, targetFolderId);
-      }
-    });
-  }
-
-  onCopyItem(item: FileItem) {
-    const dialogRef = this.dialog.open(FolderTreeDialogComponent, {
-      width: '700px',
-      data: {
-        title: 'Copy item',
-        actionType: 'copy',
-        currentFolderId: this.currentFolder?.id,
-        excludeIds: []
-      }
-    });
-
-    dialogRef.afterClosed().subscribe(targetFolderId => {
-      if (targetFolderId !== undefined) {
-        this.performCopyWithRetry(item, targetFolderId);
-      }
-    });
-  }
-
-  onDeleteItem(item: FileItem) {
-    if (confirm(`Are you sure you want to delete "${item.name}"?`)) {
-      this.deleteItems([item]);
-    }
-  }
-
-  onDownloadSelected() {
-    const selectedItems = this.selectedItems;
-    if (selectedItems.length === 1) {
-      this.onDownloadItem(selectedItems[0]);
-    } else if (selectedItems.length > 1) {
-      this.isDownloading = true;
-      const documentIds = selectedItems.map(item => item.id);
-      this.selectedItems.forEach(item => item.selected = false);
-      this.documentApi.downloadMultipleDocuments(documentIds).subscribe({
-        next: (blob) => {
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'documents.zip';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          window.URL.revokeObjectURL(url);
-          this.isDownloading = false;
-        },
-        error: (error) => {
-          this.snackBar.open('Failed to download files', 'Close', { duration: 3000 });
-          this.isDownloading = false;
-        }
-      });
-    }
-  }
-
-  onMoveSelected() {
-    const selectedItems = this.selectedItems;
-    if (selectedItems.length > 0) {
-      const dialogRef = this.dialog.open(FolderTreeDialogComponent, {
-        width: '700px',
-        data: {
-          title: `Move ${selectedItems.length} item${selectedItems.length > 1 ? 's' : ''}`,
-          actionType: 'move',
-          currentFolderId: this.currentFolder?.id,
-          excludeIds: selectedItems.map(item => item.id)
-        }
-      });
-
-      dialogRef.afterClosed().subscribe(targetFolderId => {
-        if (targetFolderId !== undefined) {
-          const folders = selectedItems.filter(item => item.type === 'FOLDER');
-          const files = selectedItems.filter(item => item.type === 'FILE');
-
-          let totalOperations = 0;
-          if (folders.length > 0) totalOperations++;
-          if (files.length > 0) totalOperations++;
-
-          let completed = 0;
-          const handleCompletion = () => {
-            completed++;
-            if (completed === totalOperations) {
-              this.snackBar.open('Items moved successfully', 'Close', { duration: 3000 });
-              this.loadFolder(this.currentFolder);
-            }
-          };
-
-          if (folders.length > 0) {
-            this.performBulkMove(folders, targetFolderId, handleCompletion, 'folders');
-          }
-
-          if (files.length > 0) {
-            this.performBulkMove(files, targetFolderId, handleCompletion, 'files');
-          }
-        }
-      });
-    }
-  }
-
-  onCopySelected() {
-    const selectedItems = this.selectedItems;
-    if (selectedItems.length > 0) {
-      const dialogRef = this.dialog.open(FolderTreeDialogComponent, {
-        width: '700px',
-        data: {
-          title: `Copy ${selectedItems.length} item${selectedItems.length > 1 ? 's' : ''}`,
-          actionType: 'copy',
-          currentFolderId: this.currentFolder?.id,
-          excludeIds: []
-        }
-      });
-
-      dialogRef.afterClosed().subscribe(targetFolderId => {
-        if (targetFolderId !== undefined) {
-          const folders = selectedItems.filter(item => item.type === 'FOLDER');
-          const files = selectedItems.filter(item => item.type === 'FILE');
-
-          let totalOperations = 0;
-          if (folders.length > 0) totalOperations++;
-          if (files.length > 0) totalOperations++;
-
-          let completed = 0;
-          const handleCompletion = () => {
-            completed++;
-            if (completed === totalOperations) {
-              this.snackBar.open('Items copied successfully', 'Close', { duration: 3000 });
-              this.loadFolder(this.currentFolder);
-            }
-          };
-
-          if (folders.length > 0) {
-            this.performBulkCopy(folders, targetFolderId, handleCompletion, 'folders');
-          }
-
-          if (files.length > 0) {
-            this.performBulkCopy(files, targetFolderId, handleCompletion, 'files');
-          }
-        }
-      });
-    }
-  }
-
-  onRenameSelected() {
-    const selectedItems = this.selectedItems;
-    if (selectedItems.length === 1) {
-      this.onRenameItem(selectedItems[0]);
-    }
-  }
-
-  onDeleteSelected() {
-    const selectedItems = this.selectedItems;
-    if (selectedItems.length > 0) {
-      const itemNames = selectedItems.map(item => item.name).join(', ');
-      if (confirm(`Are you sure you want to delete: ${itemNames}?`)) {
-        this.deleteItems(selectedItems);
-      }
-    }
-  }
-
-  private deleteItems(items: FileItem[]) {
-    const request: DeleteRequest = {
-      documentIds: items.map(item => item.id)
-    };
-
-    const folders = items.filter(item => item.type === 'FOLDER');
-    const files = items.filter(item => item.type === 'FILE');
-
-    const deleteObservables = [];
-
-    if (folders.length > 0) {
-      deleteObservables.push(this.documentApi.deleteFolders({ documentIds: folders.map(f => f.id) }));
-    }
-
-    if (files.length > 0) {
-      deleteObservables.push(this.documentApi.deleteFiles({ documentIds: files.map(f => f.id) }));
-    }
-
-    deleteObservables.forEach(observable => {
-      observable.subscribe({
-        next: () => {
-          this.snackBar.open('Items deleted successfully', 'Close', { duration: 3000 });
-          this.loadFolder(this.currentFolder);
-        },
-        error: (error) => {
-          this.snackBar.open('Failed to delete items', 'Close', { duration: 3000 });
-        }
-      });
-    });
-  }
-
-  private performMoveWithRetry(item: FileItem, targetFolderId: string | null, attempt: number = 1, maxAttempts: number = 5) {
-    const request: MoveRequest = {
-      documentIds: [item.id],
-      targetFolderId: targetFolderId || undefined,
-      allowDuplicateFileNames: attempt > 1
-    };
-
-    const moveObservable = item.type === 'FOLDER'
-      ? this.documentApi.moveFolders(request)
-      : this.documentApi.moveFiles(request);
-
-    moveObservable.subscribe({
-      next: () => {
-        this.snackBar.open('Item moved successfully', 'Close', { duration: 3000 });
-        this.loadFolder(this.currentFolder);
-      },
-      error: (error: any) => {
-        if (error.status === 409 && attempt < maxAttempts) {
-          if (attempt === 1) {
-            this.performMoveWithRetry(item, targetFolderId, attempt + 1, maxAttempts);
-          } else {
-            this.snackBar.open(`Name conflict detected. Maximum retry attempts (${maxAttempts}) reached.`, 'Close', { duration: 5000 });
-          }
-        } else {
-          this.snackBar.open('Failed to move item', 'Close', { duration: 3000 });
-        }
-      }
-    });
-  }
-
-  private performCopyWithRetry(item: FileItem, targetFolderId: string | null, attempt: number = 1, maxAttempts: number = 5) {
-    const request: CopyRequest = {
-      documentIds: [item.id],
-      targetFolderId: targetFolderId || undefined,
-      allowDuplicateFileNames: attempt > 1
-    };
-
-    if (item.type === 'FOLDER') {
-      this.documentApi.copyFolders(request).subscribe({
-        next: () => {
-          this.snackBar.open('Item copied successfully', 'Close', { duration: 3000 });
-          this.loadFolder(this.currentFolder);
-        },
-        error: (error: any) => {
-          if (error.status === 409 && attempt < maxAttempts) {
-            if (attempt === 1) {
-              this.performCopyWithRetry(item, targetFolderId, attempt + 1, maxAttempts);
-            } else {
-              this.snackBar.open(`Name conflict detected. Maximum retry attempts (${maxAttempts}) reached.`, 'Close', { duration: 5000 });
-            }
-          } else {
-            this.snackBar.open('Failed to copy item', 'Close', { duration: 3000 });
-          }
-        }
-      });
-    } else {
-      this.documentApi.copyFiles(request).subscribe({
-        next: () => {
-          this.snackBar.open('Item copied successfully', 'Close', { duration: 3000 });
-          this.loadFolder(this.currentFolder);
-        },
-        error: (error: any) => {
-          if (error.status === 409 && attempt < maxAttempts) {
-            if (attempt === 1) {
-              this.performCopyWithRetry(item, targetFolderId, attempt + 1, maxAttempts);
-            } else {
-              this.snackBar.open(`Name conflict detected. Maximum retry attempts (${maxAttempts}) reached.`, 'Close', { duration: 5000 });
-            }
-          } else {
-            this.snackBar.open('Failed to copy item', 'Close', { duration: 3000 });
-          }
-        }
-      });
-    }
-  }
-
-  private performBulkMove(items: FileItem[], targetFolderId: string | null, onComplete: () => void, type: 'files' | 'folders', attempt: number = 1, maxAttempts: number = 5) {
-    const request: MoveRequest = {
-      documentIds: items.map(f => f.id),
-      targetFolderId: targetFolderId || undefined,
-      allowDuplicateFileNames: attempt > 1
-    };
-
-    const moveObservable = type === 'folders'
-      ? this.documentApi.moveFolders(request)
-      : this.documentApi.moveFiles(request);
-
-    moveObservable.subscribe({
-      next: () => onComplete(),
-      error: (error: any) => {
-        if (error.status === 409 && attempt < maxAttempts) {
-          if (attempt === 1) {
-            this.performBulkMove(items, targetFolderId, onComplete, type, attempt + 1, maxAttempts);
-          } else {
-            this.snackBar.open(`Name conflict detected. Maximum retry attempts (${maxAttempts}) reached.`, 'Close', { duration: 5000 });
-          }
-        } else {
-          this.snackBar.open('Failed to move items', 'Close', { duration: 3000 });
-        }
-      }
-    });
-  }
-
-  private performBulkCopy(items: FileItem[], targetFolderId: string | null, onComplete: () => void, type: 'files' | 'folders', attempt: number = 1, maxAttempts: number = 5) {
-    const request: CopyRequest = {
-      documentIds: items.map(f => f.id),
-      targetFolderId: targetFolderId || undefined,
-      allowDuplicateFileNames: attempt > 1
-    };
-
-    if (type === 'folders') {
-      this.documentApi.copyFolders(request).subscribe({
-        next: () => onComplete(),
-        error: (error: any) => {
-          if (error.status === 409 && attempt < maxAttempts) {
-            if (attempt === 1) {
-              this.performBulkCopy(items, targetFolderId, onComplete, type, attempt + 1, maxAttempts);
-            } else {
-              this.snackBar.open(`Name conflict detected. Maximum retry attempts (${maxAttempts}) reached.`, 'Close', { duration: 5000 });
-            }
-          } else {
-            this.snackBar.open('Failed to copy items', 'Close', { duration: 3000 });
-          }
-        }
-      });
-    } else {
-      this.documentApi.copyFiles(request).subscribe({
-        next: () => onComplete(),
-        error: (error: any) => {
-          if (error.status === 409 && attempt < maxAttempts) {
-            if (attempt === 1) {
-              this.performBulkCopy(items, targetFolderId, onComplete, type, attempt + 1, maxAttempts);
-            } else {
-              this.snackBar.open(`Name conflict detected. Maximum retry attempts (${maxAttempts}) reached.`, 'Close', { duration: 5000 });
-            }
-          } else {
-            this.snackBar.open('Failed to copy items', 'Close', { duration: 3000 });
-          }
-        }
-      });
-    }
   }
 
   triggerFileInput() {
@@ -748,8 +358,7 @@ export class FileExplorerComponent implements OnInit {
 
   private handleFileUpload(files: FileList) {
     this.documentApi.uploadMultipleDocuments(Array.from(files), this.currentFolder?.id).subscribe({
-      next: (item) => {
-      },
+      next: (item) => {},
       error: (error) => {
         this.snackBar.open(`Failed to upload files`, 'Close', { duration: 3000 });
       },

@@ -27,6 +27,7 @@ export class ToolbarComponent {
   @Input() pageIndex = 0;
   @Input() pageSize = 25;
   @Input() totalItems = 0;
+  @Input() isSearchResultsPage = false;
 
   @Output() createFolder = new EventEmitter<void>();
   @Output() uploadFiles = new EventEmitter<void>();

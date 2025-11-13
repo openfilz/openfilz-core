@@ -11,7 +11,7 @@
   top: 64px; /* Header height */
   left: 240px; /* Sidebar width */
   right: 0;
-  z-index: 100; /* Under header, above content */
+  z-index: 98; /* Under header, above content */
   transition: left 0.3s ease;
 }
 

@@ -12,14 +12,14 @@ import reactor.core.publisher.Mono;
 
 import java.util.UUID;
 
-@Service("defaultDocumentQueryService")
+@Service("allFoldersDocumentQueryService")
 @RequiredArgsConstructor
 @ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
-public class DefaultDocumentQueryService implements DocumentQueryService {
+public class AllFoldersDocumentQueryService implements DocumentQueryService {
 
     private final DocumentDataFetcher documentDataFetcher;
-    private final ListFolderDataFetcher listFolderDataFetcher;
-    private final ListFolderCountDataFetcher listFolderCountDataFetcher;
+    private final ListAllFolderDataFetcher listFolderDataFetcher;
+    private final ListAllFolderCountDataFetcher listFolderCountDataFetcher;
 
 
     @Override

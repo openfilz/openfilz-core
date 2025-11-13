@@ -11,7 +11,7 @@ logging:
 openfilz:
   calculate-checksum: true
   full-text:
-    active: false
+    active: true
     indexation-mode: local # local (only choice for the moment) -> to be developed : redis | kafka | nats
     opensearch:
       host: localhost

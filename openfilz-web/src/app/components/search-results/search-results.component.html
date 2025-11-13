@@ -1,0 +1,59 @@
+<div class="search-results-container">
+  <app-toolbar
+    [viewMode]="viewMode"
+    [totalItems]="totalItems"
+    [isSearchResultsPage]="true"
+    [hasSelection]="hasSelectedItems"
+    [selectionCount]="selectedItems.length"
+    (viewModeChange)="onViewModeChange($event)"
+    (renameSelected)="onRenameSelected()"
+    (downloadSelected)="onDownloadSelected()"
+    (moveSelected)="onMoveSelected()"
+    (copySelected)="onCopySelected()"
+    (deleteSelected)="onDeleteSelected()"
+    (clearSelection)="onSelectAll(false)">
+  </app-toolbar>
+
+  <div class="search-results-content">
+    <h2>Search results for "{{ searchQuery }}"</h2>
+    @if(!loading) {
+      @if(items.length === 0) {
+        <div class="empty-state">
+          <p>No results found.</p>
+        </div>
+      }
+      @if(viewMode === 'grid' && items.length > 0) {
+        <app-file-grid
+          [items]="items"
+          (itemClick)="onItemClick($event)"
+          (itemDoubleClick)="onItemDoubleClick($event)"
+          (selectionChange)="onSelectionChange($event)"
+          (rename)="onRenameItem($event)"
+          (download)="onDownloadItem($event)"
+          (move)="onMoveItem($event)"
+          (copy)="onCopyItem($event)"
+          (delete)="onDeleteItem($event)">
+        </app-file-grid>
+      }
+      @if(viewMode === 'list' && items.length > 0) {
+        <app-file-list
+          [items]="items"
+          (itemClick)="onItemClick($event)"
+          (itemDoubleClick)="onItemDoubleClick($event)"
+          (selectionChange)="onSelectionChange($event)"
+          (selectAll)="onSelectAll($event)"
+          (rename)="onRenameItem($event)"
+          (download)="onDownloadItem($event)"
+          (move)="onMoveItem($event)"
+          (copy)="onCopyItem($event)"
+          (delete)="onDeleteItem($event)">
+        </app-file-list>
+      }
+    } @else {
+      <div class="loading-container">
+        <mat-spinner></mat-spinner>
+        <p>Searching...</p>
+      </div>
+    }
+  </div>
+</div>

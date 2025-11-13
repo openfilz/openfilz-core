@@ -88,6 +88,23 @@ export interface MultipleUploadFileParameterAttributes {
   metadata?: { [key: string]: any };
 }
 
+export interface DocumentSearchInfo {
+    id: string;
+    name: string;
+    extension: string;
+    size: number;
+    parentId: string;
+    createdAt: string;
+    updatedAt: string;
+    createdBy: string;
+    updatedBy: string;
+}
+
+export interface DocumentSearchResult {
+    totalHits: number;
+    documents: DocumentSearchInfo[];
+}
+
 export class Root implements ElementInfo {
 
   public static INSTANCE = new Root();
