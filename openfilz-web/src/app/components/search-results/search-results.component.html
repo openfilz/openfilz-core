@@ -2,6 +2,9 @@
   <app-toolbar
     [viewMode]="viewMode"
     [totalItems]="totalItems"
+    [isSearchResultsPage]="true"
+    [hasSelection]="hasSelectedItems"
+    [selectionCount]="selectedItems.length"
     (viewModeChange)="onViewModeChange($event)">
   </app-toolbar>
 

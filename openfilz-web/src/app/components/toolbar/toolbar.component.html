@@ -11,7 +11,7 @@
     }
 
     <!-- Action buttons (visible when no selection) -->
-    @if(!hasSelection) {
+    @if(!hasSelection && !isSearchResultsPage) {
       <button mat-raised-button color="primary" class="upload-btn" (click)="onUploadFiles()">
         <i class="fas fa-upload"></i>
         <span>Upload</span>

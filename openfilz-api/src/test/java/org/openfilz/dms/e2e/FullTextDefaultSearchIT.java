@@ -4,7 +4,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.openfilz.dms.config.RestApiVersion;
+import org.openfilz.dms.dto.request.CreateFolderRequest;
 import org.openfilz.dms.dto.request.DeleteRequest;
+import org.openfilz.dms.dto.response.FolderResponse;
 import org.openfilz.dms.dto.response.Suggest;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.e2e.util.PdfLoremGeneratorStreaming;
@@ -25,6 +27,7 @@ import reactor.test.StepVerifier;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 
 import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
@@ -45,9 +48,21 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
 
     @Test
     void testSuggestionsRestAPI() throws Exception {
+        String f0 = "Folder for " +getSuggestionQuery1();
         String f1 = "a sample data file of december.pdf";
         String f2 = "a sample data file of november.pdf";
         String f3 = "Meeting with the boss.pdf";
+
+        CreateFolderRequest createFolderRequest = new CreateFolderRequest(f0, null);
+
+        FolderResponse r0 = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/folders")
+                .body(BodyInserters.fromValue(createFolderRequest))
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(FolderResponse.class)
+                .returnResult().getResponseBody();
+
+        Assertions.assertNotNull(r0);
 
         PdfLoremGeneratorStreaming.generate("target/test-classes/" + f1, 1L);
         MultipartBodyBuilder builder = newFileBuilder(f1);
@@ -73,7 +88,7 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
                 .returnResult().getResponseBody();
 
         Assertions.assertNotNull(suggestions);
-        Assertions.assertEquals(2, suggestions.size());
+        Assertions.assertEquals(3, suggestions.size());
 
         suggestions = getWebTestClient().get().uri(uri ->
                         uri.path(RestApiVersion.API_PREFIX + "/suggestions")
@@ -105,8 +120,25 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
                 .exchange()
                 .expectStatus().isNoContent();
 
+        deleteRequest = new DeleteRequest(List.of(r0.id()));
+        getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/folders")
+                .body(BodyInserters.fromValue(deleteRequest))
+                .exchange()
+                .expectStatus().isNoContent();
+
         waitFor(3000);
 
+        suggestions = getWebTestClient().get().uri(uri ->
+                        uri.path(RestApiVersion.API_PREFIX + "/suggestions")
+                                .queryParam("q", getSuggestionQuery1())
+                                .build())
+                .exchange()
+                .expectBody(new ParameterizedTypeReference<List<Suggest>>() {
+                })
+                .returnResult().getResponseBody();
+
+        Assertions.assertNotNull(suggestions);
+        Assertions.assertEquals(0, suggestions.size());
     }
 
     protected String getSuggestionQuery1() {
