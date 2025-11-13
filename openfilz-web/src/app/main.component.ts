@@ -84,8 +84,7 @@ export class MainComponent implements OnInit {
 
   onSearch(query: string) {
     if (query.trim()) {
-      // TODO: Implement search functionality
-      this.snackBar.open('Search functionality coming soon', 'Close', { duration: 3000 });
+
     }
   }
 

@@ -51,6 +51,38 @@ const LIST_FOLDER_AND_COUNT_QUERY = gql`
   }
 `;
 
+const SEARCH_DOCUMENTS_QUERY = gql`
+  query searchDocuments(
+    $query: String,
+    $filters: [FilterInput!],
+    $sort: SortInput,
+    $page: Int = 1,
+    $size: Int = 20
+  ) {
+    searchDocuments(
+      query: $query,
+      filters: $filters,
+      sort: $sort,
+      page: $page,
+      size: $size
+    ) {
+      totalHits
+      documents {
+        id
+        name
+        extension
+        size
+        parentId
+        createdAt
+        updatedAt
+        createdBy
+        updatedBy
+        contentSnippet
+      }
+    }
+  }
+`;
+
 @Injectable({
   providedIn: 'root'
 })
@@ -256,5 +288,21 @@ export class DocumentApiService {
     return this.http.post<string[]>(`${this.baseUrl}/documents/search/ids-by-metadata`, request, {
       headers: this.getHeaders()
     });
+  }
+
+  searchDocuments(
+    query: string | null,
+    filters: any[] | null,
+    sort: any | null,
+    page: number = 1,
+    size: number = 20
+  ): Observable<any> {
+    return this.apollo.watchQuery<any>({
+      fetchPolicy: 'no-cache',
+      query: SEARCH_DOCUMENTS_QUERY,
+      variables: { query, filters, sort, page, size }
+    }).valueChanges.pipe(
+      map(result => result.data.searchDocuments)
+    );
   }
 }

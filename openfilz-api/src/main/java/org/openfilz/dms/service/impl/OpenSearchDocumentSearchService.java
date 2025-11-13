@@ -11,6 +11,7 @@ import org.openfilz.dms.enums.SortOrder;
 import org.openfilz.dms.exception.OpenSearchException;
 import org.openfilz.dms.service.DocumentSearchService;
 import org.openfilz.dms.service.IndexNameProvider;
+import org.openfilz.dms.service.OpenSearchService;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.opensearch._types.FieldValue;
 import org.opensearch.client.opensearch._types.query_dsl.BoolQuery;
@@ -33,14 +34,9 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @ConditionalOnProperty(name = "openfilz.full-text.active", havingValue = "true")
-public class OpenSearchDocumentSearchService implements DocumentSearchService {
+public class OpenSearchDocumentSearchService implements DocumentSearchService, OpenSearchService {
 
-    public static final String KEYWORD = ".keyword";
-    public static final String CONTENT = OpenSearchDocumentKey.content.toString();
-    public static final String NAME = OpenSearchDocumentKey.name.toString();
-    public static final String EXTENSION = OpenSearchDocumentKey.extension.toString();
-    public static final String CREATED_BY = OpenSearchDocumentKey.createdBy.toString();
-    public static final String UPDATED_BY = OpenSearchDocumentKey.updatedBy.toString();
+
     private final IndexNameProvider indexNameProvider;
     private final OpenSearchAsyncClient client;
 
@@ -61,12 +57,14 @@ public class OpenSearchDocumentSearchService implements DocumentSearchService {
         // 2. Build the Bool Query (the container for all clauses)
         BoolQuery.Builder boolQueryBuilder = new BoolQuery.Builder();
 
+        String trimQuery = query != null && !query.isEmpty() ? query.trim() : null;
+
         // 3. Add Full-Text Search Clause (must)
         // This clause contributes to the relevance score.
-        if (StringUtils.hasText(query)) {
+        if (trimQuery != null) {
             boolQueryBuilder.must(m -> m.multiMatch(mm -> mm
-                    .query(query)
-                    .fields(CONTENT, NAME) // Search in both content and name
+                    .query(trimQuery)
+                    .fields(CONTENT, SUGGEST_OTHERS_2) // Search in both content and name
             ));
         }
 

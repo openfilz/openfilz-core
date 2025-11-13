@@ -7,6 +7,7 @@ import org.openfilz.dms.dto.request.ListFolderRequest;
 import org.openfilz.dms.dto.response.FullDocumentInfo;
 import org.openfilz.dms.mapper.DocumentMapper;
 import org.openfilz.dms.utils.SqlUtils;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Service;
@@ -27,7 +28,7 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
 
     protected String fromClause;
 
-    public ListFolderDataFetcher(DatabaseClient databaseClient, DocumentMapper mapper, ObjectMapper objectMapper, SqlUtils sqlUtils, ListFolderCriteria listFolderCriteria) {
+    public ListFolderDataFetcher(DatabaseClient databaseClient, DocumentMapper mapper, ObjectMapper objectMapper, SqlUtils sqlUtils, @Qualifier("defaultListFolderCriteria") ListFolderCriteria listFolderCriteria) {
         super(databaseClient, mapper, objectMapper, sqlUtils);
         this.criteria = listFolderCriteria;
     }

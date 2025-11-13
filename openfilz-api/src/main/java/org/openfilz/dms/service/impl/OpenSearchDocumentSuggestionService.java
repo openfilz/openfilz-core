@@ -1,11 +1,13 @@
 package org.openfilz.dms.service.impl;
 
 import lombok.RequiredArgsConstructor;
+import org.jetbrains.annotations.NotNull;
 import org.openfilz.dms.dto.response.Suggest;
 import org.openfilz.dms.enums.OpenSearchDocumentKey;
 import org.openfilz.dms.exception.OpenSearchException;
 import org.openfilz.dms.service.DocumentSuggestionService;
 import org.openfilz.dms.service.IndexNameProvider;
+import org.openfilz.dms.service.OpenSearchService;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.opensearch._types.query_dsl.TextQueryType;
 import org.opensearch.client.opensearch.core.SearchRequest;
@@ -23,16 +25,9 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @ConditionalOnProperty(name = "openfilz.full-text.active", havingValue = "true")
-public class OpenSearchDocumentSuggestionService implements DocumentSuggestionService {
+public class OpenSearchDocumentSuggestionService implements DocumentSuggestionService, OpenSearchService {
 
-    static final String SUGGEST_MAIN = OpenSearchDocumentKey.name_suggest.toString();
-    static final String SUGGEST_ID = OpenSearchDocumentKey.id.toString();
-    static final String SUGGEST_EXT = OpenSearchDocumentKey.extension.toString();
-    static final String[] SUGGEST_OTHERS = { "name_suggest._2gram", "name_suggest._3gram" };
-    static final int SUGGEST_RESULTS_MAX_SIZE = 10;
-    public static final String EM = "<em>";
-    public static final String EM1 = "</em>";
-    public static final String EM_EM = "<em>|</em>";
+
 
     private final IndexNameProvider indexNameProvider;
     private final OpenSearchAsyncClient client;
@@ -52,15 +47,16 @@ public class OpenSearchDocumentSuggestionService implements DocumentSuggestionSe
             return Flux.empty();
         }
 
+        String trimQuery = getTrimQuery(query);
         SearchRequest searchRequest = new SearchRequest.Builder()
                 .index(indexNameProvider.getDocumentsIndexName())
                 .query(q -> q
                         .multiMatch(mm -> mm
                                 // The 'bool_prefix' type is optimized for search-as-you-type fields
                                 .type(TextQueryType.BoolPrefix)
-                                .query(query)
+                                .query(trimQuery)
                                 // We target the main field and its internal sub-fields for best results
-                                .fields(SUGGEST_MAIN, SUGGEST_OTHERS)
+                                .fields(NAME_SUGGEST, SUGGEST_OTHERS)
                         )
                 )
                 // We don't need the full document source, making the request very lightweight.
@@ -69,7 +65,7 @@ public class OpenSearchDocumentSuggestionService implements DocumentSuggestionSe
                 .size(SUGGEST_RESULTS_MAX_SIZE)
                 // Use highlighting to get the matched parts of the name.
                 .highlight(h -> h
-                        .fields(SUGGEST_MAIN, f -> f.preTags(EM).postTags(EM1))
+                        .fields(NAME_SUGGEST, f -> f.preTags(EM).postTags(EM1))
                 )
                 .build();
 
@@ -82,6 +78,8 @@ public class OpenSearchDocumentSuggestionService implements DocumentSuggestionSe
             throw new OpenSearchException(e);
         }
     }
+
+
 
     /**
      * Converts the OpenSearch response into a Flux of Suggest objects.
@@ -105,7 +103,7 @@ public class OpenSearchDocumentSuggestionService implements DocumentSuggestionSe
      */
     private Suggest createSuggestFromHit(Hit<DocumentSource> hit) {
         DocumentSource source = hit.source();
-        List<String> highlights = hit.highlight().get(SUGGEST_MAIN);
+        List<String> highlights = hit.highlight().get(NAME_SUGGEST);
 
         // Ensure we have both the source with an ID and at least one highlight fragment.
         if (source != null && source.id() != null && highlights != null && !highlights.isEmpty()) {
@@ -118,7 +116,7 @@ public class OpenSearchDocumentSuggestionService implements DocumentSuggestionSe
         return null;
     }
 
-
+/*
     private List<String> extractSuggestionsFromHighlights(SearchResponse<Void> response) {
         if (response.hits() == null) {
             return Collections.emptyList();
@@ -135,4 +133,6 @@ public class OpenSearchDocumentSuggestionService implements DocumentSuggestionSe
                 .distinct() // Ensure unique suggestions
                 .collect(Collectors.toList());
     }
+
+ */
 }

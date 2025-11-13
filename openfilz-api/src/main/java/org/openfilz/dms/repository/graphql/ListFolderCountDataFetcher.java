@@ -5,6 +5,7 @@ import graphql.schema.DataFetchingEnvironment;
 import org.openfilz.dms.dto.request.ListFolderRequest;
 import org.openfilz.dms.mapper.DocumentMapper;
 import org.openfilz.dms.utils.SqlUtils;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Service;
@@ -22,7 +23,7 @@ public class ListFolderCountDataFetcher  extends AbstractListDataFetcher<Long> {
 
     protected String fromClause;
 
-    public ListFolderCountDataFetcher(DatabaseClient databaseClient, DocumentMapper mapper, ObjectMapper objectMapper, SqlUtils sqlUtils, ListFolderCriteria criteria) {
+    public ListFolderCountDataFetcher(DatabaseClient databaseClient, DocumentMapper mapper, ObjectMapper objectMapper, SqlUtils sqlUtils, @Qualifier("defaultListFolderCriteria") ListFolderCriteria criteria) {
         super(databaseClient, mapper, objectMapper, sqlUtils);
         this.criteria = criteria;
     }

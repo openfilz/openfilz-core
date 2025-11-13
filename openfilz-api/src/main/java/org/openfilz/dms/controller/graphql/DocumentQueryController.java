@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.dto.request.ListFolderRequest;
 import org.openfilz.dms.dto.response.FullDocumentInfo;
 import org.openfilz.dms.repository.DocumentQueryService;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.graphql.data.method.annotation.Argument;
 import org.springframework.graphql.data.method.annotation.QueryMapping;
@@ -16,11 +17,14 @@ import reactor.core.publisher.Mono;
 import java.util.UUID;
 
 @Controller
-@RequiredArgsConstructor
 @ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
 public class DocumentQueryController {
 
     protected final DocumentQueryService documentService;
+
+    public DocumentQueryController(@Qualifier("defaultDocumentQueryService") DocumentQueryService documentService) {
+        this.documentService = documentService;
+    }
 
     @QueryMapping
     public Mono<FullDocumentInfo> documentById(@Argument @NotNull UUID id,

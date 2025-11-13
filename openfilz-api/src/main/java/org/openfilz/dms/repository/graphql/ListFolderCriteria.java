@@ -10,10 +10,10 @@ import static org.openfilz.dms.entity.SqlColumnMapping.*;
 import static org.openfilz.dms.utils.SqlUtils.*;
 
 @RequiredArgsConstructor
-@Component
+@Component("defaultListFolderCriteria")
 public class ListFolderCriteria {
 
-    private final SqlUtils sqlUtils;
+    protected final SqlUtils sqlUtils;
 
     public DatabaseClient.GenericExecuteSpec bindCriteria(DatabaseClient.GenericExecuteSpec query, ListFolderRequest filter) {
         if(filter.id() != null) {
@@ -73,66 +73,82 @@ public class ListFolderCriteria {
     }
 
     public void applyFilter(String prefix, StringBuilder query, ListFolderRequest request) {
-        appendParentIdFilter(prefix, query, request);
-        appendAllFilterExceptParentId(prefix, query, request);
+        boolean appendAnd = appendParentIdFilter(prefix, query, request);
+        appendAllFilterExceptParentId(prefix, query, request, appendAnd);
     }
 
-    public void appendAllFilterExceptParentId(String prefix, StringBuilder query, ListFolderRequest request) {
+    public void appendAllFilterExceptParentId(String prefix, StringBuilder query, ListFolderRequest request, boolean appendAnd) {
         if(request.type() != null) {
-            sqlUtils.appendEqualsCriteria(prefix, TYPE, appendAnd(query));
+            sqlUtils.appendEqualsCriteria(prefix, TYPE, appendAnd(query, appendAnd));
+            appendAnd = true;
         }
         if(request.contentType() != null) {
-            sqlUtils.appendEqualsCriteria(prefix, CONTENT_TYPE, appendAnd(query));
+            sqlUtils.appendEqualsCriteria(prefix, CONTENT_TYPE, appendAnd(query, appendAnd));
+            appendAnd = true;
         }
         if(request.name() != null) {
-            sqlUtils.appendEqualsCriteria(prefix, NAME, appendAnd(query));
+            sqlUtils.appendEqualsCriteria(prefix, NAME, appendAnd(query, appendAnd));
+            appendAnd = true;
         }
         if(request.nameLike() != null) {
-            sqlUtils.appendLikeCriteria(prefix, NAME, appendAnd(query));
+            sqlUtils.appendLikeCriteria(prefix, NAME, appendAnd(query, appendAnd));
+            appendAnd = true;
         }
         if(request.metadata() != null && !request.metadata().isEmpty()) {
-            sqlUtils.appendJsonEqualsCriteria(prefix, METADATA, appendAnd(query));
+            sqlUtils.appendJsonEqualsCriteria(prefix, METADATA, appendAnd(query, appendAnd));
+            appendAnd = true;
         }
         if(request.size() != null) {
-            sqlUtils.appendEqualsCriteria(prefix, SIZE, appendAnd(query));
+            sqlUtils.appendEqualsCriteria(prefix, SIZE, appendAnd(query, appendAnd));
+            appendAnd = true;
         }
         if(request.createdBy() != null) {
-            sqlUtils.appendEqualsCriteria(prefix, CREATED_BY, appendAnd(query));
+            sqlUtils.appendEqualsCriteria(prefix, CREATED_BY, appendAnd(query, appendAnd));
+            appendAnd = true;
         }
         if(request.updatedBy() != null) {
-            sqlUtils.appendEqualsCriteria(prefix, UPDATED_BY, appendAnd(query));
+            sqlUtils.appendEqualsCriteria(prefix, UPDATED_BY, appendAnd(query, appendAnd));
+            appendAnd = true;
         }
         if(request.createdAtBefore() != null) {
             if(request.createdAtAfter() != null) {
-                sqlUtils.appendBetweenCriteria(prefix, CREATED_AT, appendAnd(query));
+                sqlUtils.appendBetweenCriteria(prefix, CREATED_AT, appendAnd(query, appendAnd));
+                appendAnd = true;
             } else {
-                sqlUtils.appendLessThanCriteria(prefix, CREATED_AT, appendAnd(query));
+                sqlUtils.appendLessThanCriteria(prefix, CREATED_AT, appendAnd(query, appendAnd));
+                appendAnd = true;
             }
         } else if(request.createdAtAfter() != null) {
-            sqlUtils.appendGreaterThanCriteria(prefix, CREATED_AT, appendAnd(query));
+            sqlUtils.appendGreaterThanCriteria(prefix, CREATED_AT, appendAnd(query, appendAnd));
+            appendAnd = true;
         }
         if(request.updatedAtBefore() != null) {
             if(request.updatedAtAfter() != null) {
-                sqlUtils.appendBetweenCriteria(prefix, UPDATED_AT, appendAnd(query));
+                sqlUtils.appendBetweenCriteria(prefix, UPDATED_AT, appendAnd(query, appendAnd));
             } else {
-                sqlUtils.appendLessThanCriteria(prefix, UPDATED_AT, appendAnd(query));
+                sqlUtils.appendLessThanCriteria(prefix, UPDATED_AT, appendAnd(query, appendAnd));
             }
         } else if(request.updatedAtAfter() != null) {
-            sqlUtils.appendGreaterThanCriteria(prefix, UPDATED_AT, appendAnd(query));
+            sqlUtils.appendGreaterThanCriteria(prefix, UPDATED_AT, appendAnd(query, appendAnd));
         }
     }
 
-    private StringBuilder appendAnd(StringBuilder query) {
-        return query.append(AND);
+    private StringBuilder appendAnd(StringBuilder query, boolean appendAnd) {
+        if(appendAnd) {
+            return query.append(AND);
+        } else {
+            return query.append(WHERE);
+        }
     }
 
-    public void appendParentIdFilter(String prefix, StringBuilder query, ListFolderRequest request) {
+    public boolean appendParentIdFilter(String prefix, StringBuilder query, ListFolderRequest request) {
         query.append(WHERE);
         if(request.id() != null) {
             sqlUtils.appendEqualsCriteria(prefix, PARENT_ID, query);
         } else {
             sqlUtils.appendIsNullCriteria(prefix, PARENT_ID, query);
         }
+        return true;
     }
 
     public void checkPageInfo(ListFolderRequest request) {
