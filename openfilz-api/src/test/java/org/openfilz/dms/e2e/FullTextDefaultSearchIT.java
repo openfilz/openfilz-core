@@ -27,7 +27,6 @@ import reactor.test.StepVerifier;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 
 import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
@@ -217,8 +216,8 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
                             && documents.get(1).get("id").equals(r1.id().toString())
                             && documents.get(0).get("extension").equals("pdf")
                             && documents.get(1).get("extension").equals("pdf")
-                            && documents.get(0).get("updatedBy").equals("anonymousUser")
-                            && documents.get(1).get("updatedBy").equals("anonymousUser")
+                            && documents.get(0).get("updatedBy").equals(getUsername())
+                            && documents.get(1).get("updatedBy").equals(getUsername())
                             && documents.get(0).get("name").equals(f2)
                             && documents.get(1).get("name").equals(f1);
                 })
@@ -236,6 +235,10 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
 
         waitFor(3000);
 
+    }
+
+    protected String getUsername() {
+        return "anonymousUser";
     }
 
     protected String getSearchQuery() {

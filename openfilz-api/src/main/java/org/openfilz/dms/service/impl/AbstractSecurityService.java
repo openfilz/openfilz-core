@@ -140,7 +140,7 @@ public abstract class AbstractSecurityService implements SecurityService {
      * */
     protected final boolean isQueryOrSearch(HttpMethod method, String path) {
         return (method.equals(HttpMethod.GET)
-                && pathStartsWith(path, "/files", "/folders", "/documents"))
+                && pathStartsWith(path, "/files", "/folders", "/documents", "/suggestions"))
                 ||
                 (method.equals(HttpMethod.POST) && (
                         pathStartsWith(path, "/documents/download-multiple", "/documents/search/ids-by-metadata", "/folders/list")

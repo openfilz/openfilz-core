@@ -11,7 +11,6 @@ import java.util.List;
 
 public interface DocumentSearchService {
 
-    String FILTER_NAME = OpenSearchDocumentKey.name.toString();
     String FILTER_TYPE = "type";
     String FILTER_EXTENSION = OpenSearchDocumentKey.extension.toString();
     String FILTER_SIZE = OpenSearchDocumentKey.size.toString();
