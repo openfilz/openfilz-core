@@ -5,7 +5,13 @@
     [isSearchResultsPage]="true"
     [hasSelection]="hasSelectedItems"
     [selectionCount]="selectedItems.length"
-    (viewModeChange)="onViewModeChange($event)">
+    (viewModeChange)="onViewModeChange($event)"
+    (renameSelected)="onRenameSelected()"
+    (downloadSelected)="onDownloadSelected()"
+    (moveSelected)="onMoveSelected()"
+    (copySelected)="onCopySelected()"
+    (deleteSelected)="onDeleteSelected()"
+    (clearSelection)="onSelectAll(false)">
   </app-toolbar>
 
   <div class="search-results-content">
