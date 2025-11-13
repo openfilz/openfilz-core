@@ -1,4 +1,20 @@
 spring:
+  r2dbc:
+    url: r2dbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:dms_db}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:sasql}
+    initialization-mode: always
+    pool:
+      enabled: true
+      initial-size: 5
+      max-size: 10
+  flyway:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:dms_db}
+    user: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:sasql}
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    out-of-order: true
   graphql:
     graphiql:
       enabled: true

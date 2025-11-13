@@ -27,6 +27,7 @@ import {
 
 import { DragDropDirective } from "../../directives/drag-drop.directive";
 import { DownloadProgressComponent } from "../download-progress/download-progress.component";
+import {AppConfig} from '../../config/app.config';
 
 @Component({
   selector: 'app-file-explorer',
@@ -83,7 +84,8 @@ import { DownloadProgressComponent } from "../download-progress/download-progres
                       (download)="onDownloadItem($event)"
                       (move)="onMoveItem($event)"
                       (copy)="onCopyItem($event)"
-                      (delete)="onDeleteItem($event)">
+                      (delete)="onDeleteItem($event)"
+                      (toggleFavorite)="onToggleFavorite($event)">
               </app-file-grid>
           }
           @if(viewMode === 'list' && items.length > 0) {
@@ -98,7 +100,8 @@ import { DownloadProgressComponent } from "../download-progress/download-progres
                       (download)="onDownloadItem($event)"
                       (move)="onMoveItem($event)"
                       (copy)="onCopyItem($event)"
-                      (delete)="onDeleteItem($event)">
+                      (delete)="onDeleteItem($event)"
+                      (toggleFavorite)="onToggleFavorite($event)">
               </app-file-list>
           }
       }
@@ -138,8 +141,13 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
   breadcrumbTrail: FileItem[] = []; // Track full path
   currentFolder?: FileItem;
 
-  pageSize = 70;
+  totalItems = 0;
+  pageSize = AppConfig.pagination.defaultPageSize;
   pageIndex = 0;
+
+  // Click delay handling
+  private clickTimeout: any = null;
+  private readonly CLICK_DELAY = 250; // milliseconds
 
   @ViewChild('fileInput') fileInput!: ElementRef;
 
@@ -300,7 +308,29 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
     this.fileOver = isOver;
   }
 
+  onItemClick(item: FileItem) {
+    // Clear any existing timeout
+    if (this.clickTimeout) {
+      clearTimeout(this.clickTimeout);
+    }
+
+    // Delay the selection to allow double-click to be detected
+    this.clickTimeout = setTimeout(() => {
+      item.selected = !item.selected;
+      this.clickTimeout = null;
+    }, this.CLICK_DELAY);
+  }
+
   onItemDoubleClick(item: FileItem) {
+    // Clear the pending single-click timeout
+    if (this.clickTimeout) {
+      clearTimeout(this.clickTimeout);
+      this.clickTimeout = null;
+    }
+
+    // Deselect the item if it was selected
+    item.selected = false;
+
     if (item.type === 'FOLDER') {
       this.loadFolder(item, false, true);
     } else {
@@ -332,6 +362,421 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
         });
       }
     });
+  }
+
+  onRenameItem(item: FileItem) {
+    const dialogRef = this.dialog.open(RenameDialogComponent, {
+      width: '400px',
+      data: { name: item.name, type: item.type } as RenameDialogData
+    });
+
+    dialogRef.afterClosed().subscribe(newName => {
+      if (newName) {
+        const request: RenameRequest = { newName };
+
+        const renameObservable = item.type === 'FOLDER'
+          ? this.documentApi.renameFolder(item.id, request)
+          : this.documentApi.renameFile(item.id, request);
+
+        renameObservable.subscribe({
+          next: () => {
+            this.snackBar.open('Item renamed successfully', 'Close', { duration: 3000 });
+            this.loadFolder(this.currentFolder);
+          },
+          error: (error) => {
+            this.snackBar.open('Failed to rename item', 'Close', { duration: 3000 });
+          }
+        });
+      }
+    });
+  }
+
+  onDownloadItem(item: FileItem) {
+    this.isDownloading = true;
+    item.selected = false;
+    this.documentApi.downloadDocument(item.id).subscribe({
+      next: (blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = item.name + ((item.type == 'FILE' ? '' : '.zip'));
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        this.isDownloading = false;
+      },
+      error: (error) => {
+        this.snackBar.open('Failed to download file', 'Close', { duration: 3000 });
+        this.isDownloading = false;
+      }
+    });
+  }
+
+  onMoveItem(item: FileItem) {
+    const dialogRef = this.dialog.open(FolderTreeDialogComponent, {
+      width: '700px',
+      data: {
+        title: 'Move item',
+        actionType: 'move',
+        currentFolderId: this.currentFolder?.id,
+        excludeIds: [item.id]
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(targetFolderId => {
+      if (targetFolderId !== undefined) {
+        this.performMoveWithRetry(item, targetFolderId);
+      }
+    });
+  }
+
+  onCopyItem(item: FileItem) {
+    const dialogRef = this.dialog.open(FolderTreeDialogComponent, {
+      width: '700px',
+      data: {
+        title: 'Copy item',
+        actionType: 'copy',
+        currentFolderId: this.currentFolder?.id,
+        excludeIds: []
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(targetFolderId => {
+      if (targetFolderId !== undefined) {
+        this.performCopyWithRetry(item, targetFolderId);
+      }
+    });
+  }
+
+  onDeleteItem(item: FileItem) {
+    if (confirm(`Are you sure you want to delete "${item.name}"?`)) {
+      this.deleteItems([item]);
+    }
+  }
+
+  onToggleFavorite(item: FileItem) {
+    this.documentApi.toggleFavorite(item.id).subscribe({
+      next: (isFavorited) => {
+        // Update local state
+        item.isFavorite = isFavorited;
+
+        // Show notification
+        const message = isFavorited
+          ? `"${item.name}" added to favorites`
+          : `"${item.name}" removed from favorites`;
+        this.snackBar.open(message, 'Close', { duration: 2000 });
+      },
+      error: (error) => {
+        console.error('Error toggling favorite:', error);
+        this.snackBar.open('Failed to update favorite status', 'Close', { duration: 3000 });
+      }
+    });
+  }
+
+  onDownloadSelected() {
+    const selectedItems = this.selectedItems;
+    if (selectedItems.length === 1 && selectedItems[0].type === 'FILE') {
+      this.onDownloadItem(selectedItems[0]);
+    } else if (selectedItems.length > 1) {
+      this.isDownloading = true;
+      const documentIds = selectedItems.map(item => item.id);
+      this.selectedItems.forEach(item => item.selected = false);
+      this.documentApi.downloadMultipleDocuments(documentIds).subscribe({
+        next: (blob) => {
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'documents.zip';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+          this.isDownloading = false;
+        },
+        error: (error) => {
+          this.snackBar.open('Failed to download files', 'Close', { duration: 3000 });
+          this.isDownloading = false;
+        }
+      });
+    }
+  }
+
+  onMoveSelected() {
+    const selectedItems = this.selectedItems;
+    if (selectedItems.length > 0) {
+      const dialogRef = this.dialog.open(FolderTreeDialogComponent, {
+        width: '700px',
+        data: {
+          title: `Move ${selectedItems.length} item${selectedItems.length > 1 ? 's' : ''}`,
+          actionType: 'move',
+          currentFolderId: this.currentFolder?.id,
+          excludeIds: selectedItems.map(item => item.id)
+        }
+      });
+
+      dialogRef.afterClosed().subscribe(targetFolderId => {
+        if (targetFolderId !== undefined) {
+          const folders = selectedItems.filter(item => item.type === 'FOLDER');
+          const files = selectedItems.filter(item => item.type === 'FILE');
+
+          let totalOperations = 0;
+          if (folders.length > 0) totalOperations++;
+          if (files.length > 0) totalOperations++;
+
+          let completed = 0;
+          const handleCompletion = () => {
+            completed++;
+            if (completed === totalOperations) {
+              this.snackBar.open('Items moved successfully', 'Close', { duration: 3000 });
+              this.loadFolder(this.currentFolder);
+            }
+          };
+
+          if (folders.length > 0) {
+            this.performBulkMove(folders, targetFolderId, handleCompletion, 'folders');
+          }
+
+          if (files.length > 0) {
+            this.performBulkMove(files, targetFolderId, handleCompletion, 'files');
+          }
+        }
+      });
+    }
+  }
+
+  onCopySelected() {
+    const selectedItems = this.selectedItems;
+    if (selectedItems.length > 0) {
+      const dialogRef = this.dialog.open(FolderTreeDialogComponent, {
+        width: '700px',
+        data: {
+          title: `Copy ${selectedItems.length} item${selectedItems.length > 1 ? 's' : ''}`,
+          actionType: 'copy',
+          currentFolderId: this.currentFolder?.id,
+          excludeIds: []
+        }
+      });
+
+      dialogRef.afterClosed().subscribe(targetFolderId => {
+        if (targetFolderId !== undefined) {
+          const folders = selectedItems.filter(item => item.type === 'FOLDER');
+          const files = selectedItems.filter(item => item.type === 'FILE');
+
+          let totalOperations = 0;
+          if (folders.length > 0) totalOperations++;
+          if (files.length > 0) totalOperations++;
+
+          let completed = 0;
+          const handleCompletion = () => {
+            completed++;
+            if (completed === totalOperations) {
+              this.snackBar.open('Items copied successfully', 'Close', { duration: 3000 });
+              this.loadFolder(this.currentFolder);
+            }
+          };
+
+          if (folders.length > 0) {
+            this.performBulkCopy(folders, targetFolderId, handleCompletion, 'folders');
+          }
+
+          if (files.length > 0) {
+            this.performBulkCopy(files, targetFolderId, handleCompletion, 'files');
+          }
+        }
+      });
+    }
+  }
+
+  onRenameSelected() {
+    const selectedItems = this.selectedItems;
+    if (selectedItems.length === 1) {
+      this.onRenameItem(selectedItems[0]);
+    }
+  }
+
+  onDeleteSelected() {
+    const selectedItems = this.selectedItems;
+    if (selectedItems.length > 0) {
+      const itemNames = selectedItems.map(item => item.name).join(', ');
+      if (confirm(`Are you sure you want to delete: ${itemNames}?`)) {
+        this.deleteItems(selectedItems);
+      }
+    }
+  }
+
+  private deleteItems(items: FileItem[]) {
+    const request: DeleteRequest = {
+      documentIds: items.map(item => item.id)
+    };
+
+    const folders = items.filter(item => item.type === 'FOLDER');
+    const files = items.filter(item => item.type === 'FILE');
+
+    const deleteObservables = [];
+
+    if (folders.length > 0) {
+      deleteObservables.push(this.documentApi.deleteFolders({ documentIds: folders.map(f => f.id) }));
+    }
+
+    if (files.length > 0) {
+      deleteObservables.push(this.documentApi.deleteFiles({ documentIds: files.map(f => f.id) }));
+    }
+
+    deleteObservables.forEach(observable => {
+      observable.subscribe({
+        next: () => {
+          this.snackBar.open('Items deleted successfully', 'Close', { duration: 3000 });
+          this.loadFolder(this.currentFolder);
+        },
+        error: (error) => {
+          this.snackBar.open('Failed to delete items', 'Close', { duration: 3000 });
+        }
+      });
+    });
+  }
+
+  private performMoveWithRetry(item: FileItem, targetFolderId: string | null, attempt: number = 1, maxAttempts: number = 5) {
+    const request: MoveRequest = {
+      documentIds: [item.id],
+      targetFolderId: targetFolderId || undefined,
+      allowDuplicateFileNames: attempt > 1
+    };
+
+    const moveObservable = item.type === 'FOLDER'
+      ? this.documentApi.moveFolders(request)
+      : this.documentApi.moveFiles(request);
+
+    moveObservable.subscribe({
+      next: () => {
+        this.snackBar.open('Item moved successfully', 'Close', { duration: 3000 });
+        this.loadFolder(this.currentFolder);
+      },
+      error: (error: any) => {
+        if (error.status === 409 && attempt < maxAttempts) {
+          if (attempt === 1) {
+            this.performMoveWithRetry(item, targetFolderId, attempt + 1, maxAttempts);
+          } else {
+            this.snackBar.open(`Name conflict detected. Maximum retry attempts (${maxAttempts}) reached.`, 'Close', { duration: 5000 });
+          }
+        } else {
+          this.snackBar.open('Failed to move item', 'Close', { duration: 3000 });
+        }
+      }
+    });
+  }
+
+  private performCopyWithRetry(item: FileItem, targetFolderId: string | null, attempt: number = 1, maxAttempts: number = 5) {
+    const request: CopyRequest = {
+      documentIds: [item.id],
+      targetFolderId: targetFolderId || undefined,
+      allowDuplicateFileNames: attempt > 1
+    };
+
+    if (item.type === 'FOLDER') {
+      this.documentApi.copyFolders(request).subscribe({
+        next: () => {
+          this.snackBar.open('Item copied successfully', 'Close', { duration: 3000 });
+          this.loadFolder(this.currentFolder);
+        },
+        error: (error: any) => {
+          if (error.status === 409 && attempt < maxAttempts) {
+            if (attempt === 1) {
+              this.performCopyWithRetry(item, targetFolderId, attempt + 1, maxAttempts);
+            } else {
+              this.snackBar.open(`Name conflict detected. Maximum retry attempts (${maxAttempts}) reached.`, 'Close', { duration: 5000 });
+            }
+          } else {
+            this.snackBar.open('Failed to copy item', 'Close', { duration: 3000 });
+          }
+        }
+      });
+    } else {
+      this.documentApi.copyFiles(request).subscribe({
+        next: () => {
+          this.snackBar.open('Item copied successfully', 'Close', { duration: 3000 });
+          this.loadFolder(this.currentFolder);
+        },
+        error: (error: any) => {
+          if (error.status === 409 && attempt < maxAttempts) {
+            if (attempt === 1) {
+              this.performCopyWithRetry(item, targetFolderId, attempt + 1, maxAttempts);
+            } else {
+              this.snackBar.open(`Name conflict detected. Maximum retry attempts (${maxAttempts}) reached.`, 'Close', { duration: 5000 });
+            }
+          } else {
+            this.snackBar.open('Failed to copy item', 'Close', { duration: 3000 });
+          }
+        }
+      });
+    }
+  }
+
+  private performBulkMove(items: FileItem[], targetFolderId: string | null, onComplete: () => void, type: 'files' | 'folders', attempt: number = 1, maxAttempts: number = 5) {
+    const request: MoveRequest = {
+      documentIds: items.map(f => f.id),
+      targetFolderId: targetFolderId || undefined,
+      allowDuplicateFileNames: attempt > 1
+    };
+
+    const moveObservable = type === 'folders'
+      ? this.documentApi.moveFolders(request)
+      : this.documentApi.moveFiles(request);
+
+    moveObservable.subscribe({
+      next: () => onComplete(),
+      error: (error: any) => {
+        if (error.status === 409 && attempt < maxAttempts) {
+          if (attempt === 1) {
+            this.performBulkMove(items, targetFolderId, onComplete, type, attempt + 1, maxAttempts);
+          } else {
+            this.snackBar.open(`Name conflict detected. Maximum retry attempts (${maxAttempts}) reached.`, 'Close', { duration: 5000 });
+          }
+        } else {
+          this.snackBar.open('Failed to move items', 'Close', { duration: 3000 });
+        }
+      }
+    });
+  }
+
+  private performBulkCopy(items: FileItem[], targetFolderId: string | null, onComplete: () => void, type: 'files' | 'folders', attempt: number = 1, maxAttempts: number = 5) {
+    const request: CopyRequest = {
+      documentIds: items.map(f => f.id),
+      targetFolderId: targetFolderId || undefined,
+      allowDuplicateFileNames: attempt > 1
+    };
+
+    if (type === 'folders') {
+      this.documentApi.copyFolders(request).subscribe({
+        next: () => onComplete(),
+        error: (error: any) => {
+          if (error.status === 409 && attempt < maxAttempts) {
+            if (attempt === 1) {
+              this.performBulkCopy(items, targetFolderId, onComplete, type, attempt + 1, maxAttempts);
+            } else {
+              this.snackBar.open(`Name conflict detected. Maximum retry attempts (${maxAttempts}) reached.`, 'Close', { duration: 5000 });
+            }
+          } else {
+            this.snackBar.open('Failed to copy items', 'Close', { duration: 3000 });
+          }
+        }
+      });
+    } else {
+      this.documentApi.copyFiles(request).subscribe({
+        next: () => onComplete(),
+        error: (error: any) => {
+          if (error.status === 409 && attempt < maxAttempts) {
+            if (attempt === 1) {
+              this.performBulkCopy(items, targetFolderId, onComplete, type, attempt + 1, maxAttempts);
+            } else {
+              this.snackBar.open(`Name conflict detected. Maximum retry attempts (${maxAttempts}) reached.`, 'Close', { duration: 5000 });
+            }
+          } else {
+            this.snackBar.open('Failed to copy items', 'Close', { duration: 3000 });
+          }
+        }
+      });
+    }
   }
 
   triggerFileInput() {

@@ -194,49 +194,38 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
     @Override
     @Transactional
     public Mono<Void> deleteFiles(DeleteRequest request) {
-        return Flux.fromIterable(request.documentIds())
-                .flatMap(docId -> documentDAO.findById(docId, AccessType.RWD)
-                        .switchIfEmpty(Mono.error(new DocumentNotFoundException(docId)))
-                        .filter(doc -> doc.getType() == FILE) // Ensure it's a file
-                        .switchIfEmpty(Mono.error(new OperationForbiddenException("ID " + docId + " is a folder. Use delete folders API.")))
-                        .flatMap(document -> storageService.deleteFile(document.getStoragePath())
-                                .then(documentDAO.delete(document)))
-                        .then(auditService.logAction(AuditAction.DELETE_FILE, FILE, docId))
-                        .doOnSuccess(_ -> metadataPostProcessor.deleteDocument(docId))
-                )
-                .then();
+        return getConnectedUserEmail()
+                .flatMap(userId -> Flux.fromIterable(request.documentIds())
+                        .flatMap(docId -> documentDAO.findById(docId, AccessType.RWD)
+                                .switchIfEmpty(Mono.error(new DocumentNotFoundException(docId)))
+                                .filter(doc -> doc.getType() == FILE) // Ensure it's a file
+                                .switchIfEmpty(Mono.error(new OperationForbiddenException("ID " + docId + " is a folder. Use delete folders API.")))
+                                // Soft delete - keep physical file, just mark as deleted in DB
+                                .flatMap(document -> documentDAO.softDelete(docId, userId))
+                                .then(auditService.logAction(AuditAction.DELETE_FILE, FILE, docId))
+                        )
+                        .then()
+                );
     }
 
     @Override
     @Transactional
     public Mono<Void> deleteFolders(DeleteRequest request) {
-        return Flux.fromIterable(request.documentIds())
-                .flatMap(this::deleteFolderRecursive)
-                .then();
+        return getConnectedUserEmail()
+                .flatMap(userId -> Flux.fromIterable(request.documentIds())
+                        .flatMap(folderId -> deleteFolderRecursive(folderId, userId))
+                        .then()
+                );
     }
 
-    private Mono<Void> deleteFolderRecursive(UUID folderId) {
+    private Mono<Void> deleteFolderRecursive(UUID folderId, String userId) {
         return documentDAO.getFolderToDelete(folderId)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, folderId)))
                 .flatMap(folder -> {
-                    // 1. Delete child files
-                    Mono<Void> deleteChildFiles = getChildrenDocumentsToDelete(folderId, FILE)
-                            .flatMap(file -> storageService.deleteFile(file.getStoragePath())
-                                    .then(documentDAO.delete(file))
-                                    .then(auditService.logAction(DELETE_FILE_CHILD, FILE, file.getId(), new DeleteAudit(folderId)))
-                                    .doOnSuccess(_ -> metadataPostProcessor.deleteDocument(file.getId()))
-                            ).then();
-
-                    // 2. Recursively delete child folders
-                    Mono<Void> deleteChildFolders = getChildrenDocumentsToDelete(folderId, FOLDER)
-                            .flatMap(childFolder -> deleteFolderRecursive(childFolder.getId()))
-                            .then();
-
-                    // 3. Delete the folder itself from DB (and storage if it had a physical representation)
-                    return Mono.when(deleteChildFiles, deleteChildFolders)
-                            .then(documentDAO.delete(folder))
-                            .then(auditService.logAction(AuditAction.DELETE_FOLDER, FOLDER, folderId))
-                            .doOnSuccess(_ -> metadataPostProcessor.deleteDocument(folder.getId()));
+                    // Soft delete folder and all children recursively
+                    // This marks the folder and all descendants as deleted without removing physical files
+                    return documentDAO.softDeleteRecursive(folderId, userId)
+                            .then(auditService.logAction(AuditAction.DELETE_FOLDER, FOLDER, folderId));
                 });
     }
 
@@ -771,17 +760,21 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
         if(folderId == null) {
             return listRootElements(type);
         }
-        return documentDAO.existsByIdAndType(folderId, DocumentType.FOLDER, AccessType.RO)
-                .flatMapMany(exists -> {
-                    if(!exists) {
-                        return Flux.error(new DocumentNotFoundException(FOLDER, folderId));
-                    }
-                    return documentDAO.listDocumentInfoInFolder(folderId, type);
-                });
+        return getConnectedUserEmail()
+                .flatMapMany(userId ->
+                        documentDAO.existsByIdAndType(folderId, DocumentType.FOLDER, AccessType.RO)
+                                .flatMapMany(exists -> {
+                                    if(!exists) {
+                                        return Flux.error(new DocumentNotFoundException(FOLDER, folderId));
+                                    }
+                                    return documentDAO.listDocumentInfoInFolder(folderId, type, userId);
+                                })
+                );
     }
 
     protected Flux<FolderElementInfo> listRootElements(DocumentType type) {
-        return documentDAO.listDocumentInfoInFolder(null, type);
+        return getConnectedUserEmail()
+                .flatMapMany(userId -> documentDAO.listDocumentInfoInFolder(null, type, userId));
     }
 
     @Override

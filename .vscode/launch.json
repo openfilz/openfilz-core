@@ -1,0 +1,14 @@
+{
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Spring Boot-DmsApiApplication<openfilz-api>",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "mainClass": "org.openfilz.dms.DmsApiApplication",
+            "projectName": "openfilz-api",
+            "args": "",
+            "envFile": "${workspaceFolder}/.env"
+        }
+    ]
+}

@@ -47,10 +47,11 @@
   height: calc(100vh - 104px); /* Include breadcrumb in calculation */
 }
 
-.main-content.center-content {
-  justify-content: center; /* Center content vertically */
-  align-items: center; /* Center content horizontally */
-}
+/* Removed centering for WIP routes - they should display full width */
+/* .main-content.center-content {
+  justify-content: center;
+  align-items: center;
+} */
 
 /* For wip content */
 .wip-content {

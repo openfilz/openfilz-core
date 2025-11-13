@@ -6,9 +6,9 @@ public enum AuditAction {
     RENAME_FILE,
     RENAME_FOLDER,
     COPY_FOLDER,
-    DELETE_FILE,
-    DELETE_FILE_CHILD,
-    DELETE_FOLDER,
+    DELETE_FILE, // Soft delete (move to recycle bin)
+    DELETE_FILE_CHILD, // Soft delete child file
+    DELETE_FOLDER, // Soft delete folder
     CREATE_FOLDER,
     MOVE_FILE,
     MOVE_FOLDER,
@@ -18,5 +18,11 @@ public enum AuditAction {
     UPDATE_DOCUMENT_METADATA,
     DOWNLOAD_DOCUMENT,
     DELETE_DOCUMENT_METADATA,
-    SHARE_DOCUMENTS
+    SHARE_DOCUMENTS,
+    // Recycle bin actions
+    RESTORE_FILE, // Restore file from recycle bin
+    RESTORE_FOLDER, // Restore folder from recycle bin
+    PERMANENT_DELETE_FILE, // Permanently delete file from recycle bin
+    PERMANENT_DELETE_FOLDER, // Permanently delete folder from recycle bin
+    EMPTY_RECYCLE_BIN // Empty entire recycle bin
 }

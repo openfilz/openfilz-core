@@ -1,0 +1,75 @@
+<div class="favorites-container">
+  <!-- Toolbar with page title and integrated pagination (no upload/create folder buttons) -->
+  <app-toolbar
+    [pageTitle]="'Favorites'"
+    [pageIcon]="'favorite'"
+    [viewMode]="viewMode"
+    [hasSelection]="hasSelectedItems"
+    [selectionCount]="selectedItems.length"
+    [pageIndex]="pageIndex"
+    [pageSize]="pageSize"
+    [totalItems]="totalItems"
+    [showUploadButton]="false"
+    [showCreateFolderButton]="false"
+    (viewModeChange)="onViewModeChange($event)"
+    (renameSelected)="onRenameSelected()"
+    (downloadSelected)="onDownloadSelected()"
+    (moveSelected)="onMoveSelected()"
+    (copySelected)="onCopySelected()"
+    (deleteSelected)="onDeleteSelected()"
+    (clearSelection)="onClearSelection()"
+    (previousPage)="onPreviousPage()"
+    (nextPage)="onNextPage()"
+    (pageSizeChange)="onPageSizeChange($event)">
+  </app-toolbar>
+
+  <div class="favorites-content">
+    @if (loading) {
+      <div class="loading-container">
+        <mat-spinner></mat-spinner>
+        <p>Loading your favorites...</p>
+      </div>
+    }
+
+    @if (!loading && items.length === 0) {
+      <div class="empty-state">
+        <mat-icon class="empty-icon">favorite_border</mat-icon>
+        <h2>No favorites yet</h2>
+        <p>Add files and folders to your favorites to see them here</p>
+      </div>
+    }
+
+    @if (!loading && items.length > 0) {
+      @if (viewMode === 'grid') {
+        <app-file-grid
+          [items]="items"
+          (itemClick)="onItemClick($event)"
+          (itemDoubleClick)="onItemDoubleClick($event)"
+          (selectionChange)="onSelectionChange($event)"
+          (toggleFavorite)="onToggleFavorite($event)"
+          (rename)="onRenameItem($event)"
+          (download)="onDownloadItem($event)"
+          (move)="onMoveItem($event)"
+          (copy)="onCopyItem($event)"
+          (delete)="onDeleteItem($event)">
+        </app-file-grid>
+      }
+
+      @if (viewMode === 'list') {
+        <app-file-list
+          [items]="items"
+          (itemClick)="onItemClick($event)"
+          (itemDoubleClick)="onItemDoubleClick($event)"
+          (selectionChange)="onSelectionChange($event)"
+          (selectAll)="onSelectAll($event)"
+          (toggleFavorite)="onToggleFavorite($event)"
+          (rename)="onRenameItem($event)"
+          (download)="onDownloadItem($event)"
+          (move)="onMoveItem($event)"
+          (copy)="onCopyItem($event)"
+          (delete)="onDeleteItem($event)">
+        </app-file-list>
+      }
+    }
+  </div>
+</div>

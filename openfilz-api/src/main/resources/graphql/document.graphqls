@@ -22,6 +22,7 @@ type FolderElementInfo {
     updatedAt : DateTime
     createdBy : String
     updatedBy : String
+    isFavorite : Boolean
 }
 
 type DocumentInfo {

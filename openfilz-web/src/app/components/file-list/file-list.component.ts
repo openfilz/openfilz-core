@@ -23,6 +23,7 @@ import {FileIconService} from '../../services/file-icon.service';
 export class FileListComponent {
   @Input() items: FileItem[] = [];
   @Input() fileOver: boolean = false;
+  @Input() showFavoriteButton: boolean = true; // Control favorite button visibility
   
   @Output() itemClick = new EventEmitter<FileItem>();
   @Output() itemDoubleClick = new EventEmitter<FileItem>();
@@ -33,8 +34,14 @@ export class FileListComponent {
   @Output() move = new EventEmitter<FileItem>();
   @Output() copy = new EventEmitter<FileItem>();
   @Output() delete = new EventEmitter<FileItem>();
+  @Output() toggleFavorite = new EventEmitter<FileItem>();
 
-  displayedColumns: string[] = ['select', 'name', 'size', 'type'];
+  get displayedColumns(): string[] {
+    if (this.showFavoriteButton) {
+      return ['select', 'favorite', 'name', 'size', 'type'];
+    }
+    return ['select', 'name', 'size', 'type'];
+  }
 
   constructor(private fileIconService: FileIconService) {}
 
@@ -80,6 +87,11 @@ export class FileListComponent {
 
   onDelete(item: FileItem) {
     this.delete.emit(item);
+  }
+
+  onToggleFavorite(event: Event, item: FileItem) {
+    event.stopPropagation();
+    this.toggleFavorite.emit(item);
   }
 
   getFileIcon(fileName: string, type: 'FILE' | 'FOLDER'): string {

@@ -48,9 +48,21 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
 
 
     private static final String SELECT_ALL_FOLDER_ELEMENT_INFO = """
-            SELECT d.id, d.type, d.name
+            SELECT
+                d.id,
+                d.type,
+                d.content_type,
+                d.name,
+                d.metadata,
+                d.size,
+                d.created_at,
+                d.updated_at,
+                d.created_by,
+                d.updated_by,
+                CASE WHEN uf.id IS NOT NULL THEN TRUE ELSE FALSE END as is_favorite
             FROM Documents d
-            WHERE d.parent_id""";
+            LEFT JOIN user_favorites uf ON d.id = uf.document_id AND uf.user_id = :user_id
+            WHERE d.deleted_at IS NULL AND d.parent_id""";
 
     protected static final String SELECT_CHILDREN = """
             WITH RECURSIVE folder_tree AS (
@@ -62,7 +74,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
                  storage_path as storage,
                  name::text as fullpath
               FROM documents
-              WHERE parent_id = :parentId
+              WHERE parent_id = :parentId AND deleted_at IS NULL
              UNION ALL
               SELECT
                  d.id,
@@ -73,6 +85,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
                  tree.fullpath || '/' || d.name
               FROM documents d
               JOIN folder_tree tree ON d.parent_id = tree.id
+              WHERE d.deleted_at IS NULL
              )
              SELECT * FROM folder_tree""";
 
@@ -87,7 +100,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
                  storage_path as storage,
                  :rootFolder || name as fullpath
               FROM documents
-              WHERE parent_id = :parentId
+              WHERE parent_id = :parentId AND deleted_at IS NULL
              UNION ALL
               SELECT
                  d.id,
@@ -98,6 +111,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
                  tree.fullpath || '/' || d.name
               FROM documents d
               JOIN folder_tree tree ON d.parent_id = tree.id
+              WHERE d.deleted_at IS NULL
              )
              SELECT * FROM folder_tree""";
 
@@ -217,7 +231,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
                     size,
                     storage_path
                 FROM documents
-                where id in (:ids)""")
+                where id in (:ids) AND deleted_at IS NULL""")
                 .bind(IDS, documentIds)
                 .map(this::toRootChild)
                 .all()
@@ -225,9 +239,13 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
     }
 
     @Override
-    public Flux<FolderElementInfo> listDocumentInfoInFolder(UUID parentFolderId, DocumentType type) {
+    public Flux<FolderElementInfo> listDocumentInfoInFolder(UUID parentFolderId, DocumentType type, String userId) {
         StringBuilder sql = buildListDocumentInfoInFolderQuery(parentFolderId, type);
         DatabaseClient.GenericExecuteSpec query = databaseClient.sql(sql.toString());
+
+        // Bind user_id for the favorites check
+        query = query.bind("user_id", userId != null ? userId : "");
+
         if(parentFolderId != null) {
             query = query.bind(ID, parentFolderId);
         }
@@ -263,12 +281,12 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
 
     @Override
     public Mono<Long> countDocument(UUID parentId) {
-        return parentId == null ? documentRepository.countDocumentByParentIdIsNull()
-                : documentRepository.countDocumentByParentIdEquals(parentId);
+        return parentId == null ? documentRepository.countDocumentByParentIdIsNullAndDeletedAtIsNull()
+                : documentRepository.countDocumentByParentIdEqualsAndDeletedAtIsNull(parentId);
     }
 
     protected Flux<Tuple2<UUID, String>> getFolders(List<UUID> documentIds) {
-        return databaseClient.sql("select id, name from documents where type = :type and id in (:ids)")
+        return databaseClient.sql("select id, name from documents where type = :type and id in (:ids) AND deleted_at IS NULL")
                 .bind(TYPE, DocumentType.FOLDER.toString())
                 .bind(IDS, documentIds)
                 .map(row -> Tuples.of(row.get(ID, UUID.class), row.get(NAME, String.class)))
@@ -333,5 +351,169 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
     @Override
     public Mono<Void> delete(Document document) {
         return documentRepository.delete(document);
+    }
+
+    @Override
+    public Mono<Long> countFilesByType(DocumentType type) {
+        return databaseClient.sql("SELECT COUNT(*) FROM " + DOCUMENT + " WHERE " + TYPE + " = :type")
+                .bind("type", type.name())
+                .map(row -> row.get(0, Long.class))
+                .one()
+                .defaultIfEmpty(0L);
+    }
+
+    @Override
+    public Mono<Long> getTotalStorageByContentType(String contentTypePattern) {
+        return databaseClient.sql("SELECT COALESCE(SUM(" + SIZE + "), 0) FROM " + DOCUMENT +
+                " WHERE " + CONTENT_TYPE + " LIKE :pattern AND " + TYPE + " = :type")
+                .bind("pattern", contentTypePattern)
+                .bind("type", DocumentType.FILE.name())
+                .map(row -> row.get(0, Long.class))
+                .one()
+                .defaultIfEmpty(0L);
+    }
+
+    @Override
+    public Mono<Long> countFilesByContentType(String contentTypePattern) {
+        return databaseClient.sql("SELECT COUNT(*) FROM " + DOCUMENT +
+                " WHERE " + CONTENT_TYPE + " LIKE :pattern AND " + TYPE + " = :type")
+                .bind("pattern", contentTypePattern)
+                .bind("type", DocumentType.FILE.name())
+                .map(row -> row.get(0, Long.class))
+                .one()
+                .defaultIfEmpty(0L);
+    }
+
+    @Override
+    public Mono<Long> getTotalStorageUsed() {
+        return databaseClient.sql("SELECT COALESCE(SUM(" + SIZE + "), 0) FROM " + DOCUMENT +
+                " WHERE " + TYPE + " = :type")
+                .bind("type", DocumentType.FILE.name())
+                .map(row -> row.get(0, Long.class))
+                .one()
+                .defaultIfEmpty(0L);
+    }
+
+    // ==================== Recycle Bin Methods ====================
+
+    @Override
+    public Mono<Void> softDelete(UUID documentId, String userId) {
+        String sql = "UPDATE " + DOCUMENT + " SET " + DELETED_AT + " = CURRENT_TIMESTAMP, " +
+                DELETED_BY + " = :userId WHERE " + ID + " = :id";
+
+        return databaseClient.sql(sql)
+                .bind("userId", userId)
+                .bind("id", documentId)
+                .then();
+    }
+
+    @Override
+    public Mono<Void> softDeleteRecursive(UUID documentId, String userId) {
+        // Recursively soft delete all children and the document itself
+        String sql = """
+                WITH RECURSIVE descendants AS (
+                    SELECT id FROM documents WHERE id = :docId
+                    UNION ALL
+                    SELECT d.id FROM documents d
+                    INNER JOIN descendants desc ON d.parent_id = desc.id
+                )
+                UPDATE documents
+                SET deleted_at = CURRENT_TIMESTAMP, deleted_by = :userId
+                WHERE id IN (SELECT id FROM descendants)
+                """;
+
+        return databaseClient.sql(sql)
+                .bind("docId", documentId)
+                .bind("userId", userId)
+                .then();
+    }
+
+    @Override
+    public Flux<FolderElementInfo> findDeletedDocuments(String userId) {
+        String sql = """
+                SELECT
+                    id,
+                    type,
+                    content_type,
+                    name,
+                    metadata,
+                    size,
+                    created_at,
+                    updated_at,
+                    created_by,
+                    updated_by,
+                    FALSE as is_favorite
+                FROM documents
+                WHERE deleted_by = :userId
+                AND deleted_at IS NOT NULL
+                ORDER BY deleted_at DESC
+                """;
+
+        return databaseClient.sql(sql)
+                .bind("userId", userId)
+                .map(mapFolderElementInfo())
+                .all();
+    }
+
+    @Override
+    public Mono<Void> restore(UUID documentId) {
+        String sql = "UPDATE " + DOCUMENT + " SET " + DELETED_AT + " = NULL, " +
+                DELETED_BY + " = NULL WHERE " + ID + " = :id";
+
+        return databaseClient.sql(sql)
+                .bind("id", documentId)
+                .then();
+    }
+
+    @Override
+    public Mono<Void> restoreRecursive(UUID documentId) {
+        // Recursively restore all children and the document itself
+        String sql = """
+                WITH RECURSIVE descendants AS (
+                    SELECT id FROM documents WHERE id = :docId
+                    UNION ALL
+                    SELECT d.id FROM documents d
+                    INNER JOIN descendants desc ON d.parent_id = desc.id
+                )
+                UPDATE documents
+                SET deleted_at = NULL, deleted_by = NULL
+                WHERE id IN (SELECT id FROM descendants)
+                """;
+
+        return databaseClient.sql(sql)
+                .bind("docId", documentId)
+                .then();
+    }
+
+    @Override
+    public Mono<Void> permanentDelete(UUID documentId) {
+        // Find the document first to get full entity
+        return documentRepository.findById(documentId)
+                .flatMap(doc -> documentRepository.delete(doc))
+                .then();
+    }
+
+    @Override
+    public Flux<Document> findExpiredDeletedDocuments(int days) {
+        String sql = "SELECT * FROM " + DOCUMENT +
+                " WHERE " + DELETED_AT + " IS NOT NULL" +
+                " AND " + DELETED_AT + " < CURRENT_TIMESTAMP - INTERVAL '" + days + " days'";
+
+        return databaseClient.sql(sql)
+                .fetch()
+                .all()
+                .flatMap(row -> documentRepository.findById((UUID) row.get("id")));
+    }
+
+    @Override
+    public Mono<Long> countDeletedDocuments(String userId) {
+        String sql = "SELECT COUNT(*) FROM " + DOCUMENT +
+                " WHERE " + DELETED_BY + " = :userId AND " + DELETED_AT + " IS NOT NULL";
+
+        return databaseClient.sql(sql)
+                .bind("userId", userId)
+                .map(row -> row.get(0, Long.class))
+                .one()
+                .defaultIfEmpty(0L);
     }
 }

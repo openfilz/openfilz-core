@@ -58,4 +58,13 @@ public class Document implements SqlColumnMapping, PhysicalDocument {
 
     @Column(UPDATED_BY)
     private String updatedBy;
+
+    @Column(DELETED_AT)
+    private OffsetDateTime deletedAt; // Soft delete: timestamp when deleted
+
+    @Column(DELETED_BY)
+    private String deletedBy; // User who deleted the document
+
+    @org.springframework.data.annotation.Transient
+    private Boolean isFavorite; // Not stored in database, populated from JOIN
 }

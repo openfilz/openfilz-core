@@ -1,0 +1,104 @@
+<div class="recycle-bin-container">
+  <!-- Toolbar with page title and custom recycle bin actions -->
+  <app-toolbar
+    [pageTitle]="'Recycle Bin'"
+    [pageIcon]="'delete'"
+    [viewMode]="viewMode"
+    [hasSelection]="hasSelectedItems"
+    [selectionCount]="selectedItems.length"
+    [pageIndex]="pageIndex"
+    [pageSize]="pageSize"
+    [totalItems]="totalItems"
+    [showUploadButton]="false"
+    [showCreateFolderButton]="false"
+    [showStandardSelectionActions]="false"
+    (viewModeChange)="onViewModeChange($event)"
+    (clearSelection)="onClearSelection()"
+    (previousPage)="onPreviousPage()"
+    (nextPage)="onNextPage()"
+    (pageSizeChange)="onPageSizeChange($event)">
+
+    <!-- Custom recycle bin actions projected into toolbar -->
+    <div toolbarActions class="recycle-bin-actions">
+      <button mat-raised-button
+              color="primary"
+              (click)="restoreSelected()"
+              [disabled]="selectedItemsCount === 0"
+              matTooltip="Restore selected items"
+              class="restore-btn">
+        <mat-icon>restore</mat-icon>
+        <span>Restore</span>
+      </button>
+      <button mat-raised-button
+              color="warn"
+              (click)="permanentlyDeleteSelected()"
+              [disabled]="selectedItemsCount === 0"
+              matTooltip="Permanently delete selected items"
+              class="delete-forever-btn">
+        <mat-icon>delete_forever</mat-icon>
+        <span>Delete Forever</span>
+      </button>
+      <button mat-raised-button
+              (click)="emptyRecycleBin()"
+              [disabled]="items.length === 0"
+              matTooltip="Empty entire recycle bin"
+              class="empty-bin-btn">
+        <mat-icon>delete_sweep</mat-icon>
+        <span>Empty Bin</span>
+      </button>
+    </div>
+  </app-toolbar>
+
+  <div class="recycle-bin-content">
+    @if (loading) {
+      <div class="loading-container">
+        <mat-spinner></mat-spinner>
+        <p>Loading recycle bin...</p>
+      </div>
+    }
+
+    @if (!loading && items.length === 0) {
+      <div class="empty-state">
+        <mat-icon class="empty-icon">delete_outline</mat-icon>
+        <h2>Recycle bin is empty</h2>
+        <p>Deleted files and folders will appear here</p>
+        <p class="info-text">Items are automatically deleted after 30 days</p>
+      </div>
+    }
+
+    @if (!loading && items.length > 0) {
+      @if (viewMode === 'grid') {
+        <app-file-grid
+          [items]="items"
+          [showFavoriteButton]="false"
+          (itemClick)="onItemClick($event)"
+          (itemDoubleClick)="onItemDoubleClick($event)"
+          (selectionChange)="onSelectionChange($event)"
+          (toggleFavorite)="onToggleFavorite($event)"
+          (rename)="onRenameItem($event)"
+          (download)="onDownloadItem($event)"
+          (move)="onMoveItem($event)"
+          (copy)="onCopyItem($event)"
+          (delete)="onDeleteItem($event)">
+        </app-file-grid>
+      }
+
+      @if (viewMode === 'list') {
+        <app-file-list
+          [items]="items"
+          [showFavoriteButton]="false"
+          (itemClick)="onItemClick($event)"
+          (itemDoubleClick)="onItemDoubleClick($event)"
+          (selectionChange)="onSelectionChange($event)"
+          (selectAll)="onSelectAll($event)"
+          (toggleFavorite)="onToggleFavorite($event)"
+          (rename)="onRenameItem($event)"
+          (download)="onDownloadItem($event)"
+          (move)="onMoveItem($event)"
+          (copy)="onCopyItem($event)"
+          (delete)="onDeleteItem($event)">
+        </app-file-list>
+      }
+    }
+  </div>
+</div>

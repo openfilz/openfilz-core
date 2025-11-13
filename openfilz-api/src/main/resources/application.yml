@@ -99,6 +99,10 @@ openfilz:
     # role-token-lookup: GROUPS
     # root-group: name of the root group holding the 3 Roles as subgroups : eg. 'GED' is the root group in the group /GED/AUDITORS
     # root-group: GED
+  recycle-bin:
+    enabled: true # Enable recycle bin functionality (soft delete)
+    auto-cleanup-days: 30 # Number of days before automatically deleting items from recycle bin (0 = never auto-delete)
+    cleanup-cron: "0 0 2 * * ?" # Cron expression for cleanup job (daily at 2 AM)
 
 # Database schema initialization (e.g., Flyway or Liquibase if preferred)
 # For simple R2DBC, you might use an InitializingBean to create tables

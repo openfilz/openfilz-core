@@ -17,5 +17,8 @@ public interface SqlColumnMapping {
     String UPDATED_BY = "updated_by";
     String METADATA = "metadata";
     String STORAGE_PATH = "storage_path";
+    String IS_FAVORITE = "is_favorite";
+    String DELETED_AT = "deleted_at";
+    String DELETED_BY = "deleted_by";
 
 }

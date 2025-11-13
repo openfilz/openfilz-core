@@ -64,18 +64,27 @@ export class MainComponent implements OnInit {
   updateCurrentRoute() {
     const path = this.router.url.split('/')[1]; // Get the first part of the URL after the slash
     this.currentRoute = path || 'dashboard'; // Default to 'dashboard' if path is empty (root route)
-    this.isWipRoute = ['recycle-bin', 'favorites', 'settings'].includes(this.currentRoute);
+    this.isWipRoute = ['recycle-bin', 'settings'].includes(this.currentRoute);
   }
 
   onNavigate(item: any) {
     // Handle navigation events from breadcrumb
+    // Determine the target route based on current route
+    let targetRoute = '/my-folder'; // Default
+
+    if (this.currentRoute === 'favorites') {
+      targetRoute = '/favorites';
+    } else if (this.currentRoute === 'recycle-bin') {
+      targetRoute = '/recycle-bin';
+    }
+
     if (item && item.id === '0') { // Root.INSTANCE has id of '0'
-      this.router.navigate(['/my-folder']).then(() => {
-        // Trigger breadcrumb reset in file explorer
+      this.router.navigate([targetRoute]).then(() => {
+        // Trigger breadcrumb reset in current context
         this.breadcrumbService.navigateTo(null);
       });
     } else if(item && item.id) {
-      this.router.navigate(['/my-folder']).then(() => {
+      this.router.navigate([targetRoute]).then(() => {
         // Trigger navigation to specific folder
         this.breadcrumbService.navigateTo(item);
       });
