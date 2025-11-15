@@ -11,7 +11,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.UUID;
 
-@Service("defaultDocumentQueryService")
+@Service
 public class DefaultDocumentQueryService implements DocumentQueryService {
 
     private final DocumentDataFetcher documentDataFetcher;

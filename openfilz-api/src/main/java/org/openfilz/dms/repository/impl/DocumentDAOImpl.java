@@ -208,7 +208,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
     }
 
     @Override
-    public Flux<ChildElementInfo> getElementsAndChildren(List<UUID> documentIds) {
+    public Flux<ChildElementInfo> getElementsAndChildren(List<UUID> documentIds, String connectedUserEmail) {
         return databaseClient.sql("""
                 SELECT
                     id,

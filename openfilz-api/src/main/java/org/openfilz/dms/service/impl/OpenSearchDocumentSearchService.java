@@ -2,18 +2,17 @@ package org.openfilz.dms.service.impl;
 
 import graphql.schema.DataFetchingEnvironment;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.dto.request.FilterInput;
 import org.openfilz.dms.dto.request.SortInput;
 import org.openfilz.dms.dto.response.DocumentSearchInfo;
 import org.openfilz.dms.dto.response.DocumentSearchResult;
-import org.openfilz.dms.enums.OpenSearchDocumentKey;
-import org.openfilz.dms.enums.SortOrder;
 import org.openfilz.dms.exception.OpenSearchException;
 import org.openfilz.dms.service.DocumentSearchService;
 import org.openfilz.dms.service.IndexNameProvider;
+import org.openfilz.dms.service.OpenSearchQueryService;
 import org.openfilz.dms.service.OpenSearchService;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
-import org.opensearch.client.opensearch._types.FieldValue;
 import org.opensearch.client.opensearch._types.query_dsl.BoolQuery;
 import org.opensearch.client.opensearch._types.query_dsl.Query;
 import org.opensearch.client.opensearch.core.SearchRequest;
@@ -21,8 +20,6 @@ import org.opensearch.client.opensearch.core.SearchResponse;
 import org.opensearch.client.opensearch.core.search.Hit;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
-import org.springframework.util.CollectionUtils;
-import org.springframework.util.StringUtils;
 import reactor.core.publisher.Mono;
 
 import java.io.IOException;
@@ -32,12 +29,14 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 @ConditionalOnProperty(name = "openfilz.full-text.active", havingValue = "true")
 public class OpenSearchDocumentSearchService implements DocumentSearchService, OpenSearchService {
 
 
     private final IndexNameProvider indexNameProvider;
+    private final OpenSearchQueryService openSearchQueryService;
     private final OpenSearchAsyncClient client;
 
     /**
@@ -55,6 +54,33 @@ public class OpenSearchDocumentSearchService implements DocumentSearchService, O
         requestBuilder.index(indexNameProvider.getDocumentsIndexName());
 
         // 2. Build the Bool Query (the container for all clauses)
+        BoolQuery.Builder boolQueryBuilder = getBoolQueryBuilder(query);
+
+        return openSearchQueryService.addFilterClauses(filters, boolQueryBuilder)
+                .flatMap(b -> {
+                    // Finalize the query
+                    Query finalQuery = new Query.Builder().bool(b.build()).build();
+                    requestBuilder.query(finalQuery);
+
+                    addSorting(sort, requestBuilder);
+
+                    // 6. Add Pagination
+                    requestBuilder.from((page - 1) * size).size(size);
+
+                    // 7. Execute the request asynchronously
+                    SearchRequest searchRequest = requestBuilder
+                            .source(fn -> fn.filter(v ->
+                                    v.excludes(NAME_SUGGEST, openSearchQueryService.getSourceOtherExclusions()))).build();
+                    try {
+                        return Mono.fromFuture(client.search(searchRequest, DocumentSearchInfo.class))
+                                .map(this::toDocumentSearchResult); // Convert the response to our DTO
+                    } catch (IOException e) {
+                        return Mono.error(new OpenSearchException(e));
+                    }
+                });
+    }
+
+    private BoolQuery.Builder getBoolQueryBuilder(String query) {
         BoolQuery.Builder boolQueryBuilder = new BoolQuery.Builder();
 
         String trimQuery = query != null && !query.isEmpty() ? query.trim() : null;
@@ -67,59 +93,7 @@ public class OpenSearchDocumentSearchService implements DocumentSearchService, O
                     .fields(CONTENT, SUGGEST_OTHERS_2) // Search in both content and name
             ));
         }
-
-        // 4. Add Filter Clauses (filter)
-        // These clauses are used for exact matching and do not affect the score.
-        // They are generally faster and cacheable.
-        if (!CollectionUtils.isEmpty(filters)) {
-            for (FilterInput filter : filters) {
-                // IMPORTANT: For exact matching on text fields, you must use the '.keyword' sub-field.
-                // This assumes your OpenSearch mapping for text fields includes a keyword multi-field.
-                // For fields like 'parentId' that might already be of type 'keyword', this is still safe.
-                String fieldName = filter.field().endsWith(KEYWORD) ? filter.field() : filter.field() + KEYWORD;
-
-                boolQueryBuilder.filter(f -> f.term(t -> t
-                        .field(fieldName)
-                        .value(FieldValue.of(filter.value()))
-                ));
-            }
-        }
-
-        // Finalize the query
-        Query finalQuery = new Query.Builder().bool(boolQueryBuilder.build()).build();
-        requestBuilder.query(finalQuery);
-
-        // 5. Add Sorting
-        if (sort != null && StringUtils.hasText(sort.field())) {
-            // Map our enum to the OpenSearch enum
-            var osSortOrder = sort.order() == SortOrder.ASC ?
-                    org.opensearch.client.opensearch._types.SortOrder.Asc :
-                    org.opensearch.client.opensearch._types.SortOrder.Desc;
-
-            // Again, use .keyword for sorting on text fields to sort alphabetically, not by relevance.
-            String sortField = sort.field();
-            if (NAME.equals(sortField) || EXTENSION.equals(sortField)
-                    || CREATED_BY.equals(sortField) || UPDATED_BY.equals(sortField)) {
-                sortField += KEYWORD;
-            }
-
-            String finalSortField = sortField;
-            requestBuilder.sort(s -> s.field(f -> f.field(finalSortField).order(osSortOrder)));
-        }
-
-        // 6. Add Pagination
-        requestBuilder.from((page - 1) * size).size(size);
-
-        // 7. Execute the request asynchronously
-        SearchRequest searchRequest = requestBuilder
-                .source(fn -> fn.filter(v ->
-                        v.excludes("name_suggest", "metadata", "content"))).build();
-        try {
-            return Mono.fromFuture(client.search(searchRequest, DocumentSearchInfo.class))
-                    .map(this::toDocumentSearchResult); // Convert the response to our DTO
-        } catch (IOException e) {
-            throw new OpenSearchException(e);
-        }
+        return boolQueryBuilder;
     }
 
     /**

@@ -1,15 +1,15 @@
 package org.openfilz.dms.service.impl;
 
 import lombok.RequiredArgsConstructor;
-import org.jetbrains.annotations.NotNull;
+import org.openfilz.dms.dto.request.FilterInput;
+import org.openfilz.dms.dto.request.SortInput;
 import org.openfilz.dms.dto.response.Suggest;
-import org.openfilz.dms.enums.OpenSearchDocumentKey;
 import org.openfilz.dms.exception.OpenSearchException;
 import org.openfilz.dms.service.DocumentSuggestionService;
 import org.openfilz.dms.service.IndexNameProvider;
+import org.openfilz.dms.service.OpenSearchQueryService;
 import org.openfilz.dms.service.OpenSearchService;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
-import org.opensearch.client.opensearch._types.query_dsl.TextQueryType;
 import org.opensearch.client.opensearch.core.SearchRequest;
 import org.opensearch.client.opensearch.core.SearchResponse;
 import org.opensearch.client.opensearch.core.search.Hit;
@@ -19,8 +19,9 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.io.IOException;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +31,7 @@ public class OpenSearchDocumentSuggestionService implements DocumentSuggestionSe
 
 
     private final IndexNameProvider indexNameProvider;
+    private final OpenSearchQueryService openSearchQueryService;
     private final OpenSearchAsyncClient client;
 
     // A private, internal record used only for deserializing the ID from OpenSearch's _source.
@@ -42,43 +44,40 @@ public class OpenSearchDocumentSuggestionService implements DocumentSuggestionSe
      * @param query The user's partial input string.
      * @return A Flux that emits Suggest objects, each containing a document ID and the suggestion text.
      */
-    public Flux<Suggest> getSuggestions(String query) {
+    public Flux<Suggest> getSuggestions(String query, List<FilterInput> filters, SortInput sort) {
         if (query == null || query.isBlank()) {
             return Flux.empty();
         }
 
         String trimQuery = getTrimQuery(query);
-        SearchRequest searchRequest = new SearchRequest.Builder()
-                .index(indexNameProvider.getDocumentsIndexName())
-                .query(q -> q
-                        .multiMatch(mm -> mm
-                                // The 'bool_prefix' type is optimized for search-as-you-type fields
-                                .type(TextQueryType.BoolPrefix)
-                                .query(trimQuery)
-                                // We target the main field and its internal sub-fields for best results
-                                .fields(NAME_SUGGEST, SUGGEST_OTHERS)
-                        )
-                )
-                // We don't need the full document source, making the request very lightweight.
-                .source(s -> s.filter(f -> f.includes(SUGGEST_ID, SUGGEST_EXT)))
-                // We only need a few suggestions for the UI.
-                .size(SUGGEST_RESULTS_MAX_SIZE)
-                // Use highlighting to get the matched parts of the name.
-                .highlight(h -> h
-                        .fields(NAME_SUGGEST, f -> f.preTags(EM).postTags(EM1))
-                )
-                .build();
+        SearchRequest.Builder requestBuilder = new SearchRequest.Builder();
+        return openSearchQueryService.getQuery(trimQuery, filters)
+                    .flatMapMany(openQuery -> {
+                        requestBuilder
+                                .index(indexNameProvider.getDocumentsIndexName())
+                                .query(openQuery.toQuery());
+                        addSorting(sort, requestBuilder);
+                        SearchRequest searchRequest = requestBuilder
+                                // We don't need the full document source, making the request very lightweight.
+                                .source(s -> s.filter(f -> f.includes(SUGGEST_ID, SUGGEST_EXT)))
+                                // We only need a few suggestions for the UI.
+                                .size(SUGGEST_RESULTS_MAX_SIZE)
+                                // Use highlighting to get the matched parts of the name.
+                                .highlight(h -> h
+                                        .fields(NAME_SUGGEST, f -> f.preTags(EM).postTags(EM1))
+                                )
+                                .build();
 
-        // We use flatMapMany to transform the single response (Mono<SearchResponse>)
-        // into a stream of multiple items (Flux<Suggest>).
-        try {
-            return Mono.fromFuture(client.search(searchRequest, DocumentSource.class))
-                    .flatMapMany(this::toSuggestFlux);
-        } catch (IOException e) {
-            throw new OpenSearchException(e);
-        }
+                        // We use flatMapMany to transform the single response (Mono<SearchResponse>)
+                        // into a stream of multiple items (Flux<Suggest>).
+                        try {
+                            return Mono.fromFuture(client.search(searchRequest, DocumentSource.class))
+                                    .flatMapMany(this::toSuggestFlux);
+                        } catch (IOException e) {
+                            throw new OpenSearchException(e);
+                        }
+                    });
     }
-
 
 
     /**

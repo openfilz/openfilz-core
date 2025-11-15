@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authorization.AuthorizationDecision;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableReactiveMethodSecurity;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
@@ -67,8 +68,12 @@ public class DefaultAuthSecurityConfig {
                 }
             )
             .oauth2ResourceServer(oauth2 -> oauth2
-                    .jwt(jwt -> jwt.jwtDecoder(jwtDecoder())))
+                    .jwt(getJwtSpecCustomizer()))
             .build();
+    }
+
+    protected Customizer<ServerHttpSecurity.OAuth2ResourceServerSpec.JwtSpec> getJwtSpecCustomizer() {
+        return jwt -> jwt.jwtDecoder(jwtDecoder());
     }
 
     private AuthorizationDecision newAuthorizationDecision(Authentication auth, AuthorizationContext context) {

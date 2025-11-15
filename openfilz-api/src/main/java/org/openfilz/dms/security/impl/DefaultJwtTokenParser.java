@@ -1,6 +1,8 @@
-package org.openfilz.dms.utils;
+package org.openfilz.dms.security.impl;
 
 import lombok.RequiredArgsConstructor;
+import org.openfilz.dms.security.JwtTokenParser;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.graphql.server.WebGraphQlInterceptor;
 import org.springframework.graphql.server.WebGraphQlRequest;
@@ -17,9 +19,12 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Component
-@ConditionalOnProperty(name = "openfilz.security.no-auth", havingValue = "false")
+@ConditionalOnProperties({
+        @ConditionalOnProperty(name = "openfilz.security.no-auth", havingValue = "false"),
+        @ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
+})
 @RequiredArgsConstructor
-public class JwtTokenParser {
+public class DefaultJwtTokenParser implements JwtTokenParser {
 
     private static final Pattern authorizationPattern =
             Pattern.compile("^Bearer (?<token>[a-zA-Z0-9-._~+/]+=*)$", Pattern.CASE_INSENSITIVE);
@@ -27,12 +32,11 @@ public class JwtTokenParser {
     private static final String AUTHORIZATION = "Authorization";
     private static final String TOKEN = "token";
     private static final String BEARER = "bearer";
-    public static final String EMAIL = "email";
 
 
-    private final ReactiveJwtDecoder jwtDecoder;
+    protected final ReactiveJwtDecoder jwtDecoder;
 
-    private String extactTokenValue(HttpHeaders headers) {
+    protected String extactTokenValue(HttpHeaders headers) {
         String authorizationValue = headers.getFirst(AUTHORIZATION);
         if(authorizationValue == null) {
             throw new AccessDeniedException("Authorization header missing");

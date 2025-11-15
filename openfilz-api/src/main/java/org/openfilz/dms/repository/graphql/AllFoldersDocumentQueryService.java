@@ -13,7 +13,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.UUID;
 
-@Service("allFoldersDocumentQueryService")
+@Service
 @RequiredArgsConstructor
 public class AllFoldersDocumentQueryService implements DocumentQueryService {
 

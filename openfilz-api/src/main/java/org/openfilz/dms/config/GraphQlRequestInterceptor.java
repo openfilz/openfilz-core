@@ -2,7 +2,7 @@ package org.openfilz.dms.config;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.openfilz.dms.utils.JwtTokenParser;
+import org.openfilz.dms.security.JwtTokenParser;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.graphql.server.WebGraphQlInterceptor;
 import org.springframework.graphql.server.WebGraphQlRequest;

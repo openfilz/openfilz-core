@@ -13,11 +13,11 @@ public interface SaveDocumentService {
 
     String APPLICATION_OCTET_STREAM = "application/octet-stream";
 
-    Mono<UploadResponse> doSaveDocument(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, Mono<String> storagePathMono);
+    Mono<UploadResponse> doSaveFile(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, Mono<String> storagePathMono);
 
     Mono<Document> saveAndReplaceDocument(FilePart newFilePart, Long contentLength, Document document, String oldStoragePath);
 
     Function<String, Mono<Document>> saveNewDocumentFunction(Document.DocumentBuilder documentBuilder);
 
-    Mono<Document> doSaveDocument(Function<String, Mono<Document>> documentFunction);
+    Mono<Document> doSaveFile(Function<String, Mono<Document>> documentFunction);
 }
