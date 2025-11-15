@@ -31,7 +31,7 @@ import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -57,6 +57,7 @@ import static org.openfilz.dms.utils.FileConstants.SLASH;
 @ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
 public class DocumentServiceImpl implements DocumentService, UserInfoService {
 
+    protected final TransactionalOperator tx;
     protected final StorageService storageService;
     protected final ObjectMapper objectMapper; // For JSONB processing
     protected final AuditService auditService; // For auditing
@@ -70,7 +71,6 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
 
 
     @Override
-    @Transactional // Ensure R2DBC @Transactional is properly configured if complex operations span DB and FS
     public Mono<FolderResponse> createFolder(CreateFolderRequest request) {
         if (request.name().contains(StorageService.FOLDER_SEPARATOR)) {
             return Mono.error(new OperationForbiddenException("Folder name should not contains any '/'"));
@@ -103,10 +103,14 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                     }
                     return auditService.logAction(copy ? AuditAction.COPY_FOLDER : AuditAction.CREATE_FOLDER, FOLDER, savedFolder.getId(), new CreateFolderAudit(request, sourceFolderId))
                             .thenReturn(savedFolder);
-                });
+                }).as(tx::transactional)
+                .doOnSuccess(this::postProcessDocument);
 
     }
 
+    protected void postProcessDocument(Document document) {
+        metadataPostProcessor.processDocument(document);
+    }
 
 
     private Mono<Document> saveFolderInRepository(CreateFolderRequest request, Json folderMetadata) {
@@ -115,7 +119,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                 .type(FOLDER)
                 .parentId(request.parentId())
                 .metadata(folderMetadata);
-        return saveDocumentService.doSaveDocument(saveDocumentService.saveNewDocumentFunction(documentBuilder));
+        return saveDocumentService.doSaveFile(saveDocumentService.saveNewDocumentFunction(documentBuilder));
     }
 
 
@@ -125,7 +129,6 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
 
 
     @Override
-    @Transactional
     public Mono<UploadResponse> uploadDocument(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, Boolean allowDuplicateFileNames) {
         String originalFilename = filePart.filename().replace(StorageService.FILENAME_SEPARATOR, "");
         if (parentFolderId != null) {
@@ -142,20 +145,20 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
 
     private Mono<UploadResponse> doUploadDocument(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, Boolean allowDuplicateFileNames) {
         if(allowDuplicateFileNames) {
-            return saveDocumentService.doSaveDocument(filePart, contentLength, parentFolderId, metadata, originalFilename, storageService.saveFile(filePart));
+            return saveDocumentService.doSaveFile(filePart, contentLength, parentFolderId, metadata, originalFilename, storageService.saveFile(filePart));
         }
         Mono<Boolean> duplicateCheck = documentExists(originalFilename, parentFolderId);
-        return saveDocumentService.doSaveDocument(filePart, contentLength, parentFolderId, metadata, originalFilename, duplicateCheck.flatMap(exists -> {
-            if (exists) {
-                return Mono.error(new DuplicateNameException(FILE, originalFilename));
-            }
-            return storageService.saveFile(filePart);
-        }));
+        return saveDocumentService.doSaveFile(filePart, contentLength, parentFolderId, metadata, originalFilename, duplicateCheck.flatMap(exists -> {
+                    if (exists) {
+                        return Mono.error(new DuplicateNameException(FILE, originalFilename));
+                    }
+                    return storageService.saveFile(filePart);
+                })
+        );
     }
 
 
     @Override
-    @Transactional
     public Mono<? extends Resource> downloadDocument(Document doc) {
         return doc.getType() == FILE ?
                 storageService.loadFile(doc.getStoragePath())
@@ -192,40 +195,52 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
     }
 
     @Override
-    @Transactional
     public Mono<Void> deleteFiles(DeleteRequest request) {
-        return getConnectedUserEmail()
-                .flatMap(userId -> Flux.fromIterable(request.documentIds())
-                        .flatMap(docId -> documentDAO.findById(docId, AccessType.RWD)
-                                .switchIfEmpty(Mono.error(new DocumentNotFoundException(docId)))
-                                .filter(doc -> doc.getType() == FILE) // Ensure it's a file
-                                .switchIfEmpty(Mono.error(new OperationForbiddenException("ID " + docId + " is a folder. Use delete folders API.")))
-                                // Soft delete - keep physical file, just mark as deleted in DB
-                                .flatMap(document -> documentDAO.softDelete(docId, userId))
-                                .then(auditService.logAction(AuditAction.DELETE_FILE, FILE, docId))
-                        )
-                        .then()
-                );
+        return Flux.fromIterable(request.documentIds())
+                .flatMap(docId -> documentDAO.findById(docId, AccessType.RWD)
+                        .switchIfEmpty(Mono.error(new DocumentNotFoundException(docId)))
+                        .filter(doc -> doc.getType() == FILE) // Ensure it's a file
+                        .switchIfEmpty(Mono.error(new OperationForbiddenException("ID " + docId + " is a folder. Use delete folders API.")))
+                        .flatMap(document -> storageService.deleteFile(document.getStoragePath())
+                                .then(documentDAO.delete(document)))
+                        .then(auditService.logAction(AuditAction.DELETE_FILE, FILE, docId))
+                        .as(tx::transactional)
+                        .doOnSuccess(_ -> metadataPostProcessor.deleteDocument(docId))
+                )
+                .then();
     }
 
     @Override
-    @Transactional
     public Mono<Void> deleteFolders(DeleteRequest request) {
-        return getConnectedUserEmail()
-                .flatMap(userId -> Flux.fromIterable(request.documentIds())
-                        .flatMap(folderId -> deleteFolderRecursive(folderId, userId))
-                        .then()
-                );
+        return Flux.fromIterable(request.documentIds())
+                .flatMap(this::deleteFolderRecursive)
+                .then();
     }
 
-    private Mono<Void> deleteFolderRecursive(UUID folderId, String userId) {
+    private Mono<Void> deleteFolderRecursive(UUID folderId) {
         return documentDAO.getFolderToDelete(folderId)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, folderId)))
                 .flatMap(folder -> {
-                    // Soft delete folder and all children recursively
-                    // This marks the folder and all descendants as deleted without removing physical files
-                    return documentDAO.softDeleteRecursive(folderId, userId)
-                            .then(auditService.logAction(AuditAction.DELETE_FOLDER, FOLDER, folderId));
+                    // 1. Delete child files
+                    Mono<Void> deleteChildFiles = getChildrenDocumentsToDelete(folderId, FILE)
+                            .flatMap(file -> storageService.deleteFile(file.getStoragePath())
+                                    .then(documentDAO.delete(file))
+                                    .then(auditService.logAction(DELETE_FILE_CHILD, FILE, file.getId(), new DeleteAudit(folderId)))
+                                    .as(tx::transactional)
+                                    .doOnSuccess(_ -> metadataPostProcessor.deleteDocument(file.getId()))
+                            ).then();
+
+                    // 2. Recursively delete child folders
+                    Mono<Void> deleteChildFolders = getChildrenDocumentsToDelete(folderId, FOLDER)
+                            .flatMap(childFolder -> deleteFolderRecursive(childFolder.getId()))
+                            .then();
+
+                    // 3. Delete the folder itself from DB (and storage if it had a physical representation)
+                    return Mono.when(deleteChildFiles, deleteChildFolders)
+                            .then(documentDAO.delete(folder))
+                            .then(auditService.logAction(AuditAction.DELETE_FOLDER, FOLDER, folderId))
+                            .as(tx::transactional)
+                            .doOnSuccess(_ -> metadataPostProcessor.deleteDocument(folder.getId()));
                 });
     }
 
@@ -235,7 +250,6 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
 
 
     @Override
-    @Transactional
     public Mono<Void> moveFiles(MoveRequest request) {
         if(request.targetFolderId() == null) {
             return doMoveFiles(request);
@@ -261,14 +275,17 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                             // Check for name collision in target folder
                             return moveDocument(request, fileToMove)
                                     .flatMap(movedFile -> auditService.logAction(MOVE_FILE, FILE, movedFile.getId(),
-                                            new MoveAudit(request.targetFolderId())));
+                                            new MoveAudit(request.targetFolderId()))
+                                            .thenReturn(movedFile))
+                                    .as(tx::transactional)
+                                    .doOnSuccess(movedDoc -> metadataPostProcessor
+                                            .updateIndexField(movedDoc, OpenSearchDocumentKey.parentId.toString(), request.targetFolderId()));
                         })
                 )
                 .then();
     }
 
     @Override
-    @Transactional
     public Mono<Void> moveFolders(MoveRequest request) {
         Mono<Document> targetFolderMono = documentDAO.findById(request.targetFolderId(), AccessType.RW)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, request.targetFolderId())))
@@ -297,7 +314,10 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                                             // Check for name collision in target folder
                                             return moveDocument(request, folderToMove)
                                                     .flatMap(movedFolder -> auditService.logAction(MOVE_FOLDER, FOLDER, movedFolder.getId(),
-                                                            new MoveAudit(request.targetFolderId())));
+                                                            new MoveAudit(request.targetFolderId())).thenReturn(movedFolder))
+                                                    .as(tx::transactional)
+                                                    .doOnSuccess(movedDoc -> metadataPostProcessor
+                                                            .updateIndexField(movedDoc, OpenSearchDocumentKey.parentId.toString(), request.targetFolderId()));
                                         });
                             });
                         })
@@ -323,13 +343,12 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
     }
 
     private Mono<Document> doMoveDocuments(MoveRequest request, Document documentToMove) {
-        return saveDocumentService.doSaveDocument(username -> {
+        return saveDocumentService.doSaveFile(username -> {
             documentToMove.setParentId(request.targetFolderId());
             documentToMove.setUpdatedAt(OffsetDateTime.now());
             documentToMove.setUpdatedBy(username);
             return documentDAO.update(documentToMove);
-        }).doOnSuccess(movedDoc -> metadataPostProcessor
-                .updateIndexField(movedDoc, OpenSearchDocumentKey.parentId.toString(), request.targetFolderId()));
+        });
     }
 
     // Helper to check if 'potentialChildId' is a descendant of 'potentialParentId'
@@ -356,7 +375,6 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
 
 
     @Override
-    @Transactional
     public Flux<CopyResponse> copyFiles(CopyRequest request) {
         if (request.targetFolderId() == null) {
             return doCopyFiles(request);
@@ -389,13 +407,17 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                                                     .parentId(request.targetFolderId())
                                                     .storagePath(newStoragePath)
                                                     .metadata(jsonUtils.cloneOrNewEmptyJson(originalFile.getMetadata()));
-                                            return saveDocumentService.doSaveDocument(saveDocumentService.saveNewDocumentFunction(copiedFile));
+                                            return saveDocumentService.doSaveFile(saveDocumentService.saveNewDocumentFunction(copiedFile));
                                         })
                                         .flatMap(cf -> auditService.logAction(COPY_FILE, FILE, cf.getId(),
                                                         new CopyAudit(fileIdToCopy, request.targetFolderId()))
-                                                .thenReturn(new CopyResponse(fileIdToCopy, cf.getId()))
-                                                .doOnSuccess(_ -> metadataPostProcessor.copyIndex(fileIdToCopy, cf))
-                                        ))
+                                                        .thenReturn(cf)
+                                                )
+                                        )
+                                )
+                                .as(tx::transactional)
+                                .doOnSuccess(cf -> metadataPostProcessor.copyIndex(fileIdToCopy, cf))
+                                .flatMap(cf -> Mono.just(new CopyResponse(fileIdToCopy, cf.getId()))
                         )
                 );
     }
@@ -418,7 +440,6 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
 
 
     @Override
-    @Transactional
     public Flux<UUID> copyFolders(CopyRequest request) {
         Mono<Document> targetFolderMono = documentDAO.findById(request.targetFolderId(), AccessType.RW)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, request.targetFolderId())))
@@ -463,10 +484,14 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                                                                         .parentId(newFolderId)
                                                                         .storagePath(newChildFileName)
                                                                         .metadata(jsonUtils.cloneOrNewEmptyJson(childFile.getMetadata()));
-                                                                return saveDocumentService.doSaveDocument(saveDocumentService.saveNewDocumentFunction(documentBuilder));
+                                                                return saveDocumentService.doSaveFile(saveDocumentService.saveNewDocumentFunction(documentBuilder));
                                                             })
                                                             .flatMap(ccf -> auditService.logAction(COPY_FILE_CHILD, FILE, ccf.getId(),
-                                                                    new CopyAudit(childFile.getId(), newFolderId, sourceFolderId)).thenReturn(ccf)));
+                                                                    new CopyAudit(childFile.getId(), newFolderId, sourceFolderId)).thenReturn(ccf)
+                                                            )
+                                                            .as(tx::transactional)
+                                                            .doOnSuccess(this::postProcessDocument)
+                                                    );
                                         });
 
                                 // 3. Recursively copy child folders
@@ -480,7 +505,6 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
 
 
     @Override
-    @Transactional
     public Mono<Document> renameFile(UUID fileId, RenameRequest request) {
         return documentDAO.findById(fileId, AccessType.RW)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(FILE, fileId)))
@@ -493,7 +517,9 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                 })
                 .flatMap(renamedFile -> auditService.logAction(RENAME_FILE, FILE, renamedFile.getId(),
                         new RenameAudit(request.newName()))
-                        .thenReturn(renamedFile));
+                        .thenReturn(renamedFile))
+                .as(tx::transactional)
+                .doOnSuccess(file -> metadataPostProcessor.updateIndexField(file, OpenSearchDocumentKey.name.toString(), file.getName()));
     }
 
     private Mono<Document> saveFileToRename(RenameRequest request, Document fileToRename, Mono<Boolean> duplicateCheck) {
@@ -502,17 +528,16 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                 return Mono.error(new DuplicateNameException(
                         "A file/folder with name '" + request.newName() + "' already exists in the current location."));
             }
-            return saveDocumentService.doSaveDocument(username -> {
+            return saveDocumentService.doSaveFile(username -> {
                 fileToRename.setName(request.newName());
                 fileToRename.setUpdatedAt(OffsetDateTime.now());
                 fileToRename.setUpdatedBy(username);
                 return documentDAO.update(fileToRename);
-            }).doOnSuccess(file -> metadataPostProcessor.updateIndexField(file, OpenSearchDocumentKey.name.toString(), file.getName()));
+            });
         });
     }
 
     @Override
-    @Transactional
     public Mono<Document> renameFolder(UUID folderId, RenameRequest request) {
         return documentDAO.findById(folderId, AccessType.RW)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, folderId)))
@@ -527,12 +552,13 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                     return saveFileToRename(request, folderToRename, duplicateCheck);
                 })
                 .flatMap(renamedFolder -> auditService.logAction(RENAME_FOLDER, FOLDER, renamedFolder.getId(),
-                        new RenameAudit(request.newName())).thenReturn(renamedFolder));
+                        new RenameAudit(request.newName())).thenReturn(renamedFolder))
+                .as(tx::transactional)
+                .doOnSuccess(file -> metadataPostProcessor.updateIndexField(file, OpenSearchDocumentKey.name.toString(), file.getName()));
     }
 
 
     @Override
-    @Transactional
     public Mono<Document> replaceDocumentContent(UUID documentId, FilePart newFilePart, Long contentLength) {
         return documentDAO.findById(documentId, AccessType.RWD)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
@@ -541,7 +567,6 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                 .flatMap(document -> {
                     // 1. Save new file content
                     String oldStoragePath = document.getStoragePath();
-
                     return saveDocumentService.saveAndReplaceDocument(newFilePart, contentLength, document, oldStoragePath);
                 });
     }
@@ -549,12 +574,10 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
 
 
     @Override
-    @Transactional
     public Mono<Document> replaceDocumentMetadata(UUID documentId, Map<String, Object> newMetadata) {
-
         return documentDAO.findById(documentId, AccessType.RW)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
-                .flatMap(document -> saveDocumentService.doSaveDocument(username -> {
+                .flatMap(document -> saveDocumentService.doSaveFile(username -> {
                     document.setMetadata(newMetadata != null ? Json.of(objectMapper.valueToTree(newMetadata).toString()) : null);
                     document.setUpdatedAt(OffsetDateTime.now());
                     document.setUpdatedBy(username);
@@ -562,16 +585,16 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                 }))
                 .flatMap(updatedDoc -> auditService.logAction(REPLACE_DOCUMENT_METADATA, updatedDoc.getType(), updatedDoc.getId(),
                         new ReplaceAudit(newMetadata))
-                        .doOnSuccess(_ -> metadataPostProcessor.processMetadata(updatedDoc))
-                        .thenReturn(updatedDoc));
+                        .thenReturn(updatedDoc))
+                .as(tx::transactional)
+                .doOnSuccess(metadataPostProcessor::processMetadata);
     }
 
     @Override
-    @Transactional
     public Mono<Document> updateDocumentMetadata(UUID documentId, UpdateMetadataRequest request) {
         return documentDAO.findById(documentId, AccessType.RW)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
-                .flatMap(document -> saveDocumentService.doSaveDocument(username -> {
+                .flatMap(document -> saveDocumentService.doSaveFile(username -> {
                     JsonNode currentMetadata = jsonUtils.toJsonNode(document.getMetadata());
                     ObjectNode updatedMetadataNode;
 
@@ -591,17 +614,17 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                 }))
                 .flatMap(updatedDoc -> auditService.logAction(UPDATE_DOCUMENT_METADATA, updatedDoc.getType(), updatedDoc.getId(),
                         new UpdateMetadataAudit(request.metadataToUpdate()))
-                        .doOnSuccess(_ -> metadataPostProcessor.processMetadata(updatedDoc))
-                        .thenReturn(updatedDoc));
+                        .thenReturn(updatedDoc))
+                .as(tx::transactional)
+                .doOnSuccess(metadataPostProcessor::processMetadata);
     }
 
 
     @Override
-    @Transactional
     public Mono<Void> deleteDocumentMetadata(UUID documentId, DeleteMetadataRequest request) {
         return documentDAO.findById(documentId, AccessType.RW)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
-                .flatMap(document -> saveDocumentService.doSaveDocument(username -> {
+                .flatMap(document -> saveDocumentService.doSaveFile(username -> {
                     if(document.getMetadata() == null) {
                         return Mono.empty();
                     }
@@ -618,8 +641,10 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                     return documentDAO.update(document);
                 }))
                 .flatMap(updatedDoc -> auditService.logAction(DELETE_DOCUMENT_METADATA, updatedDoc.getType(), updatedDoc.getId(),
-                        new DeleteMetadataAudit(request.metadataKeysToDelete()))
-                        .doOnSuccess(_ -> metadataPostProcessor.processMetadata(updatedDoc)));
+                        new DeleteMetadataAudit(request.metadataKeysToDelete())).thenReturn(updatedDoc))
+                .as(tx::transactional)
+                .doOnSuccess(metadataPostProcessor::processMetadata)
+                .then();
     }
 
 
@@ -628,36 +653,38 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
         if (documentIds == null || documentIds.isEmpty()) {
             return Mono.error(new IllegalArgumentException("Document IDs list cannot be empty."));
         }
+        return getConnectedUserEmail().flatMap(connectedUserEmail -> {
+            try {
+                PipedInputStream pipedInputStream = new PipedInputStream(pipedBufferSize);
+                PipedOutputStream pipedOutputStream = new PipedOutputStream(pipedInputStream);
+                ZipArchiveOutputStream zos = new ZipArchiveOutputStream(pipedOutputStream);
 
-        try {
-            PipedInputStream pipedInputStream = new PipedInputStream(pipedBufferSize);
-            PipedOutputStream pipedOutputStream = new PipedOutputStream(pipedInputStream);
-            ZipArchiveOutputStream zos = new ZipArchiveOutputStream(pipedOutputStream);
+                documentDAO.getElementsAndChildren(documentIds, connectedUserEmail)
+                        .collectList()
+                        .flatMap(docs -> {
+                            if (docs.isEmpty()) {
+                                return Mono.error(new DocumentNotFoundException("No valid files found for the provided IDs to zip."));
+                            }
+                            if (docs.size() != documentIds.size()) {
+                                log.warn("Some requested documents were not files or not found. Zipping available files.");
+                            }
+                            return Flux.fromIterable(docs)
+                                    .concatMap(doc ->  addDocumentToZip(doc, zos))
+                                    .then(Mono.just(true));
+                        })
+                        .doOnTerminate(() -> closeOutputStream(zos))
+                        .subscribeOn(Schedulers.boundedElastic())
+                        .subscribe(
+                                null,
+                                error -> log.error("Error during zip creation", error)
+                        );
 
-            documentDAO.getElementsAndChildren(documentIds)
-                    .collectList()
-                    .flatMap(docs -> {
-                        if (docs.isEmpty()) {
-                            return Mono.error(new DocumentNotFoundException("No valid files found for the provided IDs to zip."));
-                        }
-                        if (docs.size() != documentIds.size()) {
-                            log.warn("Some requested documents were not files or not found. Zipping available files.");
-                        }
-                        return Flux.fromIterable(docs)
-                                .concatMap(doc ->  addDocumentToZip(doc, zos))
-                                .then(Mono.just(true));
-                    })
-                    .doOnTerminate(() -> closeOutputStream(zos))
-                    .subscribeOn(Schedulers.boundedElastic())
-                    .subscribe(
-                            null,
-                            error -> log.error("Error during zip creation", error)
-                    );
+                return Mono.just(new InputStreamResource(pipedInputStream));
+            } catch (IOException e) {
+                return Mono.error(new StorageException("Failed to create piped stream", e));
+            }
+        });
 
-            return Mono.just(new InputStreamResource(pipedInputStream));
-        } catch (IOException e) {
-            return Mono.error(new StorageException("Failed to create piped stream", e));
-        }
     }
 
     private static void closeOutputStream(ZipArchiveOutputStream zos) {
@@ -760,21 +787,17 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
         if(folderId == null) {
             return listRootElements(type);
         }
-        return getConnectedUserEmail()
-                .flatMapMany(userId ->
-                        documentDAO.existsByIdAndType(folderId, DocumentType.FOLDER, AccessType.RO)
-                                .flatMapMany(exists -> {
-                                    if(!exists) {
-                                        return Flux.error(new DocumentNotFoundException(FOLDER, folderId));
-                                    }
-                                    return documentDAO.listDocumentInfoInFolder(folderId, type, userId);
-                                })
-                );
+        return documentDAO.existsByIdAndType(folderId, DocumentType.FOLDER, AccessType.RO)
+                .flatMapMany(exists -> {
+                    if(!exists) {
+                        return Flux.error(new DocumentNotFoundException(FOLDER, folderId));
+                    }
+                    return documentDAO.listDocumentInfoInFolder(folderId, type);
+                });
     }
 
     protected Flux<FolderElementInfo> listRootElements(DocumentType type) {
-        return getConnectedUserEmail()
-                .flatMapMany(userId -> documentDAO.listDocumentInfoInFolder(null, type, userId));
+        return documentDAO.listDocumentInfoInFolder(null, type);
     }
 
     @Override

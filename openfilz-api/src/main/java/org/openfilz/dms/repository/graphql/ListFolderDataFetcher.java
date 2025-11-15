@@ -133,7 +133,7 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
         return spec.bind("user_id", userId != null ? userId : "");
     }
 
-    private void applySort(StringBuilder query, ListFolderRequest request) {
+    public void applySort(StringBuilder query, ListFolderRequest request) {
         if(request.pageInfo().sortBy() != null) {
             appendSort(query, request);
         }
@@ -151,7 +151,7 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
         return prefix == null ? sortBy : prefix + sortBy;
     }
 
-    private void appendOffsetLimit(StringBuilder query, ListFolderRequest request) {
+    public void appendOffsetLimit(StringBuilder query, ListFolderRequest request) {
         query.append(SqlUtils.LIMIT).append(request.pageInfo().pageSize())
                 .append(SqlUtils.OFFSET).append((request.pageInfo().pageNumber() - 1) * request.pageInfo().pageSize());
     }

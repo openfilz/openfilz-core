@@ -9,7 +9,6 @@ import org.openfilz.dms.service.IndexService;
 import org.openfilz.dms.service.StorageService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -42,18 +41,15 @@ public class LocalFullTextServiceImpl implements FullTextService {
     }
 
     private void indexFolder(Document document) {
-        indexDocMetadataMono(document)
+        indexService.indexDocMetadataMono(document)
+                .subscribeOn(Schedulers.boundedElastic())
                 .subscribe();
-    }
-
-    private Mono<Void> indexDocMetadataMono(Document document) {
-        return indexService.indexMetadata(document.getId(), indexService.newOpenSearchDocumentMetadata(document));
     }
 
     private void indexFile(Document document) {
         try {
             Path tempFile = Files.createTempFile("upload-opf", ".tmp");
-            indexDocMetadataMono(document)
+            indexService.indexDocMetadataMono(document)
                     .then(tikaService.processResource(tempFile, storageService.loadFile(document.getStoragePath()))
                             .as(flux -> indexService.indexDocumentStream(flux, document.getId()))
                     )
@@ -65,6 +61,7 @@ public class LocalFullTextServiceImpl implements FullTextService {
                             log.error("Failed to clean up stable temp file [{}].", tempFile, e);
                         }
                     }))
+                    .subscribeOn(Schedulers.boundedElastic())
                     .subscribe();
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -74,36 +71,36 @@ public class LocalFullTextServiceImpl implements FullTextService {
     @Override
     public void indexDocumentMetadata(Document document) {
         Mono.fromCallable(() -> indexService.updateMetadata(document))
-                .subscribeOn(Schedulers.boundedElastic())
                 .doOnError(err ->
                         log.error("indexDocumentMetadata error for {} : {}", document.getId(), err.getMessage()))
+                .subscribeOn(Schedulers.boundedElastic())
                 .subscribe();
     }
 
     @Override
     public void copyIndex(UUID sourceFileId, Document createdDocument) {
         indexService.copyIndex(sourceFileId, createdDocument)
-                .subscribeOn(Schedulers.boundedElastic())
                 .doOnError(err ->
                         log.error("copyIndex error for {} : {}", createdDocument.getId(), err.getMessage()))
+                .subscribeOn(Schedulers.boundedElastic())
                 .subscribe();
     }
 
     @Override
     public void updateIndexField(Document document, String openSearchDocumentKey, Object value) {
         Mono.fromCallable(() -> indexService.updateIndexField(document, openSearchDocumentKey, value))
-                .subscribeOn(Schedulers.boundedElastic())
                 .doOnError(err ->
                         log.error("updateIndexField error for {} : {}", document, err.getMessage()))
+                .subscribeOn(Schedulers.boundedElastic())
                 .subscribe();
     }
 
     @Override
     public void deleteDocument(UUID id) {
         Mono.fromCallable(() -> indexService.deleteDocument(id))
-                .subscribeOn(Schedulers.boundedElastic())
                 .doOnError(err ->
                         log.error("deleteDocument error for {} : {}", id, err.getMessage()))
+                .subscribeOn(Schedulers.boundedElastic())
                 .subscribe();
     }
 

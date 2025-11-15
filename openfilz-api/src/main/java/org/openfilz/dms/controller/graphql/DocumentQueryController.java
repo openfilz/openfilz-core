@@ -2,7 +2,6 @@ package org.openfilz.dms.controller.graphql;
 
 import graphql.schema.DataFetchingEnvironment;
 import jakarta.validation.constraints.NotNull;
-import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.dto.request.ListFolderRequest;
 import org.openfilz.dms.dto.response.FullDocumentInfo;
 import org.openfilz.dms.repository.DocumentQueryService;

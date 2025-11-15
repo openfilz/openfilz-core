@@ -13,8 +13,4 @@ public abstract class AbstractListDataFetcher<T> extends AbstractDataFetcher<Lis
         super(databaseClient, mapper, objectMapper, sqlUtils);
     }
 
-    protected ListFolderRequest getFilter(Object request) {
-        return objectMapper.convertValue(request, ListFolderRequest.class);
-    }
-
 }

@@ -7,7 +7,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import reactor.core.publisher.Mono;
 
-import static org.openfilz.dms.utils.JwtTokenParser.EMAIL;
+import static org.openfilz.dms.security.JwtTokenParser.EMAIL;
 
 public interface UserInfoService {
 

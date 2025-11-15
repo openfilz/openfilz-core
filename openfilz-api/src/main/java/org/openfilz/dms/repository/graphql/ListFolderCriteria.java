@@ -73,7 +73,7 @@ public class ListFolderCriteria {
     }
 
     public void applyFilter(String prefix, StringBuilder query, ListFolderRequest request) {
-        boolean appendAnd = appendParentIdFilter(prefix, query, request);
+        boolean appendAnd = appendWhereParentIdFilter(prefix, query, request);
         appendAllFilterExceptParentId(prefix, query, request, appendAnd);
     }
 
@@ -141,8 +141,12 @@ public class ListFolderCriteria {
         }
     }
 
-    public boolean appendParentIdFilter(String prefix, StringBuilder query, ListFolderRequest request) {
+    public boolean appendWhereParentIdFilter(String prefix, StringBuilder query, ListFolderRequest request) {
         query.append(WHERE);
+        return appendParentIdFilter(prefix, query, request);
+    }
+
+    public boolean appendParentIdFilter(String prefix, StringBuilder query, ListFolderRequest request) {
         if(request.id() != null) {
             sqlUtils.appendEqualsCriteria(prefix, PARENT_ID, query);
         } else {
