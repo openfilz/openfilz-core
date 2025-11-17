@@ -32,7 +32,7 @@ const LIST_FOLDER_QUERY = gql`
       updatedAt
       createdBy
       updatedBy
-      isFavorite
+      favorite
     }
   }
 `;
@@ -49,9 +49,27 @@ const LIST_FOLDER_AND_COUNT_QUERY = gql`
       updatedAt
       createdBy
       updatedBy
-      isFavorite
+      favorite
     }
     count(request: $request2)
+  }
+`;
+
+const LIST_FAVORITES_AND_COUNT_QUERY = gql`
+  query listFavoritesAndCount($request1: FavoriteRequest!, $request2: FavoriteRequest) {
+      listFavorites(request: $request1) {
+      id
+      type
+      contentType
+      name
+      size
+      createdAt
+      updatedAt
+      createdBy
+      updatedBy
+      favorite
+    }
+      countFavorites(request: $request2)
   }
 `;
 
@@ -99,7 +117,7 @@ const RECENT_FILES_QUERY = gql`
       updatedAt
       createdBy
       updatedBy
-      isFavorite
+      favorite
     }
   }
 `;
@@ -177,6 +195,32 @@ export class DocumentApiService {
     );
     
   }
+
+    listFavoritesAndCount(page: number = 1, pageSize: number = 50): Observable<ListFolderAndCountResponse> {
+        const request1 = {
+            pageInfo: {
+                pageNumber: page,
+                pageSize: pageSize
+            }
+        };
+
+        const request2 = {
+        };
+
+        return this.apollo.watchQuery<any>({
+            fetchPolicy: 'no-cache',
+            query: LIST_FAVORITES_AND_COUNT_QUERY,
+            variables: { request1, request2 }
+        }).valueChanges.pipe(
+            map(result => {
+                return {
+                    listFolder: result.data.listFavorites,
+                    count: result.data.countFavorites
+                };
+            })
+        );
+
+    }
 
   createFolder(request: CreateFolderRequest): Observable<FolderResponse> {
     return this.http.post<FolderResponse>(`${this.baseUrl}/folders`, request, {
@@ -357,7 +401,7 @@ export class DocumentApiService {
     });
   }
 
-  isFavorite(documentId: string): Observable<boolean> {
+  favorite(documentId: string): Observable<boolean> {
     return this.http.get<boolean>(`${this.baseUrl}/favorites/${documentId}/is-favorite`, {
       headers: this.getHeaders()
     });

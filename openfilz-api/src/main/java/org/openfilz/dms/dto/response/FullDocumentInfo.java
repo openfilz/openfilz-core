@@ -22,5 +22,5 @@ public record FullDocumentInfo(
         @Schema(description = "Last update date") OffsetDateTime updatedAt,
         @Schema(description = "Creation user") String createdBy,
         @Schema(description = "Last update user") String updatedBy,
-        @Schema(description = "Whether this document is favorited by the current user") Boolean isFavorite) {
+        @Schema(description = "Whether this document is favorited by the current user") Boolean favorite) {
 }

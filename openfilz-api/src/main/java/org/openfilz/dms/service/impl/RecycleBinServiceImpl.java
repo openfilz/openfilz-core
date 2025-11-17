@@ -8,12 +8,15 @@ import org.openfilz.dms.enums.AuditAction;
 import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.exception.DocumentNotFoundException;
 import org.openfilz.dms.repository.DocumentDAO;
+import org.openfilz.dms.repository.impl.DocumentSoftDeleteDAO;
 import org.openfilz.dms.service.AuditService;
+import org.openfilz.dms.service.MetadataPostProcessor;
 import org.openfilz.dms.service.RecycleBinService;
 import org.openfilz.dms.service.StorageService;
 import org.openfilz.dms.utils.UserInfoService;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -26,20 +29,23 @@ import static org.openfilz.dms.enums.DocumentType.FOLDER;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "openfilz.soft-delete.active", havingValue = "true")
 public class RecycleBinServiceImpl implements RecycleBinService, UserInfoService {
 
     private final DocumentDAO documentDAO;
+    private final MetadataPostProcessor metadataPostProcessor;
+    private final DocumentSoftDeleteDAO documentSoftDeleteDAO;
     private final StorageService storageService;
     private final AuditService auditService;
+    private final TransactionalOperator tx;
 
     @Override
     public Flux<FolderElementInfo> listDeletedItems() {
         return getConnectedUserEmail()
-                .flatMapMany(userId -> documentDAO.findDeletedDocuments(userId));
+                .flatMapMany(userId -> documentSoftDeleteDAO.findDeletedDocuments(userId));
     }
 
     @Override
-    @Transactional
     public Mono<Void> restoreItems(List<UUID> documentIds) {
         return Flux.fromIterable(documentIds)
                 .flatMap(docId -> documentDAO.findById(docId, null) // Find even if deleted
@@ -51,17 +57,17 @@ public class RecycleBinServiceImpl implements RecycleBinService, UserInfoService
 
                             // Restore recursively if it's a folder
                             Mono<Void> restore = type == FOLDER
-                                    ? documentDAO.restoreRecursive(docId)
-                                    : documentDAO.restore(docId);
+                                    ? documentSoftDeleteDAO.restoreRecursive(docId)
+                                    : documentSoftDeleteDAO.restore(docId);
 
                             return restore.then(auditService.logAction(action, type, docId));
                         })
+                        .as(tx::transactional)
                 )
                 .then();
     }
 
     @Override
-    @Transactional
     public Mono<Void> permanentlyDeleteItems(List<UUID> documentIds) {
         return getConnectedUserEmail()
                 .flatMap(userId -> Flux.fromIterable(documentIds)
@@ -81,22 +87,52 @@ public class RecycleBinServiceImpl implements RecycleBinService, UserInfoService
         if (type == FILE) {
             // Delete physical file and database record
             return storageService.deleteFile(document.getStoragePath())
-                    .then(documentDAO.permanentDelete(docId))
-                    .then(auditService.logAction(action, type, docId));
+                    .then(documentSoftDeleteDAO.permanentDelete(docId))
+                    .then(auditService.logAction(action, type, docId))
+                    .as(tx::transactional)
+                    .doOnSuccess(_ -> metadataPostProcessor.deleteDocument(docId));
         } else {
             // For folders, recursively delete all children first
             return documentDAO.findDocumentsByParentIdAndType(docId, null) // Get all children (files and folders)
                     .flatMap(child -> permanentlyDeleteDocumentRecursive(child, userId))
-                    .then(documentDAO.permanentDelete(docId))
-                    .then(auditService.logAction(action, type, docId));
+                    .then(documentSoftDeleteDAO.permanentDelete(docId))
+                    .then(auditService.logAction(action, type, docId))
+                    .as(tx::transactional)
+                    .doOnSuccess(_ -> metadataPostProcessor.deleteDocument(docId));
         }
     }
 
+    /*private Mono<Void> deleteFolderRecursive(UUID folderId) {
+        return documentDAO.getFolderToDelete(folderId)
+                .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, folderId)))
+                .flatMap(folder -> {
+                    // 1. Delete child files
+                    Mono<Void> deleteChildFiles = getChildrenDocumentsToDelete(folderId, FILE)
+                            .flatMap(file -> storageService.deleteFile(file.getStoragePath())
+                                    .then(documentDAO.delete(file))
+                                    .then(auditService.logAction(DELETE_FILE_CHILD, FILE, file.getId(), new DeleteAudit(folderId)))
+                                    .as(tx::transactional)
+                                    .doOnSuccess(_ -> metadataPostProcessor.deleteDocument(file.getId()))
+                            ).then();
+
+                    // 2. Recursively delete child folders
+                    Mono<Void> deleteChildFolders = getChildrenDocumentsToDelete(folderId, FOLDER)
+                            .flatMap(childFolder -> deleteFolderRecursive(childFolder.getId()))
+                            .then();
+
+                    // 3. Delete the folder itself from DB (and storage if it had a physical representation)
+                    return Mono.when(deleteChildFiles, deleteChildFolders)
+                            .then(documentDAO.delete(folder))
+                            .then(auditService.logAction(AuditAction.DELETE_FOLDER, FOLDER, folderId))
+                            .as(tx::transactional)
+                            .doOnSuccess(_ -> metadataPostProcessor.deleteDocument(folder.getId()));
+                });
+    }*/
+
     @Override
-    @Transactional
     public Mono<Void> emptyRecycleBin() {
         return getConnectedUserEmail()
-                .flatMap(userId -> documentDAO.findDeletedDocuments(userId)
+                .flatMap(userId -> documentSoftDeleteDAO.findDeletedDocuments(userId)
                         .map(FolderElementInfo::id)
                         .collectList()
                         .flatMap(docIds -> {
@@ -112,6 +148,6 @@ public class RecycleBinServiceImpl implements RecycleBinService, UserInfoService
     @Override
     public Mono<Long> countDeletedItems() {
         return getConnectedUserEmail()
-                .flatMap(userId -> documentDAO.countDeletedDocuments(userId));
+                .flatMap(documentSoftDeleteDAO::countDeletedDocuments);
     }
 }

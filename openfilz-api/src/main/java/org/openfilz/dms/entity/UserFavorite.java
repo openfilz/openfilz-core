@@ -4,12 +4,15 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
+
+import static org.openfilz.dms.entity.SqlColumnMapping.CREATED_AT;
+import static org.openfilz.dms.entity.SqlTableMapping.USER_FAVORITES;
+import static org.openfilz.dms.security.JwtTokenParser.EMAIL;
 
 /**
  * Entity representing a user's favorite document (file or folder)
@@ -18,19 +21,15 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Table("user_favorites")
+@Table(USER_FAVORITES)
 public class UserFavorite {
 
-    @Id
-    @Column("id")
-    private Long id;
+    @Column(EMAIL)
+    private String email;
 
-    @Column("user_id")
-    private String userId;
+    @Column("doc_id")
+    private UUID docId;
 
-    @Column("document_id")
-    private UUID documentId;
-
-    @Column("created_at")
+    @Column(CREATED_AT)
     private OffsetDateTime createdAt;
 }

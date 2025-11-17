@@ -4,9 +4,11 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.DeleteRequest;
 import org.openfilz.dms.dto.response.FolderElementInfo;
 import org.openfilz.dms.service.RecycleBinService;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -18,9 +20,10 @@ import reactor.core.publisher.Mono;
  */
 @Slf4j
 @RestController
-@RequestMapping("/api/v1/recycle-bin")
+@RequestMapping(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_RECYCLE_BIN)
 @RequiredArgsConstructor
-@Tag(name = "Recycle Bin", description = "Recycle bin management APIs")
+@ConditionalOnProperty(name = "openfilz.soft-delete.active", havingValue = "true")
+@Tag(name = "Recycle Bin", description = "Recycle bin management APIs (openfilz.soft-delete.active must be set to 'true')")
 public class RecycleBinController {
 
     private final RecycleBinService recycleBinService;

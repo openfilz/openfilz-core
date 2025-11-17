@@ -6,7 +6,7 @@ import org.openfilz.dms.dto.response.DashboardStatisticsResponse;
 import org.openfilz.dms.dto.response.FileTypeStats;
 import org.openfilz.dms.dto.response.StorageBreakdown;
 import org.openfilz.dms.enums.DocumentType;
-import org.openfilz.dms.repository.DocumentDAO;
+import org.openfilz.dms.repository.StatisticsDAO;
 import org.openfilz.dms.service.DashboardService;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
@@ -22,7 +22,7 @@ import java.util.List;
 @Slf4j
 public class DashboardServiceImpl implements DashboardService {
 
-    private final DocumentDAO documentDAO;
+    private final StatisticsDAO statisticsDAO;
 
     // File type patterns for categorization
     private static final String DOCUMENTS_PATTERN = "application/%";
@@ -35,8 +35,8 @@ public class DashboardServiceImpl implements DashboardService {
         log.debug("Fetching dashboard statistics");
 
         // Get total file and folder counts
-        Mono<Long> totalFilesMono = documentDAO.countFilesByType(DocumentType.FILE);
-        Mono<Long> totalFoldersMono = documentDAO.countFilesByType(DocumentType.FOLDER);
+        Mono<Long> totalFilesMono = statisticsDAO.countFilesByType(DocumentType.FILE);
+        Mono<Long> totalFoldersMono = statisticsDAO.countFilesByType(DocumentType.FOLDER);
 
         // Get storage statistics
         Mono<StorageBreakdown> storageMono = getStorageBreakdown();
@@ -65,13 +65,13 @@ public class DashboardServiceImpl implements DashboardService {
 
     private Mono<StorageBreakdown> getStorageBreakdown() {
         // Get total storage used
-        Mono<Long> totalStorageMono = documentDAO.getTotalStorageUsed();
+        Mono<Long> totalStorageMono = statisticsDAO.getTotalStorageUsed();
 
         // Get storage by content type
-        Mono<Long> documentsSizeMono = documentDAO.getTotalStorageByContentType(DOCUMENTS_PATTERN);
-        Mono<Long> imagesSizeMono = documentDAO.getTotalStorageByContentType(IMAGES_PATTERN);
-        Mono<Long> videosSizeMono = documentDAO.getTotalStorageByContentType(VIDEOS_PATTERN);
-        Mono<Long> audioSizeMono = documentDAO.getTotalStorageByContentType(AUDIO_PATTERN);
+        Mono<Long> documentsSizeMono = statisticsDAO.getTotalStorageByContentType(DOCUMENTS_PATTERN);
+        Mono<Long> imagesSizeMono = statisticsDAO.getTotalStorageByContentType(IMAGES_PATTERN);
+        Mono<Long> videosSizeMono = statisticsDAO.getTotalStorageByContentType(VIDEOS_PATTERN);
+        Mono<Long> audioSizeMono = statisticsDAO.getTotalStorageByContentType(AUDIO_PATTERN);
 
         return Mono.zip(totalStorageMono, documentsSizeMono, imagesSizeMono, videosSizeMono, audioSizeMono)
                 .map(tuple -> {
@@ -103,7 +103,7 @@ public class DashboardServiceImpl implements DashboardService {
         Mono<Long> imagesCountMono = countFilesByContentType(IMAGES_PATTERN);
         Mono<Long> videosCountMono = countFilesByContentType(VIDEOS_PATTERN);
         Mono<Long> audioCountMono = countFilesByContentType(AUDIO_PATTERN);
-        Mono<Long> totalFilesMono = documentDAO.countFilesByType(DocumentType.FILE);
+        Mono<Long> totalFilesMono = statisticsDAO.countFilesByType(DocumentType.FILE);
 
         return Mono.zip(documentsCountMono, imagesCountMono, videosCountMono, audioCountMono, totalFilesMono)
                 .map(tuple -> {
@@ -127,6 +127,6 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     private Mono<Long> countFilesByContentType(String contentTypePattern) {
-        return documentDAO.countFilesByContentType(contentTypePattern);
+        return statisticsDAO.countFilesByContentType(contentTypePattern);
     }
 }

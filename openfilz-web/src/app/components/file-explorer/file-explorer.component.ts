@@ -140,16 +140,11 @@ import {AppConfig} from '../../config/app.config';
   ],
 })
 export class FileExplorerComponent extends FileOperationsComponent implements OnInit {
-  static itemsPerPage = 'itemsPerPage';
   showUploadZone = false;
   fileOver: boolean = false;
 
   breadcrumbTrail: FileItem[] = []; // Track full path
   currentFolder?: FileItem;
-
-  override totalItems = 0;
-  pageSize = AppConfig.pagination.defaultPageSize;
-  pageIndex = 0;
 
   // Click delay handling
   private clickTimeout: any = null;
@@ -161,17 +156,17 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
     private fileIconService: FileIconService,
     private breadcrumbService: BreadcrumbService,
     private route: ActivatedRoute,
-    private router: Router,
+    router: Router,
     documentApi: DocumentApiService,
     dialog: MatDialog,
     snackBar: MatSnackBar
   ) {
-    super(documentApi, dialog, snackBar);
+    super(router, documentApi, dialog, snackBar);
   }
 
   override ngOnInit() {
     super.ngOnInit();
-    const storedItemsPerPage = localStorage.getItem(FileExplorerComponent.itemsPerPage);
+    const storedItemsPerPage = localStorage.getItem(AppConfig.pagination.itemsPerPageKey);
     if (storedItemsPerPage) {
       this.pageSize = parseInt(storedItemsPerPage, 10);
     }
@@ -260,7 +255,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
     });
   }
 
-  loadItems() {
+  override loadItems() {
     this.loading = true;
     this.documentApi.listFolder(this.currentFolder?.id, this.pageIndex + 1, this.pageSize).subscribe({
       next: (response: ElementInfo[]) => {
@@ -288,27 +283,6 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
     this.breadcrumbService.updateBreadcrumbs(this.breadcrumbTrail);
   }
 
-  onPreviousPage() {
-    if (this.pageIndex > 0) {
-      this.pageIndex--;
-      this.loadItems();
-    }
-  }
-
-  onNextPage() {
-    const totalPages = Math.ceil(this.totalItems / this.pageSize);
-    if (this.pageIndex < totalPages - 1) {
-      this.pageIndex++;
-      this.loadItems();
-    }
-  }
-
-  onPageSizeChange(newPageSize: number) {
-    this.pageSize = newPageSize;
-    localStorage.setItem(FileExplorerComponent.itemsPerPage, newPageSize.toString());
-    this.pageIndex = 0;
-    this.loadItems();
-  }
 
   onFileOverChange(isOver: boolean) {
     this.fileOver = isOver;
@@ -327,7 +301,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
     }, this.CLICK_DELAY);
   }
 
-  onItemDoubleClick(item: FileItem) {
+  override onItemDoubleClick(item: FileItem) {
     // Clear the pending single-click timeout
     if (this.clickTimeout) {
       clearTimeout(this.clickTimeout);
@@ -456,10 +430,10 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
   }
 
   onToggleFavorite(item: FileItem) {
-    const action = item.isFavorite ? 'remove from' : 'add to';
+    const action = item.favorite ? 'remove from' : 'add to';
     this.documentApi.toggleFavorite(item.id).subscribe({
       next: () => {
-        item.isFavorite = !item.isFavorite;
+        item.favorite = !item.favorite;
         this.snackBar.open(`Successfully ${action === 'add to' ? 'added to' : 'removed from'} favorites`, 'Close', { duration: 3000 });
       },
       error: (error) => {

@@ -10,7 +10,7 @@ export interface ElementInfo {
   id: string;
   name: string;
   type: DocumentType;
-  isFavorite?: boolean;
+  favorite?: boolean;
 }
 
 export interface ListFolderAndCountResponse {
@@ -77,7 +77,7 @@ export interface FileItem extends ElementInfo {
   size?: number;
   modifiedDate?: Date;
   icon?: string;
-  isFavorite?: boolean;
+  favorite?: boolean;
 }
 
 export interface MultipleUploadFileParameter {

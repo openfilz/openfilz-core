@@ -20,7 +20,7 @@ public interface DocumentDAO {
 
     Flux<ChildElementInfo> getElementsAndChildren(List<UUID> documentIds, String connectedUserEmail);
 
-    Flux<FolderElementInfo> listDocumentInfoInFolder(UUID parentFolderId, DocumentType type, String userId);
+    Flux<FolderElementInfo> listDocumentInfoInFolder(UUID parentFolderId, DocumentType type);
 
     Mono<Long> countDocument(UUID parentId);
 
@@ -39,67 +39,4 @@ public interface DocumentDAO {
     Mono<Void> delete(Document document);
 
     Mono<Document> create(Document document);
-
-    /**
-     * Count total files by type
-     */
-    Mono<Long> countFilesByType(DocumentType type);
-
-    /**
-     * Get total storage used by content type pattern
-     */
-    Mono<Long> getTotalStorageByContentType(String contentTypePattern);
-
-    /**
-     * Count files by content type pattern
-     */
-    Mono<Long> countFilesByContentType(String contentTypePattern);
-
-    /**
-     * Get total storage used
-     */
-    Mono<Long> getTotalStorageUsed();
-
-    // Recycle Bin Methods
-
-    /**
-     * Soft delete a document (set deleted_at and deleted_by)
-     */
-    Mono<Void> softDelete(UUID documentId, String userId);
-
-    /**
-     * Soft delete documents recursively (folder and all children)
-     */
-    Mono<Void> softDeleteRecursive(UUID documentId, String userId);
-
-    /**
-     * Find deleted documents for a specific user (recycle bin listing)
-     */
-    Flux<FolderElementInfo> findDeletedDocuments(String userId);
-
-    /**
-     * Restore a document (clear deleted_at and deleted_by)
-     */
-    Mono<Void> restore(UUID documentId);
-
-    /**
-     * Restore documents recursively (folder and all children)
-     */
-    Mono<Void> restoreRecursive(UUID documentId);
-
-    /**
-     * Permanently delete a document (hard delete from database)
-     */
-    Mono<Void> permanentDelete(UUID documentId);
-
-    /**
-     * Find documents that have been deleted longer than specified days
-     * Used by cleanup scheduler
-     */
-    Flux<Document> findExpiredDeletedDocuments(int days);
-
-    /**
-     * Count deleted documents for a user
-     */
-    Mono<Long> countDeletedDocuments(String userId);
 }

@@ -35,14 +35,14 @@ export class SearchResultsComponent extends FileOperationsComponent implements O
 
   constructor(
     private route: ActivatedRoute,
-    private router: Router,
     private searchService: SearchService,
     private fileIconService: FileIconService,
+    router: Router,
     documentApi: DocumentApiService,
     dialog: MatDialog,
     snackBar: MatSnackBar
   ) {
-    super(documentApi, dialog, snackBar);
+    super(router, documentApi, dialog, snackBar);
   }
 
   override ngOnInit(): void {
@@ -54,7 +54,11 @@ export class SearchResultsComponent extends FileOperationsComponent implements O
     });
   }
 
-  reloadData(): void {
+  override loadItems() {
+      this.reloadData();
+  }
+
+  override reloadData(): void {
     this.loading = true;
     this.searchService.searchDocuments(this.searchQuery).subscribe({
       next: (result) => {
@@ -69,13 +73,7 @@ export class SearchResultsComponent extends FileOperationsComponent implements O
     });
   }
 
-  onItemDoubleClick(item: FileItem): void {
-    if (item.type === 'FOLDER') {
-      this.router.navigate(['/my-folder'], { queryParams: { folderId: item.id } });
-    } else {
-      this.onDownloadItem(item);
-    }
-  }
+
 
   private transformToFileItem(doc: DocumentSearchInfo): FileItem {
     const fileType = doc.extension ? DocumentType.FILE : DocumentType.FOLDER;

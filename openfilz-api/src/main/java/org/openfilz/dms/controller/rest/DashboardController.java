@@ -19,7 +19,7 @@ import reactor.core.publisher.Mono;
  */
 @Slf4j
 @RestController
-@RequestMapping(RestApiVersion.API_PREFIX + "/dashboard")
+@RequestMapping(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_DASHBOARD)
 @RequiredArgsConstructor
 @SecurityRequirement(name = "keycloak_auth")
 @Tag(name = "Dashboard", description = "Dashboard statistics and metrics")

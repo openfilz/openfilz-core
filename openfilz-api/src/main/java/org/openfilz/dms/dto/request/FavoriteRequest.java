@@ -8,8 +8,7 @@ import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.UUID;
 
-public record ListFolderRequest(
-    UUID id,
+public record FavoriteRequest(
     DocumentType type,
     String contentType,
     String name,
@@ -22,21 +21,10 @@ public record ListFolderRequest(
     OffsetDateTime updatedAtBefore,
     String createdBy,
     String updatedBy,
-    Boolean favorite,
     @NotNull @Valid PageCriteria pageInfo
     ) {
-    public boolean isEmpty() {
-        return (metadata == null || metadata.isEmpty())
-                && id == null
-                && type == null
-                && contentType == null
-                && name == null
-                && nameLike == null
-                && size == null
-                && createdAtAfter == null
-                && createdAtBefore == null
-                && updatedAtAfter == null
-                && updatedAtBefore == null
-                && updatedBy == null;
+    public ListFolderRequest toListFolderRequest() {
+        return new ListFolderRequest(null, type, contentType, name, nameLike, metadata, size, createdAtAfter,
+                createdAtBefore, updatedAtAfter, updatedAtBefore, createdBy, updatedBy, true, pageInfo);
     }
 }

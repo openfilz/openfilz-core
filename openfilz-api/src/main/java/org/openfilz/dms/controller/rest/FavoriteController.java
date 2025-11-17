@@ -1,17 +1,14 @@
 package org.openfilz.dms.controller.rest;
 
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.RestApiVersion;
-import org.openfilz.dms.dto.response.FolderElementInfo;
 import org.openfilz.dms.service.FavoriteService;
 import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.UUID;
@@ -21,9 +18,8 @@ import java.util.UUID;
  */
 @Slf4j
 @RestController
-@RequestMapping(RestApiVersion.API_PREFIX + "/favorites")
+@RequestMapping(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_FAVORITES)
 @RequiredArgsConstructor
-@SecurityRequirement(name = "keycloak_auth")
 @Tag(name = "Favorites", description = "User favorites management")
 public class FavoriteController implements UserInfoService {
 
@@ -96,19 +92,4 @@ public class FavoriteController implements UserInfoService {
                 .flatMap(userId -> favoriteService.isFavorite(documentId, userId));
     }
 
-    /**
-     * List all favorites for the current user
-     *
-     * @return Flux of favorite documents
-     */
-    @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-    @Operation(
-            summary = "List all favorites",
-            description = "Get all favorited files and folders for the current user"
-    )
-    public Flux<FolderElementInfo> listFavorites() {
-        return getConnectedUserEmail()
-                .doOnNext(userId -> log.info("User {} listing all favorites", userId))
-                .flatMapMany(userId -> favoriteService.listFavorites(userId));
-    }
 }

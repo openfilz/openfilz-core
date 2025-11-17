@@ -6,11 +6,11 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * Configuration properties for recycle bin functionality.
- * Maps to openfilz.recycle-bin properties in application.yml
+ * Maps to openfilz.soft-delete.recycle-bin properties in application.yml
  */
 @Data
 @Configuration
-@ConfigurationProperties(prefix = "openfilz.recycle-bin")
+@ConfigurationProperties(prefix = "openfilz.soft-delete.recycle-bin")
 public class RecycleBinProperties {
 
     /**

@@ -19,9 +19,9 @@
                             mat-icon-button
                             class="favorite-btn"
                             (click)="onToggleFavorite($event, item)"
-                            [title]="item.isFavorite ? 'Remove from favorites' : 'Add to favorites'">
-                            <mat-icon [class.favorited]="item.isFavorite">
-                                {{ item.isFavorite ? 'favorite' : 'favorite_border' }}
+                            [title]="item.favorite ? 'Remove from favorites' : 'Add to favorites'">
+                            <mat-icon [class.favorited]="item.favorite">
+                                {{ item.favorite ? 'favorite' : 'favorite_border' }}
                             </mat-icon>
                         </button>
                     }

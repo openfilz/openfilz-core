@@ -2,7 +2,6 @@ package org.openfilz.dms.repository;
 
 import org.openfilz.dms.entity.UserFavorite;
 import org.springframework.data.repository.reactive.ReactiveCrudRepository;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.UUID;
@@ -15,35 +14,18 @@ public interface UserFavoriteRepository extends ReactiveCrudRepository<UserFavor
     /**
      * Check if a document is favorited by a user
      *
-     * @param userId User identifier
-     * @param documentId Document ID
+     * @param email User email
+     * @param docId Document ID
      * @return true if favorited, false otherwise
      */
-    Mono<Boolean> existsByUserIdAndDocumentId(String userId, UUID documentId);
+    Mono<Boolean> existsByEmailAndDocId(String email, UUID docId);
 
-    /**
-     * Find a favorite by user and document
-     *
-     * @param userId User identifier
-     * @param documentId Document ID
-     * @return UserFavorite if exists
-     */
-    Mono<UserFavorite> findByUserIdAndDocumentId(String userId, UUID documentId);
-
-    /**
-     * Find all favorites for a user
-     *
-     * @param userId User identifier
-     * @return Flux of user favorites
-     */
-    Flux<UserFavorite> findByUserId(String userId);
-
-    /**
+     /**
      * Delete a favorite by user and document
      *
-     * @param userId User identifier
-     * @param documentId Document ID
+     * @param email User identifier
+     * @param docId Document ID
      * @return Void when deleted
      */
-    Mono<Void> deleteByUserIdAndDocumentId(String userId, UUID documentId);
+    Mono<Void> deleteByEmailAndDocId(String email, UUID docId);
 }

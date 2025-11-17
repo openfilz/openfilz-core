@@ -6,7 +6,7 @@
     (search)="onSearch($event)">
   </app-header>
 
-  @if(currentRoute !== 'dashboard') {
+  @if(currentRoute == 'my-folder' || currentRoute == 'recycle-bin') {
     <app-breadcrumb
       [breadcrumbs]="breadcrumbs"
       (navigate)="onNavigate($event)">
@@ -14,7 +14,7 @@
   }
 
 <div class="main-content" 
-     [class.dashboard-content]="currentRoute === 'dashboard'"
+     [class.dashboard-content]="currentRoute !== 'my-folder' && currentRoute !== 'recycle-bin'"
      [class.center-content]="isWipRoute">
   <router-outlet></router-outlet>
 </div>

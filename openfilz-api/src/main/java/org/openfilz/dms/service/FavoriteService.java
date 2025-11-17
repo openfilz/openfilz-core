@@ -1,7 +1,5 @@
 package org.openfilz.dms.service;
 
-import org.openfilz.dms.dto.response.FolderElementInfo;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.UUID;
@@ -47,11 +45,4 @@ public interface FavoriteService {
      */
     Mono<Boolean> isFavorite(UUID documentId, String userId);
 
-    /**
-     * List all favorites for a user
-     *
-     * @param userId User identifier
-     * @return Flux of favorite documents
-     */
-    Flux<FolderElementInfo> listFavorites(String userId);
 }

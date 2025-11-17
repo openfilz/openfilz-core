@@ -110,7 +110,7 @@ export class RecycleBinComponent implements OnInit {
         this.items = deletedItems.map(item => ({
           ...item,
           selected: false,
-          isFavorite: false, // Items in recycle bin don't show favorite status
+          favorite: false, // Items in recycle bin don't show favorite status
           icon: this.fileIconService.getFileIcon(item.name, item.type)
         }));
         this.totalItems = this.items.length;
@@ -135,7 +135,7 @@ export class RecycleBinComponent implements OnInit {
         this.items = contents.map(item => ({
           ...item,
           selected: false,
-          isFavorite: false,
+          favorite: false,
           icon: this.fileIconService.getFileIcon(item.name, item.type)
         }));
         this.totalItems = this.items.length;

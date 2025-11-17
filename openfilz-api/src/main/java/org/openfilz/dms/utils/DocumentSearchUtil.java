@@ -35,6 +35,7 @@ public class DocumentSearchUtil {
     public static final String FILTER_CREATED_BY = "createdBy";
     public static final String FILTER_UPDATED_BY = "updatedBy";
     public static final String FILTER_METADATA = "metadata.";
+    public static final String FILTER_FAVORITE = "favorite";
 
     public static final String AND = " and ";
 
@@ -68,7 +69,7 @@ public class DocumentSearchUtil {
         return metadataMap.isEmpty() ? null : metadataMap;
     }
 
-    public  OffsetDateTime toDate(Map<String, String> map, String field) {
+    public OffsetDateTime toDate(Map<String, String> map, String field) {
         String date = map.get(field);
         if(date == null) {
             return null;
@@ -129,6 +130,7 @@ public class DocumentSearchUtil {
                     null,
                     null,
                     null,
+                    null,
                     toPageCriteria(sort, page, size)
             );
         }
@@ -146,7 +148,15 @@ public class DocumentSearchUtil {
                 toDate(filters, DocumentSearchUtil.FILTER_UPDATED_AT_BEFORE),
                 filters.get(DocumentSearchUtil.FILTER_CREATED_BY),
                 filters.get(DocumentSearchUtil.FILTER_UPDATED_BY),
+                toBoolean(filters.get(FILTER_FAVORITE)),
                 toPageCriteria(sort, page, size)
         );
+    }
+
+    private Boolean toBoolean(String bool) {
+        if(bool == null || bool.isEmpty()) {
+            return null;
+        }
+        return Boolean.valueOf(bool);
     }
 }

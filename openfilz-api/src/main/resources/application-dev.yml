@@ -25,9 +25,15 @@ logging:
     # io.r2dbc.postgresql.PARAM: DEBUG # for parameters
 
 openfilz:
+  soft-delete:
+    active: true
+    recycle-bin:
+      enabled: true # Enable recycle bin functionality (soft delete)
+      auto-cleanup-days: 30 # Number of days before automatically deleting items from recycle bin (0 = never auto-delete)
+      cleanup-cron: "0 0 2 * * ?" # Cron expression for cleanup job (daily at 2 AM)
   calculate-checksum: true
   full-text:
-    active: true
+    active: false
     indexation-mode: local # local (only choice for the moment) -> to be developed : redis | kafka | nats
     opensearch:
       host: localhost

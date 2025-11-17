@@ -1,4 +1,3 @@
-// com/example/dms/repository/DocumentRepository.java
 package org.openfilz.dms.repository;
 
 import org.openfilz.dms.entity.Document;
@@ -11,22 +10,6 @@ import java.util.UUID;
 
 public interface DocumentRepository extends ReactiveCrudRepository<Document, UUID> {
 
-    // Filter out soft-deleted items (deleted_at IS NULL)
-    Flux<Document> findByParentIdAndTypeAndDeletedAtIsNull(UUID parentId, DocumentType type);
-
-    Mono<Document> findByIdAndTypeAndDeletedAtIsNull(UUID id, DocumentType documentType);
-
-    Mono<Boolean> existsByIdAndTypeAndDeletedAtIsNull(UUID id, DocumentType type);
-
-    Mono<Boolean> existsByNameAndParentIdIsNullAndDeletedAtIsNull(String name);
-
-    Mono<Boolean> existsByNameAndParentIdAndDeletedAtIsNull(String name, UUID parentId);
-
-    Mono<Long> countDocumentByParentIdIsNullAndDeletedAtIsNull();
-
-    Mono<Long> countDocumentByParentIdEqualsAndDeletedAtIsNull(UUID parentId);
-
-    // Original methods for backward compatibility (include deleted items)
     Flux<Document> findByParentIdAndType(UUID parentId, DocumentType type);
 
     Mono<Document> findByIdAndType(UUID id, DocumentType documentType);
@@ -37,7 +20,7 @@ public interface DocumentRepository extends ReactiveCrudRepository<Document, UUI
 
     Mono<Boolean> existsByNameAndParentId(String name, UUID parentId);
 
-    Mono<Long> countDocumentByParentIdIsNull();
+    Mono<Long> countDocumentByParentIdIsNullAndActiveIsTrue();
 
-    Mono<Long> countDocumentByParentIdEquals(UUID parentId);
+    Mono<Long> countDocumentByParentIdEqualsAndActiveIsTrue(UUID parentId);
 }
