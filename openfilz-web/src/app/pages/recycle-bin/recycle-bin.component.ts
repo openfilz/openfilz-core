@@ -10,7 +10,7 @@ import {DocumentApiService} from '../../services/document-api.service';
 import {FileGridComponent} from '../../components/file-grid/file-grid.component';
 import {FileListComponent} from '../../components/file-list/file-list.component';
 import {ToolbarComponent} from '../../components/toolbar/toolbar.component';
-import {ElementInfo, FileItem} from '../../models/document.models';
+import {ElementInfo, FileItem, ListFolderAndCountResponse} from '../../models/document.models';
 import {FileIconService} from '../../services/file-icon.service';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {BreadcrumbService} from '../../services/breadcrumb.service';
@@ -125,22 +125,25 @@ export class RecycleBinComponent implements OnInit {
     });
   }
 
+    private populateFolderContents(response: ElementInfo[]) {
+        this.items = response.map(item => ({
+            ...item,
+            selected: false,
+            icon: this.fileIconService.getFileIcon(item.name, item.type)
+        }));
+        this.loading = false;
+    }
+
   loadFolder(folder: FileItem) {
     this.loading = true;
     this.currentFolder = folder;
 
     // Load the folder's contents (max page size is 100)
-    this.documentApi.listFolder(folder.id, 1, 100).subscribe({
-      next: (contents: ElementInfo[]) => {
-        this.items = contents.map(item => ({
-          ...item,
-          selected: false,
-          favorite: false,
-          icon: this.fileIconService.getFileIcon(item.name, item.type)
-        }));
-        this.totalItems = this.items.length;
-        this.loading = false;
-        this.updateBreadcrumbs();
+    this.documentApi.listDeletedFolderAndCount(folder.id, 1, 100).subscribe({
+      next: (listAndCount: ListFolderAndCountResponse) => {
+          this.totalItems = listAndCount.count;
+          this.pageIndex = 0;
+          this.populateFolderContents(listAndCount.listFolder);
       },
       error: (error) => {
         console.error('Error loading folder:', error);

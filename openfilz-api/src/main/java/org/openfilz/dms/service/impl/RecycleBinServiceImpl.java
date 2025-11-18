@@ -7,7 +7,7 @@ import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.AuditAction;
 import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.exception.DocumentNotFoundException;
-import org.openfilz.dms.repository.DocumentDAO;
+import org.openfilz.dms.repository.DocumentRepository;
 import org.openfilz.dms.repository.impl.DocumentSoftDeleteDAO;
 import org.openfilz.dms.service.AuditService;
 import org.openfilz.dms.service.MetadataPostProcessor;
@@ -32,7 +32,7 @@ import static org.openfilz.dms.enums.DocumentType.FOLDER;
 @ConditionalOnProperty(name = "openfilz.soft-delete.active", havingValue = "true")
 public class RecycleBinServiceImpl implements RecycleBinService, UserInfoService {
 
-    private final DocumentDAO documentDAO;
+    private final DocumentRepository documentRepository;
     private final MetadataPostProcessor metadataPostProcessor;
     private final DocumentSoftDeleteDAO documentSoftDeleteDAO;
     private final StorageService storageService;
@@ -42,13 +42,13 @@ public class RecycleBinServiceImpl implements RecycleBinService, UserInfoService
     @Override
     public Flux<FolderElementInfo> listDeletedItems() {
         return getConnectedUserEmail()
-                .flatMapMany(userId -> documentSoftDeleteDAO.findDeletedDocuments(userId));
+                .flatMapMany(documentSoftDeleteDAO::findDeletedDocuments);
     }
 
     @Override
     public Mono<Void> restoreItems(List<UUID> documentIds) {
         return Flux.fromIterable(documentIds)
-                .flatMap(docId -> documentDAO.findById(docId, null) // Find even if deleted
+                .flatMap(docId -> documentRepository.findById(docId) // Find even if deleted
                         .switchIfEmpty(Mono.error(new DocumentNotFoundException(docId)))
                         .flatMap(doc -> {
                             // Determine if it's a file or folder
@@ -71,7 +71,7 @@ public class RecycleBinServiceImpl implements RecycleBinService, UserInfoService
     public Mono<Void> permanentlyDeleteItems(List<UUID> documentIds) {
         return getConnectedUserEmail()
                 .flatMap(userId -> Flux.fromIterable(documentIds)
-                        .flatMap(docId -> documentDAO.findById(docId, null) // Find even if deleted
+                        .flatMap(docId -> documentRepository.findById(docId) // Find even if deleted
                                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(docId)))
                                 .flatMap(doc -> permanentlyDeleteDocumentRecursive(doc, userId))
                         )
@@ -93,7 +93,7 @@ public class RecycleBinServiceImpl implements RecycleBinService, UserInfoService
                     .doOnSuccess(_ -> metadataPostProcessor.deleteDocument(docId));
         } else {
             // For folders, recursively delete all children first
-            return documentDAO.findDocumentsByParentIdAndType(docId, null) // Get all children (files and folders)
+            return documentRepository.findByParentIdAndType(docId, null) // Get all children (files and folders)
                     .flatMap(child -> permanentlyDeleteDocumentRecursive(child, userId))
                     .then(documentSoftDeleteDAO.permanentDelete(docId))
                     .then(auditService.logAction(action, type, docId))

@@ -118,7 +118,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
         HttpGraphQlClient httpGraphQlClient = getGraphQlHttpClient();
         //create post
         ListFolderRequest request = new ListFolderRequest(null, null, null, null, null, null, null, null, null, null, null, null
-                , null, null, new PageCriteria(null, null,1,10 ));
+                , null, null, true, new PageCriteria(null, null,1,10 ));
         var graphQlRequest = """
                 query count($request:ListFolderRequest) {
                     count(request:$request)
@@ -164,7 +164,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
         HttpGraphQlClient httpGraphQlClient = getGraphQlHttpClient();
         //create post
         ListFolderRequest request = new ListFolderRequest(folderResponse.id(), null, null, null, null, null, null, null, null, null, null, null
-                , null, null, null);
+                , null, null, true, null);
         var graphQlRequest = """
                 query count($request:ListFolderRequest) {
                     count(request:$request)
@@ -195,7 +195,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
         Assertions.assertTrue(count > 0);
 
         request = new ListFolderRequest(null, null, null, null, null, null, null, null, null, null, null, null
-                , null, null, null);
+                , null, null, true, null);
 
         countGraphQl = httpGraphQlClient
                 .document(graphQlRequest)
@@ -213,7 +213,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
         HttpGraphQlClient httpGraphQlClient = getGraphQlHttpClient();
         //create post
         ListFolderRequest request = new ListFolderRequest(null, null, null, null, null, null, null, null, null, null, null, null
-                , null, null, null);
+                , null, null, true, null);
         var graphQlRequest = """
                 query listFolder($request:ListFolderRequest!) {
                     listFolder(request:$request) {
@@ -237,7 +237,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
                 .verify();
 
         request = new ListFolderRequest(null, null, null, "toto", "tutu", null, null, null, null, null, null, null
-                , null, null, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                , null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
 
         graphQlRequest = """
                 query listFolder($request:ListFolderRequest!) {
@@ -266,7 +266,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
     void whenListFolderEmptyGraphQl_thenOK() {
         UUID uuid0 = UUID.randomUUID();
         ListFolderRequest request = new ListFolderRequest(null, DocumentType.FOLDER, null, null, null, Map.of("testId", uuid0.toString()), null, null, null, null, null, null
-                , null, null, new PageCriteria(null, null, 1, 100));
+                , null, null, true, new PageCriteria(null, null, 1, 100));
         String graphQlRequest = """
                 query listFolder($request:ListFolderRequest!) {
                     listFolder(request:$request) {
@@ -395,6 +395,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
                 getUsername()
                 , getUsername(),
                 null,
+                true,
                 new PageCriteria(null, null, 1, 100));
         var graphQlRequest = """
                 query listFolder($request:ListFolderRequest!) {
@@ -474,6 +475,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
                 getUsername(),
                 getUsername(),
                 null,
+                true,
                 new PageCriteria(null, null, 1, 100));
         var graphQlRequest = """
                 query listFolder($request:ListFolderRequest!) {
@@ -517,6 +519,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
                 getUsername(),
                 getUsername(),
                 null,
+                true,
                 new PageCriteria(null, null, 1, 100));
 
         response = getGraphQlHttpClient()
@@ -558,7 +561,7 @@ public class LocalStorageIT extends TestContainersBaseConfig {
         HttpGraphQlClient httpGraphQlClient = getGraphQlHttpClient();
         //create post
         ListFolderRequest request = new ListFolderRequest(null, null, null, null, null, Map.of("testId", uuid0.toString()), null, null, null, null, null, null
-                , null, null, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                , null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
         var graphQlRequest = """
                 query listFolder($request:ListFolderRequest!) {
                     listFolder(request:$request) {

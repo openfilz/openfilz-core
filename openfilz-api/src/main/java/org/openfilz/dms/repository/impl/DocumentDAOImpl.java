@@ -304,7 +304,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
 
     @Override
     public Mono<Boolean> existsByIdAndType(UUID id, DocumentType type, AccessType accessType) {
-        return documentRepository.existsByIdAndType(id, type);
+        return documentRepository.existsByIdAndTypeAndActive(id, type, true);
     }
 
     @Override
@@ -319,7 +319,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
 
     @Override
     public Mono<Document> findById(UUID documentId, AccessType accessType) {
-        return documentRepository.findById(documentId);
+        return documentRepository.findByIdAndActive(documentId, true);
     }
 
     @Override

@@ -37,10 +37,6 @@ public class DocumentSearchUtil {
     public static final String FILTER_METADATA = "metadata.";
     public static final String FILTER_FAVORITE = "favorite";
 
-    public static final String AND = " and ";
-
-    private final SqlUtils  sqlUtils;
-
     public static Long toLong(Map<String, String> map) {
         String size = map.get(DocumentSearchUtil.FILTER_SIZE);
         if(size != null) {
@@ -131,6 +127,7 @@ public class DocumentSearchUtil {
                     null,
                     null,
                     null,
+                    true,
                     toPageCriteria(sort, page, size)
             );
         }
@@ -149,6 +146,7 @@ public class DocumentSearchUtil {
                 filters.get(DocumentSearchUtil.FILTER_CREATED_BY),
                 filters.get(DocumentSearchUtil.FILTER_UPDATED_BY),
                 toBoolean(filters.get(FILTER_FAVORITE)),
+                true,
                 toPageCriteria(sort, page, size)
         );
     }

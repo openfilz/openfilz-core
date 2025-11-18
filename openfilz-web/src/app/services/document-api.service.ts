@@ -147,6 +147,36 @@ export class DocumentApiService {
   }
 
 
+    listDeletedFolderAndCount(folderId?: string, page: number = 1, pageSize: number = 50): Observable<ListFolderAndCountResponse> {
+        const request1 = {
+            id: folderId,
+            active: false,
+            pageInfo: {
+                pageNumber: page,
+                pageSize: pageSize
+            }
+        };
+
+        const request2 = {
+            id: folderId,
+            active: false
+        };
+
+        return this.apollo.watchQuery<any>({
+            fetchPolicy: 'no-cache',
+            query: LIST_FOLDER_AND_COUNT_QUERY,
+            variables: { request1, request2 }
+        }).valueChanges.pipe(
+            map(result => {
+                return {
+                    listFolder: result.data.listFolder,
+                    count: result.data.count
+                };
+            })
+        );
+
+    }
+
 
   // Folder operations
   listFolder(folderId?: string, page: number = 1, pageSize: number = 50): Observable<ElementInfo[]> {

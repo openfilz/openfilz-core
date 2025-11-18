@@ -63,6 +63,9 @@ public class ListFolderCriteria {
         if(filter.updatedBy() != null) {
             query = sqlUtils.bindCriteria(UPDATED_BY, filter.updatedBy(), query);
         }
+        if(filter.active() != null) {
+            query = sqlUtils.bindCriteria(ACTIVE, filter.active(), query);
+        }
         return query;
     }
 
@@ -128,8 +131,13 @@ public class ListFolderCriteria {
             } else {
                 sqlUtils.appendLessThanCriteria(prefix, UPDATED_AT, appendAnd(query, appendAnd));
             }
+            appendAnd = true;
         } else if(request.updatedAtAfter() != null) {
             sqlUtils.appendGreaterThanCriteria(prefix, UPDATED_AT, appendAnd(query, appendAnd));
+            appendAnd = true;
+        }
+        if(request.active() != null) {
+            sqlUtils.appendEqualsCriteria(prefix, ACTIVE, appendAnd(query, appendAnd));
         }
     }
 

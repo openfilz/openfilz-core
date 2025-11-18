@@ -66,6 +66,7 @@ input ListFolderRequest {
     updatedBy : String
     pageInfo : PageInfo
     favorite : Boolean
+    active : Boolean = true
 }
 
 input FavoriteRequest {

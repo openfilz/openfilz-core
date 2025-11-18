@@ -56,7 +56,8 @@ public class DocumentSoftDeleteService implements DocumentDeleteService, UserInf
                             // Soft delete folder and all children recursively
                             // This marks the folder and all descendants as deleted without removing physical files
                             return documentSoftDeleteDAO.softDeleteRecursive(folderId, userEmail)
-                                    .then(auditService.logAction(AuditAction.DELETE_FOLDER, FOLDER, folderId));
+                                    .then(auditService.logAction(AuditAction.DELETE_FOLDER, FOLDER, folderId))
+                                    .as(tx::transactional);
                         }));
     }
 

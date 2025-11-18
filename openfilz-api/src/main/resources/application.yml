@@ -65,7 +65,7 @@ springdoc:
 logging:
   level:
     org.openfilz: DEBUG
-    # io.r2dbc.postgresql.QUERY: DEBUG # for queries
+    io.r2dbc.postgresql.QUERY: DEBUG # for queries
     # io.r2dbc.postgresql.PARAM: DEBUG # for parameters
     # org.springframework: DEBUG
 

@@ -23,20 +23,8 @@ public record ListFolderRequest(
     String createdBy,
     String updatedBy,
     Boolean favorite,
+    Boolean active,
     @NotNull @Valid PageCriteria pageInfo
     ) {
-    public boolean isEmpty() {
-        return (metadata == null || metadata.isEmpty())
-                && id == null
-                && type == null
-                && contentType == null
-                && name == null
-                && nameLike == null
-                && size == null
-                && createdAtAfter == null
-                && createdAtBefore == null
-                && updatedAtAfter == null
-                && updatedAtBefore == null
-                && updatedBy == null;
-    }
+
 }
