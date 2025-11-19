@@ -39,7 +39,7 @@ import static org.openfilz.dms.enums.DocumentType.FILE;
 
 @Slf4j
 @RestController
-@RequestMapping(RestApiVersion.API_PREFIX + "/documents")
+@RequestMapping(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_DOCUMENTS)
 @RequiredArgsConstructor
 @SecurityRequirement(name = "keycloak_auth")
 public class DocumentController {

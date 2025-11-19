@@ -20,7 +20,7 @@ import reactor.core.publisher.Mono;
 import java.util.UUID;
 
 @RestController
-@RequestMapping(RestApiVersion.API_PREFIX + "/files")
+@RequestMapping(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_FILES)
 @RequiredArgsConstructor
 @SecurityRequirement(name = "keycloak_auth")
 public class FileController {

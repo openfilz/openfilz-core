@@ -22,6 +22,9 @@ public record ListFolderRequest(
     OffsetDateTime updatedAtBefore,
     String createdBy,
     String updatedBy,
+    Boolean favorite,
+    Boolean active,
     @NotNull @Valid PageCriteria pageInfo
     ) {
+
 }

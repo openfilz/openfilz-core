@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs:*)",
+      "Bash(printf:*)",
+      "Bash(\"C:/projects/openfilz-enterprise/core/CLAUDE.md\")",
+      "Bash(mvn compile:*)",
+      "Bash(mvn spring-boot:run:*)",
+      "Bash(timeout 30 bash -c:*)",
+      "Bash(set:*)",
+      "Bash(timeout 45 bash -c 'while ! curl -s http://localhost:8081/actuator/health > /dev/null 2>&1; do sleep 2; done && echo \"\"Server started successfully!\"\"':*)",
+      "Bash(curl:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(dir:*)",
+      "Bash(npm run build:*)",
+      "Bash(mvn clean compile:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -50,7 +50,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
     private static final String SELECT_ALL_FOLDER_ELEMENT_INFO = """
             SELECT d.id, d.type, d.name
             FROM Documents d
-            WHERE d.parent_id""";
+            WHERE d.active = true and d.parent_id""";
 
     protected static final String SELECT_CHILDREN = """
             WITH RECURSIVE folder_tree AS (
@@ -62,7 +62,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
                  storage_path as storage,
                  name::text as fullpath
               FROM documents
-              WHERE parent_id = :parentId
+              WHERE parent_id = :parentId AND active = true
              UNION ALL
               SELECT
                  d.id,
@@ -73,6 +73,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
                  tree.fullpath || '/' || d.name
               FROM documents d
               JOIN folder_tree tree ON d.parent_id = tree.id
+              WHERE d.active = true
              )
              SELECT * FROM folder_tree""";
 
@@ -87,7 +88,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
                  storage_path as storage,
                  :rootFolder || name as fullpath
               FROM documents
-              WHERE parent_id = :parentId
+              WHERE parent_id = :parentId AND active = true
              UNION ALL
               SELECT
                  d.id,
@@ -98,6 +99,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
                  tree.fullpath || '/' || d.name
               FROM documents d
               JOIN folder_tree tree ON d.parent_id = tree.id
+              WHERE d.active = true
              )
              SELECT * FROM folder_tree""";
 
@@ -217,7 +219,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
                     size,
                     storage_path
                 FROM documents
-                where id in (:ids)""")
+                where id in (:ids) AND active = true""")
                 .bind(IDS, documentIds)
                 .map(this::toRootChild)
                 .all()
@@ -263,12 +265,12 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
 
     @Override
     public Mono<Long> countDocument(UUID parentId) {
-        return parentId == null ? documentRepository.countDocumentByParentIdIsNull()
-                : documentRepository.countDocumentByParentIdEquals(parentId);
+        return parentId == null ? documentRepository.countDocumentByParentIdIsNullAndActiveIsTrue()
+                : documentRepository.countDocumentByParentIdEqualsAndActiveIsTrue(parentId);
     }
 
     protected Flux<Tuple2<UUID, String>> getFolders(List<UUID> documentIds) {
-        return databaseClient.sql("select id, name from documents where type = :type and id in (:ids)")
+        return databaseClient.sql("select id, name from documents where type = :type and id in (:ids) AND active = true")
                 .bind(TYPE, DocumentType.FOLDER.toString())
                 .bind(IDS, documentIds)
                 .map(row -> Tuples.of(row.get(ID, UUID.class), row.get(NAME, String.class)))
@@ -302,7 +304,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
 
     @Override
     public Mono<Boolean> existsByIdAndType(UUID id, DocumentType type, AccessType accessType) {
-        return documentRepository.existsByIdAndType(id, type);
+        return documentRepository.existsByIdAndTypeAndActive(id, type, true);
     }
 
     @Override
@@ -317,7 +319,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
 
     @Override
     public Mono<Document> findById(UUID documentId, AccessType accessType) {
-        return documentRepository.findById(documentId);
+        return documentRepository.findByIdAndActive(documentId, true);
     }
 
     @Override

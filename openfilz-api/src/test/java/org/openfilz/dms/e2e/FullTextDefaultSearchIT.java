@@ -249,7 +249,7 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
     protected void waitFor(long timeout) throws InterruptedException {
         CountDownLatch latch2 = new CountDownLatch(1);
         new Thread(() -> {
-            log.info("Waiting 3 seconds...");
+            log.info("Waiting "+timeout+" milliseconds...");
             try { Thread.sleep(timeout); } catch (InterruptedException ignored) {}
             latch2.countDown();
         }).start();

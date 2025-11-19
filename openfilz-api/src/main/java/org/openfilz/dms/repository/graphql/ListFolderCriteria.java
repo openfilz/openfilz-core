@@ -13,6 +13,7 @@ import static org.openfilz.dms.utils.SqlUtils.*;
 @Component("defaultListFolderCriteria")
 public class ListFolderCriteria {
 
+    public static final String NON_FAVORITE_CLAUSE = "uf.doc_id IS NULL ";
     protected final SqlUtils sqlUtils;
 
     public DatabaseClient.GenericExecuteSpec bindCriteria(DatabaseClient.GenericExecuteSpec query, ListFolderRequest filter) {
@@ -62,6 +63,9 @@ public class ListFolderCriteria {
         }
         if(filter.updatedBy() != null) {
             query = sqlUtils.bindCriteria(UPDATED_BY, filter.updatedBy(), query);
+        }
+        if(filter.active() != null) {
+            query = sqlUtils.bindCriteria(ACTIVE, filter.active(), query);
         }
         return query;
     }
@@ -128,8 +132,21 @@ public class ListFolderCriteria {
             } else {
                 sqlUtils.appendLessThanCriteria(prefix, UPDATED_AT, appendAnd(query, appendAnd));
             }
+            appendAnd = true;
         } else if(request.updatedAtAfter() != null) {
             sqlUtils.appendGreaterThanCriteria(prefix, UPDATED_AT, appendAnd(query, appendAnd));
+            appendAnd = true;
+        }
+        if(request.active() != null) {
+            sqlUtils.appendEqualsCriteria(prefix, ACTIVE, appendAnd(query, appendAnd));
+        }
+        if(request.favorite() != null && !request.favorite()) {
+            if(!query.toString().contains(WHERE)) {
+                query.append(WHERE);
+            } else  {
+                query.append(AND);
+            }
+            query.append(NON_FAVORITE_CLAUSE);
         }
     }
 

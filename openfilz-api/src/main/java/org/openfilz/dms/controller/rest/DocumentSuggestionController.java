@@ -16,7 +16,7 @@ import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping(RestApiVersion.API_PREFIX + "/suggestions")
+@RequestMapping(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_SUGGESTIONS)
 public class DocumentSuggestionController {
 
     private final DocumentSuggestionService suggestionService;

@@ -5,6 +5,7 @@ import {Apollo, gql} from 'apollo-angular';
 import {
     CopyRequest,
     CreateFolderRequest,
+    DashboardStatistics,
     DeleteRequest,
     DocumentInfo,
     ElementInfo,
@@ -12,6 +13,7 @@ import {
     ListFolderAndCountResponse,
     MoveRequest,
     MultipleUploadFileParameter,
+    RecentFileInfo,
     RenameRequest,
     SearchByMetadataRequest,
     UploadResponse
@@ -30,6 +32,7 @@ const LIST_FOLDER_QUERY = gql`
       updatedAt
       createdBy
       updatedBy
+      favorite
     }
   }
 `;
@@ -46,8 +49,27 @@ const LIST_FOLDER_AND_COUNT_QUERY = gql`
       updatedAt
       createdBy
       updatedBy
+      favorite
     }
     count(request: $request2)
+  }
+`;
+
+const LIST_FAVORITES_AND_COUNT_QUERY = gql`
+  query listFavoritesAndCount($request1: FavoriteRequest!, $request2: FavoriteRequest) {
+      listFavorites(request: $request1) {
+      id
+      type
+      contentType
+      name
+      size
+      createdAt
+      updatedAt
+      createdBy
+      updatedBy
+      favorite
+    }
+      countFavorites(request: $request2)
   }
 `;
 
@@ -83,6 +105,23 @@ const SEARCH_DOCUMENTS_QUERY = gql`
   }
 `;
 
+const RECENT_FILES_QUERY = gql`
+  query recentFiles($request: ListFolderRequest!) {
+    listFolder(request: $request) {
+      id
+      type
+      contentType
+      name
+      size
+      createdAt
+      updatedAt
+      createdBy
+      updatedBy
+      favorite
+    }
+  }
+`;
+
 @Injectable({
   providedIn: 'root'
 })
@@ -107,6 +146,36 @@ export class DocumentApiService {
     });
   }
 
+
+    listDeletedFolderAndCount(folderId?: string, page: number = 1, pageSize: number = 50): Observable<ListFolderAndCountResponse> {
+        const request1 = {
+            id: folderId,
+            active: false,
+            pageInfo: {
+                pageNumber: page,
+                pageSize: pageSize
+            }
+        };
+
+        const request2 = {
+            id: folderId,
+            active: false
+        };
+
+        return this.apollo.watchQuery<any>({
+            fetchPolicy: 'no-cache',
+            query: LIST_FOLDER_AND_COUNT_QUERY,
+            variables: { request1, request2 }
+        }).valueChanges.pipe(
+            map(result => {
+                return {
+                    listFolder: result.data.listFolder,
+                    count: result.data.count
+                };
+            })
+        );
+
+    }
 
 
   // Folder operations
@@ -156,6 +225,32 @@ export class DocumentApiService {
     );
     
   }
+
+    listFavoritesAndCount(page: number = 1, pageSize: number = 50): Observable<ListFolderAndCountResponse> {
+        const request1 = {
+            pageInfo: {
+                pageNumber: page,
+                pageSize: pageSize
+            }
+        };
+
+        const request2 = {
+        };
+
+        return this.apollo.watchQuery<any>({
+            fetchPolicy: 'no-cache',
+            query: LIST_FAVORITES_AND_COUNT_QUERY,
+            variables: { request1, request2 }
+        }).valueChanges.pipe(
+            map(result => {
+                return {
+                    listFolder: result.data.listFavorites,
+                    count: result.data.countFavorites
+                };
+            })
+        );
+
+    }
 
   createFolder(request: CreateFolderRequest): Observable<FolderResponse> {
     return this.http.post<FolderResponse>(`${this.baseUrl}/folders`, request, {
@@ -286,6 +381,96 @@ export class DocumentApiService {
 
   searchDocumentIdsByMetadata(request: SearchByMetadataRequest): Observable<string[]> {
     return this.http.post<string[]>(`${this.baseUrl}/documents/search/ids-by-metadata`, request, {
+      headers: this.getHeaders()
+    });
+  }
+
+  // Dashboard operations
+  getDashboardStatistics(): Observable<DashboardStatistics> {
+    return this.http.get<DashboardStatistics>(`${this.baseUrl}/dashboard/statistics`, {
+      headers: this.getHeaders()
+    });
+  }
+
+  getRecentlyEditedFiles(limit: number = 5): Observable<RecentFileInfo[]> {
+    const request = {
+      type: 'FILE',
+      pageInfo: {
+        pageNumber: 1,
+        pageSize: limit,
+        sortBy: 'updatedAt',
+        sortOrder: 'DESC'
+      }
+    };
+
+    return this.apollo.watchQuery<any>({
+      fetchPolicy: 'no-cache',
+      query: RECENT_FILES_QUERY,
+      variables: { request }
+    }).valueChanges.pipe(
+      map(result => result.data.listFolder)
+    );
+  }
+
+  // Favorite operations
+  addFavorite(documentId: string): Observable<void> {
+    return this.http.post<void>(`${this.baseUrl}/favorites/${documentId}`, null, {
+      headers: this.getHeaders()
+    });
+  }
+
+  removeFavorite(documentId: string): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/favorites/${documentId}`, {
+      headers: this.getHeaders()
+    });
+  }
+
+  toggleFavorite(documentId: string): Observable<boolean> {
+    return this.http.put<boolean>(`${this.baseUrl}/favorites/${documentId}/toggle`, null, {
+      headers: this.getHeaders()
+    });
+  }
+
+  favorite(documentId: string): Observable<boolean> {
+    return this.http.get<boolean>(`${this.baseUrl}/favorites/${documentId}/is-favorite`, {
+      headers: this.getHeaders()
+    });
+  }
+
+  listFavorites(): Observable<ElementInfo[]> {
+    return this.http.get<ElementInfo[]>(`${this.baseUrl}/favorites`, {
+      headers: this.getHeaders()
+    });
+  }
+
+  // Recycle Bin operations
+  listDeletedItems(): Observable<ElementInfo[]> {
+    return this.http.get<ElementInfo[]>(`${this.baseUrl}/recycle-bin`, {
+      headers: this.getHeaders()
+    });
+  }
+
+  countDeletedItems(): Observable<number> {
+    return this.http.get<number>(`${this.baseUrl}/recycle-bin/count`, {
+      headers: this.getHeaders()
+    });
+  }
+
+  restoreItems(request: DeleteRequest): Observable<void> {
+    return this.http.post<void>(`${this.baseUrl}/recycle-bin/restore`, request, {
+      headers: this.getHeaders()
+    });
+  }
+
+  permanentlyDeleteItems(request: DeleteRequest): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/recycle-bin`, {
+      headers: this.getHeaders(),
+      body: request
+    });
+  }
+
+  emptyRecycleBin(): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/recycle-bin/empty`, {
       headers: this.getHeaders()
     });
   }

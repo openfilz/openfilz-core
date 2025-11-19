@@ -8,6 +8,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.openfilz.dms.enums.DocumentType;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Transient;
 import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
@@ -36,6 +37,7 @@ public class Document implements SqlColumnMapping, PhysicalDocument {
     @Column(CONTENT_TYPE)
     private String contentType; // MIME type
 
+    @Column(SIZE)
     private Long size; // in bytes
 
     @Column(PARENT_ID)
@@ -58,4 +60,10 @@ public class Document implements SqlColumnMapping, PhysicalDocument {
 
     @Column(UPDATED_BY)
     private String updatedBy;
+
+    @Column(ACTIVE)
+    private Boolean active; // When Soft delete is active : set to false to soft-delete a document
+
+    @Transient
+    private Boolean favorite; // Not stored in database, populated from JOIN
 }

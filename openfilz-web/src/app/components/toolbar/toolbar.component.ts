@@ -4,6 +4,7 @@ import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatMenuModule} from '@angular/material/menu';
 import {MatTooltipModule} from '@angular/material/tooltip';
+import {AppConfig} from '../../config/app.config';
 
 @Component({
   selector: 'app-toolbar',
@@ -23,9 +24,18 @@ export class ToolbarComponent {
   @Input() hasSelection = false;
   @Input() selectionCount = 0;
 
+  // Page title (optional)
+  @Input() pageTitle?: string;
+  @Input() pageIcon?: string;
+
+  // Feature toggles
+  @Input() showUploadButton = true;
+  @Input() showCreateFolderButton = true;
+  @Input() showStandardSelectionActions = true; // Show rename, download, move, copy, delete buttons
+
   // Pagination inputs
   @Input() pageIndex = 0;
-  @Input() pageSize = 25;
+  @Input() pageSize = AppConfig.pagination.defaultPageSize;
   @Input() totalItems = 0;
   @Input() isSearchResultsPage = false;
 
@@ -44,8 +54,8 @@ export class ToolbarComponent {
   @Output() nextPage = new EventEmitter<void>();
   @Output() pageSizeChange = new EventEmitter<number>();
 
-  // Page size options
-  pageSizeOptions = [25, 50, 70, 100];
+  // Page size options from global config
+  pageSizeOptions = AppConfig.pagination.pageSizeOptions;
 
   onCreateFolder() {
     this.createFolder.emit();

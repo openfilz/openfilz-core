@@ -5,6 +5,7 @@ import {MatButtonModule} from '@angular/material/button';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatSelectModule} from '@angular/material/select';
 import {FormsModule} from '@angular/forms';
+import {AppConfig} from "../../config/app.config";
 
 export interface SettingsDialogData {
   itemsPerPage: number;
@@ -40,7 +41,7 @@ export class SettingsDialogComponent {
   }
 
   onSave(): void {
-    localStorage.setItem('itemsPerPage', this.selectedItemsPerPage.toString());
+    localStorage.setItem(AppConfig.pagination.itemsPerPageKey, this.selectedItemsPerPage.toString());
     this.dialogRef.close(this.selectedItemsPerPage);
   }
 }

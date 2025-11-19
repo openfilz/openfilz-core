@@ -1,4 +1,20 @@
 spring:
+  r2dbc:
+    url: r2dbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:dms_db}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:sasql}
+    initialization-mode: always
+    pool:
+      enabled: true
+      initial-size: 5
+      max-size: 10
+  flyway:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:dms_db}
+    user: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:sasql}
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    out-of-order: true
   graphql:
     graphiql:
       enabled: true
@@ -9,9 +25,15 @@ logging:
     # io.r2dbc.postgresql.PARAM: DEBUG # for parameters
 
 openfilz:
+  soft-delete:
+    active: true
+    recycle-bin:
+      enabled: true # Enable recycle bin functionality (soft delete)
+      auto-cleanup-interval: "30 days" # Number of days before automatically deleting items from recycle bin (0 = never auto-delete)
+      cleanup-cron: "0 0 2 * * ?" # Cron expression for cleanup job (daily at 2 AM)
   calculate-checksum: true
   full-text:
-    active: true
+    active: false
     indexation-mode: local # local (only choice for the moment) -> to be developed : redis | kafka | nats
     opensearch:
       host: localhost

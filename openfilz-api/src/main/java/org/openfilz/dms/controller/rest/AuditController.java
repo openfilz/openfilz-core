@@ -16,9 +16,11 @@ import reactor.core.publisher.Flux;
 
 import java.util.UUID;
 
+import static org.openfilz.dms.config.RestApiVersion.ENDPOINT_AUDIT;
+
 @Slf4j
 @RestController
-@RequestMapping(RestApiVersion.API_PREFIX + "/audit")
+@RequestMapping(RestApiVersion.API_PREFIX + ENDPOINT_AUDIT)
 @RequiredArgsConstructor
 @SecurityRequirement(name = "keycloak_auth")
 public class AuditController {

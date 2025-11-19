@@ -321,6 +321,26 @@
   color: var(--text-secondary);
 }
 
+.favorite-btn mat-icon {
+  transition: all 200ms ease;
+}
+
+.favorite-btn mat-icon.favorited {
+  color: #ef4444;
+}
+
+.favorite-btn:hover mat-icon {
+  transform: scale(1.15);
+}
+
+.favorite-btn:hover mat-icon.favorited {
+  color: #dc2626;
+}
+
+.favorite-btn:hover mat-icon:not(.favorited) {
+  color: #f87171;
+}
+
 mat-paginator {
     flex-shrink: 0;
     background: var(--bg-primary) !important;

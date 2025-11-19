@@ -6,6 +6,8 @@ import {DocumentApiService} from '../../services/document-api.service';
 import {RenameDialogComponent, RenameDialogData} from '../../dialogs/rename-dialog/rename-dialog.component';
 import {FolderTreeDialogComponent} from '../../dialogs/folder-tree-dialog/folder-tree-dialog.component';
 import {Observable} from "rxjs";
+import {AppConfig} from '../../config/app.config';
+import {Router} from "@angular/router";
 
 @Directive()
 export abstract class FileOperationsComponent implements OnInit {
@@ -14,8 +16,11 @@ export abstract class FileOperationsComponent implements OnInit {
   isDownloading = false;
   items: FileItem[] = [];
   totalItems = 0;
+  pageSize = AppConfig.pagination.defaultPageSize;
+  pageIndex = 0;
 
   constructor(
+    protected router: Router,
     protected documentApi: DocumentApiService,
     protected dialog: MatDialog,
     protected snackBar: MatSnackBar
@@ -281,4 +286,41 @@ export abstract class FileOperationsComponent implements OnInit {
       error: () => this.snackBar.open(`Failed to ${action} items`, 'Close', { duration: 3000 })
     };
   }
+
+
+    onClearSelection() {
+        this.onSelectAll(false);
+    }
+
+    onPreviousPage() {
+        if (this.pageIndex > 0) {
+            this.pageIndex--;
+            this.loadItems();
+        }
+    }
+
+    onNextPage() {
+        const totalPages = Math.ceil(this.totalItems / this.pageSize);
+        if (this.pageIndex < totalPages - 1) {
+            this.pageIndex++;
+            this.loadItems();
+        }
+    }
+
+    onPageSizeChange(newPageSize: number) {
+        this.pageSize = newPageSize;
+        localStorage.setItem(AppConfig.pagination.itemsPerPageKey, newPageSize.toString());
+        this.pageIndex = 0;
+        this.loadItems();
+    }
+
+    onItemDoubleClick(item: FileItem): void {
+        if (item.type === 'FOLDER') {
+            this.router.navigate(['/my-folder'], { queryParams: { folderId: item.id } });
+        } else {
+            this.onDownloadItem(item);
+        }
+    }
+
+    abstract loadItems() : void;
 }

@@ -140,7 +140,14 @@ public abstract class AbstractSecurityService implements SecurityService {
      * */
     protected final boolean isQueryOrSearch(HttpMethod method, String path) {
         return (method.equals(HttpMethod.GET)
-                && pathStartsWith(path, "/files", "/folders", "/documents", "/suggestions"))
+                && pathStartsWith(path, RestApiVersion.ENDPOINT_FILES,
+                    RestApiVersion.ENDPOINT_FOLDERS,
+                    RestApiVersion.ENDPOINT_DOCUMENTS,
+                    RestApiVersion.ENDPOINT_SUGGESTIONS,
+                    RestApiVersion.ENDPOINT_RECYCLE_BIN,
+                    RestApiVersion.ENDPOINT_DASHBOARD,
+                    RestApiVersion.ENDPOINT_FAVORITES
+                ))
                 ||
                 (method.equals(HttpMethod.POST) && (
                         pathStartsWith(path, "/documents/download-multiple", "/documents/search/ids-by-metadata", "/folders/list")

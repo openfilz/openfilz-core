@@ -1,4 +1,3 @@
-// com/example/dms/repository/DocumentRepository.java
 package org.openfilz.dms.repository;
 
 import org.openfilz.dms.entity.Document;
@@ -15,13 +14,15 @@ public interface DocumentRepository extends ReactiveCrudRepository<Document, UUI
 
     Mono<Document> findByIdAndType(UUID id, DocumentType documentType);
 
-    Mono<Boolean> existsByIdAndType(UUID id, DocumentType type);
-
     Mono<Boolean> existsByNameAndParentIdIsNull(String name);
 
     Mono<Boolean> existsByNameAndParentId(String name, UUID parentId);
 
-    Mono<Long> countDocumentByParentIdIsNull();
+    Mono<Long> countDocumentByParentIdIsNullAndActiveIsTrue();
 
-    Mono<Long> countDocumentByParentIdEquals(UUID parentId);
+    Mono<Long> countDocumentByParentIdEqualsAndActiveIsTrue(UUID parentId);
+
+    Mono<Boolean> existsByIdAndTypeAndActive(UUID id, DocumentType type, boolean active);
+
+    Mono<Document> findByIdAndActive(UUID documentId, boolean active);
 }

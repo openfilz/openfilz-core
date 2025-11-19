@@ -1,5 +1,15 @@
 <div class="toolbar">
   <div class="toolbar-left">
+    <!-- Page Title (if provided) -->
+    @if(pageTitle && !hasSelection) {
+      <div class="page-title-section">
+        @if(pageIcon) {
+          <mat-icon class="page-icon">{{ pageIcon }}</mat-icon>
+        }
+        <h1 class="page-title">{{ pageTitle }}</h1>
+      </div>
+    }
+
     <!-- Selection info -->
     @if(hasSelection) {
       <div class="selection-info">
@@ -10,21 +20,28 @@
       </div>
     }
 
-    <!-- Action buttons (visible when no selection) -->
-    @if(!hasSelection && !isSearchResultsPage) {
-      <button mat-raised-button color="primary" class="upload-btn" (click)="onUploadFiles()">
-        <i class="fas fa-upload"></i>
-        <span>Upload</span>
-      </button>
+    <!-- Custom action buttons (projected content) -->
+    <ng-content select="[toolbarActions]"></ng-content>
 
-      <button mat-stroked-button class="new-folder-btn" (click)="onCreateFolder()">
-        <i class="fas fa-folder-plus"></i>
-        <span>New Folder</span>
-      </button>
+    <!-- Action buttons (visible when no selection and no page title, or with page title) -->
+    @if(!hasSelection && !isSearchResultsPage) {
+      @if(showUploadButton) {
+        <button mat-raised-button color="primary" class="upload-btn" (click)="onUploadFiles()">
+          <i class="fas fa-upload"></i>
+          <span>Upload</span>
+        </button>
+      }
+
+      @if(showCreateFolderButton) {
+        <button mat-stroked-button class="new-folder-btn" (click)="onCreateFolder()">
+          <i class="fas fa-folder-plus"></i>
+          <span>New Folder</span>
+        </button>
+      }
     }
 
     <!-- Selection actions (visible when items selected) -->
-    @if(hasSelection) {
+    @if(hasSelection && showStandardSelectionActions) {
       <div class="selection-actions">
         @if(selectionCount === 1) {
           <button mat-stroked-button (click)="onRenameSelected()" matTooltip="Rename">
@@ -63,10 +80,14 @@
           <span>{{ pageSize }}</span>
           <i class="fas fa-chevron-down"></i>
         </button>
-        <mat-menu #pageSizeMenu="matMenu">
+        <mat-menu #pageSizeMenu="matMenu" class="page-size-menu">
           @for(size of pageSizeOptions; track size) {
-            <button mat-menu-item (click)="onPageSizeChange(size)" [class.active]="size === pageSize">
-              {{ size }} per page
+            <button mat-menu-item (click)="onPageSizeChange(size)" [class.active]="size === pageSize" class="page-size-option">
+              <span class="option-value">{{ size }}</span>
+              <span class="option-label">items per page</span>
+              @if(size === pageSize) {
+                <i class="fas fa-check option-check"></i>
+              }
             </button>
           }
         </mat-menu>

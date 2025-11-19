@@ -51,6 +51,8 @@ public class DefaultDocumentSearchService implements DocumentSearchService {
                 searchListFolderRequest.updatedAtBefore(),
                 searchListFolderRequest.createdBy(),
                 searchListFolderRequest.updatedBy(),
+                searchListFolderRequest.favorite(),
+                searchListFolderRequest.active(),
                 null
         );
         if(filterMap!=null && filterMap.containsKey(FILTER_PARENT_ID)) {
