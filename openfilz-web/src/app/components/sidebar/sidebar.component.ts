@@ -1,10 +1,10 @@
-import {Component, EventEmitter, Output} from '@angular/core';
-import {CommonModule} from '@angular/common';
-import {MatButtonModule} from '@angular/material/button';
-import {MatIconModule} from '@angular/material/icon';
-import {MatListModule} from '@angular/material/list';
-import {MatTooltipModule} from '@angular/material/tooltip';
-import {Router} from '@angular/router';
+import { Component, EventEmitter, Output } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatListModule } from '@angular/material/list';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-sidebar',
@@ -23,6 +23,7 @@ export class SidebarComponent {
   isCollapsed = false;
 
   @Output() collapsedChange = new EventEmitter<boolean>();
+  @Output() logout = new EventEmitter<void>();
 
   navigationItems = [
     { id: 'dashboard', label: 'Dashboard', active: true, route: '/dashboard' },
@@ -31,10 +32,10 @@ export class SidebarComponent {
     { id: 'favorites', label: 'Favorites', active: false, route: '/favorites' },
     //{ id: 'shared-files', label: 'Shared Files', active: false, route: '/shared-files' },
     { id: 'settings', label: 'Settings', active: false, route: '/settings' },
-    { id: 'logout', label: 'Log Out', active: false, route: '/logout' }
+    { id: 'logout', label: 'Log Out', active: false, route: null }
   ];
 
-  constructor(private router: Router) {}
+  constructor(private router: Router) { }
 
   toggleSidebar() {
     this.isCollapsed = !this.isCollapsed;
@@ -42,7 +43,7 @@ export class SidebarComponent {
   }
 
   getIconClass(id: string): string {
-    switch(id) {
+    switch (id) {
       case 'dashboard': return 'chart-line';
       case 'my-folder': return 'folder';
       case 'recycle-bin': return 'trash';
@@ -55,9 +56,14 @@ export class SidebarComponent {
   }
 
   onNavigationClick(itemId: string) {
+    if (itemId === 'logout') {
+      this.logout.emit();
+      return;
+    }
+
     // Update active state
     this.navigationItems.forEach(item => item.active = item.id === itemId);
-    
+
     // Navigate to the appropriate route
     const item = this.navigationItems.find(navItem => navItem.id === itemId);
     if (item && item.route) {
