@@ -16,6 +16,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.reactive.TransactionalOperator;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.UUID;
@@ -54,15 +55,34 @@ public class RecycleBinCleanupScheduler {
             return;
         }
 
-        int days = recycleBinProperties.getAutoCleanupDays();
-        log.info("Starting recycle bin cleanup for items older than {} days", days);
+        String interval = recycleBinProperties.getAutoCleanupInterval();
+        log.info("Starting recycle bin cleanup for items older than {}", interval);
 
-        documentSoftDeleteDAO.findExpiredDeletedDocuments(days)
+        // Cache the stream to avoid re-querying the database.
+        // The first subscriber will trigger the query, and subsequent subscribers will get the cached results.
+        Flux<Document> documentsToDelete = documentSoftDeleteDAO.findExpiredDeletedDocuments(interval).cache();
+
+        // Main processing pipeline
+        documentsToDelete
                 .flatMap(this::permanentlyDeleteDocumentRecursive)
-                .doOnComplete(() -> log.info("Recycle bin cleanup completed"))
-                .then(documentSoftDeleteDAO.updateStatistics())
+                .then(
+                        // After the deletions are complete, start a new Mono to decide the next step.
+                        documentsToDelete.hasElements() // Returns a Mono<Boolean>
+                                .flatMap(hasElements -> {
+                                    if (hasElements) {
+                                        // If the stream had elements, update the statistics.
+                                        log.info("Expired documents were processed, updating statistics.");
+                                        return documentSoftDeleteDAO.updateStatistics();
+                                    } else {
+                                        // If the stream was empty, do nothing and just complete.
+                                        log.info("No expired documents to process, skipping statistics update.");
+                                        return Mono.empty(); // Mono.empty() signals completion without any action.
+                                    }
+                                })
+                )
+                .doOnSuccess(_ -> log.info("Recycle bin cleanup completed successfully."))
                 .doOnError(e -> log.error("Error during recycle bin cleanup", e))
-                .subscribe(); // Non-blocking subscription
+                .subscribe();
     }
 
     /**

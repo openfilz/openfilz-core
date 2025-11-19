@@ -3,7 +3,6 @@ package org.openfilz.dms.repository.impl;
 import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.dto.response.FolderElementInfo;
 import org.openfilz.dms.entity.Document;
-import org.openfilz.dms.entity.SqlColumnMapping;
 import org.openfilz.dms.repository.DocumentRepository;
 import org.openfilz.dms.repository.SqlQueryUtils;
 import org.openfilz.dms.utils.SqlUtils;
@@ -37,10 +36,11 @@ public class DocumentSoftDeleteDAO implements UserInfoService, SqlQueryUtils {
             WHERE id IN (SELECT id FROM descendants)""";
     public static final String RECURSIVE_INSERT_IN_RECYCLE_BIN = """
             WITH RECURSIVE descendants AS (
-                SELECT id FROM documents WHERE id = :docId
+                SELECT id FROM documents WHERE id = :docId and active = true
                 UNION ALL
                 SELECT d.id FROM documents d
                 INNER JOIN descendants parent ON d.parent_id = parent.id
+                WHERE d.active = true
             )
             INSERT INTO recycle_bin(id, deleted_by)
             SELECT id, :email FROM descendants""";
@@ -62,17 +62,48 @@ public class DocumentSoftDeleteDAO implements UserInfoService, SqlQueryUtils {
                 documents d
             JOIN
                 recycle_bin r ON d.id = r.id
-            WHERE
-                d.active = FALSE
-                AND r.deleted_by = $1
-                -- And there does NOT exist a parent document 'p' which is ALSO soft-deleted.
-                AND NOT EXISTS (
+            WHERE NOT EXISTS (
                     SELECT 1
                     FROM documents p
                     WHERE p.id = d.parent_id AND p.active = FALSE
                 )
             ORDER BY
                 r.deleted_at DESC""";
+
+    public static final String COUNT_DOCS_TO_DELETE = """
+            SELECT
+                count(*)
+            FROM
+                documents d
+            JOIN
+                recycle_bin r ON d.id = r.id
+            WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM documents p
+                    WHERE p.id = d.parent_id AND p.active = FALSE
+                )""";
+
+    public static final String RESTORE_DOCS = """
+            WITH RECURSIVE descendants AS (
+                SELECT id FROM documents WHERE id = :docId
+                UNION ALL
+                SELECT d.id FROM documents d
+                INNER JOIN descendants parent ON d.parent_id = parent.id
+            )
+            UPDATE documents
+            SET active = true
+            WHERE id IN (SELECT id FROM descendants)
+            """;
+    public static final String EMPTY_BIN_WHERE_IDS = """
+            WITH RECURSIVE descendants AS (
+                SELECT id FROM documents WHERE id = :docId
+                UNION ALL
+                SELECT d.id FROM documents d
+                INNER JOIN descendants parent ON d.parent_id = parent.id
+            )
+            delete from recycle_bin
+            WHERE id IN (SELECT id FROM descendants)
+            """;
 
 
     protected final DocumentRepository documentRepository;
@@ -95,71 +126,69 @@ public class DocumentSoftDeleteDAO implements UserInfoService, SqlQueryUtils {
    
     public Mono<Void> softDeleteRecursive(UUID documentId, String userEmail) {
 
-        // Operation 1: Perform the soft delete
-        Mono<Void> softDeleteOperation = databaseClient.sql(RECURSIVE_SET_DOCS_INACTIVE)
-                .bind("docId", documentId)
-                .then(); // .then() is used because UPDATE doesn't typically return rows
-
-        // Operation 2: Record the deletions
+        // Operation 1: Record the deletions
         Mono<Void> recordDeletionsOperation = databaseClient.sql(RECURSIVE_INSERT_IN_RECYCLE_BIN)
                 .bind("docId", documentId)
                 .bind("email", userEmail)
                 .then();
 
+        // Operation 2: Perform the soft delete
+        Mono<Void> softDeleteOperation = databaseClient.sql(RECURSIVE_SET_DOCS_INACTIVE)
+                .bind("docId", documentId)
+                .then(); // .then() is used because UPDATE doesn't typically return rows
+
         // Chain the operations: Execute the soft delete first, and upon its successful completion,
         // execute the operation to record the deletions.
-        return softDeleteOperation.then(recordDeletionsOperation);
+        return recordDeletionsOperation.then(softDeleteOperation);
     }
 
    
-    public Flux<FolderElementInfo> findDeletedDocuments(String userEmail) {
+    public Flux<FolderElementInfo> findDeletedDocuments() {
         return databaseClient.sql(FIND_DOCS_TO_DELETE)
-                .bind(0, userEmail)
                 .map(mapFolderElementInfo())
                 .all();
     }
 
    
     public Mono<Void> restore(UUID documentId) {
-        String sql = "UPDATE documents SET active = true WHERE id = :id";
+        return databaseClient.sql("select parent_id from documents where id = :docId")
+                .bind("docId", documentId)
+                .map(mapId())
+                .one()
+                .flatMap(parentId -> {
+                    StringBuilder sql = new StringBuilder("UPDATE documents SET active = true");
+                    if(parentId != null) {
+                        return databaseClient.sql("select active from documents where id = :id")
+                                .bind("id", parentId)
+                                .map(row -> row.get("active", Boolean.class))
+                                .one()
+                                .flatMap(parentActive -> {
+                                    if(!parentActive) {
+                                        sql.append(", parent_id = null");
+                                    }
+                                    return restoreItem(documentId, sql);
+                                });
+                    }
+                    return restoreItem(documentId, sql);
+                });
 
-        return databaseClient.sql(sql)
-                .bind("id", documentId)
-                .fetch()
-                .rowsUpdated()
-                .flatMap(_ -> databaseClient.sql("delete from recycle_bin where id = :id").bind("id", documentId).then());
     }
 
-   
+    private Mono<Void> restoreItem(UUID documentId, StringBuilder sql) {
+        sql.append(" WHERE id = :docId");
+        return databaseClient.sql(sql.toString())
+                .bind("docId", documentId)
+                .then()
+                .then(databaseClient.sql("delete from recycle_bin where id = :id").bind("id", documentId).then());
+    }
+
+
     public Mono<Void> restoreRecursive(UUID documentId) {
         // Recursively restore all children and the document itself
-        String sql1 = """
-                WITH RECURSIVE descendants AS (
-                    SELECT id FROM documents WHERE id = :docId
-                    UNION ALL
-                    SELECT d.id FROM documents d
-                    INNER JOIN descendants parent ON d.parent_id = parent.id
-                )
-                UPDATE documents
-                SET active = true
-                WHERE id IN (SELECT id FROM descendants)
-                """;
-        String sql2 = """
-                WITH RECURSIVE descendants AS (
-                    SELECT id FROM documents WHERE id = :docId
-                    UNION ALL
-                    SELECT d.id FROM documents d
-                    INNER JOIN descendants parent ON d.parent_id = parent.id
-                )
-                delete from recycle_bin
-                WHERE id IN (SELECT id FROM descendants)
-                """;
-
-        return databaseClient.sql(sql1)
+        return databaseClient.sql(RESTORE_DOCS)
                 .bind("docId", documentId)
-                .fetch()
-                .rowsUpdated()
-                .flatMap(_->databaseClient.sql(sql2)
+                .then()
+                .then(databaseClient.sql(EMPTY_BIN_WHERE_IDS)
                         .bind("docId", documentId)
                         .then());
     }
@@ -171,9 +200,9 @@ public class DocumentSoftDeleteDAO implements UserInfoService, SqlQueryUtils {
     }
 
    
-    public Flux<Document> findExpiredDeletedDocuments(int days) {
+    public Flux<Document> findExpiredDeletedDocuments(String interval) {
         String sql = "SELECT ID FROM " + RECYCLE_BIN +
-                " WHERE DELETED_AT < CURRENT_TIMESTAMP - INTERVAL '" + days + " days'";
+                " WHERE DELETED_AT < CURRENT_TIMESTAMP - INTERVAL '" + interval + "'";
 
         return databaseClient.sql(sql)
                 .fetch()
@@ -183,12 +212,8 @@ public class DocumentSoftDeleteDAO implements UserInfoService, SqlQueryUtils {
 
    
     public Mono<Long> countDeletedDocuments(String userEmail) {
-        String sql = "SELECT COUNT(*) FROM " + RECYCLE_BIN +
-                " WHERE " + SqlColumnMapping.DELETED_BY + " = :email";
-
-        return databaseClient.sql(sql)
-                .bind("email", userEmail)
-                .map(row -> row.get(0, Long.class))
+        return databaseClient.sql(COUNT_DOCS_TO_DELETE)
+                .map(mapCount())
                 .one()
                 .defaultIfEmpty(0L);
     }

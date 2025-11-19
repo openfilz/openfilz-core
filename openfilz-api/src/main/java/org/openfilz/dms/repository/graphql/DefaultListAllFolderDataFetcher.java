@@ -14,7 +14,7 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 
 @Slf4j
-@Service("defaultListFolderDataFetcher")
+@Service
 @ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
 public class DefaultListAllFolderDataFetcher extends ListFolderDataFetcher implements ListAllFolderDataFetcher {
 

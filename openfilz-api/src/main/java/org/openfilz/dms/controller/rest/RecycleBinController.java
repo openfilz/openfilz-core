@@ -29,14 +29,14 @@ public class RecycleBinController {
     private final RecycleBinService recycleBinService;
 
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-    @Operation(summary = "List deleted items", description = "Get all items in the recycle bin for the current user")
+    @Operation(summary = "List deleted items", description = "Get all items at the root of the recycle bin")
     public Flux<FolderElementInfo> listDeletedItems() {
         log.info("Listing deleted items in recycle bin");
         return recycleBinService.listDeletedItems();
     }
 
     @GetMapping(value = "/count", produces = MediaType.APPLICATION_JSON_VALUE)
-    @Operation(summary = "Count deleted items", description = "Get count of items in recycle bin")
+    @Operation(summary = "Count deleted items", description = "Get count of items at the root of recycle bin")
     public Mono<Long> countDeletedItems() {
         log.info("Counting deleted items in recycle bin");
         return recycleBinService.countDeletedItems();

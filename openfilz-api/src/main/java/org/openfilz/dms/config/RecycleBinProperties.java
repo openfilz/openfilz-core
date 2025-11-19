@@ -23,7 +23,7 @@ public class RecycleBinProperties {
      * Number of days before items in recycle bin are automatically deleted.
      * Set to 0 to disable auto-cleanup.
      */
-    private int autoCleanupDays = 30;
+    private String autoCleanupInterval = "30 days";
 
     /**
      * Cron expression for the cleanup scheduler.

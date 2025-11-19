@@ -41,8 +41,7 @@ public class RecycleBinServiceImpl implements RecycleBinService, UserInfoService
 
     @Override
     public Flux<FolderElementInfo> listDeletedItems() {
-        return getConnectedUserEmail()
-                .flatMapMany(documentSoftDeleteDAO::findDeletedDocuments);
+        return documentSoftDeleteDAO.findDeletedDocuments();
     }
 
     @Override
@@ -131,18 +130,16 @@ public class RecycleBinServiceImpl implements RecycleBinService, UserInfoService
 
     @Override
     public Mono<Void> emptyRecycleBin() {
-        return getConnectedUserEmail()
-                .flatMap(userId -> documentSoftDeleteDAO.findDeletedDocuments(userId)
-                        .map(FolderElementInfo::id)
-                        .collectList()
-                        .flatMap(docIds -> {
-                            if (docIds.isEmpty()) {
-                                return Mono.empty();
-                            }
-                            return permanentlyDeleteItems(docIds)
-                                    .then(auditService.logAction(AuditAction.EMPTY_RECYCLE_BIN, null, null));
-                        })
-                );
+        return documentSoftDeleteDAO.findDeletedDocuments()
+                    .map(FolderElementInfo::id)
+                    .collectList()
+                    .flatMap(docIds -> {
+                        if (docIds.isEmpty()) {
+                            return Mono.empty();
+                        }
+                        return permanentlyDeleteItems(docIds)
+                                .then(auditService.logAction(AuditAction.EMPTY_RECYCLE_BIN, null, null));
+                    });
     }
 
     @Override

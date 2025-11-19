@@ -22,7 +22,7 @@ import static org.openfilz.dms.security.JwtTokenParser.EMAIL;
 import static org.openfilz.dms.utils.SqlUtils.*;
 
 @Slf4j
-@Service
+@Service("defaultListFolderDataFetcher")
 @ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
 public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentInfo> {
 
@@ -57,18 +57,9 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
         criteria.checkFilter(filter);
         criteria.checkPageInfo(filter);
         applyFilter(query, filter);
-        if(filter.favorite() != null && !filter.favorite()) {
-            if(!query.toString().contains(WHERE)) {
-                query.append(WHERE);
-            } else  {
-                query.append(AND);
-            }
-            query.append(prefix).append(FAVORITE).append(" = false ");
-        }
         applySort(query, filter);
         appendOffsetLimit(query, filter);
-        String email = environment.getGraphQlContext().get(EMAIL);
-        DatabaseClient.GenericExecuteSpec sqlQuery = prepareQuery(environment, filter, query, includeIsFavorite, email);
+        DatabaseClient.GenericExecuteSpec sqlQuery = prepareQuery(environment, filter, query, includeIsFavorite || filter.favorite() != null);
         log.debug("GraphQL - SQL query : {}", query);
         if(includeIsFavorite) {
             List<String> newFieldsList = new ArrayList<>(sqlFields);
@@ -89,48 +80,17 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
             sb.append(", CASE WHEN uf.doc_id IS NOT NULL THEN TRUE ELSE FALSE END as favorite");
         }
         sb.append(fromClause);
-        if (includeIsFavorite) {
-            if(favoriteFilter == null || !favoriteFilter) {
-                appendLeftJoin(sb);
-            }
-            appendFavorites(sb);
-        } else if(favoriteFilter != null) {
-            if(!favoriteFilter) {
-                appendLeftJoin(sb);
-            }
-            appendFavorites(sb);
-        }
+        appendRemainingFromClause(includeIsFavorite, favoriteFilter, sb);
         return sb;
 
-    }
-
-    private void appendLeftJoin(StringBuilder sb) {
-        sb.append(" LEFT");
-    }
-
-    private void appendFavorites(StringBuilder sb) {
-        sb.append(" JOIN user_favorites uf ON d.id = uf.doc_id and uf.email = :email");
     }
 
     protected void applyFilter(StringBuilder query, ListFolderRequest filter) {
         criteria.applyFilter(prefix, query, filter);
     }
 
-    protected DatabaseClient.GenericExecuteSpec prepareQuery(DataFetchingEnvironment environment, ListFolderRequest filter, StringBuilder query) {
-        return prepareQuery(filter, databaseClient.sql(query.toString()));
-    }
-
     protected DatabaseClient.GenericExecuteSpec prepareQuery(ListFolderRequest filter, DatabaseClient.GenericExecuteSpec sql) {
         return criteria.bindCriteria(sql, filter);
-    }
-
-    protected DatabaseClient.GenericExecuteSpec prepareQuery(DataFetchingEnvironment environment, ListFolderRequest filter, StringBuilder query, boolean includeIsFavorite, String userEmail) {
-        if(includeIsFavorite) {
-            DatabaseClient.GenericExecuteSpec sql = databaseClient.sql(query.toString());
-            sql = sql.bind("email", userEmail);
-            return prepareQuery(filter, sql);
-        }
-        return prepareQuery(environment, filter, query);
     }
 
     public void applySort(StringBuilder query, ListFolderRequest request) {

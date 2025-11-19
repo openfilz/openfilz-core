@@ -34,7 +34,7 @@ public class DocumentLocalSearchDAOImpl implements DocumentLocalSearchDAO {
     protected final ListAllFolderCriteria listAllFolderCriteria;
     private final ListFolderDataFetcher listFolderDataFetcher;
 
-    public DocumentLocalSearchDAOImpl(DatabaseClient databaseClient, DocumentSearchUtil documentSearchUtil, @Qualifier("defaultListFolderCriteria") ListFolderCriteria listFolderCriteria, ListAllFolderCriteria listAllFolderCriteria, ListFolderDataFetcher listFolderDataFetcher) {
+    public DocumentLocalSearchDAOImpl(DatabaseClient databaseClient, DocumentSearchUtil documentSearchUtil, @Qualifier("defaultListFolderCriteria") ListFolderCriteria listFolderCriteria, ListAllFolderCriteria listAllFolderCriteria, @Qualifier("defaultListFolderDataFetcher") ListFolderDataFetcher listFolderDataFetcher) {
         this.databaseClient = databaseClient;
         this.documentSearchUtil = documentSearchUtil;
         this.listFolderCriteria = listFolderCriteria;

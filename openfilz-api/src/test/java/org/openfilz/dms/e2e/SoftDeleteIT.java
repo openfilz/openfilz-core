@@ -10,21 +10,15 @@ import org.openfilz.dms.dto.response.DocumentInfo;
 import org.openfilz.dms.dto.response.FolderElementInfo;
 import org.openfilz.dms.dto.response.FolderResponse;
 import org.openfilz.dms.dto.response.UploadResponse;
-import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.enums.SortOrder;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.io.ClassPathResource;
-import org.springframework.core.io.Resource;
 import org.springframework.graphql.client.ClientGraphQlResponse;
 import org.springframework.graphql.client.HttpGraphQlClient;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.http.codec.json.Jackson2JsonEncoder;
-import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
@@ -34,23 +28,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URISyntaxException;
-import java.net.URL;
-import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
-import java.nio.channels.FileChannel;
-import java.nio.file.*;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.time.OffsetDateTime;
 import java.util.*;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
 
-import static java.nio.file.StandardOpenOption.CREATE;
-import static java.nio.file.StandardOpenOption.WRITE;
 import static org.openfilz.dms.enums.AuditAction.*;
 import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 
@@ -60,6 +39,7 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 @TestConstructor(autowireMode = ALL)
 public class SoftDeleteIT extends TestContainersBaseConfig {
 
+    protected HttpGraphQlClient graphQlHttpClient;
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
@@ -70,7 +50,12 @@ public class SoftDeleteIT extends TestContainersBaseConfig {
         super(webTestClient, customJackson2JsonEncoder);
     }
 
-
+    private HttpGraphQlClient getGraphQlHttpClient() {
+        if(graphQlHttpClient == null) {
+            graphQlHttpClient = newGraphQlClient();
+        }
+        return graphQlHttpClient;
+    }
 
 
     @Test
@@ -115,6 +100,310 @@ public class SoftDeleteIT extends TestContainersBaseConfig {
         getWebTestClient().get().uri(RestApiVersion.API_PREFIX + "/documents/{id}/info", response2.id())
                 .exchange()
                 .expectStatus().isNotFound();
+    }
+
+    record RestoreHandler(FolderResponse parent, UploadResponse file) {}
+
+    @Test
+    void testRestore() {
+        RestoreHandler folderAndFile1 = createFolderAndFile("test-restore-folder-1", null);
+        RestoreHandler folderAndFile2 = createFolderAndFile("test-restore-folder-2", null);
+        RestoreHandler folderAndFile1_1 = createFolderAndFile("test-restore-folder-1-1", folderAndFile1.parent().id());
+        RestoreHandler folderAndFile2_1 = createFolderAndFile("test-restore-folder-2-1", folderAndFile2.parent().id());
+        RestoreHandler folderAndFile1_2 = createFolderAndFile("test-restore-folder-1-2", folderAndFile1.parent().id());
+        RestoreHandler folderAndFile2_2 = createFolderAndFile("test-restore-folder-2-2", folderAndFile2.parent().id());
+        RestoreHandler folderAndFile1_1_1 = createFolderAndFile("test-restore-folder-1-1-1", folderAndFile1_1.parent().id());
+        MultipartBodyBuilder builder = newFileBuilder();
+        UploadResponse rootFile = uploadDocument(builder);
+
+        builder = newFileBuilder();
+        builder.part("parentFolderId", folderAndFile1_1_1.parent().id().toString());
+        UploadResponse file1_1_1_2 = uploadDocument(builder);
+
+        DeleteRequest deleteRequest = new DeleteRequest(List.of(file1_1_1_2.id()));
+
+        getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/files")
+                .body(BodyInserters.fromValue(deleteRequest))
+                .exchange()
+                .expectStatus().isNoContent();
+
+        getWebTestClient().get().uri(RestApiVersion.API_PREFIX + "/documents/{id}/info", file1_1_1_2.id())
+                .exchange()
+                .expectStatus().isNotFound();
+
+        getWebTestClient().method(HttpMethod.POST).uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_RECYCLE_BIN + "/restore")
+                .body(BodyInserters.fromValue(deleteRequest))
+                .exchange()
+                .expectStatus().isNoContent();
+
+        DocumentInfo info = getWebTestClient().get().uri(RestApiVersion.API_PREFIX + "/documents/{id}/info", file1_1_1_2.id())
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(DocumentInfo.class)
+                .returnResult().getResponseBody();
+
+        Assertions.assertNotNull(info);
+        Assertions.assertEquals(folderAndFile1_1_1.parent.id(), info.parentId());
+
+        deleteRequest = new DeleteRequest(List.of(folderAndFile1_1_1.parent().id()));
+
+        getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/folders")
+                .body(BodyInserters.fromValue(deleteRequest))
+                .exchange()
+                .expectStatus().isNoContent();
+
+        getWebTestClient().get().uri(RestApiVersion.API_PREFIX + "/documents/{id}/info", folderAndFile1_1_1.parent().id())
+                .exchange()
+                .expectStatus().isNotFound();
+
+        getWebTestClient().get().uri(RestApiVersion.API_PREFIX + "/documents/{id}/info", folderAndFile1_1_1.file().id())
+                .exchange()
+                .expectStatus().isNotFound();
+
+        getWebTestClient().get().uri(RestApiVersion.API_PREFIX + "/documents/{id}/info", file1_1_1_2.id())
+                .exchange()
+                .expectStatus().isNotFound();
+
+        deleteRequest = new DeleteRequest(List.of(file1_1_1_2.id()));
+
+        getWebTestClient().method(HttpMethod.POST).uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_RECYCLE_BIN + "/restore")
+                .body(BodyInserters.fromValue(deleteRequest))
+                .exchange()
+                .expectStatus().isNoContent();
+
+        info = getWebTestClient().get().uri(RestApiVersion.API_PREFIX + "/documents/{id}/info", file1_1_1_2.id())
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(DocumentInfo.class)
+                .returnResult().getResponseBody();
+
+        Assertions.assertNotNull(info);
+        Assertions.assertNull(info.parentId());
+
+
+        deleteRequest = new DeleteRequest(List.of(folderAndFile2.parent().id()));
+
+        getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/folders")
+                .body(BodyInserters.fromValue(deleteRequest))
+                .exchange()
+                .expectStatus().isNoContent();
+
+        getWebTestClient().method(HttpMethod.POST).uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_RECYCLE_BIN + "/restore")
+                .body(BodyInserters.fromValue(deleteRequest))
+                .exchange()
+                .expectStatus().isNoContent();
+
+        info = getWebTestClient().get().uri(RestApiVersion.API_PREFIX + "/documents/{id}/info", folderAndFile2.file().id())
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(DocumentInfo.class)
+                .returnResult().getResponseBody();
+
+
+        Assertions.assertNotNull(info);
+        Assertions.assertEquals(folderAndFile2.parent().id(), info.parentId());
+
+        getWebTestClient().get().uri(RestApiVersion.API_PREFIX + "/documents/{id}/info", folderAndFile2_2.file().id())
+                .exchange()
+                .expectStatus().isOk();
+
+        getWebTestClient().get().uri(RestApiVersion.API_PREFIX + "/documents/{id}/info", folderAndFile2_2.parent().id())
+                .exchange()
+                .expectStatus().isOk();
+
+        HttpGraphQlClient httpGraphQlClient = getGraphQlHttpClient();
+        var graphQlRequest = """
+                query count($request:ListFolderRequest) {
+                    count(request:$request)
+                }
+                """.trim();
+
+        emptyBin(httpGraphQlClient, graphQlRequest);
+
+    }
+
+    private RestoreHandler createFolderAndFile(String name, UUID parentId) {
+        CreateFolderRequest rootFolder1 = new CreateFolderRequest(name, parentId);
+
+
+        FolderResponse rootFolder1Response = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/folders")
+                .body(BodyInserters.fromValue(rootFolder1))
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(FolderResponse.class)
+                .returnResult().getResponseBody();
+
+        MultipartBodyBuilder builder = newFileBuilder();
+        builder.part("parentFolderId", rootFolder1Response.id().toString());
+
+        UploadResponse file1_1 = uploadDocument(builder);
+
+        return new RestoreHandler(rootFolder1Response, file1_1);
+    }
+
+
+    @Test
+    void whenDeleteFiles_thenVerifySoftDelete() {
+
+        CreateFolderRequest createSourceFolderRequest = new CreateFolderRequest("test-soft-delete-folder", null);
+
+        FolderResponse sourceFolderResponse = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/folders")
+                .body(BodyInserters.fromValue(createSourceFolderRequest))
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(FolderResponse.class)
+                .returnResult().getResponseBody();
+
+        MultipartBodyBuilder builder = newFileBuilder();
+        builder.part("parentFolderId", sourceFolderResponse.id().toString());
+
+        UploadResponse response = uploadDocument(builder);
+
+        DeleteRequest deleteRequest = new DeleteRequest(List.of(response.id()));
+
+        getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/files")
+                .body(BodyInserters.fromValue(deleteRequest))
+                .exchange()
+                .expectStatus().isNoContent();
+
+        getWebTestClient().get().uri(RestApiVersion.API_PREFIX + "/documents/{id}/info", response.id())
+                .exchange()
+                .expectStatus().isNotFound();
+
+        HttpGraphQlClient httpGraphQlClient = getGraphQlHttpClient();
+        //create post
+        ListFolderRequest request = new ListFolderRequest(sourceFolderResponse.id(), null, null, null, null, null, null, null, null, null, null, null
+                , null, null, false, null);
+        var graphQlRequest = """
+                query count($request:ListFolderRequest) {
+                    count(request:$request)
+                }
+                """.trim();
+
+        Mono<ClientGraphQlResponse> countGraphQl = httpGraphQlClient
+                .document(graphQlRequest)
+                .variable("request",request)
+                .execute();
+
+
+        StepVerifier.create(countGraphQl)
+                .expectNextMatches(doc -> checkCountIsOK(doc, 1L))
+                .expectComplete()
+                .verify();
+
+        request = new ListFolderRequest(sourceFolderResponse.id(), null, null, null, null, null, null, null, null, null, null, null
+                , null, null, true, null);
+
+        countGraphQl = httpGraphQlClient
+                .document(graphQlRequest)
+                .variable("request",request)
+                .execute();
+
+
+        StepVerifier.create(countGraphQl)
+                .expectNextMatches(doc -> checkCountIsOK(doc, 0L))
+                .expectComplete()
+                .verify();
+
+        deleteRequest = new DeleteRequest(Collections.singletonList(sourceFolderResponse.id()));
+
+        getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/folders")
+                .body(BodyInserters.fromValue(deleteRequest))
+                .exchange()
+                .expectStatus().isNoContent();
+
+        request = new ListFolderRequest(null, null, null, createSourceFolderRequest.name(), null, null, null, null, null, null, null, null
+                , null, null, true, null);
+
+        countGraphQl = httpGraphQlClient
+                .document(graphQlRequest)
+                .variable("request",request)
+                .execute();
+
+
+        StepVerifier.create(countGraphQl)
+                .expectNextMatches(doc -> checkCountIsOK(doc, 0L))
+                .expectComplete()
+                .verify();
+
+        request = new ListFolderRequest(null, null, null, createSourceFolderRequest.name(), null, null, null, null, null, null, null, null
+                , null, null, false, null);
+
+        countGraphQl = httpGraphQlClient
+                .document(graphQlRequest)
+                .variable("request",request)
+                .execute();
+
+
+        StepVerifier.create(countGraphQl)
+                .expectNextMatches(doc -> checkCountIsOK(doc, 1L))
+                .expectComplete()
+                .verify();
+
+        List<FolderElementInfo> deletedItems = getWebTestClient().method(HttpMethod.GET).uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_RECYCLE_BIN)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBodyList(FolderElementInfo.class)
+                .returnResult().getResponseBody();
+
+        Assertions.assertNotNull(deletedItems);
+        Assertions.assertFalse(deletedItems.isEmpty());
+        Assertions.assertEquals(sourceFolderResponse.id(), deletedItems.getFirst().id());
+
+        deleteRequest = new DeleteRequest(Collections.singletonList(response.id()));
+
+        getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_RECYCLE_BIN)
+                .body(BodyInserters.fromValue(deleteRequest))
+                .exchange()
+                .expectStatus().isNoContent();
+
+        request = new ListFolderRequest(sourceFolderResponse.id(), null, null, null, null, null, null, null, null, null, null, null
+                , null, null, false, null);
+
+        countGraphQl = httpGraphQlClient
+                .document(graphQlRequest)
+                .variable("request",request)
+                .execute();
+
+
+        StepVerifier.create(countGraphQl)
+                .expectNextMatches(doc -> checkCountIsOK(doc, 0L))
+                .expectComplete()
+                .verify();
+
+
+        emptyBin(httpGraphQlClient, graphQlRequest);
+
+    }
+
+    private void emptyBin(HttpGraphQlClient httpGraphQlClient, String graphQlRequest) {
+        Mono<ClientGraphQlResponse> countGraphQl;
+        ListFolderRequest request;
+        getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_RECYCLE_BIN + "/empty")
+                .exchange()
+                .expectStatus().isNoContent();
+
+        request = new ListFolderRequest(null, null, null, null, null, null, null, null, null, null, null, null
+                , null, null, false, null);
+
+        countGraphQl = httpGraphQlClient
+                .document(graphQlRequest)
+                .variable("request",request)
+                .execute();
+
+
+        StepVerifier.create(countGraphQl)
+                .expectNextMatches(doc -> checkCountIsOK(doc, 0L))
+                .expectComplete()
+                .verify();
+
+        Long count = getWebTestClient().method(HttpMethod.GET).uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_RECYCLE_BIN + "/count")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(Long.class)
+                .returnResult().getResponseBody();
+
+        Assertions.assertEquals(0L, count);
     }
 
 
