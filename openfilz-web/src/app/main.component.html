@@ -1,25 +1,27 @@
-<div class="app-layout" [class.sidebar-collapsed]="isSidebarCollapsed" [class.dashboard-view]="currentRoute === 'dashboard'">
-  <app-sidebar (collapsedChange)="onSidebarCollapsedChange($event)"></app-sidebar>
+@if ((isAuthenticated$ | async)?.isAuthenticated) {
+<div class="app-layout" [class.sidebar-collapsed]="isSidebarCollapsed"
+  [class.dashboard-view]="currentRoute === 'dashboard'">
+  <app-sidebar (collapsedChange)="onSidebarCollapsedChange($event)" (logout)="logout()"></app-sidebar>
 
-  <app-header
-    [hasSelection]="hasSelectedItems"
-    (search)="onSearch($event)">
+  <app-header [hasSelection]="hasSelectedItems" (search)="onSearch($event)">
   </app-header>
 
   @if(currentRoute == 'my-folder' || currentRoute == 'recycle-bin') {
-    <app-breadcrumb
-      [breadcrumbs]="breadcrumbs"
-      (navigate)="onNavigate($event)">
-    </app-breadcrumb>
+  <app-breadcrumb [breadcrumbs]="breadcrumbs" (navigate)="onNavigate($event)">
+  </app-breadcrumb>
   }
 
-<div class="main-content" 
-     [class.dashboard-content]="currentRoute !== 'my-folder' && currentRoute !== 'recycle-bin'"
-     [class.center-content]="isWipRoute">
-  <router-outlet></router-outlet>
-</div>
-  
+  <div class="main-content" [class.dashboard-content]="currentRoute !== 'my-folder' && currentRoute !== 'recycle-bin'"
+    [class.center-content]="isWipRoute">
+    <router-outlet></router-outlet>
+  </div>
+
   @if (isDownloading) {
-      <app-download-progress></app-download-progress>
+  <app-download-progress></app-download-progress>
   }
 </div>
+} @else {
+<div class="loading-page">
+  <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+</div>
+}

@@ -2,6 +2,9 @@
 package org.openfilz.dms.config;
 
 import lombok.RequiredArgsConstructor;
+
+import java.util.Arrays;
+
 import org.openfilz.dms.service.SecurityService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -18,6 +21,9 @@ import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoders;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.authorization.AuthorizationContext;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
+import org.springframework.web.cors.reactive.CorsConfigurationSource;
 
 @Configuration
 @EnableWebFluxSecurity
@@ -34,14 +40,12 @@ public class DefaultAuthSecurityConfig {
     @Value("${spring.graphql.http.path:/graphql}")
     protected String graphQlBaseUrl;
 
-
     protected final SecurityService securityService;
 
     @Bean
     public ReactiveJwtDecoder jwtDecoder() {
         return ReactiveJwtDecoders.fromIssuerLocation(issuerUri);
     }
-
 
     private static final String[] AUTH_WHITELIST = {
             // Swagger UI v3
@@ -56,20 +60,19 @@ public class DefaultAuthSecurityConfig {
     @Bean
     public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http) {
         return http
-            .csrf(ServerHttpSecurity.CsrfSpec::disable) // Disable CSRF for stateless APIs
-            .authorizeExchange(exchanges -> {
-                exchanges.pathMatchers(AUTH_WHITELIST).permitAll() // Whitelist Swagger and health
-                        .pathMatchers(HttpMethod.OPTIONS).permitAll()
-                        .pathMatchers(RestApiVersion.API_PREFIX + ALL_MATCHES, graphQlBaseUrl + ALL_MATCHES)
+                .csrf(ServerHttpSecurity.CsrfSpec::disable) // Disable CSRF for stateless APIs
+                .authorizeExchange(exchanges -> {
+                    exchanges.pathMatchers(AUTH_WHITELIST).permitAll() // Whitelist Swagger and health
+                            .pathMatchers(HttpMethod.OPTIONS).permitAll()
+                            .pathMatchers(RestApiVersion.API_PREFIX + ALL_MATCHES, graphQlBaseUrl + ALL_MATCHES)
                             .access((mono, context) -> mono
-                                .map(auth -> newAuthorizationDecision(auth, context)))
-                        .anyExchange()
-                        .authenticated();
-                }
-            )
-            .oauth2ResourceServer(oauth2 -> oauth2
-                    .jwt(getJwtSpecCustomizer()))
-            .build();
+                                    .map(auth -> newAuthorizationDecision(auth, context)))
+                            .anyExchange()
+                            .authenticated();
+                })
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .jwt(getJwtSpecCustomizer()))
+                .build();
     }
 
     protected Customizer<ServerHttpSecurity.OAuth2ResourceServerSpec.JwtSpec> getJwtSpecCustomizer() {
@@ -79,6 +82,5 @@ public class DefaultAuthSecurityConfig {
     private AuthorizationDecision newAuthorizationDecision(Authentication auth, AuthorizationContext context) {
         return new AuthorizationDecision(securityService.authorize(auth, context));
     }
-
 
 }
