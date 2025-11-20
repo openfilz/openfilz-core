@@ -67,7 +67,16 @@ export class SidebarComponent {
     // Navigate to the appropriate route
     const item = this.navigationItems.find(navItem => navItem.id === itemId);
     if (item && item.route) {
-      this.router.navigate([item.route]);
+        // --- START: Added logic to force reload ---
+        if (this.router.url === item.route) {
+            // If we are already on the same route, force a reload
+            this.router.navigateByUrl('/', { skipLocationChange: true }).then(() => {
+                this.router.navigate([item.route]);
+            });
+        } else {
+            // Otherwise, navigate normally
+            this.router.navigate([item.route]);
+        }
     }
   }
 }
