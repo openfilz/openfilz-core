@@ -13,8 +13,8 @@ import org.openfilz.dms.service.IndexNameProvider;
 import org.openfilz.dms.service.OpenSearchQueryService;
 import org.openfilz.dms.service.OpenSearchService;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
-import org.opensearch.client.opensearch._types.query_dsl.BoolQuery;
-import org.opensearch.client.opensearch._types.query_dsl.Query;
+import org.opensearch.client.opensearch._types.FieldValue;
+import org.opensearch.client.opensearch._types.query_dsl.*;
 import org.opensearch.client.opensearch.core.SearchRequest;
 import org.opensearch.client.opensearch.core.SearchResponse;
 import org.opensearch.client.opensearch.core.search.Hit;
@@ -88,10 +88,26 @@ public class OpenSearchDocumentSearchService implements DocumentSearchService, O
         // 3. Add Full-Text Search Clause (must)
         // This clause contributes to the relevance score.
         if (trimQuery != null) {
-            boolQueryBuilder.must(m -> m.multiMatch(mm -> mm
+            // --- 3. Build the Multi-Match Bool-Prefix Query ---
+            MultiMatchQuery multiMatchQuery = MultiMatchQuery.of(m -> m
                     .query(trimQuery)
-                    .fields(CONTENT, SUGGEST_OTHERS_2) // Search in both content and name
-            ));
+                    .type(TextQueryType.BoolPrefix)
+                    .fields(
+                            CONTENT,
+                            SUGGEST_OTHERS_2
+                    )
+            );
+
+            // --- 4. Build the Fuzzy Match Query ---
+            MatchQuery fuzzyMatchQuery = MatchQuery.of(m -> m
+                    .field(NAME_SUGGEST)
+                    .query(FieldValue.of(trimQuery))
+                    .fuzziness("AUTO")
+                    .operator(Operator.And)
+            );
+            boolQueryBuilder.should(multiMatchQuery.toQuery(),
+                    fuzzyMatchQuery.toQuery()).minimumShouldMatch("1");
+
         }
         return boolQueryBuilder;
     }

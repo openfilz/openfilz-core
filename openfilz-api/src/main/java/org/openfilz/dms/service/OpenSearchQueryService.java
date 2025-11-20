@@ -2,7 +2,10 @@ package org.openfilz.dms.service;
 
 import org.openfilz.dms.dto.request.FilterInput;
 import org.opensearch.client.opensearch._types.FieldValue;
-import org.opensearch.client.opensearch._types.query_dsl.*;
+import org.opensearch.client.opensearch._types.query_dsl.BoolQuery;
+import org.opensearch.client.opensearch._types.query_dsl.MultiMatchQuery;
+import org.opensearch.client.opensearch._types.query_dsl.QueryVariant;
+import org.opensearch.client.opensearch._types.query_dsl.TextQueryType;
 import org.springframework.util.CollectionUtils;
 import reactor.core.publisher.Mono;
 
@@ -33,21 +36,28 @@ public interface OpenSearchQueryService {
     }
 
     default Mono<? extends QueryVariant> getQuery(String trimQuery, List<FilterInput> filters) {
+
         if(CollectionUtils.isEmpty(filters)) {
             return getQueryWithoutFilters(trimQuery);
         }
 
         BoolQuery.Builder boolQueryBuilder = new BoolQuery.Builder();
+
+        boolQueryBuilder.must(getNameSuggestQuery(trimQuery).toQuery());
         return addFilterClauses(filters, boolQueryBuilder)
                 .flatMap(b -> Mono.just(b.build()));
     }
 
     default Mono<? extends QueryVariant> getQueryWithoutFilters(String trimQuery) {
-        return Mono.just(MultiMatchQuery.builder().type(TextQueryType.BoolPrefix)
+        return Mono.just(getNameSuggestQuery(trimQuery));
+    }
+
+    default MultiMatchQuery getNameSuggestQuery(String trimQuery) {
+        return MultiMatchQuery.builder().type(TextQueryType.BoolPrefix)
                 .query(trimQuery)
                 // We target the main field and its internal sub-fields for best results
                 .fields(NAME_SUGGEST, SUGGEST_OTHERS)
-                .build());
+                .build();
     }
 
     String[] getSourceOtherExclusions();
