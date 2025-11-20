@@ -4,6 +4,6 @@ export const environment = {
     authentication: {
         authority: 'http://localhost:8080/realms/your-realm',
         clientId: 'openfilz-web',
-        enabled: true
+        enabled: false
     }
 };

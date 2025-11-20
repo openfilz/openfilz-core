@@ -13,7 +13,7 @@ import reactor.core.publisher.Mono;
 
 import static org.openfilz.dms.utils.SqlUtils.FROM_DOCUMENTS;
 
-@Service
+@Service("defaultListFolderCountDataFetcher")
 @ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
 public class ListFolderCountDataFetcher  extends AbstractListDataFetcher<Long> {
 
@@ -40,13 +40,11 @@ public class ListFolderCountDataFetcher  extends AbstractListDataFetcher<Long> {
     public Mono<Long> get(ListFolderRequest filter, DataFetchingEnvironment environment) {
         DatabaseClient.GenericExecuteSpec sqlQuery;
         StringBuilder query = new StringBuilder(SqlUtils.SELECT).append(COUNT).append(fromClause);
-        boolean withFavorites = false;
         String newPrefix = prefix;
         if(filter != null && filter.favorite() != null) {
             query.append(" d");
             newPrefix = "d.";
             appendRemainingFromClause(false, filter.favorite(), query);
-            withFavorites = true;
         }
         if(filter == null) {
             sqlQuery = databaseClient.sql(query.toString());

@@ -182,7 +182,7 @@ public class FavoritesIT extends TestContainersBaseConfig {
 
 
         StepVerifier.create(countGraphQl)
-                .expectNextMatches(doc -> checkCountIsOK(doc, 15L))
+                .expectNextMatches(doc -> checkCountIsOK(doc, 3L))
                 .expectComplete()
                 .verify();
 
@@ -201,7 +201,7 @@ public class FavoritesIT extends TestContainersBaseConfig {
 
 
         StepVerifier.create(countGraphQl)
-                .expectNextMatches(doc -> checkCountIsOK(doc, 1L))
+                .expectNextMatches(doc -> checkCountIsOK(doc, 0L))
                 .expectComplete()
                 .verify();
 
@@ -220,7 +220,26 @@ public class FavoritesIT extends TestContainersBaseConfig {
 
 
         StepVerifier.create(countGraphQl)
-                .expectNextMatches(doc -> checkCountIsOK(doc, 16L))
+                .expectNextMatches(doc -> checkCountIsOK(doc, 3L))
+                .expectComplete()
+                .verify();
+
+        listFolderRequest = new ListFolderRequest(folderAndFile1.parent.id(), null, null, null, null, null, null, null, null, null, null, null
+                , null, true, true, null);
+        graphQlRequest = """
+                query count($request:ListFolderRequest) {
+                    count(request:$request)
+                }
+                """.trim();
+
+        countGraphQl = httpGraphQlClient
+                .document(graphQlRequest)
+                .variable("request",listFolderRequest)
+                .execute();
+
+
+        StepVerifier.create(countGraphQl)
+                .expectNextMatches(doc -> checkCountIsOK(doc, 1L))
                 .expectComplete()
                 .verify();
 
