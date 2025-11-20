@@ -42,7 +42,7 @@
 
     <properties>
         <java.version>25</java.version>
-        <spring-boot.version>3.5.6</spring-boot.version> <!-- Or latest stable -->
+        <spring-boot.version>3.5.7</spring-boot.version> <!-- Or latest stable -->
         <spring-cloud.version>2025.0.0</spring-cloud.version> <!-- Or latest stable -->
         <org.projectlombok.version>1.18.42</org.projectlombok.version>
         <org.mapstruct.version>1.6.3</org.mapstruct.version>
