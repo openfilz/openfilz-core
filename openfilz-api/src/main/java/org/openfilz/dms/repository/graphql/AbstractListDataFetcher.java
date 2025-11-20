@@ -38,20 +38,20 @@ public abstract class AbstractListDataFetcher<T> extends AbstractDataFetcher<Lis
         }
     }
 
-    protected DatabaseClient.GenericExecuteSpec prepareQuery(DataFetchingEnvironment environment, ListFolderRequest filter, StringBuilder query, boolean withFavorites) {
+    protected DatabaseClient.GenericExecuteSpec bindFavoritesToNewQuery(DataFetchingEnvironment environment, StringBuilder query, boolean withFavorites) {
         if(withFavorites) {
             String email = environment.getGraphQlContext().get(EMAIL);
             DatabaseClient.GenericExecuteSpec sql = databaseClient.sql(query.toString());
             sql = sql.bind("email", email);
-            return prepareQuery(filter, sql);
+            return sql;
         }
-        return prepareQuery(environment, filter, query);
+        return databaseClient.sql(query.toString());
     }
 
     protected DatabaseClient.GenericExecuteSpec prepareQuery(DataFetchingEnvironment environment, ListFolderRequest filter, StringBuilder query) {
-        return prepareQuery(filter, databaseClient.sql(query.toString()));
+        boolean includeIsFavorite = environment != null && getSelectedFields(environment).anyMatch(f -> f.getName().equals("favorite"));
+        return bindFavoritesToNewQuery(environment, query, includeIsFavorite || (filter != null && filter.favorite() != null));
     }
 
-    protected abstract DatabaseClient.GenericExecuteSpec prepareQuery(ListFolderRequest filter, DatabaseClient.GenericExecuteSpec sql);
 
 }

@@ -3,7 +3,6 @@ package org.openfilz.dms.repository.graphql;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import graphql.schema.DataFetchingEnvironment;
 import lombok.extern.slf4j.Slf4j;
-import org.jetbrains.annotations.NotNull;
 import org.openfilz.dms.dto.request.ListFolderRequest;
 import org.openfilz.dms.dto.response.FullDocumentInfo;
 import org.openfilz.dms.mapper.DocumentMapper;
@@ -18,8 +17,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.openfilz.dms.entity.SqlColumnMapping.FAVORITE;
-import static org.openfilz.dms.security.JwtTokenParser.EMAIL;
-import static org.openfilz.dms.utils.SqlUtils.*;
+import static org.openfilz.dms.utils.SqlUtils.FROM_DOCUMENTS;
+import static org.openfilz.dms.utils.SqlUtils.SPACE;
 
 @Slf4j
 @Service("defaultListFolderDataFetcher")
@@ -56,10 +55,10 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
 
         criteria.checkFilter(filter);
         criteria.checkPageInfo(filter);
-        applyFilter(query, filter);
+        applyFilter(filter, prefix, query);
         applySort(query, filter);
         appendOffsetLimit(query, filter);
-        DatabaseClient.GenericExecuteSpec sqlQuery = prepareQuery(environment, filter, query, includeIsFavorite || filter.favorite() != null);
+        DatabaseClient.GenericExecuteSpec sqlQuery = prepareQuery(environment, filter, query);
         log.debug("GraphQL - SQL query : {}", query);
         if(includeIsFavorite) {
             List<String> newFieldsList = new ArrayList<>(sqlFields);
@@ -85,12 +84,14 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
 
     }
 
-    protected void applyFilter(StringBuilder query, ListFolderRequest filter) {
-        criteria.applyFilter(prefix, query, filter);
+    protected void applyFilter(ListFolderRequest filter, String newPrefix, StringBuilder query) {
+        criteria.applyFilter(newPrefix, query, filter);
     }
 
-    protected DatabaseClient.GenericExecuteSpec prepareQuery(ListFolderRequest filter, DatabaseClient.GenericExecuteSpec sql) {
-        return criteria.bindCriteria(sql, filter);
+
+
+    protected DatabaseClient.GenericExecuteSpec prepareQuery(DataFetchingEnvironment environment, ListFolderRequest filter, StringBuilder query) {
+        return criteria.bindCriteria(super.prepareQuery(environment, filter, query), filter);
     }
 
     public void applySort(StringBuilder query, ListFolderRequest request) {

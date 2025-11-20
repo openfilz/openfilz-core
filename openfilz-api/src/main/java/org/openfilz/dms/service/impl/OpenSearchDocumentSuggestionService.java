@@ -36,7 +36,7 @@ public class OpenSearchDocumentSuggestionService implements DocumentSuggestionSe
 
     // A private, internal record used only for deserializing the ID from OpenSearch's _source.
     // This is a clean way to avoid creating a public DTO for this specific internal purpose.
-    private record DocumentSource(UUID id, String extension) {}
+    private record DocumentSource(UUID id, String extension, String name) {}
 
     /**
      * Provides search-as-you-type suggestions, returning a stream of Suggest objects.
@@ -59,7 +59,7 @@ public class OpenSearchDocumentSuggestionService implements DocumentSuggestionSe
                         addSorting(sort, requestBuilder);
                         SearchRequest searchRequest = requestBuilder
                                 // We don't need the full document source, making the request very lightweight.
-                                .source(s -> s.filter(f -> f.includes(SUGGEST_ID, SUGGEST_EXT)))
+                                .source(s -> s.filter(f -> f.includes(SUGGEST_ID, SUGGEST_EXT, NAME)))
                                 // We only need a few suggestions for the UI.
                                 .size(SUGGEST_RESULTS_MAX_SIZE)
                                 // Use highlighting to get the matched parts of the name.
@@ -105,10 +105,13 @@ public class OpenSearchDocumentSuggestionService implements DocumentSuggestionSe
         List<String> highlights = hit.highlight().get(NAME_SUGGEST);
 
         // Ensure we have both the source with an ID and at least one highlight fragment.
-        if (source != null && source.id() != null && highlights != null && !highlights.isEmpty()) {
-            // Take the first highlight fragment and clean the emphasis tags.
-            String suggestionText = highlights.getFirst().replaceAll(EM_EM, "");
-            return new Suggest(source.id(), suggestionText, source.extension());
+        if (source != null && source.id() != null) {
+            if(highlights != null && !highlights.isEmpty()) {
+                // Take the first highlight fragment and clean the emphasis tags.
+                String suggestionText = highlights.getFirst().replaceAll(EM_EM, "");
+                return new Suggest(source.id(), suggestionText, source.extension());
+            }
+            return new Suggest(source.id(), source.name(), source.extension());
         }
 
         // Return null if we can't construct a valid Suggest object.

@@ -14,6 +14,7 @@ import org.openfilz.dms.service.AuditService;
 import org.openfilz.dms.service.DocumentDeleteService;
 import org.openfilz.dms.service.MetadataPostProcessor;
 import org.openfilz.dms.service.StorageService;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.reactive.TransactionalOperator;
@@ -28,15 +29,18 @@ import static org.openfilz.dms.enums.DocumentType.FOLDER;
 
 @Service
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "openfilz.soft-delete.active", matchIfMissing = true, havingValue = "false")
+@ConditionalOnProperties(value = {
+        @ConditionalOnProperty(name = "openfilz.soft-delete.active", matchIfMissing = true, havingValue = "false"),
+        @ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
+})
 public class DocumentDefaultDeleteService implements DocumentDeleteService {
 
 
-    private final DocumentDAO documentDAO;
-    private final TransactionalOperator tx;
-    private final StorageService storageService;
-    private final AuditService auditService;
-    private final MetadataPostProcessor metadataPostProcessor;
+    protected final DocumentDAO documentDAO;
+    protected final TransactionalOperator tx;
+    protected final StorageService storageService;
+    protected final AuditService auditService;
+    protected final MetadataPostProcessor metadataPostProcessor;
 
 
     @Override

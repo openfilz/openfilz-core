@@ -55,8 +55,8 @@ public class ListFolderCountDataFetcher  extends AbstractListDataFetcher<Long> {
                 throw new IllegalArgumentException("Paging information must not be provided");
             }
             criteria.checkFilter(filter);
-            criteria.applyFilter(newPrefix, query, filter);
-            sqlQuery = prepareQuery(environment, filter, query, withFavorites);
+            applyFilter(filter, newPrefix, query);
+            sqlQuery = prepareQuery(environment, filter, query);
         }
 
         //log.debug("GraphQL - SQL query : {}", query);
@@ -64,10 +64,12 @@ public class ListFolderCountDataFetcher  extends AbstractListDataFetcher<Long> {
                 .one();
     }
 
+    protected void applyFilter(ListFolderRequest filter, String newPrefix, StringBuilder query) {
+        criteria.applyFilter(newPrefix, query, filter);
+    }
 
-
-    protected DatabaseClient.GenericExecuteSpec prepareQuery(ListFolderRequest filter, DatabaseClient.GenericExecuteSpec sql) {
-        return criteria.bindCriteria(sql, filter);
+    protected DatabaseClient.GenericExecuteSpec prepareQuery(DataFetchingEnvironment environment, ListFolderRequest filter, StringBuilder query) {
+        return criteria.bindCriteria(super.prepareQuery(environment, filter, query), filter);
     }
 
 

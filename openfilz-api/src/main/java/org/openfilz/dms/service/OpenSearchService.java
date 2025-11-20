@@ -27,7 +27,7 @@ public interface OpenSearchService {
     String UPDATED_BY = OpenSearchDocumentKey.updatedBy.toString();
 
     default String getTrimQuery(String query) {
-        return SPACE + query.trim() + SPACE;
+        return query.trim();
     }
 
     default void addSorting(SortInput sort, SearchRequest.Builder requestBuilder) {
