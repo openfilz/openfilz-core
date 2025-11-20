@@ -5,6 +5,8 @@ import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.dto.request.ListFolderRequest;
 import org.openfilz.dms.dto.response.FullDocumentInfo;
 import org.openfilz.dms.repository.DocumentQueryService;
+import org.openfilz.dms.repository.ListAllFolderCountDataFetcher;
+import org.openfilz.dms.repository.ListAllFolderDataFetcher;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -12,14 +14,14 @@ import reactor.core.publisher.Mono;
 
 import java.util.UUID;
 
-@Service("allFoldersDocumentQueryService")
+@Service
 @RequiredArgsConstructor
 @ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
 public class AllFoldersDocumentQueryService implements DocumentQueryService {
 
-    private final DocumentDataFetcher documentDataFetcher;
-    private final ListAllFolderDataFetcher listFolderDataFetcher;
-    private final ListAllFolderCountDataFetcher listFolderCountDataFetcher;
+    protected final DocumentDataFetcher documentDataFetcher;
+    protected final ListAllFolderDataFetcher listFolderDataFetcher;
+    protected final ListAllFolderCountDataFetcher listFolderCountDataFetcher;
 
 
     @Override

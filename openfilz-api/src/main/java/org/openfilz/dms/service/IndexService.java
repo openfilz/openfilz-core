@@ -17,9 +17,14 @@ public interface IndexService {
 
     Mono<Void> deleteDocument(UUID id);
 
-    Map<String, Object> newOpenSearchDocumentMetadata(Document document);
+    Mono<Map<String, Object>> newOpenSearchDocumentMetadata(Document document);
 
     Mono<Void> indexMetadata(UUID documentId, Map<String, Object> metadata);
 
     Mono<Void> indexDocumentStream(Flux<String> textFragments, UUID documentId);
+
+    default Mono<Void> indexDocMetadataMono(Document document) {
+        return newOpenSearchDocumentMetadata(document)
+                .flatMap(openDoc -> indexMetadata(document.getId(), openDoc));
+    }
 }

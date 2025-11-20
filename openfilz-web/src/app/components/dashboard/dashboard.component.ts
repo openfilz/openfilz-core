@@ -57,15 +57,25 @@ export class DashboardComponent implements OnInit {
   fileOver = false;
   fileTypeDistribution: FileTypeDistribution[] = [];
 
+  // Configurable limit for recent files
+  recentFilesLimit = 5;
+
   // Storage stats
-  storageUsed = 15678901234; // ~14.6 GB
-  storageTotal = 53687091200; // 50 GB
-  documentsSize = 5234567890;
-  imagesSize = 7345678901;
-  videosSize = 2098765432;
-  otherSize = 1000000011;
+  storageUsed = 0;
+  storageTotal = 0;
+  documentsSize = 0;
+  imagesSize = 0;
+  videosSize = 0;
+  audioSize = 0;
+  otherSize = 0;
+
+  // Loading states
+  isLoadingDashboard = false;
+  isLoadingRecentFiles = false;
+  dashboardError: string | null = null;
 
   get storagePercentage(): number {
+    if (this.storageTotal === 0) return 0;
     return Math.round((this.storageUsed / this.storageTotal) * 100);
   }
 
@@ -78,159 +88,127 @@ export class DashboardComponent implements OnInit {
   ) {}
 
   ngOnInit() {
+    this.loadDashboardData();
+  }
+
+  loadDashboardData() {
+    this.isLoadingDashboard = true;
+    this.dashboardError = null;
+
+    // Load dashboard statistics
+    this.documentApi.getDashboardStatistics().subscribe({
+      next: (stats) => {
+        // Update storage stats
+        this.storageUsed = stats.storage.totalStorageUsed;
+        this.storageTotal = stats.storage.totalStorageAvailable || 0;
+
+        // Update storage breakdown
+        stats.storage.fileTypeBreakdown.forEach(breakdown => {
+          switch (breakdown.type) {
+            case 'documents':
+              this.documentsSize = breakdown.totalSize || 0;
+              break;
+            case 'images':
+              this.imagesSize = breakdown.totalSize || 0;
+              break;
+            case 'videos':
+              this.videosSize = breakdown.totalSize || 0;
+              break;
+            case 'audio':
+              this.audioSize = breakdown.totalSize || 0;
+              break;
+            case 'others':
+              this.otherSize = breakdown.totalSize || 0;
+              break;
+          }
+        });
+
+        // Update file type distribution
+        const totalFiles = stats.fileTypeCounts.reduce((sum, ft) => sum + (ft.count || 0), 0);
+        this.fileTypeDistribution = stats.fileTypeCounts.map(ft => ({
+          type: this.capitalizeFirst(ft.type),
+          count: ft.count || 0,
+          percentage: totalFiles > 0 ? Math.round(((ft.count || 0) / totalFiles) * 100) : 0,
+          color: this.getTypeColor(this.capitalizeFirst(ft.type))
+        }));
+
+        this.isLoadingDashboard = false;
+      },
+      error: (error) => {
+        console.error('Error loading dashboard statistics:', error);
+        this.dashboardError = 'Failed to load dashboard statistics';
+        this.isLoadingDashboard = false;
+        this.snackBar.open('Failed to load dashboard statistics', 'Close', { duration: 3000 });
+      }
+    });
+
+    // Load recently edited files
     this.loadRecentlyEditedFiles();
-    this.loadFiles();
-    this.calculateFileTypeDistribution();
-    // In a real app, load storage stats from API
   }
 
   loadRecentlyEditedFiles() {
-    // For now, we'll generate mock data - in a real app this would come from an API
-    this.recentlyEditedFiles = [
-      {
-        id: '1',
-        name: 'Banking Dashboard.png',
-        type: 'image',
-        size: 2456789,
-        owner: 'You',
-        lastModified: '2m ago',
-        updatedAt: new Date(Date.now() - 2 * 60000).toISOString(),
-        icon: 'image'
-      },
-      {
-        id: '2',
-        name: 'Team Project.xlsx',
-        type: 'document',
-        size: 3456789,
-        owner: 'You',
-        lastModified: '10m ago',
-        updatedAt: new Date(Date.now() - 10 * 60000).toISOString(),
-        icon: 'document'
-      },
-      {
-        id: '3',
-        name: 'Task Briefing.docx',
-        type: 'document',
-        size: 1234567,
-        owner: 'You',
-        lastModified: '12m ago',
-        updatedAt: new Date(Date.now() - 12 * 60000).toISOString(),
-        icon: 'document'
-      },
-      {
-        id: '4',
-        name: 'Project Proposal.pdf',
-        type: 'document',
-        size: 3456789,
-        owner: 'You',
-        lastModified: '1h ago',
-        updatedAt: new Date(Date.now() - 60 * 60000).toISOString(),
-        icon: 'document'
-      },
-      {
-        id: '5',
-        name: 'Design Assets.zip',
-        type: 'archive',
-        size: 15678901,
-        owner: 'You',
-        lastModified: '2h ago',
-        updatedAt: new Date(Date.now() - 2 * 60 * 60000).toISOString(),
-        icon: 'archive'
-      }
-    ];
-  }
+    this.isLoadingRecentFiles = true;
 
-  loadFiles() {
-    // Load files only (no folders) with pagination
-    this.documentApi.listFolder(undefined, this.pageIndex + 1, this.pageSize).subscribe({
-      next: (response: ElementInfo[]) => {
-        // Filter to show only files, not folders
-        const files = response.filter(item => item.type === DocumentType.FILE);
-        
-        this.allFiles = files.map(item => ({
-          ...item,
-          type: DocumentType.FILE,
-          selected: false,
-          size: 0, // Size is not available in ElementInfo, would need additional API call
-          modifiedDate: undefined,
-          icon: this.fileIconService.getFileIcon(item.name, DocumentType.FILE),
-          // Add properties expected by template
-          owner: 'You', // In a real app, this would come from the API
-          lastModified: 'Just now' // In a real app, format actual date
+    this.documentApi.getRecentlyEditedFiles(this.recentFilesLimit).subscribe({
+      next: (files) => {
+        this.recentlyEditedFiles = files.map(file => ({
+          id: file.id,
+          name: file.name,
+          type: this.getFileTypeCategory(file.contentType || ''),
+          size: file.size || 0,
+          owner: file.updatedBy || 'Unknown',
+          lastModified: this.formatRelativeTime(file.updatedAt || ''),
+          updatedAt: file.updatedAt || '',
+          icon: this.getIconForContentType(file.contentType || '')
         }));
-        
-        // Set total items - in a real app, this would come from a count API
-        this.totalItems = files.length;
-        // Calculate file type distribution after loading files
-        this.calculateFileTypeDistribution();
+        this.isLoadingRecentFiles = false;
       },
       error: (error) => {
-        console.error('Error loading files:', error);
-        this.snackBar.open('Failed to load files', 'Close', { duration: 3000 });
+        console.error('Error loading recently edited files:', error);
+        this.isLoadingRecentFiles = false;
+        this.snackBar.open('Failed to load recent files', 'Close', { duration: 3000 });
       }
     });
   }
 
-  calculateFileTypeDistribution() {
-    // Define file types and their extensions
-    const fileTypes: { [key: string]: string[] } = {
-      'Documents': ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.rtf'],
-      'Images': ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp', '.tiff'],
-      'Videos': ['.mp4', '.avi', '.mov', '.wmv', '.flv', '.mkv', '.webm', '.m4v'],
-      'Music': ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a', '.wma'],
-      'Archives': ['.zip', '.rar', '.7z', '.tar', '.gz', '.bz2', '.xz'],
-      'Others': []
-    };
-
-    // Count each file type based on extension
-    const typeCounts: { [key: string]: number } = {
-      'Documents': 0,
-      'Images': 0,
-      'Videos': 0,
-      'Music': 0,
-      'Archives': 0,
-      'Others': 0
-    };
-
-    for (const file of this.allFiles) {
-      const fileExtension = this.getFileExtension(file.name).toLowerCase();
-      let matched = false;
-
-      for (const [type, extensions] of Object.entries(fileTypes)) {
-        if (extensions.includes(fileExtension)) {
-          typeCounts[type]++;
-          matched = true;
-          break;
-        }
-      }
-
-      if (!matched) {
-        typeCounts['Others']++;
-      }
-    }
-
-    // Calculate percentages and set up the distribution array
-    const totalFiles = this.allFiles.length;
-    if (totalFiles === 0) {
-      // If no files, show some mock data for demonstration
-      this.fileTypeDistribution = [
-        { type: 'Documents', count: 35, percentage: 35, color: '#667eea' },
-        { type: 'Images', count: 25, percentage: 25, color: '#f093fb' },
-        { type: 'Videos', count: 20, percentage: 20, color: '#4facfe' },
-        { type: 'Music', count: 5, percentage: 5, color: '#f5576c' },
-        { type: 'Archives', count: 10, percentage: 10, color: '#00f2fe' },
-        { type: 'Others', count: 5, percentage: 5, color: '#764ba2' }
-      ];
-      return;
-    }
-
-    // Calculate percentage for each type
-    this.fileTypeDistribution = Object.entries(typeCounts).map(([type, count]) => {
-      const percentage = Math.round((count / totalFiles) * 100);
-      const color = this.getTypeColor(type);
-      return { type, count, percentage, color };
-    });
+  private capitalizeFirst(str: string): string {
+    return str.charAt(0).toUpperCase() + str.slice(1);
   }
+
+  private getFileTypeCategory(contentType: string): string {
+    if (contentType.startsWith('image/')) return 'image';
+    if (contentType.startsWith('video/')) return 'video';
+    if (contentType.startsWith('audio/')) return 'music';
+    if (contentType.includes('zip') || contentType.includes('archive')) return 'archive';
+    if (contentType.startsWith('application/')) return 'document';
+    return 'file';
+  }
+
+  private getIconForContentType(contentType: string): string {
+    if (contentType.startsWith('image/')) return 'image';
+    if (contentType.startsWith('video/')) return 'video';
+    if (contentType.startsWith('audio/')) return 'audiotrack';
+    if (contentType.includes('zip') || contentType.includes('archive')) return 'archive';
+    return 'description';
+  }
+
+  private formatRelativeTime(dateString: string): string {
+    if (!dateString) return 'Unknown';
+
+    const now = new Date();
+    const date = new Date(dateString);
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
 
   getFileExtension(filename: string): string {
     const lastDotIndex = filename.lastIndexOf('.');
@@ -252,7 +230,7 @@ export class DashboardComponent implements OnInit {
   onPageChange(event: PageEvent) {
     this.pageIndex = event.pageIndex;
     this.pageSize = event.pageSize;
-    this.loadFiles();
+    // Dashboard doesn't have pagination anymore since we're showing aggregated stats
   }
 
   onFilesDropped(files: FileList) {

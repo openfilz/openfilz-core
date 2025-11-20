@@ -18,7 +18,7 @@ public interface DocumentDAO {
 
     Flux<ChildElementInfo> getChildren(UUID folderId);
 
-    Flux<ChildElementInfo> getElementsAndChildren(List<UUID> documentIds);
+    Flux<ChildElementInfo> getElementsAndChildren(List<UUID> documentIds, String connectedUserEmail);
 
     Flux<FolderElementInfo> listDocumentInfoInFolder(UUID parentFolderId, DocumentType type);
 

@@ -12,16 +12,14 @@ import org.openfilz.dms.mapper.DocumentMapper;
 import org.openfilz.dms.repository.SqlQueryUtils;
 import org.openfilz.dms.utils.SqlUtils;
 import org.reactivestreams.Publisher;
-import org.springframework.data.util.ParsingUtils;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.r2dbc.core.DatabaseClient;
 
-import java.beans.FeatureDescriptor;
-import java.beans.IntrospectionException;
-import java.beans.Introspector;
+import java.lang.reflect.Field;
 import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.openfilz.dms.entity.SqlColumnMapping.*;
@@ -31,14 +29,31 @@ public abstract class AbstractDataFetcher<T, R> implements SqlQueryUtils {
     protected static final Map<String, String> DOCUMENT_FIELD_SQL_MAP;
 
     static {
-        try {
-            DOCUMENT_FIELD_SQL_MAP = Arrays.stream(Introspector.getBeanInfo(Document.class)
-                            .getPropertyDescriptors())
-                    .collect(Collectors.toMap(FeatureDescriptor::getName,
-                            pd -> ParsingUtils.reconcatenateCamelCase(pd.getName(), SqlUtils.UNDERSCORE)));
-        } catch (IntrospectionException e) {
-            throw new RuntimeException(e);
+        DOCUMENT_FIELD_SQL_MAP = buildFieldToColumnMap();
+    }
+
+    private static Map<String, String> buildFieldToColumnMap() {
+        Map<String, String> map = new HashMap<>();
+
+        for (Field field : Document.class.getDeclaredFields()) {
+            String fieldName = field.getName();
+            String columnName = null;
+
+            // Check for @Id annotation
+            if (field.isAnnotationPresent(Id.class) && field.isAnnotationPresent(Column.class)) {
+                columnName = field.getAnnotation(Column.class).value();
+            }
+            // Check for @Column annotation
+            else if (field.isAnnotationPresent(Column.class)) {
+                columnName = field.getAnnotation(Column.class).value();
+            }
+
+            if (columnName != null && !columnName.isEmpty()) {
+                map.put(fieldName, columnName);
+            }
         }
+
+        return Map.copyOf(map); // Immutable map (Java 9+)
     }
 
     protected String prefix = null;
@@ -58,7 +73,7 @@ public abstract class AbstractDataFetcher<T, R> implements SqlQueryUtils {
 
     protected abstract void initFromWhereClause();
 
-    private Stream<SelectedField> getSelectedFields(DataFetchingEnvironment environment) {
+    protected Stream<SelectedField> getSelectedFields(DataFetchingEnvironment environment) {
         return environment
                 .getSelectionSet()
                 .getFieldsGroupedByResultKey()
@@ -94,6 +109,7 @@ public abstract class AbstractDataFetcher<T, R> implements SqlQueryUtils {
                 case CREATED_BY -> builder.createdBy(row.get(field, String.class));
                 case UPDATED_BY -> builder.updatedBy(row.get(field, String.class));
                 case CONTENT_TYPE -> builder.contentType(row.get(field, String.class));
+                case FAVORITE -> builder.favorite(row.get(field, Boolean.class));
             }
         });
         return builder.build();

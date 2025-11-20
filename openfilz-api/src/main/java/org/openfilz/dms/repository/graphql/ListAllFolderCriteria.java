@@ -14,7 +14,7 @@ public class ListAllFolderCriteria extends ListFolderCriteria {
         super(sqlUtils);
     }
 
-    public boolean appendParentIdFilter(String prefix, StringBuilder query, ListFolderRequest request) {
+    public boolean appendWhereParentIdFilter(String prefix, StringBuilder query, ListFolderRequest request) {
         if(request.id() != null) {
             query.append(WHERE);
             sqlUtils.appendEqualsCriteria(prefix, PARENT_ID, query);

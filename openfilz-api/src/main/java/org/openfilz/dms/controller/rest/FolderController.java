@@ -21,7 +21,7 @@ import reactor.core.publisher.Mono;
 import java.util.UUID;
 
 @RestController
-@RequestMapping(RestApiVersion.API_PREFIX + "/folders")
+@RequestMapping(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_FOLDERS)
 @RequiredArgsConstructor
 @SecurityRequirement(name = "keycloak_auth") // For Swagger UI
 public class FolderController {

@@ -1,6 +1,10 @@
 package org.openfilz.dms.service;
 
+import org.openfilz.dms.dto.request.SortInput;
 import org.openfilz.dms.enums.OpenSearchDocumentKey;
+import org.openfilz.dms.enums.SortOrder;
+import org.opensearch.client.opensearch.core.SearchRequest;
+import org.springframework.util.StringUtils;
 
 public interface OpenSearchService {
 
@@ -23,7 +27,27 @@ public interface OpenSearchService {
     String UPDATED_BY = OpenSearchDocumentKey.updatedBy.toString();
 
     default String getTrimQuery(String query) {
-        return SPACE + query.trim() + SPACE;
+        return query.trim();
+    }
+
+    default void addSorting(SortInput sort, SearchRequest.Builder requestBuilder) {
+        // 5. Add Sorting
+        if (sort != null && StringUtils.hasText(sort.field())) {
+            // Map our enum to the OpenSearch enum
+            var osSortOrder = sort.order() == SortOrder.ASC ?
+                    org.opensearch.client.opensearch._types.SortOrder.Asc :
+                    org.opensearch.client.opensearch._types.SortOrder.Desc;
+
+            // Again, use .keyword for sorting on text fields to sort alphabetically, not by relevance.
+            String sortField = sort.field();
+            if (NAME.equals(sortField) || EXTENSION.equals(sortField)
+                    || CREATED_BY.equals(sortField) || UPDATED_BY.equals(sortField)) {
+                sortField += KEYWORD;
+            }
+
+            String finalSortField = sortField;
+            requestBuilder.sort(s -> s.field(f -> f.field(finalSortField).order(osSortOrder)));
+        }
     }
 
 }

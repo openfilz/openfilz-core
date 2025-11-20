@@ -10,6 +10,7 @@ export interface ElementInfo {
   id: string;
   name: string;
   type: DocumentType;
+  favorite?: boolean;
 }
 
 export interface ListFolderAndCountResponse {
@@ -76,6 +77,7 @@ export interface FileItem extends ElementInfo {
   size?: number;
   modifiedDate?: Date;
   icon?: string;
+  favorite?: boolean;
 }
 
 export interface MultipleUploadFileParameter {
@@ -112,4 +114,33 @@ export class Root implements ElementInfo {
   id = "0"
   name = "Root"
   type = DocumentType.FOLDER
+}
+
+// Dashboard models
+export interface FileTypeStats {
+  type: string;
+  count?: number;
+  totalSize?: number;
+}
+
+export interface StorageBreakdown {
+  totalStorageUsed: number;
+  totalStorageAvailable?: number;
+  fileTypeBreakdown: FileTypeStats[];
+}
+
+export interface DashboardStatistics {
+  totalFiles: number;
+  totalFolders: number;
+  storage: StorageBreakdown;
+  fileTypeCounts: FileTypeStats[];
+}
+
+export interface RecentFileInfo extends ElementInfo {
+  size?: number;
+  contentType?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy?: string;
+  updatedBy?: string;
 }

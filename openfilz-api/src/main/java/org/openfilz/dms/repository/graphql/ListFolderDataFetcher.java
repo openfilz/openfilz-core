@@ -13,13 +13,15 @@ import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
+import java.util.ArrayList;
 import java.util.List;
 
+import static org.openfilz.dms.entity.SqlColumnMapping.FAVORITE;
 import static org.openfilz.dms.utils.SqlUtils.FROM_DOCUMENTS;
 import static org.openfilz.dms.utils.SqlUtils.SPACE;
 
 @Slf4j
-@Service
+@Service("defaultListFolderDataFetcher")
 @ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
 public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentInfo> {
 
@@ -31,44 +33,68 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
     public ListFolderDataFetcher(DatabaseClient databaseClient, DocumentMapper mapper, ObjectMapper objectMapper, SqlUtils sqlUtils, @Qualifier("defaultListFolderCriteria") ListFolderCriteria listFolderCriteria) {
         super(databaseClient, mapper, objectMapper, sqlUtils);
         this.criteria = listFolderCriteria;
+        this.prefix = "d.";
     }
 
     @Override
     protected void initFromWhereClause() {
-        fromClause = FROM_DOCUMENTS;
+        fromClause = FROM_DOCUMENTS + " d";
     }
 
     @Override
     public Flux<FullDocumentInfo> get(ListFolderRequest filter, DataFetchingEnvironment environment) {
         List<String> sqlFields = getSqlFields(environment);
+
+        // Check if isFavorite was requested
+        boolean includeIsFavorite = getSelectedFields(environment).anyMatch(f -> f.getName().equals("favorite"));
+
         if(filter.pageInfo() == null || filter.pageInfo().pageSize() == null || filter.pageInfo().pageNumber() == null) {
             throw new IllegalArgumentException("Paging information must be provided");
         }
-        StringBuilder query = getSelectRequest(sqlFields);
+        StringBuilder query = getSelectRequest(sqlFields, includeIsFavorite, filter.favorite());
+
         criteria.checkFilter(filter);
         criteria.checkPageInfo(filter);
-        applyFilter(query, filter);
+        applyFilter(filter, prefix, query);
         applySort(query, filter);
         appendOffsetLimit(query, filter);
         DatabaseClient.GenericExecuteSpec sqlQuery = prepareQuery(environment, filter, query);
         log.debug("GraphQL - SQL query : {}", query);
-        return sqlQuery.map(mapFullDocumentInfo(sqlFields))
-                .all();
+        if(includeIsFavorite) {
+            List<String> newFieldsList = new ArrayList<>(sqlFields);
+            newFieldsList.add(FAVORITE);
+            return getDocuments(sqlQuery, newFieldsList);
+        }
+        return getDocuments(sqlQuery, sqlFields);
     }
 
-    protected StringBuilder getSelectRequest(List<String> sqlFields) {
-        return toSelect(sqlFields).append(fromClause);
+    private  Flux<FullDocumentInfo> getDocuments(DatabaseClient.GenericExecuteSpec sqlQuery, List<String> newFieldsList) {
+        return sqlQuery.map(mapFullDocumentInfo(newFieldsList)).all();
     }
 
-    protected void applyFilter(StringBuilder query, ListFolderRequest filter) {
-        criteria.applyFilter(prefix, query, filter);
+    protected StringBuilder getSelectRequest(List<String> sqlFields, boolean includeIsFavorite, Boolean favoriteFilter) {
+        StringBuilder sb = toSelect(sqlFields);
+        // Add isFavorite as computed field if requested
+        if (includeIsFavorite || (favoriteFilter != null && !favoriteFilter)) {
+            sb.append(", CASE WHEN uf.doc_id IS NOT NULL THEN TRUE ELSE FALSE END as favorite");
+        }
+        sb.append(fromClause);
+        appendRemainingFromClause(includeIsFavorite, favoriteFilter, sb);
+        return sb;
+
     }
+
+    protected void applyFilter(ListFolderRequest filter, String newPrefix, StringBuilder query) {
+        criteria.applyFilter(newPrefix, query, filter);
+    }
+
+
 
     protected DatabaseClient.GenericExecuteSpec prepareQuery(DataFetchingEnvironment environment, ListFolderRequest filter, StringBuilder query) {
-        return criteria.bindCriteria(databaseClient.sql(query.toString()), filter);
+        return criteria.bindCriteria(super.prepareQuery(environment, filter, query), filter);
     }
 
-    private void applySort(StringBuilder query, ListFolderRequest request) {
+    public void applySort(StringBuilder query, ListFolderRequest request) {
         if(request.pageInfo().sortBy() != null) {
             appendSort(query, request);
         }
@@ -86,7 +112,7 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
         return prefix == null ? sortBy : prefix + sortBy;
     }
 
-    private void appendOffsetLimit(StringBuilder query, ListFolderRequest request) {
+    public void appendOffsetLimit(StringBuilder query, ListFolderRequest request) {
         query.append(SqlUtils.LIMIT).append(request.pageInfo().pageSize())
                 .append(SqlUtils.OFFSET).append((request.pageInfo().pageNumber() - 1) * request.pageInfo().pageSize());
     }

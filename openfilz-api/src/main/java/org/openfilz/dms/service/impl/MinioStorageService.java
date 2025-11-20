@@ -104,7 +104,6 @@ public class MinioStorageService implements StorageService {
         // We run this in a separate thread so it doesn't block the main reactive flow
         // waiting for PipedInputStream to be read.
         DataBufferUtils.write(filePart.content(), pipedOutputStream)
-                .subscribeOn(Schedulers.boundedElastic()) // Use boundedElastic for I/O blocking work
                 .doOnError(e -> {
                     log.error("Error writing file content to PipedOutputStream for {}", objectName, e);
                     try {
@@ -120,6 +119,7 @@ public class MinioStorageService implements StorageService {
                         log.warn("Error closing PipedOutputStream for {}: {}", objectName, e.getMessage());
                     }
                 })
+                .subscribeOn(Schedulers.boundedElastic()) // Use boundedElastic for I/O blocking work
                 .subscribe(); // Fire and forget, error handling is above.
 
         // The MinIO upload part. This will block the thread it runs on until upload is complete.

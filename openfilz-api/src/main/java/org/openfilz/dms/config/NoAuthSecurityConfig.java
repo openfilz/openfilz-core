@@ -1,4 +1,3 @@
-// com/example/dms/config/SecurityConfig.java
 package org.openfilz.dms.config;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

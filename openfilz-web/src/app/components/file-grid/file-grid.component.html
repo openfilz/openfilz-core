@@ -14,6 +14,17 @@
                             (click)="$event.stopPropagation()"
                             (change)="onSelectionChange(item, $event.checked)">
                     </mat-checkbox>
+                    @if(showFavoriteButton) {
+                        <button
+                            mat-icon-button
+                            class="favorite-btn"
+                            (click)="onToggleFavorite($event, item)"
+                            [title]="item.favorite ? 'Remove from favorites' : 'Add to favorites'">
+                            <mat-icon [class.favorited]="item.favorite">
+                                {{ item.favorite ? 'favorite' : 'favorite_border' }}
+                            </mat-icon>
+                        </button>
+                    }
                 </div>
 
                 <div class="file-content">

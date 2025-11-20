@@ -3,6 +3,9 @@ declare interface Env {
   readonly NODE_ENV: string;
   readonly NG_APP_API_URL: string;
   readonly NG_APP_GRAPHQL_URL: string;
+  readonly NG_APP_AUTHENTICATION_AUTHORITY: string;
+  readonly NG_APP_AUTHENTICATION_CLIENT_ID: string;
+  readonly NG_APP_AUTHENTICATION_ENABLED: string;
   [key: string]: any;
 }
 
@@ -23,5 +26,5 @@ declare const _NGX_ENV_: Env;
 
 // 3. Use process.env.YOUR_ENV_VAR in your code. (deprecated)
 declare namespace NodeJS {
-  export interface ProcessEnv extends Env {}
+  export interface ProcessEnv extends Env { }
 }

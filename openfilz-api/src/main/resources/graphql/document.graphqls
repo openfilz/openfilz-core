@@ -9,6 +9,8 @@ type Query {
     listFolder(request: ListFolderRequest!): [FolderElementInfo]
     documentById(id: UUID!): DocumentInfo
     count(request: ListFolderRequest): Long
+    listFavorites(request: FavoriteRequest!): [FolderElementInfo]
+    countFavorites(request: FavoriteRequest): Long
 }
 
 type FolderElementInfo {
@@ -22,6 +24,7 @@ type FolderElementInfo {
     updatedAt : DateTime
     createdBy : String
     updatedBy : String
+    favorite : Boolean
 }
 
 type DocumentInfo {
@@ -62,7 +65,32 @@ input ListFolderRequest {
     createdBy : String
     updatedBy : String
     pageInfo : PageInfo
+    favorite : Boolean
+    active : Boolean = true
 }
+
+input FavoriteRequest {
+    "Type (FILE or FOLDER) of the elements to filter"
+    type : DocumentType
+    "Content-Type of the files to filter"
+    contentType : String
+    "name of the elements to filter (exact match)"
+    name : String
+    "name of the elements to filter (like clause)"
+    nameLike : String
+    "metadata of the elements to filter (contains clause)"
+    metadata : JSON
+    size : Long
+    createdAtAfter : DateTime
+    createdAtBefore : DateTime
+    updatedAtAfter : DateTime
+    updatedAtBefore : DateTime
+    createdBy : String
+    updatedBy : String
+    pageInfo : PageInfo
+}
+
+
 
 input PageInfo {
     pageNumber : Int!

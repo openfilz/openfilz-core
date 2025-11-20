@@ -13,6 +13,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.http.codec.json.Jackson2JsonEncoder;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
@@ -29,6 +30,7 @@ import java.util.Objects;
 
 @RequiredArgsConstructor
 @Import(GraphQlTestConfig.class)
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public abstract class TestContainersBaseConfig {
 
     @Value("http://localhost:${local.server.port}${spring.graphql.http.path:/graphql}")

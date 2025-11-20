@@ -65,7 +65,7 @@ springdoc:
 logging:
   level:
     org.openfilz: DEBUG
-    # io.r2dbc.postgresql.QUERY: DEBUG # for queries
+    io.r2dbc.postgresql.QUERY: DEBUG # for queries
     # io.r2dbc.postgresql.PARAM: DEBUG # for parameters
     # org.springframework: DEBUG
 
@@ -99,6 +99,8 @@ openfilz:
     # role-token-lookup: GROUPS
     # root-group: name of the root group holding the 3 Roles as subgroups : eg. 'GED' is the root group in the group /GED/AUDITORS
     # root-group: GED
+  soft-delete:
+    active: false
 
 # Database schema initialization (e.g., Flyway or Liquibase if preferred)
 # For simple R2DBC, you might use an InitializingBean to create tables

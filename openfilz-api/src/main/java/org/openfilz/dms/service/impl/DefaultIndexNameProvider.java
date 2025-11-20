@@ -4,10 +4,9 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.entity.Document;
-import org.openfilz.dms.enums.OpenSearchDocumentKey;
+import org.openfilz.dms.service.IndexMappingsProvider;
 import org.openfilz.dms.service.IndexNameProvider;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
-import org.opensearch.client.opensearch._types.mapping.DynamicMapping;
 import org.opensearch.client.opensearch.indices.CreateIndexRequest;
 import org.opensearch.client.opensearch.indices.ExistsRequest;
 import org.opensearch.client.transport.endpoints.BooleanResponse;
@@ -29,6 +28,7 @@ import java.util.UUID;
 public class DefaultIndexNameProvider implements IndexNameProvider {
 
     private final OpenSearchAsyncClient openSearchAsyncClient;
+    private final IndexMappingsProvider indexMappingsProvider;
 
     @PostConstruct
     public void init() {
@@ -86,20 +86,7 @@ public class DefaultIndexNameProvider implements IndexNameProvider {
 
                         CreateIndexRequest createRequest = CreateIndexRequest.of(c -> c
                                         .index(indexName)
-                                        .mappings(m -> m
-                                                .properties(OpenSearchDocumentKey.id.toString(), p -> p.keyword(k -> k))
-                                                .properties(OpenSearchDocumentKey.name.toString(), p -> p.text(tx -> tx.fields("keyword", b-> b.keyword(builder -> builder))))
-                                                .properties(OpenSearchDocumentKey.name_suggest.toString(), p -> p.searchAsYouType(builder ->  builder))
-                                                .properties(OpenSearchDocumentKey.extension.toString(), p -> p.keyword(k -> k))
-                                                .properties(OpenSearchDocumentKey.size.toString(), p -> p.long_(k -> k))
-                                                .properties(OpenSearchDocumentKey.parentId.toString(), p -> p.keyword(k -> k))
-                                                .properties(OpenSearchDocumentKey.createdAt.toString(), p -> p.date(k -> k))
-                                                .properties(OpenSearchDocumentKey.updatedAt.toString(), p -> p.date(k -> k))
-                                                .properties(OpenSearchDocumentKey.createdBy.toString(), p -> p.keyword(k -> k))
-                                                .properties(OpenSearchDocumentKey.updatedBy.toString(), p -> p.keyword(k -> k))
-                                                .properties(OpenSearchDocumentKey.content.toString(), p -> p.text(tx -> tx))
-                                                .properties(OpenSearchDocumentKey.metadata.toString(), p -> p.object(tx -> tx.dynamic(DynamicMapping.True)))
-                                        )
+                                        .mappings(indexMappingsProvider.getIndexMappings())
                                 // Vous pouvez ajouter d'autres settings ici, par exemple :
                                 // .settings(s -> s
                                 //    .numberOfShards("1")

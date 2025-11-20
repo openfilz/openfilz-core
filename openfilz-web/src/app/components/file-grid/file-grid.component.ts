@@ -23,6 +23,7 @@ import {FileIconService} from '../../services/file-icon.service';
 export class FileGridComponent {
   @Input() items: FileItem[] = [];
   @Input() fileOver: boolean = false;
+  @Input() showFavoriteButton: boolean = true; // Control favorite button visibility
 
   @Output() itemClick = new EventEmitter<FileItem>();
   @Output() itemDoubleClick = new EventEmitter<FileItem>();
@@ -32,6 +33,7 @@ export class FileGridComponent {
   @Output() move = new EventEmitter<FileItem>();
   @Output() copy = new EventEmitter<FileItem>();
   @Output() delete = new EventEmitter<FileItem>();
+  @Output() toggleFavorite = new EventEmitter<FileItem>();
 
   constructor(private fileIconService: FileIconService) {}
 
@@ -70,6 +72,11 @@ export class FileGridComponent {
 
   onDelete(item: FileItem) {
     this.delete.emit(item);
+  }
+
+  onToggleFavorite(event: Event, item: FileItem) {
+    event.stopPropagation(); // Prevent item click
+    this.toggleFavorite.emit(item);
   }
 
   getFileIcon(fileName: string, type: 'FILE' | 'FOLDER'): string {

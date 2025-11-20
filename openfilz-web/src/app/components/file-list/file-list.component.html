@@ -3,19 +3,36 @@
     
     <ng-container matColumnDef="select">
       <th mat-header-cell *matHeaderCellDef>
-        <mat-checkbox 
+        <mat-checkbox
           [checked]="allSelected"
           [indeterminate]="someSelected && !allSelected"
           (change)="onSelectAll($event.checked)">
         </mat-checkbox>
       </th>
       <td mat-cell *matCellDef="let item">
-        <mat-checkbox 
+        <mat-checkbox
           [checked]="item.selected"
           (change)="onSelectionChange(item, $event.checked)">
         </mat-checkbox>
       </td>
     </ng-container>
+
+    @if(showFavoriteButton) {
+      <ng-container matColumnDef="favorite">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let item">
+          <button
+            mat-icon-button
+            class="favorite-btn"
+            (click)="onToggleFavorite($event, item)"
+            [title]="item.favorite ? 'Remove from favorites' : 'Add to favorites'">
+            <mat-icon [class.favorited]="item.favorite">
+              {{ item.favorite ? 'favorite' : 'favorite_border' }}
+            </mat-icon>
+          </button>
+        </td>
+      </ng-container>
+    }
 
     <ng-container matColumnDef="name">
       <th mat-header-cell *matHeaderCellDef>Name</th>

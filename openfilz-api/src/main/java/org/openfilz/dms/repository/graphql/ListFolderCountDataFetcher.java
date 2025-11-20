@@ -34,10 +34,20 @@ public class ListFolderCountDataFetcher  extends AbstractListDataFetcher<Long> {
         fromClause = FROM_DOCUMENTS;
     }
 
+
+
     @Override
     public Mono<Long> get(ListFolderRequest filter, DataFetchingEnvironment environment) {
         DatabaseClient.GenericExecuteSpec sqlQuery;
         StringBuilder query = new StringBuilder(SqlUtils.SELECT).append(COUNT).append(fromClause);
+        boolean withFavorites = false;
+        String newPrefix = prefix;
+        if(filter != null && filter.favorite() != null) {
+            query.append(" d");
+            newPrefix = "d.";
+            appendRemainingFromClause(false, filter.favorite(), query);
+            withFavorites = true;
+        }
         if(filter == null) {
             sqlQuery = databaseClient.sql(query.toString());
         } else {
@@ -45,7 +55,7 @@ public class ListFolderCountDataFetcher  extends AbstractListDataFetcher<Long> {
                 throw new IllegalArgumentException("Paging information must not be provided");
             }
             criteria.checkFilter(filter);
-            applyFilter(query, filter);
+            applyFilter(filter, newPrefix, query);
             sqlQuery = prepareQuery(environment, filter, query);
         }
 
@@ -54,12 +64,12 @@ public class ListFolderCountDataFetcher  extends AbstractListDataFetcher<Long> {
                 .one();
     }
 
-    protected void applyFilter(StringBuilder query, ListFolderRequest filter) {
-        criteria.applyFilter(prefix, query, filter);
+    protected void applyFilter(ListFolderRequest filter, String newPrefix, StringBuilder query) {
+        criteria.applyFilter(newPrefix, query, filter);
     }
 
     protected DatabaseClient.GenericExecuteSpec prepareQuery(DataFetchingEnvironment environment, ListFolderRequest filter, StringBuilder query) {
-        return criteria.bindCriteria(databaseClient.sql(query.toString()), filter);
+        return criteria.bindCriteria(super.prepareQuery(environment, filter, query), filter);
     }
 
 
