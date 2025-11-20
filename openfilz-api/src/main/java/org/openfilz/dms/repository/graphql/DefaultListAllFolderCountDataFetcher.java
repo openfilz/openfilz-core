@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 
-@Service("defaultListFolderCountDataFetcher")
+@Service
 @ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
 public class DefaultListAllFolderCountDataFetcher extends ListFolderCountDataFetcher implements ListAllFolderCountDataFetcher {
 
