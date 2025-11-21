@@ -32,4 +32,6 @@ public abstract class AbstractStorageWithSignatureIT extends LocalStorageIT {
 
     }
 
+    void whenDownloadDocumentMultiple_thenOk() {}
+
 }
