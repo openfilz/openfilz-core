@@ -102,7 +102,7 @@ public class SoftDeleteIT extends TestContainersBaseConfig {
                 .expectStatus().isNotFound();
     }
 
-    record RestoreHandler(FolderResponse parent, UploadResponse file) {}
+
 
     @Test
     void testRestore() {
@@ -143,7 +143,7 @@ public class SoftDeleteIT extends TestContainersBaseConfig {
                 .returnResult().getResponseBody();
 
         Assertions.assertNotNull(info);
-        Assertions.assertEquals(folderAndFile1_1_1.parent.id(), info.parentId());
+        Assertions.assertEquals(folderAndFile1_1_1.parent().id(), info.parentId());
 
         deleteRequest = new DeleteRequest(List.of(folderAndFile1_1_1.parent().id()));
 
@@ -221,26 +221,6 @@ public class SoftDeleteIT extends TestContainersBaseConfig {
         emptyBin(httpGraphQlClient, graphQlRequest);
 
     }
-
-    private RestoreHandler createFolderAndFile(String name, UUID parentId) {
-        CreateFolderRequest rootFolder1 = new CreateFolderRequest(name, parentId);
-
-
-        FolderResponse rootFolder1Response = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/folders")
-                .body(BodyInserters.fromValue(rootFolder1))
-                .exchange()
-                .expectStatus().isCreated()
-                .expectBody(FolderResponse.class)
-                .returnResult().getResponseBody();
-
-        MultipartBodyBuilder builder = newFileBuilder();
-        builder.part("parentFolderId", rootFolder1Response.id().toString());
-
-        UploadResponse file1_1 = uploadDocument(builder);
-
-        return new RestoreHandler(rootFolder1Response, file1_1);
-    }
-
 
     @Test
     void whenDeleteFiles_thenVerifySoftDelete() {

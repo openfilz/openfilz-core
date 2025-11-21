@@ -21,7 +21,7 @@ public abstract class AbstractListDataFetcher<T> extends AbstractDataFetcher<Lis
     }
 
     private void appendFavorites(StringBuilder sb) {
-        sb.append(" JOIN user_favorites uf ON d.id = uf.doc_id and uf.email = :email");
+        sb.append(" JOIN user_favorites uf ON d.id = uf.doc_id and uf.email = :email ");
     }
 
     protected void appendRemainingFromClause(boolean includeIsFavorite, Boolean favoriteFilter, StringBuilder sb) {
