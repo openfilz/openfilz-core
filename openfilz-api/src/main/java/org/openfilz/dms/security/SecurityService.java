@@ -1,4 +1,4 @@
-package org.openfilz.dms.service;
+package org.openfilz.dms.security;
 
 import org.springframework.security.core.Authentication;
 import org.springframework.security.web.server.authorization.AuthorizationContext;

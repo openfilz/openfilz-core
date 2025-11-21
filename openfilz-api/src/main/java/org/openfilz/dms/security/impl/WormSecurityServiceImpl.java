@@ -1,4 +1,4 @@
-package org.openfilz.dms.service.impl;
+package org.openfilz.dms.security.impl;
 
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;

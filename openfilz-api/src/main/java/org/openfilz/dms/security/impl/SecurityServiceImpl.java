@@ -1,4 +1,4 @@
-package org.openfilz.dms.service.impl;
+package org.openfilz.dms.security.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

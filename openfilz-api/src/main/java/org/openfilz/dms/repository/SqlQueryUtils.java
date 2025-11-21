@@ -4,6 +4,7 @@ import io.r2dbc.spi.Readable;
 import org.openfilz.dms.dto.response.FolderElementInfo;
 import org.openfilz.dms.enums.DocumentType;
 
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -17,6 +18,10 @@ public interface SqlQueryUtils {
 
     default Function<Readable, UUID> mapId() {
         return row -> row.get(0, UUID.class);
+    }
+
+    default Function<Readable, Optional<UUID>> mapIdOptional() {
+        return row -> Optional.ofNullable(row.get(0, UUID.class));
     }
 
     default Function<Readable, FolderElementInfo> mapFolderElementInfo() {

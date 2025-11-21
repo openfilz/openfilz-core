@@ -256,7 +256,7 @@ The available roles are:
 For more advanced scenarios, you can provide a completely custom authorization model. To do this, you need to:
 
 1.  Provide a custom implementation of `org.openfilz.dms.config.DefaultAuthSecurityConfig`
-2.  Provide a custom implementation of `org.openfilz.dms.service.impl.SecurityServiceImpl`
+2.  Provide a custom implementation of `org.openfilz.dms.security.impl.SecurityServiceImpl`
 3.  Set to `true` the `openfilz.security.custom-roles` property.
 
 ```yaml
