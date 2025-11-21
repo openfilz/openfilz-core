@@ -1,17 +1,12 @@
 package org.openfilz.dms.e2e;
 
 import lombok.extern.slf4j.Slf4j;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.openfilz.dms.config.RestApiVersion;
-import org.openfilz.dms.dto.request.CreateFolderRequest;
 import org.openfilz.dms.dto.request.FavoriteRequest;
 import org.openfilz.dms.dto.request.ListFolderRequest;
 import org.openfilz.dms.dto.request.PageCriteria;
-import org.openfilz.dms.dto.response.DashboardStatisticsResponse;
-import org.openfilz.dms.dto.response.FolderResponse;
 import org.openfilz.dms.dto.response.UploadResponse;
-import org.openfilz.dms.enums.DocumentType;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.graphql.client.ClientGraphQlResponse;
 import org.springframework.graphql.client.HttpGraphQlClient;
@@ -20,7 +15,6 @@ import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.http.codec.json.Jackson2JsonEncoder;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.test.web.reactive.server.WebTestClient;
-import org.springframework.web.reactive.function.BodyInserters;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -68,70 +62,80 @@ public class FavoritesIT extends TestContainersBaseConfig {
         builder.part("parentFolderId", folderAndFile1_1_1.parent().id().toString());
         UploadResponse file1_1_1_2 = uploadDocument(builder);
 
-        getWebTestClient().method(HttpMethod.POST).uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_FAVORITES + "/{id}", folderAndFile1.file.id())
+        UUID fileId = folderAndFile1.file().id();
+        createFavorite(fileId)
                 .exchange()
                 .expectStatus().isOk();
 
-        getWebTestClient().method(HttpMethod.GET).uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_FAVORITES + "/{id}/is-favorite", folderAndFile1.file.id())
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody(Boolean.class)
+        isFavorite(fileId)
                 .isEqualTo(Boolean.TRUE);
 
-        getWebTestClient().method(HttpMethod.PUT).uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_FAVORITES + "/{id}/toggle", folderAndFile1.file.id())
+        toggleFavorite(fileId)
                 .exchange()
                 .expectStatus().isOk().expectBody(Boolean.class)
                 .isEqualTo(Boolean.FALSE);
 
-        getWebTestClient().method(HttpMethod.GET).uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_FAVORITES + "/{id}/is-favorite", folderAndFile1.file.id())
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody(Boolean.class)
+        isFavorite(fileId)
                 .isEqualTo(Boolean.FALSE);
 
-        getWebTestClient().method(HttpMethod.PUT).uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_FAVORITES + "/{id}/toggle", folderAndFile1.file.id())
+        toggleFavorite(fileId)
                 .exchange()
                 .expectStatus().isOk().expectBody(Boolean.class)
                 .isEqualTo(Boolean.TRUE);
 
-        getWebTestClient().method(HttpMethod.GET).uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_FAVORITES + "/{id}/is-favorite", folderAndFile1.file.id())
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody(Boolean.class)
+        isFavorite(fileId)
                 .isEqualTo(Boolean.TRUE);
 
-        getWebTestClient().method(HttpMethod.PUT).uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_FAVORITES + "/{id}/toggle", folderAndFile2.file.id())
+        UUID fileId2 = folderAndFile2.file().id();
+        toggleFavorite(fileId2)
                 .exchange()
                 .expectStatus().isOk().expectBody(Boolean.class)
                 .isEqualTo(Boolean.TRUE);
 
-        getWebTestClient().method(HttpMethod.GET).uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_FAVORITES + "/{id}/is-favorite", folderAndFile2.file.id())
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody(Boolean.class)
+        isFavorite(fileId2)
                 .isEqualTo(Boolean.TRUE);
 
-        getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_FAVORITES + "/{id}", folderAndFile2.file.id())
+        deleteFavorite(fileId2)
                 .exchange()
                 .expectStatus().isOk();
 
-        getWebTestClient().method(HttpMethod.GET).uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_FAVORITES + "/{id}/is-favorite", folderAndFile2.file.id())
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody(Boolean.class)
+        isFavorite(fileId2)
                 .isEqualTo(Boolean.FALSE);
 
         HttpGraphQlClient httpGraphQlClient = getGraphQlHttpClient();
 
 
+        checkFavoritesListAndCount(httpGraphQlClient, folderAndFile1);
+
+    }
+
+    protected void checkFavoritesListAndCount(HttpGraphQlClient httpGraphQlClient, RestoreHandler folderAndFile1) {
         Mono<ClientGraphQlResponse> countGraphQl;
         FavoriteRequest request;
+        var graphQlRequest = """
+                query countFavorites($request:FavoriteRequest) {
+                    countFavorites(request:$request)
+                }
+                """.trim();
+
+        request = new FavoriteRequest(null, null, null, null, null, null, null, null, null, null, null
+                , null, null);
+
+        countGraphQl = httpGraphQlClient
+                .document(graphQlRequest)
+                .variable("request",request)
+                .execute();
 
 
+        StepVerifier.create(countGraphQl)
+                .expectNextMatches(doc -> checkCountFavoritesIsOK(doc, 1L))
+                .expectComplete()
+                .verify();
 
         request = new FavoriteRequest(null, null, null, null, null, null, null, null, null, null, null
                 , null, new PageCriteria(null, null, 1, 100));
-        var graphQlRequest = """
+
+        graphQlRequest = """
                 query listFavorites($request:FavoriteRequest!) {
                     listFavorites(request:$request) {
                       id
@@ -148,24 +152,8 @@ public class FavoritesIT extends TestContainersBaseConfig {
                 .expectNextMatches(doc -> checkListFoldersReturnedSize(doc, 1))
                 .expectComplete()
                 .verify();
-        graphQlRequest = """
-                query countFavorites($request:FavoriteRequest) {
-                    countFavorites(request:$request)
-                }
-                """.trim();
-        request = new FavoriteRequest(null, null, null, null, null, null, null, null, null, null, null
-                , null, null);
-
-        countGraphQl = httpGraphQlClient
-                .document(graphQlRequest)
-                .variable("request",request)
-                .execute();
 
 
-        StepVerifier.create(countGraphQl)
-                .expectNextMatches(doc -> checkCountFavoritesIsOK(doc, 1L))
-                .expectComplete()
-                .verify();
 
         ListFolderRequest listFolderRequest = new ListFolderRequest(null, null, null, null, null, null, null, null, null, null, null, null
                 , null, false, true, null);
@@ -224,7 +212,7 @@ public class FavoritesIT extends TestContainersBaseConfig {
                 .expectComplete()
                 .verify();
 
-        listFolderRequest = new ListFolderRequest(folderAndFile1.parent.id(), null, null, null, null, null, null, null, null, null, null, null
+        listFolderRequest = new ListFolderRequest(folderAndFile1.parent().id(), null, null, null, null, null, null, null, null, null, null, null
                 , null, true, true, null);
         graphQlRequest = """
                 query count($request:ListFolderRequest) {
@@ -242,41 +230,34 @@ public class FavoritesIT extends TestContainersBaseConfig {
                 .expectNextMatches(doc -> checkCountIsOK(doc, 1L))
                 .expectComplete()
                 .verify();
+    }
 
+    protected WebTestClient.RequestBodySpec deleteFavorite(UUID fileId2) {
+        return getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_FAVORITES + "/{id}", fileId2);
+    }
+
+    protected WebTestClient.RequestBodySpec toggleFavorite(UUID fileId) {
+        return getWebTestClient().method(HttpMethod.PUT).uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_FAVORITES + "/{id}/toggle", fileId);
+    }
+
+    protected WebTestClient.BodySpec<Boolean, ?> isFavorite(UUID fileId) {
+        return getWebTestClient().method(HttpMethod.GET).uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_FAVORITES + "/{id}/is-favorite", fileId)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(Boolean.class);
+    }
+
+    protected WebTestClient.RequestBodySpec createFavorite(UUID folderAndFile1) {
+        return getWebTestClient().method(HttpMethod.POST).uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_FAVORITES + "/{id}", folderAndFile1);
     }
 
     protected boolean checkCountFavoritesIsOK(ClientGraphQlResponse doc, Long expectedCount) {
         return Objects.equals(((Integer) ((Map<String, Object>) doc.getData()).get("countFavorites")).longValue(), expectedCount);
     }
 
-    private boolean checkListFoldersReturnedSize(ClientGraphQlResponse doc, int expectedSize) {
+    protected boolean checkListFoldersReturnedSize(ClientGraphQlResponse doc, int expectedSize) {
         return ((List<Map<String, Object>>) ((Map<String, Map<String, Object>>) doc.getData()).get("listFavorites")).size() == expectedSize;
     }
-
-
-
-    record RestoreHandler(FolderResponse parent, UploadResponse file) {}
-
-
-    private RestoreHandler createFolderAndFile(String name, UUID parentId) {
-        CreateFolderRequest rootFolder1 = new CreateFolderRequest(name, parentId);
-
-
-        FolderResponse rootFolder1Response = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/folders")
-                .body(BodyInserters.fromValue(rootFolder1))
-                .exchange()
-                .expectStatus().isCreated()
-                .expectBody(FolderResponse.class)
-                .returnResult().getResponseBody();
-
-        MultipartBodyBuilder builder = newFileBuilder();
-        builder.part("parentFolderId", rootFolder1Response.id().toString());
-
-        UploadResponse file1_1 = uploadDocument(builder);
-
-        return new RestoreHandler(rootFolder1Response, file1_1);
-    }
-
 
 
 }

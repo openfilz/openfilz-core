@@ -78,31 +78,4 @@ public class StatisticsIT extends TestContainersBaseConfig {
     }
 
 
-
-
-
-    record RestoreHandler(FolderResponse parent, UploadResponse file) {}
-
-
-    private RestoreHandler createFolderAndFile(String name, UUID parentId) {
-        CreateFolderRequest rootFolder1 = new CreateFolderRequest(name, parentId);
-
-
-        FolderResponse rootFolder1Response = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/folders")
-                .body(BodyInserters.fromValue(rootFolder1))
-                .exchange()
-                .expectStatus().isCreated()
-                .expectBody(FolderResponse.class)
-                .returnResult().getResponseBody();
-
-        MultipartBodyBuilder builder = newFileBuilder();
-        builder.part("parentFolderId", rootFolder1Response.id().toString());
-
-        UploadResponse file1_1 = uploadDocument(builder);
-
-        return new RestoreHandler(rootFolder1Response, file1_1);
-    }
-
-
-
 }

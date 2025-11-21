@@ -13,8 +13,6 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.graphql.client.ClientGraphQlResponse;
 import org.springframework.graphql.client.GraphQlTransportException;
-import org.springframework.graphql.client.HttpGraphQlClient;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
@@ -70,10 +68,6 @@ public class SecurityIT extends TestContainersKeyCloakConfig {
         contributorAccessToken = getAccessToken("contributor-user");
         cleanerAccessToken = getAccessToken("cleaner-user");
         adminAccessToken = getAccessToken("admin-user");
-    }
-
-    protected HttpGraphQlClient newGraphQlClient(String authToken) {
-        return newGraphQlClient().mutate().header(HttpHeaders.AUTHORIZATION, "Bearer " + authToken).build();
     }
 
     @Test
@@ -650,24 +644,11 @@ public class SecurityIT extends TestContainersKeyCloakConfig {
         return uploadNewFile(null, contributorAccessToken);
     }
 
-    protected UploadResponse uploadNewFile(UUID parentFolderId, String accessToken) {
-        MultipartBodyBuilder builder = newFileBuilder();
-        if(parentFolderId != null) {
-            builder.part("parentFolderId", parentFolderId.toString());
-        }
-        return newFile(builder, accessToken);
-    }
-
     protected UploadResponse newFile(MultipartBodyBuilder builder) {
         return newFile(builder, contributorAccessToken);
     }
 
-    protected UploadResponse newFile(MultipartBodyBuilder builder, String accessToken) {
-        return getUploadDocumentExchange(builder,  accessToken)
-                .expectStatus().isCreated()
-                .expectBody(UploadResponse.class)
-                .returnResult().getResponseBody();
-    }
+
 
 
 }

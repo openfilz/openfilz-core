@@ -3,6 +3,7 @@ package org.openfilz.dms.repository.graphql;
 import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.dto.request.ListFolderRequest;
 import org.openfilz.dms.utils.SqlUtils;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Component;
 
@@ -11,6 +12,7 @@ import static org.openfilz.dms.utils.SqlUtils.*;
 
 @RequiredArgsConstructor
 @Component("defaultListFolderCriteria")
+@ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
 public class ListFolderCriteria {
 
     public static final String NON_FAVORITE_CLAUSE = "uf.doc_id IS NULL ";

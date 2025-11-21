@@ -2,7 +2,9 @@ package org.openfilz.dms.e2e;
 
 import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.config.RestApiVersion;
+import org.openfilz.dms.dto.request.CreateFolderRequest;
 import org.openfilz.dms.dto.request.MultipleUploadFileParameter;
+import org.openfilz.dms.dto.response.FolderResponse;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Import;
@@ -23,10 +25,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 
 @RequiredArgsConstructor
 @Import(GraphQlTestConfig.class)
@@ -103,7 +102,11 @@ public abstract class TestContainersBaseConfig {
     }
 
     protected WebTestClient.RequestHeadersSpec<?> addAuthorization( WebTestClient.RequestHeadersSpec<?> header, String accessToken) {
-        return header.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken);
+        return accessToken != null ? header.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken) : header;
+    }
+
+    protected WebTestClient.RequestBodySpec addAuthorizationHeader( WebTestClient.RequestBodySpec request, String accessToken) {
+        return accessToken != null ? request.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken) : request;
     }
 
     protected WebTestClient.ResponseSpec getUploadDocumentExchange(MultipartBodyBuilder builder) {
@@ -188,5 +191,49 @@ public abstract class TestContainersBaseConfig {
 
     protected boolean checkCountIsGreaterThanZero(ClientGraphQlResponse doc) {
         return (Integer) ((Map<String, Object>) doc.getData()).get("count") > 0;
+    }
+
+    protected RestoreHandler createFolderAndFile(String accessToken, String name, UUID parentId) {
+        CreateFolderRequest rootFolder1 = new CreateFolderRequest(name, parentId);
+
+        WebTestClient.RequestBodySpec request = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/folders");
+
+        if(accessToken != null) {
+            addAuthorization(request, accessToken);
+        }
+
+        FolderResponse rootFolder1Response = request
+                .body(BodyInserters.fromValue(rootFolder1))
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(FolderResponse.class)
+                .returnResult().getResponseBody();
+
+        UploadResponse file1_1 = uploadNewFile(rootFolder1Response.id(), accessToken);
+
+        return new RestoreHandler(rootFolder1Response, file1_1);
+    }
+
+    protected RestoreHandler createFolderAndFile(String name, UUID parentId) {
+        return createFolderAndFile(null, name, parentId);
+    }
+
+    protected UploadResponse newFile(MultipartBodyBuilder builder, String accessToken) {
+        return getUploadDocumentExchange(builder,  accessToken)
+                .expectStatus().isCreated()
+                .expectBody(UploadResponse.class)
+                .returnResult().getResponseBody();
+    }
+
+    protected UploadResponse uploadNewFile(UUID parentFolderId, String accessToken) {
+        MultipartBodyBuilder builder = newFileBuilder();
+        if(parentFolderId != null) {
+            builder.part("parentFolderId", parentFolderId.toString());
+        }
+        return newFile(builder, accessToken);
+    }
+
+    protected HttpGraphQlClient newGraphQlClient(String authToken) {
+        return newGraphQlClient().mutate().header(HttpHeaders.AUTHORIZATION, "Bearer " + authToken).build();
     }
 }
