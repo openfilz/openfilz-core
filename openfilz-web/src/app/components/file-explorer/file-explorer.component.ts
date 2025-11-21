@@ -10,6 +10,7 @@ import { MatIcon } from "@angular/material/icon";
 import { FileGridComponent } from '../file-grid/file-grid.component';
 import { FileListComponent } from '../file-list/file-list.component';
 import { ToolbarComponent } from '../toolbar/toolbar.component';
+import { MetadataPanelComponent } from '../metadata-panel/metadata-panel.component';
 import { CreateFolderDialogComponent } from '../../dialogs/create-folder-dialog/create-folder-dialog.component';
 import { RenameDialogComponent, RenameDialogData } from '../../dialogs/rename-dialog/rename-dialog.component';
 import { FolderTreeDialogComponent } from '../../dialogs/folder-tree-dialog/folder-tree-dialog.component';
@@ -91,7 +92,8 @@ import {AppConfig} from '../../config/app.config';
                       (move)="onMoveItem($event)"
                       (copy)="onCopyItem($event)"
                       (delete)="onDeleteItem($event)"
-                      (toggleFavorite)="onToggleFavorite($event)">
+                      (toggleFavorite)="onToggleFavorite($event)"
+                      (viewProperties)="onViewProperties($event)">
               </app-file-grid>
           }
           @if(viewMode === 'list' && items.length > 0) {
@@ -107,7 +109,8 @@ import {AppConfig} from '../../config/app.config';
                       (move)="onMoveItem($event)"
                       (copy)="onCopyItem($event)"
                       (delete)="onDeleteItem($event)"
-                      (toggleFavorite)="onToggleFavorite($event)">
+                      (toggleFavorite)="onToggleFavorite($event)"
+                      (viewProperties)="onViewProperties($event)">
               </app-file-list>
           }
       }
@@ -122,6 +125,14 @@ import {AppConfig} from '../../config/app.config';
       @if (isDownloading) {
           <app-download-progress></app-download-progress>
       }
+
+      <!-- Metadata Panel -->
+      <app-metadata-panel
+        [documentId]="selectedDocumentForMetadata"
+        [isOpen]="metadataPanelOpen"
+        (closePanel)="closeMetadataPanel()"
+        (metadataSaved)="onMetadataSaved()">
+      </app-metadata-panel>
     </div>
   `,
   styleUrls: ['./file-explorer.component.css'],
@@ -134,6 +145,7 @@ import {AppConfig} from '../../config/app.config';
     FileGridComponent,
     FileListComponent,
     ToolbarComponent,
+    MetadataPanelComponent,
     MatIcon,
     DragDropDirective,
     DownloadProgressComponent
@@ -142,6 +154,8 @@ import {AppConfig} from '../../config/app.config';
 export class FileExplorerComponent extends FileOperationsComponent implements OnInit, OnDestroy {
   showUploadZone = false;
   fileOver: boolean = false;
+  metadataPanelOpen: boolean = false;
+  selectedDocumentForMetadata?: string;
 
   breadcrumbTrail: FileItem[] = []; // Track full path
   currentFolder?: FileItem;
@@ -761,15 +775,84 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
   }
 
   private handleFileUpload(files: FileList) {
-    this.documentApi.uploadMultipleDocuments(Array.from(files), this.currentFolder?.id).subscribe({
-      next: (item) => {},
+    const fileArray = Array.from(files);
+    const isSingleFile = fileArray.length === 1;
+    const singleFileName = isSingleFile ? fileArray[0].name : undefined;
+
+    // Show uploading notification
+    const uploadMessage = isSingleFile
+      ? `Uploading ${singleFileName}...`
+      : `Uploading ${fileArray.length} files...`;
+    this.snackBar.open(uploadMessage, undefined, { duration: undefined });
+
+    // Upload files directly without dialog
+    this.documentApi.uploadMultipleDocuments(
+      fileArray,
+      this.currentFolder?.id,
+      false // allowDuplicates = false by default
+    ).subscribe({
+      next: (response) => {
+        // Response contains info about uploaded files
+      },
       error: (error) => {
-        this.snackBar.open(`Failed to upload files`, 'Close', { duration: 3000 });
+        this.snackBar.dismiss();
+        const errorMessage = isSingleFile
+          ? `Failed to upload ${singleFileName}`
+          : `Failed to upload ${fileArray.length} files`;
+        this.snackBar.open(errorMessage, 'Close', { duration: 5000 });
       },
       complete: () => {
-        this.snackBar.open(`Files uploaded successfully`, 'Close', { duration: 3000 });
-        this.loadFolder(this.currentFolder);
+        this.snackBar.dismiss();
+
+        const successMessage = isSingleFile
+          ? `${singleFileName} uploaded successfully`
+          : `${fileArray.length} files uploaded successfully`;
+        this.snackBar.open(successMessage, 'Close', { duration: 3000 });
+
+        // Reload folder and open metadata panel for single file upload
+        if (isSingleFile && singleFileName) {
+          // Reload the folder first
+          this.documentApi.listFolder(this.currentFolder?.id, this.pageIndex + 1, this.pageSize).subscribe({
+            next: (response) => {
+              this.populateFolderContents(response);
+
+              // Find the uploaded file by name
+              const uploadedItem = this.items.find(item => item.name === singleFileName);
+              if (uploadedItem) {
+                // Open metadata panel after a short delay for smooth UX
+                setTimeout(() => {
+                  this.openMetadataPanel(uploadedItem.id);
+                }, 300);
+              }
+            },
+            error: () => {
+              this.loadFolder(this.currentFolder);
+            }
+          });
+        } else {
+          // For multiple files, just reload the folder
+          this.loadFolder(this.currentFolder);
+        }
       }
     });
+  }
+
+  openMetadataPanel(documentId: string) {
+    this.selectedDocumentForMetadata = documentId;
+    this.metadataPanelOpen = true;
+  }
+
+  closeMetadataPanel() {
+    this.metadataPanelOpen = false;
+    this.selectedDocumentForMetadata = undefined;
+  }
+
+  onMetadataSaved() {
+    // Optionally reload the folder to reflect metadata changes
+    this.loadFolder(this.currentFolder);
+  }
+
+  onViewProperties(item: FileItem) {
+    this.openMetadataPanel(item.id);
   }
 }

@@ -197,6 +197,28 @@
   color: #f87171;
 }
 
+/* Actions cell styling */
+.actions-cell {
+  text-align: center;
+  width: 60px;
+}
+
+.actions-cell button {
+  transition: all 200ms ease;
+}
+
+.actions-cell button:hover {
+  background-color: rgba(99, 102, 241, 0.1);
+}
+
+.actions-cell button mat-icon {
+  color: var(--text-secondary);
+}
+
+.actions-cell button:hover mat-icon {
+  color: var(--primary);
+}
+
 th.mat-header-cell {
   font-weight: 600;
   color: var(--text-secondary);

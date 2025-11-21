@@ -341,6 +341,41 @@
   color: #f87171;
 }
 
+.file-actions {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  opacity: 0;
+  transition: opacity 200ms ease;
+  z-index: 10;
+}
+
+.file-item:hover .file-actions {
+  opacity: 1;
+}
+
+.file-actions button {
+  width: 32px;
+  height: 32px;
+  background-color: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.file-actions button:hover {
+  background-color: var(--primary);
+}
+
+.file-actions button:hover mat-icon {
+  color: white;
+}
+
+.file-actions button mat-icon {
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+  color: var(--text-secondary);
+}
+
 mat-paginator {
     flex-shrink: 0;
     background: var(--bg-primary) !important;

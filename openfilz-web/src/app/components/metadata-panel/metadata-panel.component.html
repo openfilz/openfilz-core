@@ -1,0 +1,231 @@
+<div class="metadata-panel-overlay"
+     *ngIf="isOpen"
+     (click)="onClose()"
+     [@slideInOut]="animationState">
+</div>
+
+<div class="metadata-panel"
+     *ngIf="isOpen"
+     [@slideInOut]="animationState"
+     (click)="$event.stopPropagation()">
+
+  <!-- Panel Header -->
+  <div class="panel-header">
+    <div class="header-content">
+      <mat-icon class="header-icon">info</mat-icon>
+      <h2>Properties</h2>
+    </div>
+    <button mat-icon-button
+            (click)="onClose()"
+            matTooltip="Close panel"
+            class="close-button">
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+
+  <!-- Panel Body -->
+  <div class="panel-body">
+    @if(loading) {
+      <div class="loading-container">
+        <mat-spinner diameter="50"></mat-spinner>
+        <p>Loading document information...</p>
+      </div>
+    }
+
+    @if(error && !loading) {
+      <div class="error-container">
+        <mat-icon>error</mat-icon>
+        <p>{{ error }}</p>
+        <button mat-raised-button color="primary" (click)="loadDocumentInfo()">
+          Retry
+        </button>
+      </div>
+    }
+
+    @if(documentInfo && !loading) {
+      <mat-tab-group
+        [(selectedIndex)]="selectedTabIndex"
+        (selectedIndexChange)="onTabChange($event)"
+        class="panel-tabs">
+
+        <!-- General Tab -->
+        <mat-tab>
+          <ng-template mat-tab-label>
+            <mat-icon>info</mat-icon>
+            <span>General</span>
+          </ng-template>
+
+          <div class="tab-content">
+            <div class="info-content">
+              <div class="info-row">
+                <span class="info-label">Name:</span>
+                <span class="info-value">{{ documentInfo.name }}</span>
+              </div>
+              <mat-divider></mat-divider>
+
+              <div class="info-row">
+                <span class="info-label">Type:</span>
+                <span class="info-value">
+                  <span class="type-badge" [class.type-folder]="documentInfo.type === 'FOLDER'">
+                    {{ getFriendlyTypeName() }}
+                  </span>
+                </span>
+              </div>
+              <mat-divider></mat-divider>
+
+              @if(documentInfo.size) {
+                <div class="info-row">
+                  <span class="info-label">Size:</span>
+                  <span class="info-value">{{ formatFileSize(documentInfo.size) }}</span>
+                </div>
+                <mat-divider></mat-divider>
+              }
+              @if(sha256Hash) {
+                <div class="info-row sha256-row">
+                  <span class="info-label">SHA256:</span>
+                  <span class="info-value sha256-value">
+                    <code class="sha256-hash" matTooltip="Click to copy">{{ sha256Hash }}</code>
+                    <button mat-icon-button
+                            class="copy-button"
+                            (click)="copySha256ToClipboard()"
+                            matTooltip="Copy to clipboard">
+                      <mat-icon>content_copy</mat-icon>
+                    </button>
+                  </span>
+                </div>
+                <mat-divider></mat-divider>
+              }
+            </div>
+          </div>
+        </mat-tab>
+
+        <!-- Metadata Tab -->
+        <mat-tab>
+          <ng-template mat-tab-label>
+            <mat-icon>label</mat-icon>
+            <span>Metadata</span>
+          </ng-template>
+
+          <div class="tab-content">
+            @if(saving) {
+              <div class="saving-indicator">
+                <mat-spinner diameter="20"></mat-spinner>
+                <span>Saving changes...</span>
+              </div>
+            }
+
+            <div class="metadata-content">
+              <app-metadata-editor
+                [metadata]="currentMetadata"
+                [readonly]="!editMode"
+                [showTitle]="false"
+                (metadataChange)="onMetadataChange($event)"
+                (valid)="onValidChange($event)">
+              </app-metadata-editor>
+            </div>
+
+            @if(editMode && !metadataValid) {
+              <div class="validation-warning">
+                <mat-icon>warning</mat-icon>
+                Please fix metadata errors before saving
+              </div>
+            }
+
+            @if(editMode && hasChanges) {
+              <div class="changes-indicator">
+                <mat-icon>info</mat-icon>
+                You have unsaved changes
+              </div>
+            }
+          </div>
+        </mat-tab>
+
+        <!-- Audit Tab -->
+        <mat-tab>
+          <ng-template mat-tab-label>
+            <mat-icon>history</mat-icon>
+            <span>Audit</span>
+          </ng-template>
+
+          <div class="tab-content audit-tab">
+            @if(auditLoading) {
+              <div class="loading-container">
+                <mat-spinner diameter="40"></mat-spinner>
+                <p>Loading audit history...</p>
+              </div>
+            }
+
+            @if(auditError && !auditLoading) {
+              <div class="error-container">
+                <mat-icon>error</mat-icon>
+                <p>{{ auditError }}</p>
+                <button mat-raised-button color="primary" (click)="loadAuditTrail()">
+                  Retry
+                </button>
+              </div>
+            }
+
+            @if(!auditLoading && !auditError) {
+              @if(auditLogs.length === 0) {
+                <div class="empty-state">
+                  <mat-icon>history</mat-icon>
+                  <p>No audit history available</p>
+                </div>
+              } @else {
+                <div class="audit-timeline">
+                  @for(log of auditLogs; track log.id) {
+                    <div class="audit-entry" [class]="'audit-' + getAuditActionColor(log.action)">
+                      <div class="audit-icon">
+                        <mat-icon>{{ getAuditActionIcon(log.action) }}</mat-icon>
+                      </div>
+                      <div class="audit-content">
+                        <div class="audit-header">
+                          <span class="audit-action">{{ getAuditActionLabel(log.action) }}</span>
+                          <span class="audit-time">{{ formatAuditDate(log.timestamp) }}</span>
+                        </div>
+                        <div class="audit-user">
+                          <mat-icon>person</mat-icon>
+                          <span>{{ log.username || 'Unknown user' }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
+            }
+          </div>
+        </mat-tab>
+
+      </mat-tab-group>
+    }
+  </div>
+
+  <!-- Panel Footer -->
+  <div class="panel-footer" *ngIf="documentInfo">
+    @if(!editMode) {
+      <button mat-stroked-button class="cancel-btn" (click)="onClose()">
+        <mat-icon>close</mat-icon>
+        <span>Close</span>
+      </button>
+      <button mat-raised-button class="primary-btn" (click)="toggleEditMode()">
+        <mat-icon>edit</mat-icon>
+        <span>Edit Metadata</span>
+      </button>
+    } @else {
+      <button mat-stroked-button class="cancel-btn" (click)="toggleEditMode()" [disabled]="saving">
+        <mat-icon>close</mat-icon>
+        <span>Cancel</span>
+      </button>
+      <button mat-raised-button class="primary-btn" (click)="saveMetadata()" [disabled]="!canSave">
+        <ng-container *ngIf="saving; else saveReady">
+          <mat-spinner diameter="18"></mat-spinner>
+          <span>Saving...</span>
+        </ng-container>
+        <ng-template #saveReady>
+          <mat-icon>save</mat-icon>
+          <span>Save</span>
+        </ng-template>
+      </button>
+    }
+  </div>
+</div>

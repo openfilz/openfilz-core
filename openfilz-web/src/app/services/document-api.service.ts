@@ -3,6 +3,7 @@ import {HttpClient, HttpHeaders, HttpParams} from '@angular/common/http';
 import {map, Observable} from 'rxjs';
 import {Apollo, gql} from 'apollo-angular';
 import {
+    AuditLog,
     CopyRequest,
     CreateFolderRequest,
     DashboardStatistics,
@@ -351,7 +352,7 @@ export class DocumentApiService {
     });
   }
 
-  uploadMultipleDocuments(files: File[], parentFolderId?: string, allowDuplicateFileNames?: boolean): Observable<UploadResponse> {
+  uploadMultipleDocuments(files: File[], parentFolderId?: string, allowDuplicateFileNames?: boolean, metadata?: { [key: string]: any }): Observable<UploadResponse> {
     const formData = new FormData();
     const parametersByFilename: MultipleUploadFileParameter[] = [];
     files.forEach(file => {
@@ -359,11 +360,12 @@ export class DocumentApiService {
       parametersByFilename.push({
         filename: file.name,
         fileAttributes: {
-          parentFolderId: parentFolderId
+          parentFolderId: parentFolderId,
+          metadata: metadata
         }
       });
     });
-    if (parentFolderId) {
+    if (parentFolderId || metadata) {
       formData.append('parametersByFilename', new Blob([JSON.stringify(parametersByFilename)], {type: 'application/json'}));
     }
 
@@ -381,6 +383,12 @@ export class DocumentApiService {
 
   searchDocumentIdsByMetadata(request: SearchByMetadataRequest): Observable<string[]> {
     return this.http.post<string[]>(`${this.baseUrl}/documents/search/ids-by-metadata`, request, {
+      headers: this.getHeaders()
+    });
+  }
+
+  updateDocumentMetadata(documentId: string, metadata: { [key: string]: any }): Observable<ElementInfo> {
+    return this.http.patch<ElementInfo>(`${this.baseUrl}/documents/${documentId}/metadata`, { metadataToUpdate: metadata }, {
       headers: this.getHeaders()
     });
   }
@@ -489,5 +497,14 @@ export class DocumentApiService {
     }).valueChanges.pipe(
       map(result => result.data.searchDocuments)
     );
+  }
+
+  // Audit operations
+  getAuditTrail(documentId: string, sortOrder: 'ASC' | 'DESC' = 'DESC'): Observable<AuditLog[]> {
+    let params = new HttpParams().set('sort', sortOrder);
+    return this.http.get<AuditLog[]>(`${this.baseUrl}/audit/${documentId}`, {
+      headers: this.getHeaders(),
+      params
+    });
   }
 }
