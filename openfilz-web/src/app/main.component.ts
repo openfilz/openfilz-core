@@ -97,11 +97,6 @@ export class MainComponent implements OnInit {
     }
   }
 
-  onSearch(query: string) {
-    if (query.trim()) {
-
-    }
-  }
 
   onSidebarCollapsedChange(collapsed: boolean) {
     this.isSidebarCollapsed = collapsed;

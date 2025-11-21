@@ -7,6 +7,7 @@ import org.openfilz.dms.repository.DocumentRepository;
 import org.openfilz.dms.repository.SqlQueryUtils;
 import org.openfilz.dms.utils.SqlUtils;
 import org.openfilz.dms.utils.UserInfoService;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Service;
@@ -19,7 +20,10 @@ import static org.openfilz.dms.entity.SqlTableMapping.RECYCLE_BIN;
 
 @Service
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "openfilz.soft-delete.active", havingValue = "true")
+@ConditionalOnProperties(value = {
+        @ConditionalOnProperty(name = "openfilz.soft-delete.active", havingValue = "true"),
+        @ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
+})
 public class DocumentSoftDeleteDAO implements UserInfoService, SqlQueryUtils {
 
     public static final String SOFT_DELETE_DOC = "UPDATE documents SET active = false where id = :id";
@@ -149,27 +153,25 @@ public class DocumentSoftDeleteDAO implements UserInfoService, SqlQueryUtils {
                 .all();
     }
 
-   
+
+
     public Mono<Void> restore(UUID documentId) {
         return databaseClient.sql("select parent_id from documents where id = :docId")
                 .bind("docId", documentId)
-                .map(mapId())
+                .map(mapIdOptional())
                 .one()
                 .flatMap(parentId -> {
                     StringBuilder sql = new StringBuilder("UPDATE documents SET active = true");
-                    if(parentId != null) {
-                        return databaseClient.sql("select active from documents where id = :id")
-                                .bind("id", parentId)
-                                .map(row -> row.get("active", Boolean.class))
-                                .one()
-                                .flatMap(parentActive -> {
-                                    if(!parentActive) {
-                                        sql.append(", parent_id = null");
-                                    }
-                                    return restoreItem(documentId, sql);
-                                });
-                    }
-                    return restoreItem(documentId, sql);
+                    return parentId.map(uuid -> databaseClient.sql("select active from documents where id = :id")
+                            .bind("id", uuid)
+                            .map(row -> row.get("active", Boolean.class))
+                            .one()
+                            .flatMap(parentActive -> {
+                                if (!parentActive) {
+                                    sql.append(", parent_id = null");
+                                }
+                                return restoreItem(documentId, sql);
+                            })).orElseGet(() -> restoreItem(documentId, sql));
                 });
 
     }
@@ -218,7 +220,7 @@ public class DocumentSoftDeleteDAO implements UserInfoService, SqlQueryUtils {
                 .defaultIfEmpty(0L);
     }
 
-   
+
     public Mono<Void> updateStatistics() {
         return databaseClient.sql("VACUUM ANALYZE documents").then();
     }

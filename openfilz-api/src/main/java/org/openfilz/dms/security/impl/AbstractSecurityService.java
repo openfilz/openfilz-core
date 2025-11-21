@@ -1,10 +1,10 @@
-package org.openfilz.dms.service.impl;
+package org.openfilz.dms.security.impl;
 
 import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.enums.Role;
 import org.openfilz.dms.enums.RoleTokenLookup;
-import org.openfilz.dms.service.SecurityService;
+import org.openfilz.dms.security.SecurityService;
 import org.openfilz.dms.utils.FileConstants;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
@@ -123,10 +123,10 @@ public abstract class AbstractSecurityService implements SecurityService {
 
     protected boolean isInsertOrUpdateAccess(HttpMethod method, String path) {
         return ((method.equals(HttpMethod.PATCH) || method.equals(HttpMethod.PUT))
-                && pathStartsWith(path, "/files", "/folders", "/documents")) ||
+                && pathStartsWith(path, RestApiVersion.ENDPOINT_FILES, RestApiVersion.ENDPOINT_FOLDERS, RestApiVersion.ENDPOINT_DOCUMENTS)) ||
                 (method.equals(HttpMethod.POST) && (
-                        pathStartsWith(path, "/files", "/documents/upload", "/documents/upload-multiple") ||
-                                path.equals("/folders") ||
+                        pathStartsWith(path, RestApiVersion.ENDPOINT_FILES, "/documents/upload", "/documents/upload-multiple", RestApiVersion.ENDPOINT_RECYCLE_BIN) ||
+                                path.equals(RestApiVersion.ENDPOINT_FOLDERS) ||
                                 path.equals("/folders/move") ||
                                 path.equals("/folders/copy")));
     }
@@ -150,9 +150,12 @@ public abstract class AbstractSecurityService implements SecurityService {
                 ))
                 ||
                 (method.equals(HttpMethod.POST) && (
-                        pathStartsWith(path, "/documents/download-multiple", "/documents/search/ids-by-metadata", "/folders/list")
+                        pathStartsWith(path, "/documents/download-multiple", "/documents/search/ids-by-metadata", "/folders/list", RestApiVersion.ENDPOINT_FAVORITES)
                                 || (path.startsWith("/documents/") && path.endsWith("/search/metadata")))
-                );
+                )
+                ||
+                (method.equals(HttpMethod.PUT) && pathStartsWith(path, RestApiVersion.ENDPOINT_FAVORITES))
+                ;
     }
 
     protected boolean pathStartsWith(String path, String... contextPaths) {

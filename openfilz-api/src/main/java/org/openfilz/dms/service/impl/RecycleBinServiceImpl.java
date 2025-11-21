@@ -101,33 +101,6 @@ public class RecycleBinServiceImpl implements RecycleBinService, UserInfoService
         }
     }
 
-    /*private Mono<Void> deleteFolderRecursive(UUID folderId) {
-        return documentDAO.getFolderToDelete(folderId)
-                .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, folderId)))
-                .flatMap(folder -> {
-                    // 1. Delete child files
-                    Mono<Void> deleteChildFiles = getChildrenDocumentsToDelete(folderId, FILE)
-                            .flatMap(file -> storageService.deleteFile(file.getStoragePath())
-                                    .then(documentDAO.delete(file))
-                                    .then(auditService.logAction(DELETE_FILE_CHILD, FILE, file.getId(), new DeleteAudit(folderId)))
-                                    .as(tx::transactional)
-                                    .doOnSuccess(_ -> metadataPostProcessor.deleteDocument(file.getId()))
-                            ).then();
-
-                    // 2. Recursively delete child folders
-                    Mono<Void> deleteChildFolders = getChildrenDocumentsToDelete(folderId, FOLDER)
-                            .flatMap(childFolder -> deleteFolderRecursive(childFolder.getId()))
-                            .then();
-
-                    // 3. Delete the folder itself from DB (and storage if it had a physical representation)
-                    return Mono.when(deleteChildFiles, deleteChildFolders)
-                            .then(documentDAO.delete(folder))
-                            .then(auditService.logAction(AuditAction.DELETE_FOLDER, FOLDER, folderId))
-                            .as(tx::transactional)
-                            .doOnSuccess(_ -> metadataPostProcessor.deleteDocument(folder.getId()));
-                });
-    }*/
-
     @Override
     public Mono<Void> emptyRecycleBin() {
         return documentSoftDeleteDAO.findDeletedDocuments()

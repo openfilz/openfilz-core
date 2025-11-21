@@ -20,7 +20,6 @@ import { DocumentApiService } from "../../services/document-api.service";
 })
 export class HeaderComponent implements OnInit, OnDestroy {
   @Input() hasSelection = false;
-  @Output() search = new EventEmitter<string>();
 
   searchQuery: string = '';
   suggestions: Suggestion[] = [];
@@ -127,9 +126,11 @@ export class HeaderComponent implements OnInit, OnDestroy {
   }
 
   protected onOpen(suggestion: Suggestion, event: MouseEvent) {
-    event.stopPropagation();
 
-    console.log(`Opening document with ID: ${suggestion.id}`);
+    //console.log(`Opening document with ID: ${suggestion.id}`);
+    if(suggestion.id != null && suggestion.ext == null) {
+        this.router.navigate(['/my-folder'], { queryParams: { folderId: suggestion.id } });
+    }
     this.suggestions = [];
   }
 }

@@ -26,12 +26,13 @@ public class ListFolderCountDataFetcher  extends AbstractListDataFetcher<Long> {
     public ListFolderCountDataFetcher(DatabaseClient databaseClient, DocumentMapper mapper, ObjectMapper objectMapper, SqlUtils sqlUtils, @Qualifier("defaultListFolderCriteria") ListFolderCriteria criteria) {
         super(databaseClient, mapper, objectMapper, sqlUtils);
         this.criteria = criteria;
+        this.prefix = "d.";
     }
 
 
     @Override
     protected void initFromWhereClause() {
-        fromClause = FROM_DOCUMENTS;
+        fromClause = FROM_DOCUMENTS + " d";
     }
 
 
@@ -40,10 +41,7 @@ public class ListFolderCountDataFetcher  extends AbstractListDataFetcher<Long> {
     public Mono<Long> get(ListFolderRequest filter, DataFetchingEnvironment environment) {
         DatabaseClient.GenericExecuteSpec sqlQuery;
         StringBuilder query = new StringBuilder(SqlUtils.SELECT).append(COUNT).append(fromClause);
-        String newPrefix = prefix;
         if(filter != null && filter.favorite() != null) {
-            query.append(" d");
-            newPrefix = "d.";
             appendRemainingFromClause(false, filter.favorite(), query);
         }
         if(filter == null) {
@@ -53,7 +51,7 @@ public class ListFolderCountDataFetcher  extends AbstractListDataFetcher<Long> {
                 throw new IllegalArgumentException("Paging information must not be provided");
             }
             criteria.checkFilter(filter);
-            applyFilter(filter, newPrefix, query);
+            applyFilter(filter, prefix, query);
             sqlQuery = prepareQuery(environment, filter, query);
         }
 

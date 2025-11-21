@@ -1,7 +1,7 @@
-import { Component, ElementRef, OnInit, ViewChild } from '@angular/core';
+import {Component, ElementRef, OnDestroy, OnInit, ViewChild} from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute, Router } from '@angular/router';
-import { take } from 'rxjs';
+import {ActivatedRoute, NavigationEnd, Router} from '@angular/router';
+import {filter, Subscription, take} from 'rxjs';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -139,7 +139,7 @@ import {AppConfig} from '../../config/app.config';
     DownloadProgressComponent
   ],
 })
-export class FileExplorerComponent extends FileOperationsComponent implements OnInit {
+export class FileExplorerComponent extends FileOperationsComponent implements OnInit, OnDestroy {
   showUploadZone = false;
   fileOver: boolean = false;
 
@@ -149,6 +149,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
   // Click delay handling
   private clickTimeout: any = null;
   private readonly CLICK_DELAY = 250; // milliseconds
+
 
   @ViewChild('fileInput') fileInput!: ElementRef;
 
@@ -164,21 +165,44 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
     super(router, documentApi, dialog, snackBar);
   }
 
+    private routerEventsSubscription!: Subscription;
+
+
+    // A new method to handle the logic
+    private handleFolderIdChange(): void {
+        const folderId = this.route.snapshot.queryParamMap.get('folderId');
+        if (folderId) {
+            this.loadFolderById(folderId);
+        } else {
+            this.loadFolder();
+        }
+    }
+
+    ngOnDestroy(): void {
+        this.routerEventsSubscription.unsubscribe();
+    }
+
+
   override ngOnInit() {
-    super.ngOnInit();
+
+      // Initial load
+      this.handleFolderIdChange();
+
+      // Listen for subsequent navigation events to the same route
+      this.routerEventsSubscription = this.router.events.pipe(
+          // Filter for the NavigationEnd event
+          filter(event => event instanceof NavigationEnd)
+      ).subscribe(() => {
+          // Manually trigger the logic when navigation ends
+          this.handleFolderIdChange();
+      });
+
     const storedItemsPerPage = localStorage.getItem(AppConfig.pagination.itemsPerPageKey);
     if (storedItemsPerPage) {
       this.pageSize = parseInt(storedItemsPerPage, 10);
     }
 
-    this.route.queryParams.pipe(take(1)).subscribe(params => {
-      const folderId = params['folderId'];
-      if (folderId) {
-        this.loadFolderById(folderId);
-      } else {
-        this.loadFolder();
-      }
-    });
+
 
     this.breadcrumbService.navigation$.subscribe(folder => {
       if (folder === null) {
