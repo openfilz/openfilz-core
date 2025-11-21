@@ -19,6 +19,7 @@ import { FileOperationsComponent } from '../base/file-operations.component';
 import { DocumentApiService } from '../../services/document-api.service';
 import { FileIconService } from '../../services/file-icon.service';
 import { BreadcrumbService } from '../../services/breadcrumb.service';
+import { SearchService } from '../../services/search.service';
 
 import {
     CreateFolderRequest,
@@ -29,7 +30,8 @@ import {
     RenameRequest,
     MoveRequest,
     CopyRequest,
-    DeleteRequest
+    DeleteRequest,
+    SearchFilters
 } from '../../models/document.models';
 
 import { DragDropDirective } from "../../directives/drag-drop.directive";
@@ -159,6 +161,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
 
   breadcrumbTrail: FileItem[] = []; // Track full path
   currentFolder?: FileItem;
+  currentFilters?: SearchFilters;
 
   // Click delay handling
   private clickTimeout: any = null;
@@ -171,6 +174,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
     private fileIconService: FileIconService,
     private breadcrumbService: BreadcrumbService,
     private route: ActivatedRoute,
+    private searchService: SearchService,
     router: Router,
     documentApi: DocumentApiService,
     dialog: MatDialog,
@@ -230,6 +234,11 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
         }
       }
     });
+
+    this.searchService.filters$.subscribe(filters => {
+      this.currentFilters = filters;
+      this.reloadData();
+    });
   }
 
   reloadData(): void {
@@ -280,7 +289,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
       }
     }
 
-    this.documentApi.listFolderAndCount(this.currentFolder?.id, 1, this.pageSize).subscribe({
+    this.documentApi.listFolderAndCount(this.currentFolder?.id, 1, this.pageSize, this.currentFilters).subscribe({
       next: (listAndCount: ListFolderAndCountResponse) => {
         this.totalItems = listAndCount.count;
         this.pageIndex = 0;
@@ -295,7 +304,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
 
   override loadItems() {
     this.loading = true;
-    this.documentApi.listFolder(this.currentFolder?.id, this.pageIndex + 1, this.pageSize).subscribe({
+    this.documentApi.listFolder(this.currentFolder?.id, this.pageIndex + 1, this.pageSize, this.currentFilters).subscribe({
       next: (response: ElementInfo[]) => {
         this.populateFolderContents(response);
       },
@@ -374,7 +383,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
             this.snackBar.open('Folder created successfully', 'Close', { duration: 3000 });
             this.loadFolder(this.currentFolder);
           },
-          error: (error) => {
+          error: () => {
             this.snackBar.open('Failed to create folder', 'Close', { duration: 3000 });
           }
         });
@@ -793,6 +802,8 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
     ).subscribe({
       next: (response) => {
         // Response contains info about uploaded files
+        this.snackBar.open('Upload successful', 'Close', { duration: 3000 });
+        this.reloadData();
       },
       error: (error) => {
         this.snackBar.dismiss();

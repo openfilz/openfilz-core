@@ -41,7 +41,7 @@ export interface FolderResponse {
 
 export interface RenameRequest {
   newName: string;
-}
+  }
 
 export interface MoveRequest {
   documentIds: string[];
@@ -185,4 +185,42 @@ export interface AuditLog {
   action: AuditAction;
   resourceType: DocumentType;
   details?: AuditLogDetails;
+}
+
+export interface PageCriteria {
+  pageNumber: number;
+  pageSize: number;
+  sortBy?: string;
+  sortOrder?: 'ASC' | 'DESC';
+}
+
+export interface ListFolderRequest {
+  id?: string;
+  type?: DocumentType;
+  contentType?: string;
+  name?: string;
+  nameLike?: string;
+  metadata?: { [key: string]: any };
+  size?: number;
+  createdAtAfter?: string;
+  createdAtBefore?: string;
+  updatedAtAfter?: string;
+  updatedAtBefore?: string;
+  createdBy?: string;
+  updatedBy?: string;
+  favorite?: boolean;
+  active?: boolean;
+  pageInfo?: PageCriteria;
+}
+
+export interface FilterInput {
+  field: string;
+  value: string;
+}
+
+export interface SearchFilters {
+  type?: DocumentType;
+  dateModified?: string;
+  owner?: string;
+  fileType?: string;
 }

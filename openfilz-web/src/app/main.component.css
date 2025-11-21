@@ -18,7 +18,7 @@
   flex-grow: 1;
   margin-top: 64px;
   /* Header height only */
-  margin-left: 240px;
+   margin-left: 240px;
   /* Updated to match new sidebar width */
   margin-bottom: 0;
   display: flex;

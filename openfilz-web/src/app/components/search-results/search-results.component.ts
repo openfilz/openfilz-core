@@ -52,6 +52,12 @@ export class SearchResultsComponent extends FileOperationsComponent implements O
         this.reloadData();
       }
     });
+
+    this.searchService.filters$.subscribe(() => {
+      if (this.searchQuery) {
+        this.reloadData();
+      }
+    });
   }
 
   override loadItems() {

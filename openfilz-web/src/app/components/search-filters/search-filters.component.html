@@ -1,0 +1,42 @@
+<div class="filters-overlay">
+  <div class="filter-section">
+    <label>Type</label>
+    <select [(ngModel)]="filters.type">
+      <option *ngFor="let type of documentTypes" [ngValue]="type.value">
+        {{ type.label }}
+      </option>
+    </select>
+  </div>
+
+  <div class="filter-section">
+    <label>Date Modified</label>
+    <select [(ngModel)]="filters.dateModified">
+      <option *ngFor="let date of dateOptions" [value]="date.value">
+        {{ date.label }}
+      </option>
+    </select>
+  </div>
+
+  <div class="filter-section">
+    <label>Owner</label>
+    <input
+      type="text"
+      [(ngModel)]="filters.owner"
+      placeholder="Created by..."
+    />
+  </div>
+
+  <div class="filter-section">
+    <label>File Type</label>
+    <select [(ngModel)]="filters.fileType">
+      <option *ngFor="let ft of fileTypeOptions" [value]="ft.value">
+        {{ ft.label }}
+      </option>
+    </select>
+  </div>
+
+  <div class="filter-actions">
+    <button class="btn-clear" (click)="clearFilters()">Clear</button>
+    <button class="btn-apply" (click)="applyFilters()">Apply</button>
+  </div>
+</div>

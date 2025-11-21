@@ -11,6 +11,9 @@
               [(ngModel)]="searchQuery"
               (input)="onSearchInput()"
               (keyup.enter)="onSearch()">
+          
+          <i class="fa-solid fa-sliders filter-icon" (click)="toggleFilters()" title="Search options"></i>
+
           <!-- Suggestions Dropdown -->
           @if (suggestions.length > 0) {
               <ul class="suggestions-list">
@@ -29,6 +32,13 @@
                       </li>
                   }
               </ul>
+          }
+          @if (showFilters) {
+            <app-search-filters
+                [initialFilters]="currentFilters"
+                (filtersChanged)="onFiltersChanged($event)"
+                (close)="toggleFilters()">
+            </app-search-filters>
           }
       </div>
   </div>
