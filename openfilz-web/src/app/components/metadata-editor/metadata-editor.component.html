@@ -1,0 +1,78 @@
+<div class="metadata-editor">
+  @if(showTitle) {
+    <div class="metadata-header">
+      <h3>Metadata</h3>
+      @if(!readonly && metadataEntries.length > 0) {
+        <button mat-button color="warn" (click)="clearAll()"
+                matTooltip="Clear all metadata entries"
+                class="clear-button">
+          <mat-icon>clear_all</mat-icon>
+          Clear All
+        </button>
+      }
+    </div>
+  }
+
+  <div class="metadata-entries">
+    @if(metadataEntries.length === 0 && readonly) {
+      <div class="no-metadata">
+        <mat-icon>info</mat-icon>
+        <p>No metadata available</p>
+      </div>
+    }
+
+    @for(entry of metadataEntries; track $index) {
+      <div class="metadata-entry" [class.has-error]="entry.error">
+        <mat-form-field appearance="outline" class="key-field">
+          <mat-label>Key</mat-label>
+          <input matInput
+                 [(ngModel)]="entry.key"
+                 (ngModelChange)="onMetadataChange()"
+                 [readonly]="readonly"
+                 placeholder="e.g., author, department"
+                 aria-label="Metadata key">
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="value-field">
+          <mat-label>Value</mat-label>
+          <input matInput
+                 [(ngModel)]="entry.value"
+                 (ngModelChange)="onMetadataChange()"
+                 [readonly]="readonly"
+                 placeholder="e.g., John Doe"
+                 aria-label="Metadata value">
+        </mat-form-field>
+
+        @if(!readonly) {
+          <button mat-icon-button
+                  color="warn"
+                  (click)="removeMetadataEntry($index)"
+                  matTooltip="Remove this entry"
+                  aria-label="Remove metadata entry"
+                  class="remove-button">
+            <mat-icon>delete</mat-icon>
+          </button>
+        }
+
+        @if(entry.error) {
+          <div class="error-message">
+            <mat-icon class="error-icon">error</mat-icon>
+            {{ entry.error }}
+          </div>
+        }
+      </div>
+    }
+  </div>
+
+  @if(!readonly) {
+    <div class="add-entry-container">
+      <button mat-stroked-button
+              color="primary"
+              (click)="addMetadataEntry()"
+              aria-label="Add metadata entry">
+        <mat-icon>add</mat-icon>
+        Add Metadata Entry
+      </button>
+    </div>
+  }
+</div>

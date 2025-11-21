@@ -4,6 +4,7 @@ import {MatCardModule} from '@angular/material/card';
 import {MatIconModule} from '@angular/material/icon';
 import {MatButtonModule} from '@angular/material/button';
 import {MatCheckboxModule} from '@angular/material/checkbox';
+import {MatTooltipModule} from '@angular/material/tooltip';
 import {FileItem} from '../../models/document.models';
 import {FileIconService} from '../../services/file-icon.service';
 
@@ -17,7 +18,8 @@ import {FileIconService} from '../../services/file-icon.service';
     MatCardModule,
     MatIconModule,
     MatButtonModule,
-    MatCheckboxModule
+    MatCheckboxModule,
+    MatTooltipModule
   ],
 })
 export class FileGridComponent {
@@ -34,6 +36,7 @@ export class FileGridComponent {
   @Output() copy = new EventEmitter<FileItem>();
   @Output() delete = new EventEmitter<FileItem>();
   @Output() toggleFavorite = new EventEmitter<FileItem>();
+  @Output() viewProperties = new EventEmitter<FileItem>();
 
   constructor(private fileIconService: FileIconService) {}
 
@@ -77,6 +80,10 @@ export class FileGridComponent {
   onToggleFavorite(event: Event, item: FileItem) {
     event.stopPropagation(); // Prevent item click
     this.toggleFavorite.emit(item);
+  }
+
+  onViewProperties(item: FileItem) {
+    this.viewProperties.emit(item);
   }
 
   getFileIcon(fileName: string, type: 'FILE' | 'FOLDER'): string {

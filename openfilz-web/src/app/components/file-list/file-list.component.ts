@@ -4,6 +4,7 @@ import {MatTableModule} from '@angular/material/table';
 import {MatIconModule} from '@angular/material/icon';
 import {MatButtonModule} from '@angular/material/button';
 import {MatCheckboxModule} from '@angular/material/checkbox';
+import {MatTooltipModule} from '@angular/material/tooltip';
 import {FileItem} from '../../models/document.models';
 import {FileIconService} from '../../services/file-icon.service';
 
@@ -17,7 +18,8 @@ import {FileIconService} from '../../services/file-icon.service';
         MatTableModule,
         MatIconModule,
         MatButtonModule,
-        MatCheckboxModule
+        MatCheckboxModule,
+        MatTooltipModule
     ],
 })
 export class FileListComponent {
@@ -35,12 +37,13 @@ export class FileListComponent {
   @Output() copy = new EventEmitter<FileItem>();
   @Output() delete = new EventEmitter<FileItem>();
   @Output() toggleFavorite = new EventEmitter<FileItem>();
+  @Output() viewProperties = new EventEmitter<FileItem>();
 
   get displayedColumns(): string[] {
     if (this.showFavoriteButton) {
-      return ['select', 'favorite', 'name', 'size', 'type'];
+      return ['select', 'favorite', 'name', 'size', 'type', 'actions'];
     }
-    return ['select', 'name', 'size', 'type'];
+    return ['select', 'name', 'size', 'type', 'actions'];
   }
 
   constructor(private fileIconService: FileIconService) {}
@@ -92,6 +95,10 @@ export class FileListComponent {
   onToggleFavorite(event: Event, item: FileItem) {
     event.stopPropagation();
     this.toggleFavorite.emit(item);
+  }
+
+  onViewProperties(item: FileItem) {
+    this.viewProperties.emit(item);
   }
 
   getFileIcon(fileName: string, type: 'FILE' | 'FOLDER'): string {

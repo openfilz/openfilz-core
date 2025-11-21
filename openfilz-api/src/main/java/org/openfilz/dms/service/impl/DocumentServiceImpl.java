@@ -732,8 +732,8 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
                 .flatMap(doc -> {
                     DocumentInfo info = withMetadata != null && withMetadata.booleanValue() ?
-                            new DocumentInfo(doc.getType(), doc.getName(), doc.getParentId(), doc.getMetadata() != null ? jsonUtils.toMap(doc.getMetadata()) : null, doc.getSize())
-                            : new DocumentInfo(doc.getType(), doc.getName(), doc.getParentId(), null, null);
+                            new DocumentInfo(doc.getType(), doc.getContentType(), doc.getName(), doc.getParentId(), doc.getMetadata() != null ? jsonUtils.toMap(doc.getMetadata()) : null, doc.getSize())
+                            : new DocumentInfo(doc.getType(), doc.getContentType(), doc.getName(), doc.getParentId(), null, null);
                     return Mono.just(info);
                 } );
     }
