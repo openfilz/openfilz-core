@@ -1,14 +1,7 @@
 import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { DocumentType } from '../../models/document.models';
-
-export interface SearchFilters {
-  type?: DocumentType;
-  dateModified?: string;
-  owner?: string;
-  fileType?: string;
-}
+import { DocumentType, SearchFilters } from '../../models/document.models';
 
 @Component({
   selector: 'app-search-filters',
@@ -26,12 +19,18 @@ export class SearchFiltersComponent implements OnInit {
     type: undefined,
     dateModified: 'any',
     owner: '',
-    fileType: 'any'
+    fileType: 'any',
+    metadata: []
   };
+
+  metadataFilters: { key: string; value: string }[] = [];
 
   ngOnInit() {
     if (this.initialFilters) {
       this.filters = { ...this.initialFilters };
+      if (this.initialFilters.metadata) {
+        this.metadataFilters = [...this.initialFilters.metadata];
+      }
     }
   }
 
@@ -60,7 +59,18 @@ export class SearchFiltersComponent implements OnInit {
     { label: 'Spreadsheets', value: 'application/vnd.ms-excel' } // Simplified
   ];
 
+  addMetadataFilter() {
+    this.metadataFilters.push({ key: '', value: '' });
+  }
+
+  removeMetadataFilter(index: number) {
+    this.metadataFilters.splice(index, 1);
+  }
+
   applyFilters() {
+    // Filter out empty keys
+    const validMetadata = this.metadataFilters.filter(m => m.key.trim() !== '');
+    this.filters.metadata = validMetadata;
     this.filtersChanged.emit(this.filters);
     this.close.emit();
   }
@@ -70,8 +80,10 @@ export class SearchFiltersComponent implements OnInit {
       type: undefined,
       dateModified: 'any',
       owner: '',
-      fileType: 'any'
+      fileType: 'any',
+      metadata: []
     };
+    this.metadataFilters = [];
     this.filtersChanged.emit(this.filters);
   }
 }

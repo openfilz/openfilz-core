@@ -33,6 +33,12 @@ export interface CreateFolderRequest {
   parentId?: string;
 }
 
+export interface FilterInput {
+  field: string;
+  value: string;
+}
+
+
 export interface FolderResponse {
   id: string;
   name: string;
@@ -213,14 +219,10 @@ export interface ListFolderRequest {
   pageInfo?: PageCriteria;
 }
 
-export interface FilterInput {
-  field: string;
-  value: string;
-}
-
 export interface SearchFilters {
   type?: DocumentType;
   dateModified?: string;
   owner?: string;
   fileType?: string;
+  metadata?: { key: string; value: string }[];
 }

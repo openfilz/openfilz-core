@@ -1,20 +1,13 @@
 {
     "configurations": [
-        {
-            "command": "npm start",
-            "name": "Run npm start",
-            "request": "launch",
-            "type": "node-terminal",
-            "cwd": "${workspaceFolder}/openfilz-web"
-        },
-        {
-            "name": "Launch Chrome",
-            "request": "launch",
+         {
             "type": "chrome",
+            "request": "launch",
+            "name": "Launch Chrome",
             "url": "http://localhost:4200",
-            "webRoot": "${workspaceFolder}"
+            "webRoot": "${workspaceFolder}/openfilz-web",
+            "preLaunchTask": "ng serve",
         },
-
         {
             "type": "java",
             "name": "Spring Boot-DmsApiApplication<openfilz-api>",

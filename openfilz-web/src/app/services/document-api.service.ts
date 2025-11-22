@@ -1,6 +1,6 @@
 import {Injectable} from '@angular/core';
 import {HttpClient, HttpHeaders, HttpParams} from '@angular/common/http';
-import {map, Observable} from 'rxjs';
+import {filter, map, Observable} from 'rxjs';
 import {Apollo, gql} from 'apollo-angular';
 import {
     AuditLog,
@@ -187,6 +187,10 @@ export class DocumentApiService {
 
     if (filters.fileType && filters.fileType !== 'any') {
         request.contentType = filters.fileType;
+    }
+
+    if(filters.metadata && filters.metadata.length > 0) {
+        request.metadata = this.toJsonMetadata(filters.metadata);
     }
 
     return request;
@@ -562,6 +566,13 @@ export class DocumentApiService {
         if (filters.fileType && filters.fileType !== 'any') {
             filterInputs.push({ field: 'contentType', value: filters.fileType });
         }
+        if (filters.metadata) {
+            filters.metadata.forEach(meta => {
+                if (meta.key && meta.value) {
+                    filterInputs.push({ field: 'metadata.' + meta.key, value: meta.value });
+                }
+            });
+        }
     }
 
     return this.apollo.watchQuery<any>({
@@ -581,4 +592,18 @@ export class DocumentApiService {
       params
     });
   }
+
+  toJsonMetadata(metadata: { key: string; value: string; }[]): { [key: string]: any; } | undefined {
+    if (!metadata || metadata.length === 0) {
+      return undefined;
+    }
+
+    const jsonMetadata: { [key: string]: any; } = {};
+    metadata.forEach(meta => {
+      jsonMetadata[meta.key] = meta.value;
+    });
+    return jsonMetadata;
+  }
+
 }
+
