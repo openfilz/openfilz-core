@@ -1,12 +1,15 @@
 import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { DocumentType, SearchFilters } from '../../models/document.models';
 
 @Component({
   selector: 'app-search-filters',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, MatIconModule, MatButtonModule, MatTooltipModule],
   templateUrl: './search-filters.component.html',
   styleUrls: ['./search-filters.component.css']
 })
@@ -55,8 +58,8 @@ export class SearchFiltersComponent implements OnInit {
     { label: 'Any', value: 'any' },
     { label: 'PDFs', value: 'application/pdf' },
     { label: 'Images', value: 'image/' },
-    { label: 'Documents', value: 'application/msword' }, // Simplified
-    { label: 'Spreadsheets', value: 'application/vnd.ms-excel' } // Simplified
+    { label: 'Documents', value: 'application/msword' },
+    { label: 'Spreadsheets', value: 'application/vnd.ms-excel' }
   ];
 
   addMetadataFilter() {
