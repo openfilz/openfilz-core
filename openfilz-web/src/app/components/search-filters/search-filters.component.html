@@ -58,7 +58,7 @@
         <div *ngFor="let meta of metadataFilters; let i = index" class="metadata-item">
           <input type="text" [(ngModel)]="meta.key" placeholder="Key" class="meta-input" />
           <input type="text" [(ngModel)]="meta.value" placeholder="Value" class="meta-input" />
-          <button class="btn-remove" (click)="removeMetadataFilter(i)" matTooltip="Remove">
+          <button class="btn-remove" (click)="$event.stopPropagation(); removeMetadataFilter(i)" matTooltip="Remove">
             <mat-icon>close</mat-icon>
           </button>
         </div>
