@@ -15,10 +15,17 @@ export class SearchService {
   private filtersSubject = new BehaviorSubject<SearchFilters>({});
   public filters$ = this.filtersSubject.asObservable();
 
+  private sortSubject = new BehaviorSubject<{ sortBy: string, sortOrder: 'ASC' | 'DESC' }>({ sortBy: 'name', sortOrder: 'ASC' });
+  public sort$ = this.sortSubject.asObservable();
+
   constructor(private http: HttpClient, private documentApi: DocumentApiService) { }
 
   updateFilters(filters: SearchFilters) {
     this.filtersSubject.next(filters);
+  }
+
+  updateSort(sortBy: string, sortOrder: 'ASC' | 'DESC') {
+    this.sortSubject.next({ sortBy, sortOrder });
   }
 
   getSuggestions(query: string): Observable<Suggestion[]> {
@@ -34,6 +41,11 @@ export class SearchService {
 
   searchDocuments(query: string): Observable<DocumentSearchResult> {
     const currentFilters = this.filtersSubject.value;
-    return this.documentApi.searchDocuments(query, currentFilters, null);
+    const currentSort = this.sortSubject.value;
+    const sortInput = {
+      field: currentSort.sortBy,
+      order: currentSort.sortOrder
+    };
+    return this.documentApi.searchDocuments(query, currentFilters, sortInput);
   }
 }
