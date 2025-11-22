@@ -48,6 +48,19 @@ export class ToolbarComponent {
   @Output() copySelected = new EventEmitter<void>();
   @Output() deleteSelected = new EventEmitter<void>();
   @Output() clearSelection = new EventEmitter<void>();
+  @Output() sortChange = new EventEmitter<{ sortBy: string, sortOrder: 'ASC' | 'DESC' }>();
+
+  @Input() sortBy = 'name';
+  @Input() sortOrder: 'ASC' | 'DESC' = 'ASC';
+
+  sortOptions = [
+    { label: 'Name', value: 'name' },
+    { label: 'Date Modified', value: 'updatedAt' },
+    { label: 'Size', value: 'size' },
+    { label: 'Type', value: 'type' },
+    { label: 'Owner', value: 'createdBy' },
+    { label: 'Date Created', value: 'createdAt' }
+  ];
 
   // Pagination outputs
   @Output() previousPage = new EventEmitter<void>();
@@ -92,6 +105,20 @@ export class ToolbarComponent {
 
   onClearSelection() {
     this.clearSelection.emit();
+  }
+
+  onSortChange(sortBy: string) {
+    this.sortBy = sortBy;
+    this.emitSortChange();
+  }
+
+  toggleSortOrder() {
+    this.sortOrder = this.sortOrder === 'ASC' ? 'DESC' : 'ASC';
+    this.emitSortChange();
+  }
+
+  private emitSortChange() {
+    this.sortChange.emit({ sortBy: this.sortBy, sortOrder: this.sortOrder });
   }
 
   // Pagination methods

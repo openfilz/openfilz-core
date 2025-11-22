@@ -61,7 +61,10 @@ import {AppConfig} from '../../config/app.config';
         (clearSelection)="onSelectAll(false)"
         (previousPage)="onPreviousPage()"
         (nextPage)="onNextPage()"
-        (pageSizeChange)="onPageSizeChange($event)">
+        (pageSizeChange)="onPageSizeChange($event)"
+        [sortBy]="sortBy"
+        [sortOrder]="sortOrder"
+        (sortChange)="onSortChange($event)">
       </app-toolbar>
 
       <div class="file-explorer-content" appDragDrop
@@ -112,7 +115,11 @@ import {AppConfig} from '../../config/app.config';
                       (copy)="onCopyItem($event)"
                       (delete)="onDeleteItem($event)"
                       (toggleFavorite)="onToggleFavorite($event)"
-                      (viewProperties)="onViewProperties($event)">
+                      (toggleFavorite)="onToggleFavorite($event)"
+                      (viewProperties)="onViewProperties($event)"
+                      [sortBy]="sortBy"
+                      [sortOrder]="sortOrder"
+                      (sortChange)="onSortChange($event)">
               </app-file-list>
           }
       }
@@ -289,7 +296,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
       }
     }
 
-    this.documentApi.listFolderAndCount(this.currentFolder?.id, 1, this.pageSize, this.currentFilters).subscribe({
+    this.documentApi.listFolderAndCount(this.currentFolder?.id, 1, this.pageSize, this.currentFilters, this.sortBy, this.sortOrder).subscribe({
       next: (listAndCount: ListFolderAndCountResponse) => {
         this.totalItems = listAndCount.count;
         this.pageIndex = 0;
@@ -304,7 +311,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
 
   override loadItems() {
     this.loading = true;
-    this.documentApi.listFolder(this.currentFolder?.id, this.pageIndex + 1, this.pageSize, this.currentFilters).subscribe({
+    this.documentApi.listFolder(this.currentFolder?.id, this.pageIndex + 1, this.pageSize, this.currentFilters, this.sortBy, this.sortOrder).subscribe({
       next: (response: ElementInfo[]) => {
         this.populateFolderContents(response);
       },

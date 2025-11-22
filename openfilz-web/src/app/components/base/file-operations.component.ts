@@ -42,6 +42,15 @@ export abstract class FileOperationsComponent implements OnInit {
     this.viewMode = mode;
   }
 
+  sortBy: string = 'name';
+  sortOrder: 'ASC' | 'DESC' = 'ASC';
+
+  onSortChange(event: { sortBy: string, sortOrder: 'ASC' | 'DESC' }) {
+    this.sortBy = event.sortBy;
+    this.sortOrder = event.sortOrder;
+    this.reloadData();
+  }
+
   onItemClick(item: FileItem): void {
     item.selected = !item.selected;
   }

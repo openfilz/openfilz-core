@@ -73,7 +73,7 @@ export class FavoritesComponent extends FileOperationsComponent implements OnIni
 
       loadFavorites() {
           this.loading = true;
-          this.documentApi.listFavoritesAndCount(1, this.pageSize, this.currentFilters).subscribe({
+          this.documentApi.listFavoritesAndCount(this.pageIndex + 1, this.pageSize, this.currentFilters, this.sortBy, this.sortOrder).subscribe({
               next: (listAndCount: ListFolderAndCountResponse) => {
                   this.totalItems = listAndCount.count;
                   this.pageIndex = 0;

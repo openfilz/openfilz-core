@@ -228,13 +228,15 @@ export class DocumentApiService {
 
 
   // Folder operations
-  listFolder(folderId?: string, page: number = 1, pageSize: number = 50, filters?: SearchFilters): Observable<ElementInfo[]> {
+  listFolder(folderId?: string, page: number = 1, pageSize: number = 50, filters?: SearchFilters, sortBy?: string, sortOrder?: 'ASC' | 'DESC'): Observable<ElementInfo[]> {
     const filterRequest = this.mapFiltersToRequest(filters);
     const request = {
       id: folderId,
       pageInfo: {
         pageNumber: page,
-        pageSize: pageSize
+        pageSize: pageSize,
+        sortBy,
+        sortOrder
       },
       ...filterRequest
     };
@@ -248,13 +250,15 @@ export class DocumentApiService {
     );
   }
 
-  listFolderAndCount(folderId?: string, page: number = 1, pageSize: number = 50, filters?: SearchFilters): Observable<ListFolderAndCountResponse> {
+  listFolderAndCount(folderId?: string, page: number = 1, pageSize: number = 50, filters?: SearchFilters, sortBy?: string, sortOrder?: 'ASC' | 'DESC'): Observable<ListFolderAndCountResponse> {
     const filterRequest = this.mapFiltersToRequest(filters);
     const request1 = {
       id: folderId,
       pageInfo: {
         pageNumber: page,
-        pageSize: pageSize
+        pageSize: pageSize,
+        sortBy,
+        sortOrder
       },
       ...filterRequest
     };
@@ -278,12 +282,14 @@ export class DocumentApiService {
     );
   }
 
-  listFavoritesAndCount(page: number = 1, pageSize: number = 50, filters?: SearchFilters): Observable<ListFolderAndCountResponse> {
+  listFavoritesAndCount(page: number = 1, pageSize: number = 50, filters?: SearchFilters, sortBy?: string, sortOrder?: 'ASC' | 'DESC'): Observable<ListFolderAndCountResponse> {
     const filterRequest = this.mapFiltersToRequest(filters);
     const request1 = {
       pageInfo: {
         pageNumber: page,
-        pageSize: pageSize
+        pageSize: pageSize,
+        sortBy,
+        sortOrder
       },
       ...filterRequest
     };

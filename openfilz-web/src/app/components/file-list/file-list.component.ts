@@ -5,6 +5,7 @@ import {MatIconModule} from '@angular/material/icon';
 import {MatButtonModule} from '@angular/material/button';
 import {MatCheckboxModule} from '@angular/material/checkbox';
 import {MatTooltipModule} from '@angular/material/tooltip';
+import {MatSortModule, Sort} from '@angular/material/sort';
 import {FileItem} from '../../models/document.models';
 import {FileIconService} from '../../services/file-icon.service';
 
@@ -13,19 +14,22 @@ import {FileIconService} from '../../services/file-icon.service';
   standalone: true,
   templateUrl: './file-list.component.html',
   styleUrls: ['./file-list.component.css'],
-    imports: [
-        CommonModule,
-        MatTableModule,
-        MatIconModule,
-        MatButtonModule,
-        MatCheckboxModule,
-        MatTooltipModule
-    ],
+  imports: [
+    CommonModule,
+    MatTableModule,
+    MatSortModule,
+    MatIconModule,
+    MatButtonModule,
+    MatCheckboxModule,
+    MatTooltipModule
+  ],
 })
 export class FileListComponent {
   @Input() items: FileItem[] = [];
   @Input() fileOver: boolean = false;
   @Input() showFavoriteButton: boolean = true; // Control favorite button visibility
+  @Input() sortBy: string = 'name';
+  @Input() sortOrder: 'ASC' | 'DESC' = 'ASC';
   
   @Output() itemClick = new EventEmitter<FileItem>();
   @Output() itemDoubleClick = new EventEmitter<FileItem>();
@@ -38,6 +42,7 @@ export class FileListComponent {
   @Output() delete = new EventEmitter<FileItem>();
   @Output() toggleFavorite = new EventEmitter<FileItem>();
   @Output() viewProperties = new EventEmitter<FileItem>();
+  @Output() sortChange = new EventEmitter<{ sortBy: string, sortOrder: 'ASC' | 'DESC' }>();
 
   get displayedColumns(): string[] {
     if (this.showFavoriteButton) {
@@ -112,5 +117,12 @@ export class FileListComponent {
   getFileTypeFromName(fileName: string): string {
     const extension = fileName.split('.').pop()?.toUpperCase();
     return extension ? `${extension} File` : 'File';
+  }
+
+  onSortChange(sort: Sort) {
+    this.sortChange.emit({
+      sortBy: sort.active,
+      sortOrder: sort.direction.toUpperCase() as 'ASC' | 'DESC'
+    });
   }
 }
