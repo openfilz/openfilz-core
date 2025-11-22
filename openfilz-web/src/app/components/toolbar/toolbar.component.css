@@ -672,4 +672,7 @@
 ::ng-deep .sort-menu .mat-mdc-menu-item.active span {
   color: var(--primary);
   font-weight: 500;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
