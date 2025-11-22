@@ -4,6 +4,7 @@ import { FileExplorerComponent } from './components/file-explorer/file-explorer.
 import { FavoritesComponent } from './pages/favorites/favorites.component';
 import { RecycleBinComponent } from './pages/recycle-bin/recycle-bin.component';
 import { WipComponent } from "./components/wip/wip";
+import { SettingsComponent } from './pages/settings/settings.component';
 import { SearchResultsComponent } from './components/search-results/search-results.component';
 import { authGuard } from './guards/auth.guard';
 
@@ -16,6 +17,6 @@ export const routes: Routes = [
   { path: 'recycle-bin', component: RecycleBinComponent, canActivate: [authGuard] },
   { path: 'favorites', component: FavoritesComponent, canActivate: [authGuard] },
   //{ path: 'shared-files', component: WipComponent },
-  { path: 'settings', component: WipComponent, canActivate: [authGuard] },
+  { path: 'settings', component: SettingsComponent, canActivate: [authGuard] },
   { path: '**', redirectTo: '/dashboard' } // Wildcard route for undefined paths
 ];

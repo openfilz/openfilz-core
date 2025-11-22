@@ -11,6 +11,7 @@ import { BreadcrumbComponent } from './components/breadcrumb/breadcrumb.componen
 import { DownloadProgressComponent } from "./components/download-progress/download-progress.component";
 import { ElementInfo } from "./models/document.models";
 import { BreadcrumbService } from "./services/breadcrumb.service";
+import { ThemeService } from './services/theme.service';
 
 @Component({
   selector: 'app-main',
@@ -47,7 +48,8 @@ export class MainComponent implements OnInit {
     private router: Router,
     private snackBar: MatSnackBar,
     private breadcrumbService: BreadcrumbService,
-    private oidcSecurityService: OidcSecurityService
+    private oidcSecurityService: OidcSecurityService,
+    private themeService: ThemeService
   ) { }
 
   ngOnInit() {
