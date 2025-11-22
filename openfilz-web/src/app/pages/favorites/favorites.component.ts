@@ -18,6 +18,8 @@ import {ActivatedRoute, Router} from "@angular/router";
 import {SearchService} from "../../services/search.service";
 import {MatDialog} from "@angular/material/dialog";
 
+import { UserPreferencesService } from '../../services/user-preferences.service';
+
 @Component({
   selector: 'app-favorites',
   standalone: true,
@@ -49,9 +51,10 @@ export class FavoritesComponent extends FileOperationsComponent implements OnIni
         router: Router,
         documentApi: DocumentApiService,
         dialog: MatDialog,
-        snackBar: MatSnackBar
+        snackBar: MatSnackBar,
+        userPreferencesService: UserPreferencesService
     ) {
-        super(router, documentApi, dialog, snackBar);
+        super(router, documentApi, dialog, snackBar, userPreferencesService);
     }
 
     override ngOnInit() {

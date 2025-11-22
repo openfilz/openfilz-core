@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
+import { UserPreferencesService } from './user-preferences.service';
 
 export interface Theme {
   name: string;
@@ -11,7 +12,6 @@ export interface Theme {
   providedIn: 'root'
 })
 export class ThemeService {
-  private readonly THEME_KEY = 'user-theme';
   
   public readonly availableThemes: Theme[] = [
     { name: 'light', displayName: 'Light (Default)', className: 'theme-light' },
@@ -23,7 +23,7 @@ export class ThemeService {
   private currentThemeSubject = new BehaviorSubject<Theme>(this.availableThemes[0]);
   currentTheme$ = this.currentThemeSubject.asObservable();
 
-  constructor() {
+  constructor(private userPreferencesService: UserPreferencesService) {
     this.loadSavedTheme();
   }
 
@@ -31,7 +31,7 @@ export class ThemeService {
     const theme = this.availableThemes.find(t => t.name === themeName);
     if (theme) {
       this.applyTheme(theme);
-      localStorage.setItem(this.THEME_KEY, themeName);
+      this.userPreferencesService.setTheme(themeName);
     }
   }
 
@@ -40,7 +40,7 @@ export class ThemeService {
   }
 
   private loadSavedTheme(): void {
-    const savedThemeName = localStorage.getItem(this.THEME_KEY);
+    const savedThemeName = this.userPreferencesService.getPreferences().theme;
     if (savedThemeName) {
       const theme = this.availableThemes.find(t => t.name === savedThemeName);
       if (theme) {

@@ -4,6 +4,7 @@ import { BehaviorSubject, Observable } from 'rxjs';
 import { environment } from "../../environments/environment";
 import { DocumentSearchResult, Suggestion, SearchFilters, FilterInput } from "../models/document.models";
 import { DocumentApiService } from "./document-api.service";
+import { UserPreferencesService } from './user-preferences.service';
 
 @Injectable({
   providedIn: 'root'
@@ -18,7 +19,14 @@ export class SearchService {
   private sortSubject = new BehaviorSubject<{ sortBy: string, sortOrder: 'ASC' | 'DESC' }>({ sortBy: 'name', sortOrder: 'ASC' });
   public sort$ = this.sortSubject.asObservable();
 
-  constructor(private http: HttpClient, private documentApi: DocumentApiService) { }
+  constructor(
+    private http: HttpClient, 
+    private documentApi: DocumentApiService,
+    private userPreferencesService: UserPreferencesService
+  ) {
+    const prefs = this.userPreferencesService.getPreferences();
+    this.sortSubject.next({ sortBy: prefs.sortBy, sortOrder: prefs.sortOrder });
+  }
 
   updateFilters(filters: SearchFilters) {
     this.filtersSubject.next(filters);
@@ -26,6 +34,7 @@ export class SearchService {
 
   updateSort(sortBy: string, sortOrder: 'ASC' | 'DESC') {
     this.sortSubject.next({ sortBy, sortOrder });
+    this.userPreferencesService.setSort(sortBy, sortOrder);
   }
 
   getSuggestions(query: string): Observable<Suggestion[]> {

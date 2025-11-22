@@ -15,6 +15,8 @@ import {ToolbarComponent} from '../toolbar/toolbar.component';
 import {FileOperationsComponent} from '../base/file-operations.component';
 import {DocumentSearchInfo, DocumentType, FileItem} from '../../models/document.models';
 
+import { UserPreferencesService } from '../../services/user-preferences.service';
+
 @Component({
   selector: 'app-search-results',
   standalone: true,
@@ -40,9 +42,10 @@ export class SearchResultsComponent extends FileOperationsComponent implements O
     router: Router,
     documentApi: DocumentApiService,
     dialog: MatDialog,
-    snackBar: MatSnackBar
+    snackBar: MatSnackBar,
+    userPreferencesService: UserPreferencesService
   ) {
-    super(router, documentApi, dialog, snackBar);
+    super(router, documentApi, dialog, snackBar, userPreferencesService);
   }
 
   override ngOnInit(): void {

@@ -8,6 +8,7 @@ import {FolderTreeDialogComponent} from '../../dialogs/folder-tree-dialog/folder
 import {Observable} from "rxjs";
 import {AppConfig} from '../../config/app.config';
 import {Router} from "@angular/router";
+import {UserPreferencesService} from '../../services/user-preferences.service';
 
 @Directive()
 export abstract class FileOperationsComponent implements OnInit {
@@ -18,17 +19,44 @@ export abstract class FileOperationsComponent implements OnInit {
   totalItems = 0;
   pageSize = AppConfig.pagination.defaultPageSize;
   pageIndex = 0;
+  sortBy: string = 'name';
+  sortOrder: 'ASC' | 'DESC' = 'ASC';
 
   constructor(
     protected router: Router,
     protected documentApi: DocumentApiService,
     protected dialog: MatDialog,
-    protected snackBar: MatSnackBar
-  ) {}
+    protected snackBar: MatSnackBar,
+    protected userPreferencesService: UserPreferencesService
+  ) {
+    const prefs = this.userPreferencesService.getPreferences();
+    this.pageSize = prefs.pageSize;
+    this.sortBy = prefs.sortBy;
+    this.sortOrder = prefs.sortOrder;
+  }
 
   abstract reloadData(): void;
 
-  ngOnInit(): void {}
+  ngOnInit(): void {
+    // Subscribe to preferences changes to keep UI in sync
+    this.userPreferencesService.preferences$.subscribe(prefs => {
+      let needsReload = false;
+      if (this.pageSize !== prefs.pageSize) {
+        this.pageSize = prefs.pageSize;
+        this.pageIndex = 0; // Reset to first page on page size change
+        needsReload = true;
+      }
+      if (this.sortBy !== prefs.sortBy || this.sortOrder !== prefs.sortOrder) {
+        this.sortBy = prefs.sortBy;
+        this.sortOrder = prefs.sortOrder;
+        needsReload = true;
+      }
+      
+      if (needsReload) {
+        this.reloadData();
+      }
+    });
+  }
 
   get hasSelectedItems(): boolean {
     return this.items.some(item => item.selected);
@@ -42,12 +70,10 @@ export abstract class FileOperationsComponent implements OnInit {
     this.viewMode = mode;
   }
 
-  sortBy: string = 'name';
-  sortOrder: 'ASC' | 'DESC' = 'ASC';
-
   onSortChange(event: { sortBy: string, sortOrder: 'ASC' | 'DESC' }) {
     this.sortBy = event.sortBy;
     this.sortOrder = event.sortOrder;
+    this.userPreferencesService.setSort(this.sortBy, this.sortOrder);
     this.reloadData();
   }
 
@@ -318,7 +344,7 @@ export abstract class FileOperationsComponent implements OnInit {
 
     onPageSizeChange(newPageSize: number) {
         this.pageSize = newPageSize;
-        localStorage.setItem(AppConfig.pagination.itemsPerPageKey, newPageSize.toString());
+        this.userPreferencesService.setPageSize(newPageSize);
         this.pageIndex = 0;
         this.loadItems();
     }

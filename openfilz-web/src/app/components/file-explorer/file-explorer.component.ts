@@ -20,6 +20,7 @@ import { DocumentApiService } from '../../services/document-api.service';
 import { FileIconService } from '../../services/file-icon.service';
 import { BreadcrumbService } from '../../services/breadcrumb.service';
 import { SearchService } from '../../services/search.service';
+import { UserPreferencesService } from '../../services/user-preferences.service';
 
 import {
     CreateFolderRequest,
@@ -174,8 +175,9 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
   private clickTimeout: any = null;
   private readonly CLICK_DELAY = 250; // milliseconds
 
-
   @ViewChild('fileInput') fileInput!: ElementRef;
+
+  private routerEventsSubscription!: Subscription;
 
   constructor(
     private fileIconService: FileIconService,
@@ -185,30 +187,31 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
     router: Router,
     documentApi: DocumentApiService,
     dialog: MatDialog,
-    snackBar: MatSnackBar
+    snackBar: MatSnackBar,
+    userPreferencesService: UserPreferencesService
   ) {
-    super(router, documentApi, dialog, snackBar);
+    super(router, documentApi, dialog, snackBar, userPreferencesService);
   }
 
-    private routerEventsSubscription!: Subscription;
+  // A new method to handle the logic
+  private handleFolderIdChange(): void {
+      const folderId = this.route.snapshot.queryParamMap.get('folderId');
+      if (folderId) {
+          this.loadFolderById(folderId);
+      } else {
+          this.loadFolder();
+      }
+  }
 
-
-    // A new method to handle the logic
-    private handleFolderIdChange(): void {
-        const folderId = this.route.snapshot.queryParamMap.get('folderId');
-        if (folderId) {
-            this.loadFolderById(folderId);
-        } else {
-            this.loadFolder();
-        }
-    }
-
-    ngOnDestroy(): void {
-        this.routerEventsSubscription.unsubscribe();
-    }
+  ngOnDestroy(): void {
+      if (this.routerEventsSubscription) {
+          this.routerEventsSubscription.unsubscribe();
+      }
+  }
 
 
   override ngOnInit() {
+      super.ngOnInit();
 
       // Initial load
       //this.handleFolderIdChange();
@@ -221,13 +224,6 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
           // Manually trigger the logic when navigation ends
           this.handleFolderIdChange();
       });
-
-    const storedItemsPerPage = localStorage.getItem(AppConfig.pagination.itemsPerPageKey);
-    if (storedItemsPerPage) {
-      this.pageSize = parseInt(storedItemsPerPage, 10);
-    }
-
-
 
     this.breadcrumbService.navigation$.subscribe(folder => {
       if (folder === null) {
