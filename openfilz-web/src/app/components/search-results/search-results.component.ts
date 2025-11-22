@@ -15,6 +15,8 @@ import {ToolbarComponent} from '../toolbar/toolbar.component';
 import {FileOperationsComponent} from '../base/file-operations.component';
 import {DocumentSearchInfo, DocumentType, FileItem} from '../../models/document.models';
 
+import { UserPreferencesService } from '../../services/user-preferences.service';
+
 @Component({
   selector: 'app-search-results',
   standalone: true,
@@ -40,9 +42,10 @@ export class SearchResultsComponent extends FileOperationsComponent implements O
     router: Router,
     documentApi: DocumentApiService,
     dialog: MatDialog,
-    snackBar: MatSnackBar
+    snackBar: MatSnackBar,
+    userPreferencesService: UserPreferencesService
   ) {
-    super(router, documentApi, dialog, snackBar);
+    super(router, documentApi, dialog, snackBar, userPreferencesService);
   }
 
   override ngOnInit(): void {
@@ -52,6 +55,24 @@ export class SearchResultsComponent extends FileOperationsComponent implements O
         this.reloadData();
       }
     });
+
+    this.searchService.filters$.subscribe(() => {
+      if (this.searchQuery) {
+        this.reloadData();
+      }
+    });
+
+    this.searchService.sort$.subscribe(sort => {
+      this.sortBy = sort.sortBy;
+      this.sortOrder = sort.sortOrder;
+      if (this.searchQuery) {
+        this.reloadData();
+      }
+    });
+  }
+
+  override onSortChange(event: { sortBy: string, sortOrder: 'ASC' | 'DESC' }): void {
+    this.searchService.updateSort(event.sortBy, event.sortOrder);
   }
 
   override loadItems() {
@@ -72,8 +93,6 @@ export class SearchResultsComponent extends FileOperationsComponent implements O
       }
     });
   }
-
-
 
   private transformToFileItem(doc: DocumentSearchInfo): FileItem {
     const fileType = doc.extension ? DocumentType.FILE : DocumentType.FOLDER;

@@ -38,6 +38,15 @@
                         {{ item.name }}
                     </div>
                 </div>
+
+                <div class="file-actions">
+                    <button mat-icon-button
+                            (click)="onViewProperties(item); $event.stopPropagation()"
+                            matTooltip="View Properties"
+                            aria-label="View properties">
+                        <mat-icon>info</mat-icon>
+                    </button>
+                </div>
             </div>
         }
     </div>

@@ -10,6 +10,7 @@ import java.util.UUID;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record DocumentInfo(
         @Schema(description = "Type of the document") DocumentType type,
+        @Schema(description = "Content-Type of the document (MIME type)") String contentType,
         @Schema(description = "Name of the document") String name,
         @Schema(description = "ID of the parent folder. If null, located at root.") UUID parentId,
         @Schema(description = "Metadata of the document - if requested") Map<String, Object> metadata,

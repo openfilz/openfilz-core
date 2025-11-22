@@ -10,6 +10,7 @@ export interface ElementInfo {
   id: string;
   name: string;
   type: DocumentType;
+  contentType?: string;
   favorite?: boolean;
 }
 
@@ -20,6 +21,7 @@ export interface ListFolderAndCountResponse {
 
 export interface DocumentInfo {
   type: DocumentType;
+  contentType?: string;
   name: string;
   parentId?: string;
   metadata?: { [key: string]: any };
@@ -31,6 +33,12 @@ export interface CreateFolderRequest {
   parentId?: string;
 }
 
+export interface FilterInput {
+  field: string;
+  value: string;
+}
+
+
 export interface FolderResponse {
   id: string;
   name: string;
@@ -39,7 +47,7 @@ export interface FolderResponse {
 
 export interface RenameRequest {
   newName: string;
-}
+  }
 
 export interface MoveRequest {
   documentIds: string[];
@@ -143,4 +151,78 @@ export interface RecentFileInfo extends ElementInfo {
   updatedAt?: string;
   createdBy?: string;
   updatedBy?: string;
+}
+
+// Audit models
+export type AuditAction =
+  | 'COPY_FILE'
+  | 'COPY_FILE_CHILD'
+  | 'RENAME_FILE'
+  | 'RENAME_FOLDER'
+  | 'COPY_FOLDER'
+  | 'DELETE_FILE'
+  | 'DELETE_FILE_CHILD'
+  | 'DELETE_FOLDER'
+  | 'CREATE_FOLDER'
+  | 'MOVE_FILE'
+  | 'MOVE_FOLDER'
+  | 'UPLOAD_DOCUMENT'
+  | 'REPLACE_DOCUMENT_CONTENT'
+  | 'REPLACE_DOCUMENT_METADATA'
+  | 'UPDATE_DOCUMENT_METADATA'
+  | 'DOWNLOAD_DOCUMENT'
+  | 'DELETE_DOCUMENT_METADATA'
+  | 'SHARE_DOCUMENTS'
+  | 'RESTORE_FILE'
+  | 'RESTORE_FOLDER'
+  | 'PERMANENT_DELETE_FILE'
+  | 'PERMANENT_DELETE_FOLDER'
+  | 'EMPTY_RECYCLE_BIN';
+
+export interface AuditLogDetails {
+  type: string;
+  [key: string]: any;
+}
+
+export interface AuditLog {
+  id: string;
+  timestamp: string;
+  username: string;
+  action: AuditAction;
+  resourceType: DocumentType;
+  details?: AuditLogDetails;
+}
+
+export interface PageCriteria {
+  pageNumber: number;
+  pageSize: number;
+  sortBy?: string;
+  sortOrder?: 'ASC' | 'DESC';
+}
+
+export interface ListFolderRequest {
+  id?: string;
+  type?: DocumentType;
+  contentType?: string;
+  name?: string;
+  nameLike?: string;
+  metadata?: { [key: string]: any };
+  size?: number;
+  createdAtAfter?: string;
+  createdAtBefore?: string;
+  updatedAtAfter?: string;
+  updatedAtBefore?: string;
+  createdBy?: string;
+  updatedBy?: string;
+  favorite?: boolean;
+  active?: boolean;
+  pageInfo?: PageCriteria;
+}
+
+export interface SearchFilters {
+  type?: DocumentType;
+  dateModified?: string;
+  owner?: string;
+  fileType?: string;
+  metadata?: { key: string; value: string }[];
 }

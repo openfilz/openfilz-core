@@ -1,28 +1,27 @@
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from "@angular/core";
+import { Component, ElementRef, EventEmitter, HostListener, Input, OnDestroy, OnInit, Output } from "@angular/core";
 import { Router } from "@angular/router";
 import { Subject, Subscription } from "rxjs";
 import { SearchService } from "../../services/search.service";
 import { debounceTime, distinctUntilChanged, switchMap } from "rxjs/operators";
-import { Suggestion } from "../../models/document.models";
+import { Suggestion, SearchFilters } from "../../models/document.models";
 import { DocumentApiService } from "../../services/document-api.service";
+import { SearchFiltersComponent } from "../search-filters/search-filters.component";
 
 @Component({
   selector: 'app-header',
   standalone: true,
+  imports: [CommonModule, FormsModule, SearchFiltersComponent],
   templateUrl: './header.component.html',
-  styleUrls: ['./header.component.css'],
-  imports: [
-    CommonModule,
-    FormsModule
-  ],
+  styleUrls: ['./header.component.css']
 })
 export class HeaderComponent implements OnInit, OnDestroy {
-  @Input() hasSelection = false;
-
   searchQuery: string = '';
   suggestions: Suggestion[] = [];
+  showFilters = false;
+  @Input() hasSelection: boolean = false;
+  currentFilters?: SearchFilters;
 
   private searchSubject = new Subject<string>();
   private searchSubscription!: Subscription;
@@ -30,7 +29,8 @@ export class HeaderComponent implements OnInit, OnDestroy {
   constructor(
     private searchService: SearchService,
     private apiService: DocumentApiService,
-    private router: Router
+    private router: Router,
+    private elementRef: ElementRef
   ) { }
 
   ngOnInit(): void {
@@ -43,6 +43,16 @@ export class HeaderComponent implements OnInit, OnDestroy {
     });
   }
 
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent) {
+    if (this.showFilters) {
+      const clickedInside = this.elementRef.nativeElement.contains(event.target);
+      if (!clickedInside) {
+        this.showFilters = false;
+      }
+    }
+  }
+
   onSearchInput(): void {
     this.searchSubject.next(this.searchQuery);
   }
@@ -52,6 +62,16 @@ export class HeaderComponent implements OnInit, OnDestroy {
       this.router.navigate(['/search'], { queryParams: { q: this.searchQuery } });
       this.suggestions = [];
     }
+  }
+
+  toggleFilters() {
+    this.showFilters = !this.showFilters;
+  }
+
+  onFiltersChanged(filters: SearchFilters) {
+    console.log('Filters changed:', filters);
+    this.currentFilters = filters;
+    this.searchService.updateFilters(filters);
   }
 
   selectSuggestion(docId: string): void {

@@ -1,9 +1,10 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { BehaviorSubject, Observable } from 'rxjs';
 import { environment } from "../../environments/environment";
-import { DocumentSearchResult, Suggestion } from "../models/document.models";
+import { DocumentSearchResult, Suggestion, SearchFilters, FilterInput } from "../models/document.models";
 import { DocumentApiService } from "./document-api.service";
+import { UserPreferencesService } from './user-preferences.service';
 
 @Injectable({
   providedIn: 'root'
@@ -12,7 +13,29 @@ export class SearchService {
 
   private readonly suggestionsUrl = environment.apiURL + '/suggestions'; // Your backend endpoint
 
-  constructor(private http: HttpClient, private documentApi: DocumentApiService) { }
+  private filtersSubject = new BehaviorSubject<SearchFilters>({});
+  public filters$ = this.filtersSubject.asObservable();
+
+  private sortSubject = new BehaviorSubject<{ sortBy: string, sortOrder: 'ASC' | 'DESC' }>({ sortBy: 'name', sortOrder: 'ASC' });
+  public sort$ = this.sortSubject.asObservable();
+
+  constructor(
+    private http: HttpClient, 
+    private documentApi: DocumentApiService,
+    private userPreferencesService: UserPreferencesService
+  ) {
+    const prefs = this.userPreferencesService.getPreferences();
+    this.sortSubject.next({ sortBy: prefs.sortBy, sortOrder: prefs.sortOrder });
+  }
+
+  updateFilters(filters: SearchFilters) {
+    this.filtersSubject.next(filters);
+  }
+
+  updateSort(sortBy: string, sortOrder: 'ASC' | 'DESC') {
+    this.sortSubject.next({ sortBy, sortOrder });
+    this.userPreferencesService.setSort(sortBy, sortOrder);
+  }
 
   getSuggestions(query: string): Observable<Suggestion[]> {
     console.log('getSuggestions for query: ' + query);
@@ -26,6 +49,12 @@ export class SearchService {
   }
 
   searchDocuments(query: string): Observable<DocumentSearchResult> {
-    return this.documentApi.searchDocuments(query, null, null);
+    const currentFilters = this.filtersSubject.value;
+    const currentSort = this.sortSubject.value;
+    const sortInput = {
+      field: currentSort.sortBy,
+      order: currentSort.sortOrder
+    };
+    return this.documentApi.searchDocuments(query, currentFilters, sortInput);
   }
 }

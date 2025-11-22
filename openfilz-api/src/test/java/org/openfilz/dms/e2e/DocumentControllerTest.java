@@ -83,7 +83,7 @@ class DocumentControllerTest {
     @Test
     void getDocumentInfo_Success() {
         UUID documentId = UUID.randomUUID();
-        DocumentInfo info = new DocumentInfo(DocumentType.FILE, "test.txt", null, null, null);
+        DocumentInfo info = new DocumentInfo(DocumentType.FILE, null, "test.txt", null, null, null);
 
         when(documentService.getDocumentInfo(documentId, false))
                 .thenReturn(Mono.just(info));

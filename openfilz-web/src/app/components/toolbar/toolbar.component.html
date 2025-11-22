@@ -69,6 +69,34 @@
     }
   </div>
 
+  <!-- Sort Controls (center) -->
+  @if(!hasSelection) {
+    <div class="toolbar-center">
+      <div class="sort-controls">
+        <button mat-button [matMenuTriggerFor]="sortMenu" class="sort-btn">
+          <i class="fas fa-sort"></i>
+          <span>Sort By</span>
+          <i class="fas fa-chevron-down"></i>
+        </button>
+        <mat-menu #sortMenu="matMenu" class="sort-menu">
+          @for(option of sortOptions; track option.value) {
+            <button mat-menu-item (click)="onSortChange(option.value)" [class.active]="sortBy === option.value">
+              <span>{{ option.label }}</span>
+              @if(sortBy === option.value) {
+                <i class="fas fa-check"></i>
+              }
+            </button>
+          }
+        </mat-menu>
+        
+        <button mat-icon-button (click)="toggleSortOrder()" class="sort-direction-btn" 
+                [matTooltip]="sortOrder === 'ASC' ? 'Ascending' : 'Descending'">
+          <i class="fas" [class.fa-sort-amount-up]="sortOrder === 'ASC'" [class.fa-sort-amount-down]="sortOrder === 'DESC'"></i>
+        </button>
+      </div>
+    </div>
+  }
+
   <div class="toolbar-right">
     <!-- Pagination -->
     @if(totalItems > 0) {

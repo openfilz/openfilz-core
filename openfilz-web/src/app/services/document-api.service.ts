@@ -1,8 +1,9 @@
 import {Injectable} from '@angular/core';
 import {HttpClient, HttpHeaders, HttpParams} from '@angular/common/http';
-import {map, Observable} from 'rxjs';
+import {filter, map, Observable} from 'rxjs';
 import {Apollo, gql} from 'apollo-angular';
 import {
+    AuditLog,
     CopyRequest,
     CreateFolderRequest,
     DashboardStatistics,
@@ -12,13 +13,17 @@ import {
     FolderResponse,
     ListFolderAndCountResponse,
     MoveRequest,
-    MultipleUploadFileParameter,
     RecentFileInfo,
     RenameRequest,
     SearchByMetadataRequest,
-    UploadResponse
+    UploadResponse,
+    MultipleUploadFileParameter,
+    ListFolderRequest,
+    FilterInput,
+    SearchFilters,
+    DocumentType
 } from '../models/document.models';
-import {environment} from "../../environments/environment";
+import {environment} from '../../environments/environment';
 
 const LIST_FOLDER_QUERY = gql`
   query listFolder($request: ListFolderRequest!) {
@@ -146,6 +151,50 @@ export class DocumentApiService {
     });
   }
 
+  private mapFiltersToRequest(filters?: SearchFilters): Partial<ListFolderRequest> {
+    if (!filters) {
+      return {};
+    }
+
+    const request: Partial<ListFolderRequest> = {};
+
+    if (filters.type) {
+      request.type = filters.type;
+    }
+
+    if (filters.owner) {
+      request.createdBy = filters.owner;
+    }
+
+    if (filters.dateModified && filters.dateModified !== 'any') {
+      const now = new Date();
+      let date: Date | undefined;
+      switch (filters.dateModified) {
+        case 'today':
+          date = new Date(now.setHours(0, 0, 0, 0));
+          break;
+        case 'last7':
+          date = new Date(now.setDate(now.getDate() - 7));
+          break;
+        case 'last30':
+          date = new Date(now.setDate(now.getDate() - 30));
+          break;
+      }
+      if (date) {
+          request.updatedAtAfter = date.toISOString();
+      }
+    }
+
+    if (filters.fileType && filters.fileType !== 'any') {
+        request.contentType = filters.fileType;
+    }
+
+    if(filters.metadata && filters.metadata.length > 0) {
+        request.metadata = this.toJsonMetadata(filters.metadata);
+    }
+
+    return request;
+  }
 
     listDeletedFolderAndCount(folderId?: string, page: number = 1, pageSize: number = 50): Observable<ListFolderAndCountResponse> {
         const request1 = {
@@ -179,14 +228,17 @@ export class DocumentApiService {
 
 
   // Folder operations
-  listFolder(folderId?: string, page: number = 1, pageSize: number = 50): Observable<ElementInfo[]> {
-    //console.log(`listFolder ${folderId} - page ${page}`);
+  listFolder(folderId?: string, page: number = 1, pageSize: number = 50, filters?: SearchFilters, sortBy?: string, sortOrder?: 'ASC' | 'DESC'): Observable<ElementInfo[]> {
+    const filterRequest = this.mapFiltersToRequest(filters);
     const request = {
       id: folderId,
       pageInfo: {
         pageNumber: page,
-        pageSize: pageSize
-      }
+        pageSize: pageSize,
+        sortBy,
+        sortOrder
+      },
+      ...filterRequest
     };
 
     return this.apollo.watchQuery<any>({
@@ -198,17 +250,22 @@ export class DocumentApiService {
     );
   }
 
-  listFolderAndCount(folderId?: string, page: number = 1, pageSize: number = 50): Observable<ListFolderAndCountResponse> {
+  listFolderAndCount(folderId?: string, page: number = 1, pageSize: number = 50, filters?: SearchFilters, sortBy?: string, sortOrder?: 'ASC' | 'DESC'): Observable<ListFolderAndCountResponse> {
+    const filterRequest = this.mapFiltersToRequest(filters);
     const request1 = {
       id: folderId,
       pageInfo: {
         pageNumber: page,
-        pageSize: pageSize
-      }
+        pageSize: pageSize,
+        sortBy,
+        sortOrder
+      },
+      ...filterRequest
     };
 
     const request2 = {
-      id: folderId
+      id: folderId,
+      ...filterRequest
     };
 
     return this.apollo.watchQuery<any>({
@@ -223,36 +280,39 @@ export class DocumentApiService {
         };
       })
     );
-    
   }
 
-    listFavoritesAndCount(page: number = 1, pageSize: number = 50): Observable<ListFolderAndCountResponse> {
-        const request1 = {
-            pageInfo: {
-                pageNumber: page,
-                pageSize: pageSize
-            }
+  listFavoritesAndCount(page: number = 1, pageSize: number = 50, filters?: SearchFilters, sortBy?: string, sortOrder?: 'ASC' | 'DESC'): Observable<ListFolderAndCountResponse> {
+    const filterRequest = this.mapFiltersToRequest(filters);
+    const request1 = {
+      pageInfo: {
+        pageNumber: page,
+        pageSize: pageSize,
+        sortBy,
+        sortOrder
+      },
+      ...filterRequest
+    };
+
+    const request2 = {
+      ...filterRequest
+    };
+
+    return this.apollo.watchQuery<any>({
+      fetchPolicy: 'no-cache',
+      query: LIST_FAVORITES_AND_COUNT_QUERY,
+      variables: { request1, request2 }
+    }).valueChanges.pipe(
+      map(result => {
+        return {
+          listFolder: result.data.listFavorites,
+          count: result.data.countFavorites
         };
+      })
+    );
+  }
 
-        const request2 = {
-        };
-
-        return this.apollo.watchQuery<any>({
-            fetchPolicy: 'no-cache',
-            query: LIST_FAVORITES_AND_COUNT_QUERY,
-            variables: { request1, request2 }
-        }).valueChanges.pipe(
-            map(result => {
-                return {
-                    listFolder: result.data.listFavorites,
-                    count: result.data.countFavorites
-                };
-            })
-        );
-
-    }
-
-  createFolder(request: CreateFolderRequest): Observable<FolderResponse> {
+ createFolder(request: CreateFolderRequest): Observable<FolderResponse> {
     return this.http.post<FolderResponse>(`${this.baseUrl}/folders`, request, {
       headers: this.getHeaders()
     });
@@ -351,7 +411,7 @@ export class DocumentApiService {
     });
   }
 
-  uploadMultipleDocuments(files: File[], parentFolderId?: string, allowDuplicateFileNames?: boolean): Observable<UploadResponse> {
+  uploadMultipleDocuments(files: File[], parentFolderId?: string, allowDuplicateFileNames?: boolean, metadata?: { [key: string]: any }): Observable<UploadResponse> {
     const formData = new FormData();
     const parametersByFilename: MultipleUploadFileParameter[] = [];
     files.forEach(file => {
@@ -359,11 +419,12 @@ export class DocumentApiService {
       parametersByFilename.push({
         filename: file.name,
         fileAttributes: {
-          parentFolderId: parentFolderId
+          parentFolderId: parentFolderId,
+          metadata: metadata
         }
       });
     });
-    if (parentFolderId) {
+    if (parentFolderId || metadata) {
       formData.append('parametersByFilename', new Blob([JSON.stringify(parametersByFilename)], {type: 'application/json'}));
     }
 
@@ -381,6 +442,12 @@ export class DocumentApiService {
 
   searchDocumentIdsByMetadata(request: SearchByMetadataRequest): Observable<string[]> {
     return this.http.post<string[]>(`${this.baseUrl}/documents/search/ids-by-metadata`, request, {
+      headers: this.getHeaders()
+    });
+  }
+
+  updateDocumentMetadata(documentId: string, metadata: { [key: string]: any }): Observable<ElementInfo> {
+    return this.http.patch<ElementInfo>(`${this.baseUrl}/documents/${documentId}/metadata`, { metadataToUpdate: metadata }, {
       headers: this.getHeaders()
     });
   }
@@ -477,17 +544,72 @@ export class DocumentApiService {
 
   searchDocuments(
     query: string | null,
-    filters: any[] | null,
+    filters: SearchFilters | null,
     sort: any | null,
     page: number = 1,
     size: number = 20
   ): Observable<any> {
+    const filterInputs: FilterInput[] = [];
+    if (filters) {
+        if (filters.type) {
+            filterInputs.push({ field: 'type', value: filters.type });
+        }
+        if (filters.owner) {
+            filterInputs.push({ field: 'createdBy', value: filters.owner });
+        }
+        if (filters.dateModified && filters.dateModified !== 'any') {
+             const now = new Date();
+             let date: Date | undefined;
+             switch (filters.dateModified) {
+               case 'today': date = new Date(now.setHours(0, 0, 0, 0)); break;
+               case 'last7': date = new Date(now.setDate(now.getDate() - 7)); break;
+               case 'last30': date = new Date(now.setDate(now.getDate() - 30)); break;
+             }
+             if (date) {
+                 filterInputs.push({ field: 'updatedAtAfter', value: date.toISOString() });
+             }
+        }
+        if (filters.fileType && filters.fileType !== 'any') {
+            filterInputs.push({ field: 'contentType', value: filters.fileType });
+        }
+        if (filters.metadata) {
+            filters.metadata.forEach(meta => {
+                if (meta.key && meta.value) {
+                    filterInputs.push({ field: 'metadata.' + meta.key, value: meta.value });
+                }
+            });
+        }
+    }
+
     return this.apollo.watchQuery<any>({
       fetchPolicy: 'no-cache',
       query: SEARCH_DOCUMENTS_QUERY,
-      variables: { query, filters, sort, page, size }
+      variables: { query, filters: filterInputs, sort, page, size }
     }).valueChanges.pipe(
       map(result => result.data.searchDocuments)
     );
   }
+
+  // Audit operations
+  getAuditTrail(documentId: string, sortOrder: 'ASC' | 'DESC' = 'DESC'): Observable<AuditLog[]> {
+    let params = new HttpParams().set('sort', sortOrder);
+    return this.http.get<AuditLog[]>(`${this.baseUrl}/audit/${documentId}`, {
+      headers: this.getHeaders(),
+      params
+    });
+  }
+
+  toJsonMetadata(metadata: { key: string; value: string; }[]): { [key: string]: any; } | undefined {
+    if (!metadata || metadata.length === 0) {
+      return undefined;
+    }
+
+    const jsonMetadata: { [key: string]: any; } = {};
+    metadata.forEach(meta => {
+      jsonMetadata[meta.key] = meta.value;
+    });
+    return jsonMetadata;
+  }
+
 }
+

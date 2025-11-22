@@ -20,7 +20,10 @@
     (clearSelection)="onClearSelection()"
     (previousPage)="onPreviousPage()"
     (nextPage)="onNextPage()"
-    (pageSizeChange)="onPageSizeChange($event)">
+    (pageSizeChange)="onPageSizeChange($event)"
+    [sortBy]="sortBy"
+    [sortOrder]="sortOrder"
+    (sortChange)="onSortChange($event)">
   </app-toolbar>
 
   <div class="favorites-content">
@@ -67,7 +70,11 @@
           (download)="onDownloadItem($event)"
           (move)="onMoveItem($event)"
           (copy)="onCopyItem($event)"
-          (delete)="onDeleteItem($event)">
+          (copy)="onCopyItem($event)"
+          (delete)="onDeleteItem($event)"
+          [sortBy]="sortBy"
+          [sortOrder]="sortOrder"
+          (sortChange)="onSortChange($event)">
         </app-file-list>
       }
     }

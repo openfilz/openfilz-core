@@ -9,7 +9,7 @@ import {DocumentApiService} from '../../services/document-api.service';
 import {FileGridComponent} from '../../components/file-grid/file-grid.component';
 import {FileListComponent} from '../../components/file-list/file-list.component';
 import {ToolbarComponent} from '../../components/toolbar/toolbar.component';
-import {ElementInfo, FileItem, ListFolderAndCountResponse} from '../../models/document.models';
+import {ElementInfo, FileItem, ListFolderAndCountResponse, SearchFilters} from '../../models/document.models';
 import {FileIconService} from '../../services/file-icon.service';
 import {BreadcrumbService} from '../../services/breadcrumb.service';
 import {AppConfig} from '../../config/app.config';
@@ -17,6 +17,8 @@ import {FileOperationsComponent} from "../../components/base/file-operations.com
 import {ActivatedRoute, Router} from "@angular/router";
 import {SearchService} from "../../services/search.service";
 import {MatDialog} from "@angular/material/dialog";
+
+import { UserPreferencesService } from '../../services/user-preferences.service';
 
 @Component({
   selector: 'app-favorites',
@@ -40,6 +42,7 @@ export class FavoritesComponent extends FileOperationsComponent implements OnIni
   // Click delay handling
   private clickTimeout: any = null;
   private readonly CLICK_DELAY = 250; // milliseconds
+  currentFilters?: SearchFilters;
 
     constructor(
         private route: ActivatedRoute,
@@ -48,13 +51,17 @@ export class FavoritesComponent extends FileOperationsComponent implements OnIni
         router: Router,
         documentApi: DocumentApiService,
         dialog: MatDialog,
-        snackBar: MatSnackBar
+        snackBar: MatSnackBar,
+        userPreferencesService: UserPreferencesService
     ) {
-        super(router, documentApi, dialog, snackBar);
+        super(router, documentApi, dialog, snackBar, userPreferencesService);
     }
 
     override ngOnInit() {
-        this.loadFavorites();
+        this.searchService.filters$.subscribe(filters => {
+            this.currentFilters = filters;
+            this.loadFavorites();
+        });
     }
 
     override loadItems() {
@@ -69,7 +76,7 @@ export class FavoritesComponent extends FileOperationsComponent implements OnIni
 
       loadFavorites() {
           this.loading = true;
-          this.documentApi.listFavoritesAndCount(1, this.pageSize).subscribe({
+          this.documentApi.listFavoritesAndCount(this.pageIndex + 1, this.pageSize, this.currentFilters, this.sortBy, this.sortOrder).subscribe({
               next: (listAndCount: ListFolderAndCountResponse) => {
                   this.totalItems = listAndCount.count;
                   this.pageIndex = 0;
