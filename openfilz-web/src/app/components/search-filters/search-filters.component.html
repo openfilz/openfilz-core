@@ -26,14 +26,16 @@
     />
   </div>
 
-  <div class="filter-section">
-    <label>File Type</label>
-    <select [(ngModel)]="filters.fileType">
-      <option *ngFor="let ft of fileTypeOptions" [value]="ft.value">
-        {{ ft.label }}
-      </option>
-    </select>
-  </div>
+  @if (showFileTypeFilter) {
+    <div class="filter-section">
+      <label>File Type</label>
+      <select [(ngModel)]="filters.fileType">
+        <option *ngFor="let ft of fileTypeOptions" [value]="ft.value">
+          {{ ft.label }}
+        </option>
+      </select>
+    </div>
+  }
 
   <div class="filter-actions">
     <button class="btn-clear" (click)="clearFilters()">Clear</button>

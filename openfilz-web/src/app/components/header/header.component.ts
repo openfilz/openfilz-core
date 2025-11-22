@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from "@angular/core";
+import { Component, ElementRef, EventEmitter, HostListener, Input, OnDestroy, OnInit, Output } from "@angular/core";
 import { Router } from "@angular/router";
 import { Subject, Subscription } from "rxjs";
 import { SearchService } from "../../services/search.service";
@@ -29,7 +29,8 @@ export class HeaderComponent implements OnInit, OnDestroy {
   constructor(
     private searchService: SearchService,
     private apiService: DocumentApiService,
-    private router: Router
+    private router: Router,
+    private elementRef: ElementRef
   ) { }
 
   ngOnInit(): void {
@@ -40,6 +41,16 @@ export class HeaderComponent implements OnInit, OnDestroy {
     ).subscribe(suggestions => {
       this.suggestions = suggestions;
     });
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent) {
+    if (this.showFilters) {
+      const clickedInside = this.elementRef.nativeElement.contains(event.target);
+      if (!clickedInside) {
+        this.showFilters = false;
+      }
+    }
   }
 
   onSearchInput(): void {

@@ -204,7 +204,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
   override ngOnInit() {
 
       // Initial load
-      this.handleFolderIdChange();
+      //this.handleFolderIdChange();
 
       // Listen for subsequent navigation events to the same route
       this.routerEventsSubscription = this.router.events.pipe(

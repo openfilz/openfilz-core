@@ -35,6 +35,10 @@ export class SearchFiltersComponent implements OnInit {
     }
   }
 
+  get showFileTypeFilter(): boolean {
+    return this.filters.type !== DocumentType.FOLDER;
+  }
+
   documentTypes = [
     { label: 'All', value: undefined },
     { label: 'Folders', value: DocumentType.FOLDER },
