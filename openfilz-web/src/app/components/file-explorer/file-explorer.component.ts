@@ -14,6 +14,7 @@ import { MetadataPanelComponent } from '../metadata-panel/metadata-panel.compone
 import { CreateFolderDialogComponent } from '../../dialogs/create-folder-dialog/create-folder-dialog.component';
 import { RenameDialogComponent, RenameDialogData } from '../../dialogs/rename-dialog/rename-dialog.component';
 import { FolderTreeDialogComponent } from '../../dialogs/folder-tree-dialog/folder-tree-dialog.component';
+import { FileViewerDialogComponent } from '../../dialogs/file-viewer-dialog/file-viewer-dialog.component';
 import { FileOperationsComponent } from '../base/file-operations.component';
 
 import { DocumentApiService } from '../../services/document-api.service';
@@ -364,8 +365,24 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
     if (item.type === 'FOLDER') {
       this.loadFolder(item, false, true);
     } else {
-      this.onDownloadItem(item);
+      // Open file viewer for files
+      this.openFileViewer(item);
     }
+  }
+
+  private openFileViewer(item: FileItem) {
+    const dialogRef = this.dialog.open(FileViewerDialogComponent, {
+      width: '95vw',
+      height: '95vh',
+      maxWidth: '1400px',
+      maxHeight: '900px',
+      panelClass: 'file-viewer-dialog-container',
+      data: {
+        documentId: item.id,
+        fileName: item.name,
+        contentType: item.contentType || ''
+      }
+    });
   }
 
   onCreateFolder() {

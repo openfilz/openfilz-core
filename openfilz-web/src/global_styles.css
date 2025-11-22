@@ -1,6 +1,9 @@
 /* Import Inter font */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
+/* Import highlight.js syntax highlighting (VS Code Dark+ theme) */
+@import 'highlight.js/styles/vs2015.css';
+
 :root {
   /* Default Light Theme Variables (Fallback) */
   --primary: #6366f1;
@@ -304,3 +307,14 @@ body {
 
 html, body { height: 100%; }
 body { margin: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; }
+
+/* File Viewer Dialog Custom Styles */
+.file-viewer-dialog-container .mat-mdc-dialog-container {
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.file-viewer-dialog-container .mat-mdc-dialog-surface {
+  border-radius: 8px;
+  overflow: hidden;
+}
