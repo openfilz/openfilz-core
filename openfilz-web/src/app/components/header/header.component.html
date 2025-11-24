@@ -1,48 +1,39 @@
 <div class="header">
-  <div class="header-left">
-      <div class="search-box">
-          <svg class="search-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"></circle>
-              <path d="m21 21-4.35-4.35"></path>
-          </svg>
-          <input
-              type="text"
-              placeholder="Type anything to search"
-              [(ngModel)]="searchQuery"
-              (input)="onSearchInput()"
-              (keyup.enter)="onSearch()">
-          
-          <i class="fa-solid fa-sliders filter-icon" (click)="toggleFilters()" title="Search options"></i>
+    <div class="header-left">
+        <div class="search-box">
+            <svg class="search-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input type="text" placeholder="Type anything to search" [(ngModel)]="searchQuery" (input)="onSearchInput()"
+                (keyup.enter)="onSearch()">
 
-          <!-- Suggestions Dropdown -->
-          @if (suggestions.length > 0) {
-              <ul class="suggestions-list">
-                  @for (suggestion of suggestions; track $index) {
-                      <li class="suggestion-info" (click)="selectSuggestion(suggestion.id)">
-                          <i class="suggestion-icon" [ngClass]="getIconForExtension(suggestion.ext)"></i>
-                          <span class="suggestion-text">{{ suggestion.s }}</span>
-                          <div class="suggestion-actions">
-                              <i class="fa-solid fa-download"
-                                 title="Download"
-                                 (click)="onDownload(suggestion, $event)"></i>
-                              <i class="fa-solid fa-arrow-up-right-from-square"
-                                 title="Open"
-                                 (click)="onOpen(suggestion, $event)"></i>
-                          </div>
-                      </li>
-                  }
-              </ul>
-          }
-          @if (showFilters) {
-            <app-search-filters
-                [initialFilters]="currentFilters"
-                (filtersChanged)="onFiltersChanged($event)"
+            <i class="fa-solid fa-sliders filter-icon" (click)="toggleFilters()" title="Search options"></i>
+
+            <!-- Suggestions Dropdown -->
+            @if (suggestions.length > 0) {
+            <ul class="suggestions-list">
+                @for (suggestion of suggestions; track $index) {
+                <li class="suggestion-info" (click)="selectSuggestion(suggestion.id)">
+                    <i class="suggestion-icon" [ngClass]="getIconForExtension(suggestion.ext)"></i>
+                    <span class="suggestion-text">{{ suggestion.s }}</span>
+                    <div class="suggestion-actions">
+                        <i class="fa-solid fa-download" title="Download" (click)="onDownload(suggestion, $event)"></i>
+                        <i class="fa-solid fa-arrow-up-right-from-square" title="Open"
+                            (click)="onOpen(suggestion, $event)"></i>
+                    </div>
+                </li>
+                }
+            </ul>
+            }
+            @if (showFilters) {
+            <app-search-filters [initialFilters]="currentFilters" (filtersChanged)="onFiltersChanged($event)"
                 (close)="toggleFilters()">
             </app-search-filters>
-          }
-      </div>
-  </div>
-  <div class="header-right">
-    <div class="avatar">JD</div>
-  </div>
+            }
+        </div>
+    </div>
+    <div class="header-right">
+        <div class="avatar" (click)="navigateToSettings()" style="cursor: pointer;">{{ userInitials }}</div>
+    </div>
 </div>

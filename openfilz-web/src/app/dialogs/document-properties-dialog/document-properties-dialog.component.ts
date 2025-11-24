@@ -1,4 +1,4 @@
-import { Component, Inject, OnInit, ViewChild } from '@angular/core';
+import { Component, inject, OnInit, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -86,12 +86,12 @@ export class DocumentPropertiesDialogComponent implements OnInit {
   };
 
 
-  constructor(
-    public dialogRef: MatDialogRef<DocumentPropertiesDialogComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: DocumentPropertiesDialogData,
-    private documentApi: DocumentApiService,
-    private snackBar: MatSnackBar
-  ) {}
+  readonly dialogRef = inject(MatDialogRef<DocumentPropertiesDialogComponent>);
+  readonly data = inject<DocumentPropertiesDialogData>(MAT_DIALOG_DATA);
+  private documentApi = inject(DocumentApiService);
+  private snackBar = inject(MatSnackBar);
+
+  constructor() { }
 
   ngOnInit() {
     this.loadDocumentInfo();
@@ -118,7 +118,7 @@ export class DocumentPropertiesDialogComponent implements OnInit {
     });
   }
 
-  
+
   /**
    * Filter out system metadata keys that should not be editable
    */
@@ -253,7 +253,7 @@ export class DocumentPropertiesDialogComponent implements OnInit {
     }
   }
 
-onMetadataChange(metadata: { [key: string]: any }) {
+  onMetadataChange(metadata: { [key: string]: any }) {
     this.currentMetadata = metadata;
   }
 

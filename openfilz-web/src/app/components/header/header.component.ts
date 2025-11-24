@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Component, ElementRef, EventEmitter, HostListener, Input, OnDestroy, OnInit, Output } from "@angular/core";
+import { Component, ElementRef, HostListener, Input, OnDestroy, OnInit, inject } from "@angular/core";
 import { Router } from "@angular/router";
 import { Subject, Subscription } from "rxjs";
 import { SearchService } from "../../services/search.service";
@@ -20,18 +20,26 @@ export class HeaderComponent implements OnInit, OnDestroy {
   searchQuery: string = '';
   suggestions: Suggestion[] = [];
   showFilters = false;
-  @Input() hasSelection: boolean = false;
+  userInitials: string = '';
   currentFilters?: SearchFilters;
 
   private searchSubject = new Subject<string>();
   private searchSubscription!: Subscription;
 
-  constructor(
-    private searchService: SearchService,
-    private apiService: DocumentApiService,
-    private router: Router,
-    private elementRef: ElementRef
-  ) { }
+  private searchService = inject(SearchService);
+  private apiService = inject(DocumentApiService);
+  private router = inject(Router);
+  private elementRef = inject(ElementRef);
+
+  @Input() hasSelection: boolean = false;
+  @Input() set userData(value: any) {
+    if (value) {
+      const data = value.userData || value;
+      this.calculateInitials(data);
+    }
+  }
+
+  constructor() { }
 
   ngOnInit(): void {
     this.searchSubscription = this.searchSubject.pipe(
@@ -146,11 +154,32 @@ export class HeaderComponent implements OnInit, OnDestroy {
   }
 
   protected onOpen(suggestion: Suggestion, event: MouseEvent) {
-
     //console.log(`Opening document with ID: ${suggestion.id}`);
-    if(suggestion.id != null && suggestion.ext == null) {
-        this.router.navigate(['/my-folder'], { queryParams: { folderId: suggestion.id } });
+    if (suggestion.id != null && suggestion.ext == null) {
+      this.router.navigate(['/my-folder'], { queryParams: { folderId: suggestion.id } });
     }
     this.suggestions = [];
+  }
+
+  private calculateInitials(userData: any) {
+    if (!userData) return;
+    const name = userData.name || userData.preferred_username || 'User';
+
+    if (userData.given_name && userData.family_name) {
+      this.userInitials = (userData.given_name[0] + userData.family_name[0]).toUpperCase();
+    } else if (name.includes(' ')) {
+      const parts = name.split(' ');
+      if (parts.length >= 2) {
+        this.userInitials = (parts[0][0] + parts[1][0]).toUpperCase();
+      } else {
+        this.userInitials = name.substring(0, 2).toUpperCase();
+      }
+    } else {
+      this.userInitials = name.substring(0, 2).toUpperCase();
+    }
+  }
+
+  navigateToSettings() {
+    this.router.navigate(['/settings']);
   }
 }

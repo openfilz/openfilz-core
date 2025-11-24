@@ -1,4 +1,4 @@
-import { Component, Inject, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
+import { Component, inject, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -77,13 +77,13 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
   // Office viewer properties
   officeContent?: SafeHtml;
 
-  constructor(
-    public dialogRef: MatDialogRef<FileViewerDialogComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: FileViewerDialogData,
-    private documentApi: DocumentApiService,
-    private snackBar: MatSnackBar,
-    private sanitizer: DomSanitizer
-  ) {
+  readonly dialogRef = inject(MatDialogRef<FileViewerDialogComponent>);
+  readonly data = inject<FileViewerDialogData>(MAT_DIALOG_DATA);
+  private documentApi = inject(DocumentApiService);
+  private snackBar = inject(MatSnackBar);
+  private sanitizer = inject(DomSanitizer);
+
+  constructor() {
     // Configure PDF.js worker
     pdfjsLib.GlobalWorkerOptions.workerSrc =
       `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs`;
@@ -115,20 +115,20 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
     }
     // Images
     else if (contentType.startsWith('image/') ||
-             /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(fileName)) {
+      /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(fileName)) {
       this.viewerMode = 'image';
     }
     // Text/Code files
     else if (contentType.startsWith('text/') ||
-             contentType === 'application/json' ||
-             contentType === 'application/xml' ||
-             /\.(txt|json|xml|html|css|js|ts|java|py|md|yml|yaml|sh|bat|log)$/i.test(fileName)) {
+      contentType === 'application/json' ||
+      contentType === 'application/xml' ||
+      /\.(txt|json|xml|html|css|js|ts|java|py|md|yml|yaml|sh|bat|log)$/i.test(fileName)) {
       this.viewerMode = 'text';
     }
     // Office documents
     else if (contentType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-             contentType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-             /\.(docx|xlsx)$/i.test(fileName)) {
+      contentType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      /\.(docx|xlsx)$/i.test(fileName)) {
       this.viewerMode = 'office';
     }
     else {

@@ -3,7 +3,7 @@
   [class.dashboard-view]="currentRoute === 'dashboard'">
   <app-sidebar (collapsedChange)="onSidebarCollapsedChange($event)" (logout)="logout()"></app-sidebar>
 
-  <app-header [hasSelection]="hasSelectedItems">
+  <app-header [hasSelection]="hasSelectedItems" [userData]="(userData$ | async)">
   </app-header>
 
   @if(currentRoute == 'my-folder' || currentRoute == 'recycle-bin') {

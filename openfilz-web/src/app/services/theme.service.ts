@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import { UserPreferencesService } from './user-preferences.service';
 
@@ -12,7 +12,7 @@ export interface Theme {
   providedIn: 'root'
 })
 export class ThemeService {
-  
+
   public readonly availableThemes: Theme[] = [
     { name: 'light', displayName: 'Light (Default)', className: 'theme-light' },
     { name: 'dark', displayName: 'Dark', className: 'theme-dark' },
@@ -23,7 +23,9 @@ export class ThemeService {
   private currentThemeSubject = new BehaviorSubject<Theme>(this.availableThemes[0]);
   currentTheme$ = this.currentThemeSubject.asObservable();
 
-  constructor(private userPreferencesService: UserPreferencesService) {
+  private userPreferencesService = inject(UserPreferencesService);
+
+  constructor() {
     this.loadSavedTheme();
   }
 
@@ -57,7 +59,7 @@ export class ThemeService {
     this.availableThemes.forEach(t => {
       document.body.classList.remove(t.className);
     });
-    
+
     // Add new theme class
     document.body.classList.add(theme.className);
     this.currentThemeSubject.next(theme);
