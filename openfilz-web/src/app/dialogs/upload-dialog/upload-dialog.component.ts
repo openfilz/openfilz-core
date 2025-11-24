@@ -1,4 +1,4 @@
-import { Component, Inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -39,11 +39,11 @@ export class UploadDialogComponent {
   totalSize: number = 0;
   allowDuplicates: boolean = false;
 
-  constructor(
-    public dialogRef: MatDialogRef<UploadDialogComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: UploadDialogData
-  ) {
-    this.files = data.files;
+  readonly dialogRef = inject(MatDialogRef<UploadDialogComponent>);
+  readonly data = inject<UploadDialogData>(MAT_DIALOG_DATA);
+
+  constructor() {
+    this.files = this.data.files;
     this.totalSize = this.files.reduce((sum, file) => sum + file.size, 0);
   }
 

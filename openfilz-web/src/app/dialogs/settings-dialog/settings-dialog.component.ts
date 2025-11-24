@@ -1,11 +1,11 @@
-import {Component, Inject} from '@angular/core';
-import {CommonModule} from '@angular/common';
-import {MAT_DIALOG_DATA, MatDialogModule, MatDialogRef} from '@angular/material/dialog';
-import {MatButtonModule} from '@angular/material/button';
-import {MatFormFieldModule} from '@angular/material/form-field';
-import {MatSelectModule} from '@angular/material/select';
-import {FormsModule} from '@angular/forms';
-import {AppConfig} from "../../config/app.config";
+import { Component, inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MatButtonModule } from '@angular/material/button';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatSelectModule } from '@angular/material/select';
+import { FormsModule } from '@angular/forms';
+import { AppConfig } from "../../config/app.config";
 
 export interface SettingsDialogData {
   itemsPerPage: number;
@@ -29,11 +29,11 @@ export class SettingsDialogComponent {
   selectedItemsPerPage: number;
   itemsPerPageOptions: number[] = [10, 20, 50, 70, 100];
 
-  constructor(
-    public dialogRef: MatDialogRef<SettingsDialogComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: SettingsDialogData
-  ) {
-    this.selectedItemsPerPage = data.itemsPerPage;
+  readonly dialogRef = inject(MatDialogRef<SettingsDialogComponent>);
+  readonly data = inject<SettingsDialogData>(MAT_DIALOG_DATA);
+
+  constructor() {
+    this.selectedItemsPerPage = this.data.itemsPerPage;
   }
 
   onCancel(): void {

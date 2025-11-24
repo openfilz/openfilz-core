@@ -1,13 +1,13 @@
-import {Component, EventEmitter, Input, Output} from '@angular/core';
-import {CommonModule} from '@angular/common';
-import {MatTableModule} from '@angular/material/table';
-import {MatIconModule} from '@angular/material/icon';
-import {MatButtonModule} from '@angular/material/button';
-import {MatCheckboxModule} from '@angular/material/checkbox';
-import {MatTooltipModule} from '@angular/material/tooltip';
-import {MatSortModule, Sort} from '@angular/material/sort';
-import {FileItem} from '../../models/document.models';
-import {FileIconService} from '../../services/file-icon.service';
+import { Component, EventEmitter, Input, Output, inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { MatTableModule } from '@angular/material/table';
+import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatSortModule, Sort } from '@angular/material/sort';
+import { FileItem } from '../../models/document.models';
+import { FileIconService } from '../../services/file-icon.service';
 
 @Component({
   selector: 'app-file-list',
@@ -30,7 +30,7 @@ export class FileListComponent {
   @Input() showFavoriteButton: boolean = true; // Control favorite button visibility
   @Input() sortBy: string = 'name';
   @Input() sortOrder: 'ASC' | 'DESC' = 'ASC';
-  
+
   @Output() itemClick = new EventEmitter<FileItem>();
   @Output() itemDoubleClick = new EventEmitter<FileItem>();
   @Output() selectionChange = new EventEmitter<{ item: FileItem, selected: boolean }>();
@@ -51,7 +51,9 @@ export class FileListComponent {
     return ['select', 'name', 'size', 'type', 'actions'];
   }
 
-  constructor(private fileIconService: FileIconService) {}
+  private fileIconService = inject(FileIconService);
+
+  constructor() { }
 
   get allSelected(): boolean {
     return this.items.length > 0 && this.items.every(item => item.selected);

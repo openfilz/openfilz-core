@@ -3,7 +3,7 @@ import { of } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
 export class MockAuthService {
-    userData$ = of({ sub: 'mock-user', name: 'Mock User', preferred_username: 'mockuser' });
+    userData$ = of({ sub: 'mock-user', name: 'Openfilz User', preferred_username: 'mockuser' });
     isAuthenticated$ = of({ isAuthenticated: true });
 
     checkAuth() {

@@ -1,12 +1,12 @@
-import {Component, EventEmitter, Input, Output} from '@angular/core';
-import {CommonModule} from '@angular/common';
-import {MatCardModule} from '@angular/material/card';
-import {MatIconModule} from '@angular/material/icon';
-import {MatButtonModule} from '@angular/material/button';
-import {MatCheckboxModule} from '@angular/material/checkbox';
-import {MatTooltipModule} from '@angular/material/tooltip';
-import {FileItem} from '../../models/document.models';
-import {FileIconService} from '../../services/file-icon.service';
+import { Component, EventEmitter, Input, Output, inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { MatCardModule } from '@angular/material/card';
+import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { FileItem } from '../../models/document.models';
+import { FileIconService } from '../../services/file-icon.service';
 
 @Component({
   selector: 'app-file-grid',
@@ -38,7 +38,9 @@ export class FileGridComponent {
   @Output() toggleFavorite = new EventEmitter<FileItem>();
   @Output() viewProperties = new EventEmitter<FileItem>();
 
-  constructor(private fileIconService: FileIconService) {}
+  private fileIconService = inject(FileIconService);
+
+  constructor() { }
 
   onItemClick(item: FileItem) {
     this.itemClick.emit(item);

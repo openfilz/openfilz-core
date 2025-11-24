@@ -1,12 +1,12 @@
-import {Component, Inject, OnInit} from '@angular/core';
-import {CommonModule} from '@angular/common';
-import {MAT_DIALOG_DATA, MatDialogModule, MatDialogRef} from '@angular/material/dialog';
-import {MatButtonModule} from '@angular/material/button';
-import {MatIconModule} from '@angular/material/icon';
-import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
-import {MatPaginatorModule, PageEvent} from '@angular/material/paginator';
+import { Component, OnInit, inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 
-import {DocumentApiService} from '../../services/document-api.service';
+import { DocumentApiService } from '../../services/document-api.service';
 
 export interface FolderTreeDialogData {
   title: string;
@@ -41,7 +41,7 @@ interface BreadcrumbItem {
 })
 export class FolderTreeDialogComponent implements OnInit {
   folders: FolderItem[] = [];
-  breadcrumbs: BreadcrumbItem[] = [{name: 'Root'}];
+  breadcrumbs: BreadcrumbItem[] = [{ name: 'Root' }];
   currentFolderId?: string;
   loading = true;
 
@@ -50,11 +50,11 @@ export class FolderTreeDialogComponent implements OnInit {
   pageIndex = 0;
   pageSizeOptions: number[] = [10, 20, 50, 70, 100];
 
-  constructor(
-    private dialogRef: MatDialogRef<FolderTreeDialogComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: FolderTreeDialogData,
-    private documentApi: DocumentApiService
-  ) {}
+  private dialogRef = inject(MatDialogRef<FolderTreeDialogComponent>);
+  readonly data = inject<FolderTreeDialogData>(MAT_DIALOG_DATA);
+  private documentApi = inject(DocumentApiService);
+
+  constructor() { }
 
   ngOnInit() {
     const storedPageSize = localStorage.getItem('folderDialogItemsPerPage');
