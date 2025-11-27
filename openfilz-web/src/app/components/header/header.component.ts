@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Component, ElementRef, HostListener, Input, OnDestroy, OnInit, inject } from "@angular/core";
+import { Component, ElementRef, HostListener, Input, OnDestroy, OnInit, Output, EventEmitter, inject } from "@angular/core";
 import { Router } from "@angular/router";
 import { Subject, Subscription } from "rxjs";
 import { MatIconModule } from '@angular/material/icon';
@@ -41,6 +41,7 @@ export class HeaderComponent implements OnInit, OnDestroy {
     }
   }
 
+  @Output() mobileMenuToggle = new EventEmitter<void>();
   constructor() { }
 
   ngOnInit(): void {

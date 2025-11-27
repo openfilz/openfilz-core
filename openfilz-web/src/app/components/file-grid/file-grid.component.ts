@@ -44,9 +44,8 @@ export class FileGridComponent {
   private gridColumns = 5; // Approximate columns, will be calculated dynamically
 
   
-    private fileIconService = inject(FileIconService,
-    private touchDetectionService: TouchDetectionService
-  );
+  private fileIconService = inject(FileIconService);
+  private touchDetectionService = inject(TouchDetectionService);
 
   constructor() { }
 

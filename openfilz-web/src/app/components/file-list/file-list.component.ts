@@ -56,8 +56,8 @@ export class FileListComponent {
   }
 
   
-    private fileIconService = inject(FileIconService,
-    private touchDetectionService: TouchDetectionService
+    private fileIconService = inject(FileIconService);
+    private touchDetectionService= inject(TouchDetectionService
   );
 
   constructor() { }
