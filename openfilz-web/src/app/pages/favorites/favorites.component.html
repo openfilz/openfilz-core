@@ -1,8 +1,7 @@
 <div class="favorites-container">
-  <!-- Toolbar with page title and integrated pagination (no upload/create folder buttons) -->
+  <!-- Toolbar with integrated pagination (no upload/create folder buttons) -->
   <app-toolbar
-    [pageTitle]="'Favorites'"
-    [pageIcon]="'favorite'"
+    
     [viewMode]="viewMode"
     [hasSelection]="hasSelectedItems"
     [selectionCount]="selectedItems.length"
@@ -24,6 +23,16 @@
     [sortBy]="sortBy"
     [sortOrder]="sortOrder"
     (sortChange)="onSortChange($event)">
+
+    <!-- Breadcrumb projected into toolbar for mobile visibility -->
+    <div toolbarBreadcrumb class="toolbar-breadcrumb-compact">
+      <button mat-icon-button
+              aria-label="Favorites"
+              class="breadcrumb-home-btn">
+        <mat-icon>favorite</mat-icon>
+      </button>
+      <span class="breadcrumb-text">Favorites</span>
+    </div>
   </app-toolbar>
 
   <div class="favorites-content">

@@ -5,7 +5,8 @@ import {filter, Subscription, take} from 'rxjs';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatIcon } from "@angular/material/icon";
+import { MatIcon, MatIconModule } from "@angular/material/icon";
+import { MatButtonModule } from "@angular/material/button";
 
 import { FileGridComponent } from '../file-grid/file-grid.component';
 import { FileListComponent } from '../file-list/file-list.component';
@@ -15,6 +16,7 @@ import { CreateFolderDialogComponent } from '../../dialogs/create-folder-dialog/
 import { RenameDialogComponent, RenameDialogData } from '../../dialogs/rename-dialog/rename-dialog.component';
 import { FolderTreeDialogComponent } from '../../dialogs/folder-tree-dialog/folder-tree-dialog.component';
 import { FileViewerDialogComponent } from '../../dialogs/file-viewer-dialog/file-viewer-dialog.component';
+import { KeyboardShortcutsDialogComponent } from '../../dialogs/keyboard-shortcuts-dialog/keyboard-shortcuts-dialog.component';
 import { FileOperationsComponent } from '../base/file-operations.component';
 
 import { DocumentApiService } from '../../services/document-api.service';
@@ -22,6 +24,7 @@ import { FileIconService } from '../../services/file-icon.service';
 import { BreadcrumbService } from '../../services/breadcrumb.service';
 import { SearchService } from '../../services/search.service';
 import { UserPreferencesService } from '../../services/user-preferences.service';
+import { KeyboardShortcutsService } from '../../services/keyboard-shortcuts.service';
 
 import {
     CreateFolderRequest,
@@ -67,6 +70,26 @@ import {AppConfig} from '../../config/app.config';
         [sortBy]="sortBy"
         [sortOrder]="sortOrder"
         (sortChange)="onSortChange($event)">
+
+        <!-- Breadcrumb projected into toolbar for mobile visibility -->
+        <div toolbarBreadcrumb class="toolbar-breadcrumb-compact">
+          @if(breadcrumbTrail.length > 0) {
+            <button mat-icon-button (click)="navigateBack()"
+                    aria-label="Navigate back"
+                    class="breadcrumb-back-btn">
+              <mat-icon>arrow_back</mat-icon>
+            </button>
+            <mat-icon class="separator">chevron_right</mat-icon>
+            <span class="breadcrumb-text">{{ breadcrumbTrail[breadcrumbTrail.length - 1].name }}</span>
+          } @else {
+            <button mat-icon-button (click)="navigateToHome()"
+                    aria-label="Home"
+                    class="breadcrumb-home-btn">
+              <mat-icon>home</mat-icon>
+            </button>
+            <span class="breadcrumb-text">My Folder</span>
+          }
+        </div>
       </app-toolbar>
 
       <div class="file-explorer-content" appDragDrop
@@ -153,6 +176,8 @@ import {AppConfig} from '../../config/app.config';
     MatDialogModule,
     MatSnackBarModule,
     MatProgressSpinnerModule,
+    MatIconModule,
+    MatButtonModule,
     FileGridComponent,
     FileListComponent,
     ToolbarComponent,
@@ -179,12 +204,14 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
   @ViewChild('fileInput') fileInput!: ElementRef;
 
   private routerEventsSubscription!: Subscription;
+  private shortcutsSubscription?: Subscription;
 
   constructor(
     private fileIconService: FileIconService,
     private breadcrumbService: BreadcrumbService,
     private route: ActivatedRoute,
     private searchService: SearchService,
+    private keyboardShortcuts: KeyboardShortcutsService,
     router: Router,
     documentApi: DocumentApiService,
     dialog: MatDialog,
@@ -208,8 +235,133 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
       if (this.routerEventsSubscription) {
           this.routerEventsSubscription.unsubscribe();
       }
+      if (this.shortcutsSubscription) {
+          this.shortcutsSubscription.unsubscribe();
+      }
   }
 
+  private registerKeyboardShortcuts(): void {
+    // Register shortcuts for file explorer
+    this.keyboardShortcuts.registerShortcut({
+      key: 'u',
+      ctrlKey: true,
+      description: 'Upload files',
+      action: () => this.triggerFileInput(),
+      context: 'file-explorer'
+    });
+
+    this.keyboardShortcuts.registerShortcut({
+      key: 'n',
+      ctrlKey: true,
+      description: 'Create new folder',
+      action: () => this.onCreateFolder(),
+      context: 'file-explorer'
+    });
+
+    this.keyboardShortcuts.registerShortcut({
+      key: 'a',
+      ctrlKey: true,
+      description: 'Select all items',
+      action: () => this.onSelectAll(true),
+      context: 'file-explorer'
+    });
+
+    this.keyboardShortcuts.registerShortcut({
+      key: 'Delete',
+      description: 'Delete selected items',
+      action: () => {
+        if (this.hasSelectedItems) {
+          this.onDeleteSelected();
+        }
+      },
+      context: 'file-explorer'
+    });
+
+    this.keyboardShortcuts.registerShortcut({
+      key: 'F2',
+      description: 'Rename selected item',
+      action: () => {
+        if (this.selectedItems.length === 1) {
+          this.onRenameSelected();
+        }
+      },
+      context: 'file-explorer'
+    });
+
+    this.keyboardShortcuts.registerShortcut({
+      key: 'Escape',
+      description: 'Clear selection',
+      action: () => {
+        if (this.hasSelectedItems) {
+          this.onSelectAll(false);
+        }
+      },
+      context: 'file-explorer'
+    });
+
+    this.keyboardShortcuts.registerShortcut({
+      key: 'd',
+      ctrlKey: true,
+      description: 'Download selected items',
+      action: () => {
+        if (this.hasSelectedItems) {
+          this.onDownloadSelected();
+        }
+      },
+      context: 'file-explorer'
+    });
+
+    this.keyboardShortcuts.registerShortcut({
+      key: 'x',
+      ctrlKey: true,
+      description: 'Move selected items',
+      action: () => {
+        if (this.hasSelectedItems) {
+          this.onMoveSelected();
+        }
+      },
+      context: 'file-explorer'
+    });
+
+    this.keyboardShortcuts.registerShortcut({
+      key: 'c',
+      ctrlKey: true,
+      shiftKey: true,
+      description: 'Copy selected items',
+      action: () => {
+        if (this.hasSelectedItems) {
+          this.onCopySelected();
+        }
+      },
+      context: 'file-explorer'
+    });
+
+    this.keyboardShortcuts.registerShortcut({
+      key: '?',
+      shiftKey: true,
+      description: 'Show keyboard shortcuts help',
+      action: () => this.showKeyboardShortcuts(),
+      context: 'global'
+    });
+
+    // Subscribe to shortcut events
+    this.shortcutsSubscription = this.keyboardShortcuts.shortcutTriggered$.subscribe(
+      shortcut => {
+        // Shortcuts are handled by their action callbacks
+        // This subscription is mainly for logging or analytics if needed
+      }
+    );
+  }
+
+  showKeyboardShortcuts(): void {
+    this.dialog.open(KeyboardShortcutsDialogComponent, {
+      width: '750px',
+      maxWidth: '95vw',
+      autoFocus: true,
+      ariaLabelledBy: 'shortcuts-dialog-title',
+      ariaDescribedBy: 'shortcuts-dialog-description'
+    });
+  }
 
   override ngOnInit() {
       super.ngOnInit();
@@ -243,6 +395,9 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
       this.currentFilters = filters;
       this.reloadData();
     });
+
+    // Register keyboard shortcuts
+    this.registerKeyboardShortcuts();
   }
 
   reloadData(): void {
@@ -332,6 +487,23 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
 
   private updateBreadcrumbs() {
     this.breadcrumbService.updateBreadcrumbs(this.breadcrumbTrail);
+  }
+
+  navigateToHome() {
+    this.breadcrumbTrail = [];
+    this.loadFolder(undefined, true);
+  }
+
+  navigateBack() {
+    if (this.breadcrumbTrail.length > 1) {
+      // Navigate to parent folder (second to last in trail)
+      this.breadcrumbTrail.pop(); // Remove current folder
+      const parentFolder = this.breadcrumbTrail[this.breadcrumbTrail.length - 1];
+      this.loadFolder(parentFolder, true);
+    } else if (this.breadcrumbTrail.length === 1) {
+      // Navigate to root
+      this.navigateToHome();
+    }
   }
 
 

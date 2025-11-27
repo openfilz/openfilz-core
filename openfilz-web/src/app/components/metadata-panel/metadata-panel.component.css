@@ -366,15 +366,15 @@
   height: 44px !important;
   font-size: 14px !important;
   transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1) !important;
-  background: linear-gradient(135deg, #6366F1 0%, #7C3AED 100%) !important;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%) !important;
   color: white !important;
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3) !important;
+  box-shadow: var(--shadow-md) !important;
   border: none !important;
 }
 
 .panel-footer .primary-btn:hover:not([disabled]) {
   transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4) !important;
+  box-shadow: var(--shadow-lg) !important;
 }
 
 .panel-footer .primary-btn[disabled] {

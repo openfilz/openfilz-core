@@ -1,15 +1,15 @@
 <div class="dialog-header">
   <div class="header-content">
     <div class="icon-wrapper">
-      <i class="fas fa-i-cursor"></i>
+      <mat-icon aria-hidden="true">edit</mat-icon>
     </div>
     <div class="header-text">
-      <h2 class="dialog-title">Rename {{ data.type === 'FOLDER' ? 'Folder' : 'File' }}</h2>
-      <p class="dialog-subtitle">Enter a new name for your item</p>
+      <h2 class="dialog-title" id="dialog-title">Rename {{ data.type === 'FOLDER' ? 'Folder' : 'File' }}</h2>
+      <p class="dialog-subtitle" id="dialog-description">Enter a new name for your item</p>
     </div>
   </div>
-  <button mat-icon-button class="close-btn" (click)="onCancel()">
-    <i class="fas fa-times"></i>
+  <button mat-icon-button class="close-btn" (click)="onCancel()" aria-label="Close dialog">
+    <mat-icon aria-hidden="true">close</mat-icon>
   </button>
 </div>
 
@@ -22,14 +22,16 @@
       placeholder="Enter new name"
       (keyup.enter)="onRename()"
       autocomplete="off"
+      [attr.aria-label]="(data.type === 'FOLDER' ? 'Folder' : 'File') + ' name'"
+      aria-required="true"
       #nameInput>
-    <mat-icon matPrefix class="input-icon">{{ data.type === 'FOLDER' ? 'folder' : 'description' }}</mat-icon>
+    <mat-icon matPrefix class="input-icon" aria-hidden="true">{{ data.type === 'FOLDER' ? 'folder' : 'description' }}</mat-icon>
   </mat-form-field>
 </div>
 
 <div mat-dialog-actions class="dialog-actions">
-  <button mat-stroked-button class="cancel-btn" (click)="onCancel()">
-    <i class="fas fa-times"></i>
+  <button mat-stroked-button class="cancel-btn" (click)="onCancel()" aria-label="Cancel">
+    <mat-icon aria-hidden="true">close</mat-icon>
     <span>&nbsp;&nbsp;Cancel</span>
   </button>
   <button
@@ -37,8 +39,9 @@
     color="primary"
     class="create-btn"
     [disabled]="!newName.trim() || newName.trim() === data.name"
-    (click)="onRename()">
-    <i class="fas fa-check"></i>
+    (click)="onRename()"
+    aria-label="Rename item">
+    <mat-icon aria-hidden="true">check</mat-icon>
     <span>&nbsp;&nbsp;Rename</span>
   </button>
 </div>

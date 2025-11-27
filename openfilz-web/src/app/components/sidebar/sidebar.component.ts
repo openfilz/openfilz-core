@@ -25,6 +25,7 @@ export class SidebarComponent implements OnInit {
 
   @Output() collapsedChange = new EventEmitter<boolean>();
   @Output() logout = new EventEmitter<void>();
+  @Output() mobileMenuClose = new EventEmitter<void>();
 
   navigationItems = [
     { id: 'dashboard', label: 'Dashboard', active: true, route: '/dashboard' },
@@ -69,20 +70,21 @@ export class SidebarComponent implements OnInit {
 
   getIconClass(id: string): string {
     switch (id) {
-      case 'dashboard': return 'chart-line';
+      case 'dashboard': return 'dashboard';
       case 'my-folder': return 'folder';
-      case 'recycle-bin': return 'trash';
-      case 'favorites': return 'heart';
-      //case 'shared-files': return 'share-alt';
-      case 'settings': return 'cog';
-      case 'logout': return 'sign-out-alt';
-      default: return 'question';
+      case 'recycle-bin': return 'delete';
+      case 'favorites': return 'favorite';
+      //case 'shared-files': return 'share';
+      case 'settings': return 'settings';
+      case 'logout': return 'logout';
+      default: return 'help_outline';
     }
   }
 
   onNavigationClick(itemId: string) {
     if (itemId === 'logout') {
       this.logout.emit();
+      this.mobileMenuClose.emit();
       return;
     }
 
@@ -102,6 +104,8 @@ export class SidebarComponent implements OnInit {
         // Otherwise, navigate normally
         this.router.navigate([item.route]);
       }
+        // Close mobile menu after navigation
+        this.mobileMenuClose.emit();
     }
   }
 }

@@ -1,9 +1,14 @@
 <div class="file-grid-container">
-    <div class="file-grid">
-        @for(item of items; track item.id) {
+    <div class="file-grid" role="grid" aria-label="Files and folders">
+        @for(item of items; track item.id; let i = $index) {
             <div
                 class="file-item"
+                role="gridcell"
                 [class.selected]="item.selected"
+                [class.focused]="isFocused(i)"
+                [attr.tabindex]="getTabIndex(i)"
+                [attr.aria-label]="item.type === 'FOLDER' ? 'Folder: ' + item.name : 'File: ' + item.name"
+                [attr.aria-selected]="item.selected"
                 (click)="onItemClick(item)"
                 (dblclick)="onItemDoubleClick(item)"
                 (contextmenu)="onContextMenu($event, item)">
@@ -11,6 +16,7 @@
                 <div class="file-header">
                     <mat-checkbox
                             [checked]="item.selected"
+                            [attr.aria-label]="'Select ' + item.name"
                             (click)="$event.stopPropagation()"
                             (change)="onSelectionChange(item, $event.checked)">
                     </mat-checkbox>
@@ -19,8 +25,9 @@
                             mat-icon-button
                             class="favorite-btn"
                             (click)="onToggleFavorite($event, item)"
+                            [attr.aria-label]="item.favorite ? 'Remove ' + item.name + ' from favorites' : 'Add ' + item.name + ' to favorites'"
                             [title]="item.favorite ? 'Remove from favorites' : 'Add to favorites'">
-                            <mat-icon [class.favorited]="item.favorite">
+                            <mat-icon [class.favorited]="item.favorite" aria-hidden="true">
                                 {{ item.favorite ? 'favorite' : 'favorite_border' }}
                             </mat-icon>
                         </button>
@@ -28,8 +35,8 @@
                 </div>
 
                 <div class="file-content">
-                    <div class="file-icon">
-                        <mat-icon [class]="'file-type-' + item.type.toLowerCase()">
+                    <div class="file-icon" (click)="onIconClick($event, item)">
+                        <mat-icon [class]="'file-type-' + item.type.toLowerCase()" aria-hidden="true">
                             {{ getFileIcon(item.name, item.type) }}
                         </mat-icon>
                     </div>
@@ -43,8 +50,8 @@
                     <button mat-icon-button
                             (click)="onViewProperties(item); $event.stopPropagation()"
                             matTooltip="View Properties"
-                            aria-label="View properties">
-                        <mat-icon>info</mat-icon>
+                            [attr.aria-label]="'View properties for ' + item.name">
+                        <mat-icon aria-hidden="true">info</mat-icon>
                     </button>
                 </div>
             </div>

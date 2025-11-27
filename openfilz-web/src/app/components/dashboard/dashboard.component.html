@@ -1,132 +1,177 @@
-<div class="content" appDragDrop
-     (filesDropped)="onFilesDropped($event)"
-     (fileOverChange)="onFileOverChange($event)"
-     [class.file-over]="fileOver">
+<main class="dashboard-grid"
+      appDragDrop
+      (filesDropped)="onFilesDropped($event)"
+      (fileOverChange)="onFileOverChange($event)"
+      [class.file-over]="fileOver"
+      role="main"
+      aria-label="Dashboard">
 
-  <!-- Error Message -->
+  <!-- Error State -->
   @if (dashboardError) {
-    <div class="error-message">
-      <mat-icon>error</mat-icon>
-      <span>{{ dashboardError }}</span>
-      <button mat-button (click)="loadDashboardData()">Retry</button>
+    <div class="error-state" role="alert">
+      <mat-icon class="error-icon" aria-hidden="true">error_outline</mat-icon>
+      <p class="error-message">{{ dashboardError }}</p>
+      <button mat-raised-button color="primary" (click)="loadDashboardData()"
+              aria-label="Retry loading dashboard data">
+        Retry Loading
+      </button>
     </div>
   }
 
-  <!-- Recently Edited Section -->
-  <h2 class="section-title">Recently Edited</h2>
-  <div class="recently-edited">
-    @if (isLoadingRecentFiles) {
-      <div class="loading-state">
-        <mat-icon class="spinner">refresh</mat-icon>
-        <span>Loading recent files...</span>
+  <!-- Loading State -->
+  @if (isLoadingDashboard && !dashboardError) {
+    <div class="loading-state" role="status" aria-live="polite" aria-busy="true">
+      <mat-spinner diameter="48" class="loading-spinner"></mat-spinner>
+      <span class="loading-text">Loading your dashboard...</span>
+    </div>
+  }
+
+  <!-- Dashboard Cards -->
+  @if (!isLoadingDashboard && !dashboardError) {
+
+    <!-- Storage Overview Card -->
+    <article class="dashboard-card storage-card"
+             role="region"
+             aria-label="Storage overview">
+      <header class="card-header">
+        <div class="card-icon-wrapper">
+          <mat-icon class="card-icon" aria-hidden="true">cloud_queue</mat-icon>
+        </div>
+        <h3 class="card-title">Storage</h3>
+      </header>
+
+      <div class="card-content">
+        <!-- Circular Progress Indicator -->
+        <div class="progress-ring">
+          <svg width="90" height="90">
+            <circle class="progress-ring-circle progress-ring-bg"
+                    cx="45" cy="45" r="38"></circle>
+            <circle class="progress-ring-circle progress-ring-fill"
+                    cx="45" cy="45" r="38"
+                    [attr.stroke-dasharray]="getCircleDashArray()"
+                    [attr.stroke-dashoffset]="getCircleDashOffset()"></circle>
+          </svg>
+          <div class="progress-percentage">{{ storagePercentage }}%</div>
+        </div>
+
+        <div class="storage-display">
+          <h2 class="storage-amount">{{ formatFileSize(storageUsed) }}</h2>
+          <p class="storage-total">
+            @if (storageTotal > 0) {
+              of {{ formatFileSize(storageTotal) }} used
+            } @else {
+              used
+            }
+          </p>
+        </div>
+
+        <div class="storage-breakdown">
+          <div class="breakdown-item">
+            <span class="breakdown-label">Documents</span>
+            <span class="breakdown-value">{{ formatFileSize(documentsSize) }}</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Images</span>
+            <span class="breakdown-value">{{ formatFileSize(imagesSize) }}</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Videos</span>
+            <span class="breakdown-value">{{ formatFileSize(videosSize) }}</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Other</span>
+            <span class="breakdown-value">{{ formatFileSize(otherSize) }}</span>
+          </div>
+        </div>
       </div>
-    } @else if (recentlyEditedFiles.length === 0) {
-      <div class="empty-state">
-        <mat-icon>folder_open</mat-icon>
-        <span>No recently edited files</span>
-      </div>
-    } @else {
-      @for(file of recentlyEditedFiles.slice(0, 4); track file.id) {
-        <div class="file-card">
-          <div class="file-preview" [style.background]="getGradientBackground(file.type)">
-            <div class="file-preview-content">
-              <div class="file-preview-icon">
-                <i class="fas" [class]="getFileIconClass(file.type)"></i>
+    </article>
+
+    <!-- File Statistics Card -->
+    <article class="dashboard-card stats-card"
+             role="region"
+             aria-label="File statistics">
+      <header class="card-header">
+        <div class="card-icon-wrapper">
+          <mat-icon class="card-icon" aria-hidden="true">folder_open</mat-icon>
+        </div>
+        <h3 class="card-title">Your Files</h3>
+      </header>
+
+      <div class="card-content">
+        <div class="total-display">
+          <h2 class="total-number">{{ totalFiles + totalFolders }}</h2>
+          <p class="total-label">Total Items</p>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-box">
+            <mat-icon class="stat-box-icon" aria-hidden="true">folder</mat-icon>
+            <div class="stat-box-value">{{ totalFolders }}</div>
+            <div class="stat-box-label">Folders</div>
+          </div>
+          <div class="stat-box">
+            <mat-icon class="stat-box-icon" aria-hidden="true">insert_drive_file</mat-icon>
+            <div class="stat-box-value">{{ totalFiles }}</div>
+            <div class="stat-box-label">Files</div>
+          </div>
+        </div>
+
+        @if (fileTypeDistribution.length > 0) {
+          <div class="type-list">
+            @for(item of fileTypeDistribution.slice(0, 3); track item.type) {
+              <div class="type-item">
+                <div class="type-item-left">
+                  <mat-icon class="type-item-icon" aria-hidden="true">{{ getFileIconClass(item.type) }}</mat-icon>
+                  <span class="type-item-name">{{ item.type }}</span>
+                </div>
+                <span class="type-item-count">{{ item.count }}</span>
               </div>
-              <small>{{ getFileCategory(file.type) }}</small>
-            </div>
-            <div class="file-card-actions">
-              <i class="fas fa-ellipsis-h"></i>
-            </div>
+            }
           </div>
-          <div class="file-card-body">
-            <div class="file-card-title">{{ file.name }}</div>
-            <div class="file-card-meta">{{ file.lastModified }}</div>
-          </div>
-        </div>
-      }
-    }
-  </div>
+        }
+      </div>
+    </article>
 
-  <!-- File Type Distribution Section -->
-  <h2 class="section-title">File Distribution</h2>
-  <div class="file-distribution">
-    @if (isLoadingDashboard) {
-      <div class="loading-state">
-        <mat-icon class="spinner">refresh</mat-icon>
-        <span>Loading file distribution...</span>
-      </div>
-    } @else if (fileTypeDistribution.length === 0) {
-      <div class="empty-state">
-        <mat-icon>folder_open</mat-icon>
-        <span>No files to display</span>
-      </div>
-    } @else {
-      @for(item of fileTypeDistribution; track item.type) {
-        <div class="distribution-item">
-          <div class="distribution-label">
-            <span class="distribution-type">{{ item.type }}</span>
-            <span class="distribution-count">{{ item.count }} files</span>
-          </div>
-          <div class="distribution-bar">
-            <div class="distribution-bar-fill"
-                 [style.width.%]="item.percentage"
-                 [style.background-color]="item.color">
-            </div>
-          </div>
-          <div class="distribution-percent">{{ item.percentage }}%</div>
+    <!-- Recent Files Card -->
+    <article class="dashboard-card recent-card"
+             role="region"
+             aria-labelledby="recent-files-title">
+      <header class="card-header">
+        <div class="card-icon-wrapper">
+          <mat-icon class="card-icon" aria-hidden="true">schedule</mat-icon>
         </div>
-      }
-    }
-  </div>
+        <h3 class="card-title" id="recent-files-title">Recent Activity</h3>
+      </header>
 
-  <!-- Storage Stats -->
-  <h2 class="section-title">Storage</h2>
-  <div class="storage-widget">
-    @if (isLoadingDashboard) {
-      <div class="loading-state">
-        <mat-icon class="spinner">refresh</mat-icon>
-        <span>Loading storage statistics...</span>
+      <div class="card-content">
+        @if (isLoadingRecentFiles) {
+          <div class="empty-state" role="status" aria-live="polite" aria-busy="true">
+            <mat-spinner diameter="32"></mat-spinner>
+            <p class="empty-text">Loading recent files...</p>
+          </div>
+        } @else if (recentlyEditedFiles.length === 0) {
+          <div class="empty-state" role="status">
+            <mat-icon class="empty-icon" aria-hidden="true">inbox</mat-icon>
+            <p class="empty-text">No recent activity</p>
+          </div>
+        } @else {
+          <div class="recent-files-list">
+            @for(file of recentlyEditedFiles.slice(0, 5); track file.id) {
+              <div class="recent-file-item">
+                <div class="file-icon-container">
+                  <mat-icon class="file-icon" aria-hidden="true">{{ file.icon }}</mat-icon>
+                </div>
+                <div class="file-info">
+                  <p class="file-name">{{ file.name }}</p>
+                  <p class="file-meta">{{ formatFileSize(file.size) }}</p>
+                </div>
+                <span class="file-timestamp-badge">{{ file.lastModified }}</span>
+              </div>
+            }
+          </div>
+        }
       </div>
-    } @else {
-      <div class="storage-info">
-        <div class="storage-used">
-          <span class="storage-amount">{{ formatFileSize(storageUsed) }}</span>
-          @if (storageTotal > 0) {
-            <span class="storage-total">of {{ formatFileSize(storageTotal) }} used</span>
-          } @else {
-            <span class="storage-total">used</span>
-          }
-        </div>
-        <div class="storage-percentage">{{ storagePercentage }}%</div>
-      </div>
-      @if (storageTotal > 0) {
-        <div class="storage-bar">
-          <div class="storage-bar-fill" [style.width.%]="storagePercentage"></div>
-        </div>
-      }
-      <div class="storage-breakdown">
-        <div class="breakdown-item">
-          <i class="fas fa-file" style="color: #667eea;"></i>
-          <span>Documents: {{ formatFileSize(documentsSize) }}</span>
-        </div>
-        <div class="breakdown-item">
-          <i class="fas fa-image" style="color: #f093fb;"></i>
-          <span>Images: {{ formatFileSize(imagesSize) }}</span>
-        </div>
-        <div class="breakdown-item">
-          <i class="fas fa-video" style="color: #4facfe;"></i>
-          <span>Videos: {{ formatFileSize(videosSize) }}</span>
-        </div>
-        <div class="breakdown-item">
-          <i class="fas fa-music" style="color: #f5576c;"></i>
-          <span>Audio: {{ formatFileSize(audioSize) }}</span>
-        </div>
-        <div class="breakdown-item">
-          <i class="fas fa-folder" style="color: #00f2fe;"></i>
-          <span>Other: {{ formatFileSize(otherSize) }}</span>
-        </div>
-      </div>
-    }
-  </div>
-</div>
+    </article>
+
+  }
+</main>

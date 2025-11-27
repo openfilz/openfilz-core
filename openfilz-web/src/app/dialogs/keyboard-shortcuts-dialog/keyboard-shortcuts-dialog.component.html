@@ -1,0 +1,52 @@
+<div class="dialog-header">
+  <div class="header-content">
+    <div class="icon-wrapper">
+      <mat-icon aria-hidden="true">keyboard</mat-icon>
+    </div>
+    <div class="header-text">
+      <h2 class="dialog-title" id="shortcuts-dialog-title">Keyboard Shortcuts</h2>
+      <p class="dialog-subtitle" id="shortcuts-dialog-description">Quick reference for all available keyboard shortcuts</p>
+    </div>
+  </div>
+  <button mat-icon-button
+          class="close-btn"
+          (click)="onClose()"
+          aria-label="Close keyboard shortcuts dialog">
+    <mat-icon aria-hidden="true">close</mat-icon>
+  </button>
+</div>
+
+<div mat-dialog-content class="dialog-content">
+  <div class="shortcuts-container" role="list" aria-label="Keyboard shortcuts by category">
+    @for (group of shortcutGroups; track group.category) {
+      <div class="shortcut-group" role="group" [attr.aria-label]="group.category + ' shortcuts'">
+        <h3 class="category-title">{{ group.category }}</h3>
+        <div class="shortcuts-list">
+          @for (shortcut of group.shortcuts; track shortcut.description) {
+            <div class="shortcut-item" role="listitem">
+              <div class="shortcut-keys" [attr.aria-label]="shortcut.keys">
+                @for (key of parseShortcutKeys(shortcut.keys); track $index) {
+                  <kbd class="key-badge" [attr.aria-hidden]="true">{{ key }}</kbd>
+                  @if ($index < parseShortcutKeys(shortcut.keys).length - 1) {
+                    <span class="key-separator" aria-hidden="true">+</span>
+                  }
+                }
+              </div>
+              <div class="shortcut-description">{{ shortcut.description }}</div>
+            </div>
+          }
+        </div>
+      </div>
+    }
+  </div>
+</div>
+
+<div mat-dialog-actions class="dialog-actions">
+  <button mat-raised-button
+          class="close-action-btn"
+          (click)="onClose()"
+          aria-label="Close dialog">
+    <mat-icon aria-hidden="true">close</mat-icon>
+    <span>Close</span>
+  </button>
+</div>

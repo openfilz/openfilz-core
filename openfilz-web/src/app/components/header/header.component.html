@@ -1,4 +1,10 @@
 <div class="header">
+  <button class="mobile-menu-button"
+          (click)="onMobileMenuToggle()"
+          aria-label="Toggle mobile menu">
+    <mat-icon aria-hidden="true">menu</mat-icon>
+  </button>
+
     <div class="header-left">
         <div class="search-box">
             <svg class="search-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -6,9 +12,19 @@
                 <path d="m21 21-4.35-4.35"></path>
             </svg>
             <input type="text" placeholder="Type anything to search" [(ngModel)]="searchQuery" (input)="onSearchInput()"
-                (keyup.enter)="onSearch()">
+                (keyup.enter)="onSearch()"
+    [class.has-active-filters]="hasActiveFilters()">
 
-            <i class="fa-solid fa-sliders filter-icon" (click)="toggleFilters()" title="Search options"></i>
+            <button class="filter-button"
+                  [class.active]="showFilters || hasActiveFilters()"
+                  (click)="toggleFilters()"
+                  matTooltip="Search filters"
+                  aria-label="Toggle search filters">
+            <mat-icon aria-hidden="true">tune</mat-icon>
+            @if (hasActiveFilters()) {
+              <span class="filter-badge" aria-label="Active filters"></span>
+            }
+          </button>
 
             <!-- Suggestions Dropdown -->
             @if (suggestions.length > 0) {

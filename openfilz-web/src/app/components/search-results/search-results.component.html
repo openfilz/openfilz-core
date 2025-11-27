@@ -17,12 +17,21 @@
     (clearSelection)="onSelectAll(false)">
   </app-toolbar>
 
-  <div class="search-results-content">
-    <h2>Search results for "{{ searchQuery }}"</h2>
+  <main class="search-results-content" role="main" aria-label="Search results">
+    <div class="search-header">
+      <h1 class="search-title">Search results for "{{ searchQuery }}"</h1>
+      @if(!loading && items.length > 0) {
+        <p class="search-count" role="status" aria-live="polite" aria-atomic="true">
+          Found {{ totalItems }} {{ totalItems === 1 ? 'result' : 'results' }}
+        </p>
+      }
+    </div>
     @if(!loading) {
       @if(items.length === 0) {
-        <div class="empty-state">
-          <p>No results found.</p>
+        <div class="empty-state" role="status" aria-live="polite">
+          <mat-icon aria-hidden="true">search_off</mat-icon>
+          <h2>No results found</h2>
+          <p>Try adjusting your search terms or filters</p>
         </div>
       }
       @if(viewMode === 'grid' && items.length > 0) {
@@ -56,10 +65,11 @@
         </app-file-list>
       }
     } @else {
-      <div class="loading-container">
-        <mat-spinner></mat-spinner>
-        <p>Searching...</p>
+      <div class="loading-container" role="status" aria-live="polite" aria-busy="true">
+        <mat-spinner aria-hidden="true"></mat-spinner>
+        <p>Searching for "{{ searchQuery }}"...</p>
+        <span class="sr-only">Loading search results</span>
       </div>
     }
-  </div>
+  </main>
 </div>

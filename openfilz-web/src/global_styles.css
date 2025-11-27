@@ -111,12 +111,15 @@
 }
 
 body {
+  margin: 0;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
   background-color: var(--bg-secondary);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.6;
+  height: 100vh;
+  overflow: hidden;
 }
 
 /* Material overrides to match new theme */
@@ -232,18 +235,19 @@ body {
 .mat-mdc-tooltip,
 .mat-mdc-tooltip-panel,
 .mat-tooltip {
-  --mdc-plain-tooltip-container-color: #6366f1 !important;
+  --mdc-plain-tooltip-container-color: var(--primary) !important;
   --mdc-plain-tooltip-supporting-text-color: #ffffff !important;
-  --mat-plain-tooltip-container-color: #6366f1 !important;
+  --mat-plain-tooltip-container-color: var(--primary) !important;
   --mat-plain-tooltip-supporting-text-color: #ffffff !important;
-  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
+  background: var(--primary) !important;
   color: white !important;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif !important;
   font-size: 11px !important;
   font-weight: 500 !important;
   padding: 6px 10px !important;
   border-radius: 6px !important;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35), 0 2px 6px rgba(99, 102, 241, 0.25) !important;
+  border: none !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15), 0 1px 4px rgba(0, 0, 0, 0.1) !important;
   letter-spacing: 0.01em !important;
   line-height: 1.4 !important;
   max-width: 200px !important;
@@ -252,16 +256,17 @@ body {
 
 .mat-mdc-tooltip .mdc-tooltip__surface,
 .mat-mdc-tooltip-panel .mdc-tooltip__surface {
-  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
+  background: var(--primary) !important;
   color: white !important;
   border-radius: 6px !important;
+  border: none !important;
   padding: 6px 10px !important;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif !important;
   font-size: 11px !important;
   font-weight: 500 !important;
   line-height: 1.4 !important;
   letter-spacing: 0.01em !important;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35), 0 2px 6px rgba(99, 102, 241, 0.25) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15), 0 1px 4px rgba(0, 0, 0, 0.1) !important;
   opacity: 1 !important;
 }
 
@@ -305,8 +310,10 @@ body {
   z-index: 1000;
 }
 
-html, body { height: 100%; }
-body { margin: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; }
+html {
+  height: 100vh;
+  overflow: hidden;
+}
 
 /* File Viewer Dialog Custom Styles */
 .file-viewer-dialog-container .mat-mdc-dialog-container {
@@ -317,4 +324,141 @@ body { margin: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Sego
 .file-viewer-dialog-container .mat-mdc-dialog-surface {
   border-radius: 8px;
   overflow: hidden;
+}
+
+/* ==================================
+   ACCESSIBILITY ENHANCEMENTS
+   ================================== */
+
+/* Remove default browser outline */
+*:focus {
+  outline: none;
+}
+
+/* Custom focus-visible styles for keyboard navigation */
+*:focus-visible,
+button:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible,
+.mat-mdc-button:focus-visible,
+.mat-mdc-icon-button:focus-visible,
+.mat-mdc-raised-button:focus-visible,
+.mat-mdc-stroked-button:focus-visible,
+.mat-mdc-menu-item:focus-visible,
+.mat-mdc-list-item:focus-visible {
+  outline: 2px solid var(--primary) !important;
+  outline-offset: 2px !important;
+  border-radius: 4px;
+}
+
+/* Focus visible for inputs */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+.mat-mdc-input-element:focus-visible {
+  outline: 2px solid var(--primary) !important;
+  outline-offset: 2px !important;
+}
+
+/* Focus for Material form fields */
+.mat-mdc-form-field:focus-within {
+  --mdc-outlined-text-field-focus-outline-color: var(--primary);
+}
+
+/* Skip to main content link */
+.skip-to-main {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  z-index: 100;
+  background: var(--primary);
+  color: white;
+  padding: 8px 16px;
+  text-decoration: none;
+  border-radius: 0 0 4px 0;
+  font-weight: 600;
+  font-size: 14px;
+  transition: top 0.2s ease;
+}
+
+.skip-to-main:focus {
+  top: 0;
+  outline: 2px solid white;
+  outline-offset: -4px;
+}
+
+/* Screen reader only content */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+.sr-only-focusable:focus,
+.sr-only-focusable:active {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+/* Ensure minimum touch target size (44x44px for WCAG AA) */
+button,
+a,
+.mat-mdc-button,
+.mat-mdc-icon-button,
+.mat-mdc-raised-button,
+[role="button"],
+[role="link"] {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Exception for compact icon buttons inside other controls */
+.compact-button,
+.mat-mdc-icon-button.compact {
+  min-width: 32px;
+  min-height: 32px;
+}
+
+/* High contrast focus for dark mode */
+.theme-dark *:focus-visible {
+  outline-color: var(--primary-light) !important;
+}
+
+/* Reduced motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  *:focus-visible {
+    outline-width: 3px !important;
+    outline-offset: 3px !important;
+  }
+
+  button,
+  .mat-mdc-button,
+  .mat-mdc-raised-button {
+    border: 2px solid currentColor;
+  }
 }

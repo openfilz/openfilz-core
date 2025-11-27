@@ -3,6 +3,8 @@ import { FormsModule } from '@angular/forms';
 import { Component, ElementRef, HostListener, Input, OnDestroy, OnInit, inject } from "@angular/core";
 import { Router } from "@angular/router";
 import { Subject, Subscription } from "rxjs";
+import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { SearchService } from "../../services/search.service";
 import { debounceTime, distinctUntilChanged, switchMap } from "rxjs/operators";
 import { Suggestion, SearchFilters } from "../../models/document.models";
@@ -12,7 +14,7 @@ import { SearchFiltersComponent } from "../search-filters/search-filters.compone
 @Component({
   selector: 'app-header',
   standalone: true,
-  imports: [CommonModule, FormsModule, SearchFiltersComponent],
+  imports: [CommonModule, FormsModule, SearchFiltersComponent, MatIconModule, MatTooltipModule],
   templateUrl: './header.component.html',
   styleUrls: ['./header.component.css']
 })
@@ -74,6 +76,24 @@ export class HeaderComponent implements OnInit, OnDestroy {
 
   toggleFilters() {
     this.showFilters = !this.showFilters;
+  }
+
+  onMobileMenuToggle() {
+    console.log('Header: onMobileMenuToggle called');
+    this.mobileMenuToggle.emit();
+    console.log('Header: mobileMenuToggle event emitted');
+  }
+
+  hasActiveFilters(): boolean {
+    if (!this.currentFilters) return false;
+
+    return !!(
+      this.currentFilters.type ||
+      this.currentFilters.fileType ||
+      this.currentFilters.dateModified ||
+      this.currentFilters.owner ||
+      (this.currentFilters.metadata && this.currentFilters.metadata.length > 0)
+    );
   }
 
   onFiltersChanged(filters: SearchFilters) {

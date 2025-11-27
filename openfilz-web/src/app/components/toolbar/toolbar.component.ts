@@ -4,6 +4,7 @@ import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatMenuModule} from '@angular/material/menu';
 import {MatTooltipModule} from '@angular/material/tooltip';
+import {MatDividerModule} from '@angular/material/divider';
 import {AppConfig} from '../../config/app.config';
 
 @Component({
@@ -16,7 +17,8 @@ import {AppConfig} from '../../config/app.config';
     MatButtonModule,
     MatIconModule,
     MatMenuModule,
-    MatTooltipModule
+    MatTooltipModule,
+    MatDividerModule
   ],
 })
 export class ToolbarComponent {
@@ -70,12 +72,41 @@ export class ToolbarComponent {
   // Page size options from global config
   pageSizeOptions = AppConfig.pagination.pageSizeOptions;
 
+  // Menu state for accessibility
+  sortMenuOpen = false;
+  pageSizeMenuOpen = false;
+
+  // FAB state for mobile
+  fabOpen = false;
+
+  // Bottom sheet state for mobile selection actions
+  bottomSheetOpen = false;
+
   onCreateFolder() {
     this.createFolder.emit();
   }
 
   onUploadFiles() {
     this.uploadFiles.emit();
+  }
+
+  // FAB methods
+  toggleFab() {
+    this.fabOpen = !this.fabOpen;
+  }
+
+  closeFab() {
+    this.fabOpen = false;
+  }
+
+  onUploadFilesFromFab() {
+    this.uploadFiles.emit();
+    this.closeFab();
+  }
+
+  onCreateFolderFromFab() {
+    this.createFolder.emit();
+    this.closeFab();
   }
 
   toggleViewMode() {
@@ -153,5 +184,66 @@ export class ToolbarComponent {
 
   onPageSizeChange(newPageSize: number) {
     this.pageSizeChange.emit(newPageSize);
+  }
+
+  getSortLabel(): string {
+    const option = this.sortOptions.find(opt => opt.value === this.sortBy);
+    return option ? option.label : 'Name';
+  }
+
+  // Bottom sheet methods for mobile selection actions
+  toggleBottomSheet(): void {
+    this.bottomSheetOpen = !this.bottomSheetOpen;
+
+    // Prevent body scroll when sheet is open
+    if (this.bottomSheetOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+  }
+
+  closeBottomSheet(): void {
+    if (this.bottomSheetOpen) {
+      this.bottomSheetOpen = false;
+      document.body.style.overflow = '';
+    }
+  }
+
+  onActionSelected(action: string): void {
+    // Execute action based on type
+    switch(action) {
+      case 'move':
+        this.onMoveSelected();
+        break;
+      case 'copy':
+        this.onCopySelected();
+        break;
+      case 'rename':
+        if (this.selectionCount === 1) {
+          this.onRenameSelected();
+        }
+        break;
+      case 'download':
+        this.onDownloadSelected();
+        break;
+      case 'delete':
+        this.onDeleteSelected();
+        break;
+    }
+
+    // Auto-close sheet after action
+    this.closeBottomSheet();
+  }
+
+  getAvailableActionsCount(): number {
+    // Count available actions in bottom sheet
+    // Base actions: move, copy, download, delete = 4
+    // Rename: only if 1 item selected
+    let count = 4;
+    if (this.selectionCount === 1) {
+      count += 1; // Add rename
+    }
+    return count;
   }
 }
