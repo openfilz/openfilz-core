@@ -1,42 +1,46 @@
 <div class="metadata-panel-overlay"
      *ngIf="isOpen"
      (click)="onClose()"
-     [@slideInOut]="animationState">
+     [@slideInOut]="animationState"
+     aria-hidden="true">
 </div>
 
-<div class="metadata-panel"
+<aside class="metadata-panel"
      *ngIf="isOpen"
      [@slideInOut]="animationState"
-     (click)="$event.stopPropagation()">
+     (click)="$event.stopPropagation()"
+     role="complementary"
+     aria-label="Document properties panel">
 
   <!-- Panel Header -->
   <div class="panel-header">
     <div class="header-content">
-      <mat-icon class="header-icon">info</mat-icon>
-      <h2>Properties</h2>
+      <mat-icon class="header-icon" aria-hidden="true">info</mat-icon>
+      <h2 id="panel-title">Properties</h2>
     </div>
     <button mat-icon-button
             (click)="onClose()"
             matTooltip="Close panel"
+            aria-label="Close properties panel"
             class="close-button">
-      <mat-icon>close</mat-icon>
+      <mat-icon aria-hidden="true">close</mat-icon>
     </button>
   </div>
 
   <!-- Panel Body -->
   <div class="panel-body">
     @if(loading) {
-      <div class="loading-container">
-        <mat-spinner diameter="50"></mat-spinner>
+      <div class="loading-container" role="status" aria-live="polite" aria-busy="true">
+        <mat-spinner diameter="50" aria-hidden="true"></mat-spinner>
         <p>Loading document information...</p>
       </div>
     }
 
     @if(error && !loading) {
-      <div class="error-container">
-        <mat-icon>error</mat-icon>
+      <div class="error-container" role="alert">
+        <mat-icon aria-hidden="true">error</mat-icon>
         <p>{{ error }}</p>
-        <button mat-raised-button color="primary" (click)="loadDocumentInfo()">
+        <button mat-raised-button color="primary" (click)="loadDocumentInfo()" aria-label="Retry loading document information">
           Retry
         </button>
       </div>
@@ -49,9 +53,9 @@
         class="panel-tabs">
 
         <!-- General Tab -->
-        <mat-tab>
+        <mat-tab aria-label="General information">
           <ng-template mat-tab-label>
-            <mat-icon>info</mat-icon>
+            <mat-icon aria-hidden="true">info</mat-icon>
             <span>General</span>
           </ng-template>
 
@@ -88,8 +92,9 @@
                     <button mat-icon-button
                             class="copy-button"
                             (click)="copySha256ToClipboard()"
-                            matTooltip="Copy to clipboard">
-                      <mat-icon>content_copy</mat-icon>
+                            matTooltip="Copy to clipboard"
+                            aria-label="Copy SHA256 hash to clipboard">
+                      <mat-icon aria-hidden="true">content_copy</mat-icon>
                     </button>
                   </span>
                 </div>
@@ -100,16 +105,16 @@
         </mat-tab>
 
         <!-- Metadata Tab -->
-        <mat-tab>
+        <mat-tab aria-label="Metadata">
           <ng-template mat-tab-label>
-            <mat-icon>label</mat-icon>
+            <mat-icon aria-hidden="true">label</mat-icon>
             <span>Metadata</span>
           </ng-template>
 
           <div class="tab-content">
             @if(saving) {
-              <div class="saving-indicator">
-                <mat-spinner diameter="20"></mat-spinner>
+              <div class="saving-indicator" role="status" aria-live="polite">
+                <mat-spinner diameter="20" aria-hidden="true"></mat-spinner>
                 <span>Saving changes...</span>
               </div>
             }
@@ -125,15 +130,15 @@
             </div>
 
             @if(editMode && !metadataValid) {
-              <div class="validation-warning">
-                <mat-icon>warning</mat-icon>
+              <div class="validation-warning" role="alert">
+                <mat-icon aria-hidden="true">warning</mat-icon>
                 Please fix metadata errors before saving
               </div>
             }
 
             @if(editMode && hasChanges) {
-              <div class="changes-indicator">
-                <mat-icon>info</mat-icon>
+              <div class="changes-indicator" role="status" aria-live="polite">
+                <mat-icon aria-hidden="true">info</mat-icon>
                 You have unsaved changes
               </div>
             }
@@ -141,25 +146,25 @@
         </mat-tab>
 
         <!-- Audit Tab -->
-        <mat-tab>
+        <mat-tab aria-label="Audit history">
           <ng-template mat-tab-label>
-            <mat-icon>history</mat-icon>
+            <mat-icon aria-hidden="true">history</mat-icon>
             <span>Audit</span>
           </ng-template>
 
           <div class="tab-content audit-tab">
             @if(auditLoading) {
-              <div class="loading-container">
-                <mat-spinner diameter="40"></mat-spinner>
+              <div class="loading-container" role="status" aria-live="polite" aria-busy="true">
+                <mat-spinner diameter="40" aria-hidden="true"></mat-spinner>
                 <p>Loading audit history...</p>
               </div>
             }
 
             @if(auditError && !auditLoading) {
-              <div class="error-container">
-                <mat-icon>error</mat-icon>
+              <div class="error-container" role="alert">
+                <mat-icon aria-hidden="true">error</mat-icon>
                 <p>{{ auditError }}</p>
-                <button mat-raised-button color="primary" (click)="loadAuditTrail()">
+                <button mat-raised-button color="primary" (click)="loadAuditTrail()" aria-label="Retry loading audit trail">
                   Retry
                 </button>
               </div>
@@ -168,23 +173,23 @@
             @if(!auditLoading && !auditError) {
               @if(auditLogs.length === 0) {
                 <div class="empty-state">
-                  <mat-icon>history</mat-icon>
+                  <mat-icon aria-hidden="true">history</mat-icon>
                   <p>No audit history available</p>
                 </div>
               } @else {
-                <div class="audit-timeline">
+                <div class="audit-timeline" role="list" aria-label="Audit log entries">
                   @for(log of auditLogs; track log.id) {
-                    <div class="audit-entry" [class]="'audit-' + getAuditActionColor(log.action)">
+                    <div class="audit-entry" [class]="'audit-' + getAuditActionColor(log.action)" role="listitem">
                       <div class="audit-icon">
-                        <mat-icon>{{ getAuditActionIcon(log.action) }}</mat-icon>
+                        <mat-icon aria-hidden="true">{{ getAuditActionIcon(log.action) }}</mat-icon>
                       </div>
                       <div class="audit-content">
                         <div class="audit-header">
                           <span class="audit-action">{{ getAuditActionLabel(log.action) }}</span>
-                          <span class="audit-time">{{ formatAuditDate(log.timestamp) }}</span>
+                          <time class="audit-time" [attr.datetime]="log.timestamp">{{ formatAuditDate(log.timestamp) }}</time>
                         </div>
                         <div class="audit-user">
-                          <mat-icon>person</mat-icon>
+                          <mat-icon aria-hidden="true">person</mat-icon>
                           <span>{{ log.username || 'Unknown user' }}</span>
                         </div>
                       </div>
@@ -203,29 +208,29 @@
   <!-- Panel Footer -->
   <div class="panel-footer" *ngIf="documentInfo">
     @if(!editMode) {
-      <button mat-stroked-button class="cancel-btn" (click)="onClose()">
-        <mat-icon>close</mat-icon>
+      <button mat-stroked-button class="cancel-btn" (click)="onClose()" aria-label="Close panel">
+        <mat-icon aria-hidden="true">close</mat-icon>
         <span>Close</span>
       </button>
-      <button mat-raised-button class="primary-btn" (click)="toggleEditMode()">
-        <mat-icon>edit</mat-icon>
+      <button mat-raised-button class="primary-btn" (click)="toggleEditMode()" aria-label="Edit metadata">
+        <mat-icon aria-hidden="true">edit</mat-icon>
         <span>Edit Metadata</span>
       </button>
     } @else {
-      <button mat-stroked-button class="cancel-btn" (click)="toggleEditMode()" [disabled]="saving">
-        <mat-icon>close</mat-icon>
+      <button mat-stroked-button class="cancel-btn" (click)="toggleEditMode()" [disabled]="saving" aria-label="Cancel editing">
+        <mat-icon aria-hidden="true">close</mat-icon>
         <span>Cancel</span>
       </button>
-      <button mat-raised-button class="primary-btn" (click)="saveMetadata()" [disabled]="!canSave">
+      <button mat-raised-button class="primary-btn" (click)="saveMetadata()" [disabled]="!canSave" aria-label="Save metadata changes">
         <ng-container *ngIf="saving; else saveReady">
-          <mat-spinner diameter="18"></mat-spinner>
+          <mat-spinner diameter="18" aria-hidden="true"></mat-spinner>
           <span>Saving...</span>
         </ng-container>
         <ng-template #saveReady>
-          <mat-icon>save</mat-icon>
+          <mat-icon aria-hidden="true">save</mat-icon>
           <span>Save</span>
         </ng-template>
       </button>
     }
   </div>
-</div>
+</aside>

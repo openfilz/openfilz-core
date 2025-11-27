@@ -9,11 +9,11 @@
   flex-grow: 1;
 }
 .file-explorer-container {
-  padding-top: 16px;
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  padding-top: 16px;
 }
 
 /* File Explorer Content */
@@ -167,3 +167,9 @@
   }
 }
 
+/* Mobile breakpoint (max-width: 768px) */
+@media (max-width: 768px) {
+  .file-explorer-container {
+    padding-top: 0;
+  }
+}

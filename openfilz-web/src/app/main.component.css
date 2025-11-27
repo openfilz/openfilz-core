@@ -49,9 +49,9 @@
 
 /* For non-dashboard content, breadcrumb is visible, so adjust accordingly */
 .main-content:not(.dashboard-content) {
-  margin-top: 104px;
-  /* Header height (64px) + breadcrumb height (40px) */
-  height: calc(100vh - 104px);
+  margin-top: 92px;
+  /* Header height (64px) + breadcrumb height (28px) */
+  height: calc(100vh - 92px);
   /* Include breadcrumb in calculation */
 }
 
@@ -71,11 +71,79 @@
 
 /* For non-dashboard content (file grid/list), main content handles scrolling */
 
+/* Mobile Overlay */
+.mobile-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 98;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.mobile-menu-open .mobile-overlay {
+  display: block;
+  opacity: 1;
+}
+
+/* Tablet breakpoint (769px - 1024px) */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .main-content {
+    margin-left: 200px;
+  }
+
+  .sidebar-collapsed .main-content {
+    margin-left: 60px;
+  }
+}
+
+/* Mobile breakpoint (max-width: 768px) */
 @media (max-width: 768px) {
   .main-content {
     margin-left: 0;
-    margin-top: 104px;
-    /* Header height + breadcrumb height */
+    margin-top: 60px;
+    /* Compact header height */
+    height: calc(100vh - 60px);
+  }
+
+  .main-content:not(.dashboard-content) {
+    margin-top: 60px;
+    /* No separate breadcrumb on mobile - integrated in toolbar */
+    height: calc(100vh - 60px);
+  }
+
+  /* Mobile overlay for sidebar */
+  .mobile-overlay {
+    backdrop-filter: blur(2px);
+  }
+}
+
+/* Small mobile breakpoint (max-width: 480px) */
+@media (max-width: 480px) {
+  .main-content {
+    margin-left: 0;
+    margin-top: 56px;
+    /* Extra compact header */
+    height: calc(100vh - 56px);
+  }
+
+  .main-content:not(.dashboard-content) {
+    margin-top: 56px;
+    /* No separate breadcrumb on mobile - integrated in toolbar */
+    height: calc(100vh - 56px);
+  }
+
+  .empty-state {
+    height: calc(100vh - 120px);
+    padding: 0 16px;
+  }
+
+  .loading-container {
+    height: calc(100vh - 120px);
   }
 }
 
@@ -186,8 +254,8 @@
 @media (max-width: 768px) {
   .main-content {
     margin-left: 0;
-    margin-top: 104px;
-    /* Header height + breadcrumb height */
+    margin-top: 60px;
+    /* Compact header height (breadcrumb hidden on mobile) */
   }
 
   app-breadcrumb {

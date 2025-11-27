@@ -15,7 +15,13 @@
       "Bash(taskkill:*)",
       "Bash(dir:*)",
       "Bash(npm run build:*)",
-      "Bash(mvn clean compile:*)"
+      "Bash(mvn clean compile:*)",
+      "Bash(find:*)",
+      "Bash(cat:*)",
+      "Bash(node -e:*)",
+      "Bash(nul)",
+      "Bash(npm install:*)",
+      "Bash(powershell -Command:*)"
     ],
     "deny": [],
     "ask": []

@@ -143,8 +143,8 @@
 }
 
 .btn-remove:hover {
-  background-color: #fee2e2;
-  border-color: #fca5a5;
+  background-color: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.3);
   color: #ef4444;
 }
 
@@ -167,8 +167,8 @@
 }
 
 .btn-add:hover {
-  background-color: #eef2ff;
-  border-color: var(--primary-light, #c7d2fe);
+  background-color: rgba(var(--primary-rgb, 99, 102, 241), 0.05);
+  border-color: rgba(var(--primary-rgb, 99, 102, 241), 0.3);
 }
 
 /* Footer Actions */
@@ -217,13 +217,13 @@
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  box-shadow: 0 2px 4px rgba(99, 102, 241, 0.2);
+  box-shadow: 0 2px 4px rgba(var(--primary-rgb, 99, 102, 241), 0.2);
   transition: all 200ms;
 }
 
 .btn-apply:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(99, 102, 241, 0.3);
+  box-shadow: 0 4px 8px rgba(var(--primary-rgb, 99, 102, 241), 0.3);
 }
 
 .btn-apply:active {

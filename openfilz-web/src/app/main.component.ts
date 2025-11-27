@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
@@ -37,6 +37,7 @@ export class MainComponent implements OnInit {
   currentRoute = '';
   isWipRoute = false;
   isSidebarCollapsed = false;
+  isMobileMenuOpen = false;
 
   // This is needed for the header component
   get hasSelectedItems(): boolean {
@@ -53,6 +54,11 @@ export class MainComponent implements OnInit {
   ) { }
 
   ngOnInit() {
+    console.log('MainComponent ngOnInit - isMobileMenuOpen:', this.isMobileMenuOpen);
+
+    // Ensure mobile menu starts closed
+    this.isMobileMenuOpen = false;
+
     // Initialize the current route based on the URL
     this.updateCurrentRoute();
 
@@ -102,6 +108,26 @@ export class MainComponent implements OnInit {
 
   onSidebarCollapsedChange(collapsed: boolean) {
     this.isSidebarCollapsed = collapsed;
+  }
+
+  toggleMobileMenu() {
+    console.log('toggleMobileMenu called, current state:', this.isMobileMenuOpen);
+    this.isMobileMenuOpen = !this.isMobileMenuOpen;
+    console.log('toggleMobileMenu new state:', this.isMobileMenuOpen);
+  }
+
+  closeMobileMenu() {
+    console.log('closeMobileMenu called');
+    this.isMobileMenuOpen = false;
+  }
+
+  @HostListener('window:resize', ['$event'])
+  onResize(event: any) {
+    // Close mobile menu when resizing to ensure clean state
+    if (window.innerWidth > 768 && this.isMobileMenuOpen) {
+      console.log('Window resized to desktop, closing mobile menu');
+      this.isMobileMenuOpen = false;
+    }
   }
 
   logout() {

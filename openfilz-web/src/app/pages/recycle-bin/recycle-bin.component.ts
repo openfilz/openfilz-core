@@ -52,6 +52,9 @@ export class RecycleBinComponent implements OnInit {
   private clickTimeout: any = null;
   private readonly CLICK_DELAY = 250; // milliseconds
 
+  // Mobile FAB state
+  fabOpen = false;
+
   constructor(
     private documentApi: DocumentApiService,
     private fileIconService: FileIconService,
@@ -155,6 +158,25 @@ export class RecycleBinComponent implements OnInit {
 
   private updateBreadcrumbs() {
     this.breadcrumbService.updateBreadcrumbs(this.breadcrumbTrail);
+  }
+
+  navigateToHome() {
+    this.breadcrumbTrail = [];
+    this.currentFolder = undefined;
+    this.loadDeletedItems();
+  }
+
+  navigateBack() {
+    if (this.breadcrumbTrail.length > 1) {
+      // Navigate to parent folder (second to last in trail)
+      this.breadcrumbTrail.pop(); // Remove current folder
+      const parentFolder = this.breadcrumbTrail[this.breadcrumbTrail.length - 1];
+      this.currentFolder = parentFolder;
+      this.loadDeletedItems();
+    } else if (this.breadcrumbTrail.length === 1) {
+      // Navigate to root
+      this.navigateToHome();
+    }
   }
 
   onViewModeChange(mode: 'grid' | 'list') {
@@ -395,5 +417,29 @@ export class RecycleBinComponent implements OnInit {
         this.snackBar.open('Failed to restore item', 'Close', { duration: 3000 });
       }
     });
+  }
+
+  // Mobile FAB methods
+  toggleFab() {
+    this.fabOpen = !this.fabOpen;
+  }
+
+  closeFab() {
+    this.fabOpen = false;
+  }
+
+  onRestoreFromFab() {
+    this.closeFab();
+    this.restoreSelected();
+  }
+
+  onDeleteForeverFromFab() {
+    this.closeFab();
+    this.permanentlyDeleteSelected();
+  }
+
+  onEmptyBinFromFab() {
+    this.closeFab();
+    this.emptyRecycleBin();
   }
 }
