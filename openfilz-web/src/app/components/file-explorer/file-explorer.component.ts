@@ -1,7 +1,7 @@
-import {Component, ElementRef, OnDestroy, OnInit, ViewChild} from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import {ActivatedRoute, NavigationEnd, Router} from '@angular/router';
-import {filter, Subscription, take} from 'rxjs';
+import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
+import { filter, Subscription, take } from 'rxjs';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -27,21 +27,21 @@ import { UserPreferencesService } from '../../services/user-preferences.service'
 import { KeyboardShortcutsService } from '../../services/keyboard-shortcuts.service';
 
 import {
-    CreateFolderRequest,
-    ElementInfo,
-    FileItem,
-    ListFolderAndCountResponse,
-    DocumentType,
-    RenameRequest,
-    MoveRequest,
-    CopyRequest,
-    DeleteRequest,
-    SearchFilters
+  CreateFolderRequest,
+  ElementInfo,
+  FileItem,
+  ListFolderAndCountResponse,
+  DocumentType,
+  RenameRequest,
+  MoveRequest,
+  CopyRequest,
+  DeleteRequest,
+  SearchFilters
 } from '../../models/document.models';
 
 import { DragDropDirective } from "../../directives/drag-drop.directive";
 import { DownloadProgressComponent } from "../download-progress/download-progress.component";
-import {AppConfig} from '../../config/app.config';
+import { AppConfig } from '../../config/app.config';
 
 @Component({
   selector: 'app-file-explorer',
@@ -206,38 +206,32 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
   private routerEventsSubscription!: Subscription;
   private shortcutsSubscription?: Subscription;
 
-  constructor(
-    private fileIconService: FileIconService,
-    private breadcrumbService: BreadcrumbService,
-    private route: ActivatedRoute,
-    private searchService: SearchService,
-    private keyboardShortcuts: KeyboardShortcutsService,
-    router: Router,
-    documentApi: DocumentApiService,
-    dialog: MatDialog,
-    snackBar: MatSnackBar,
-    userPreferencesService: UserPreferencesService
-  ) {
-    super(router, documentApi, dialog, snackBar, userPreferencesService);
+  private fileIconService = inject(FileIconService);
+  private breadcrumbService = inject(BreadcrumbService);
+  private route = inject(ActivatedRoute);
+  private searchService = inject(SearchService);
+  private keyboardShortcuts = inject(KeyboardShortcutsService);
+
+  constructor() {
+    super();
   }
 
-  // A new method to handle the logic
   private handleFolderIdChange(): void {
-      const folderId = this.route.snapshot.queryParamMap.get('folderId');
-      if (folderId) {
-          this.loadFolderById(folderId);
-      } else {
-          this.loadFolder();
-      }
+    const folderId = this.route.snapshot.queryParamMap.get('folderId');
+    if (folderId) {
+      this.loadFolderById(folderId);
+    } else {
+      this.loadFolder();
+    }
   }
 
   ngOnDestroy(): void {
-      if (this.routerEventsSubscription) {
-          this.routerEventsSubscription.unsubscribe();
-      }
-      if (this.shortcutsSubscription) {
-          this.shortcutsSubscription.unsubscribe();
-      }
+    if (this.routerEventsSubscription) {
+      this.routerEventsSubscription.unsubscribe();
+    }
+    if (this.shortcutsSubscription) {
+      this.shortcutsSubscription.unsubscribe();
+    }
   }
 
   private registerKeyboardShortcuts(): void {
@@ -364,19 +358,19 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
   }
 
   override ngOnInit() {
-      super.ngOnInit();
+    super.ngOnInit();
 
-      // Initial load
-      //this.handleFolderIdChange();
+    // Initial load
+    //this.handleFolderIdChange();
 
-      // Listen for subsequent navigation events to the same route
-      this.routerEventsSubscription = this.router.events.pipe(
-          // Filter for the NavigationEnd event
-          filter(event => event instanceof NavigationEnd)
-      ).subscribe(() => {
-          // Manually trigger the logic when navigation ends
-          this.handleFolderIdChange();
-      });
+    // Listen for subsequent navigation events to the same route
+    this.routerEventsSubscription = this.router.events.pipe(
+      // Filter for the NavigationEnd event
+      filter(event => event instanceof NavigationEnd)
+    ).subscribe(() => {
+      // Manually trigger the logic when navigation ends
+      this.handleFolderIdChange();
+    });
 
     this.breadcrumbService.navigation$.subscribe(folder => {
       if (folder === null) {
@@ -420,9 +414,9 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
         this.loadFolder(folderItem, true);
 
         this.router.navigate([], {
-            relativeTo: this.route,
-            queryParams: {folderId: null},
-            queryParamsHandling: 'merge',
+          relativeTo: this.route,
+          queryParams: { folderId: null },
+          queryParamsHandling: 'merge',
         });
       },
       error: (err) => {

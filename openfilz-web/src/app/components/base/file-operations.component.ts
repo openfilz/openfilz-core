@@ -1,14 +1,14 @@
-import {Directive, OnInit} from '@angular/core';
-import {MatDialog} from '@angular/material/dialog';
-import {MatSnackBar} from '@angular/material/snack-bar';
-import {CopyRequest, DocumentType, FileItem, MoveRequest, RenameRequest} from '../../models/document.models';
-import {DocumentApiService} from '../../services/document-api.service';
-import {RenameDialogComponent, RenameDialogData} from '../../dialogs/rename-dialog/rename-dialog.component';
-import {FolderTreeDialogComponent} from '../../dialogs/folder-tree-dialog/folder-tree-dialog.component';
-import {Observable} from "rxjs";
-import {AppConfig} from '../../config/app.config';
-import {Router} from "@angular/router";
-import {UserPreferencesService} from '../../services/user-preferences.service';
+import { Directive, OnInit, inject } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { CopyRequest, DocumentType, FileItem, MoveRequest, RenameRequest } from '../../models/document.models';
+import { DocumentApiService } from '../../services/document-api.service';
+import { RenameDialogComponent, RenameDialogData } from '../../dialogs/rename-dialog/rename-dialog.component';
+import { FolderTreeDialogComponent } from '../../dialogs/folder-tree-dialog/folder-tree-dialog.component';
+import { Observable } from "rxjs";
+import { AppConfig } from '../../config/app.config';
+import { Router } from "@angular/router";
+import { UserPreferencesService } from '../../services/user-preferences.service';
 
 @Directive()
 export abstract class FileOperationsComponent implements OnInit {
@@ -22,13 +22,13 @@ export abstract class FileOperationsComponent implements OnInit {
   sortBy: string = 'name';
   sortOrder: 'ASC' | 'DESC' = 'ASC';
 
-  constructor(
-    protected router: Router,
-    protected documentApi: DocumentApiService,
-    protected dialog: MatDialog,
-    protected snackBar: MatSnackBar,
-    protected userPreferencesService: UserPreferencesService
-  ) {
+  protected router = inject(Router);
+  protected documentApi = inject(DocumentApiService);
+  protected dialog = inject(MatDialog);
+  protected snackBar = inject(MatSnackBar);
+  protected userPreferencesService = inject(UserPreferencesService);
+
+  constructor() {
     const prefs = this.userPreferencesService.getPreferences();
     this.pageSize = prefs.pageSize;
     this.sortBy = prefs.sortBy;
@@ -51,7 +51,7 @@ export abstract class FileOperationsComponent implements OnInit {
         this.sortOrder = prefs.sortOrder;
         needsReload = true;
       }
-      
+
       if (needsReload) {
         this.reloadData();
       }
@@ -167,7 +167,7 @@ export abstract class FileOperationsComponent implements OnInit {
     dialogRef.afterClosed().subscribe(targetFolderId => {
       if (targetFolderId !== undefined) {
         const request: CopyRequest = { documentIds: [item.id], targetFolderId: targetFolderId || undefined };
-        const copyObservable : Observable<any> = item.type === DocumentType.FOLDER
+        const copyObservable: Observable<any> = item.type === DocumentType.FOLDER
           ? this.documentApi.copyFolders(request)
           : this.documentApi.copyFiles(request);
         copyObservable.subscribe({
@@ -323,39 +323,39 @@ export abstract class FileOperationsComponent implements OnInit {
   }
 
 
-    onClearSelection() {
-        this.onSelectAll(false);
-    }
+  onClearSelection() {
+    this.onSelectAll(false);
+  }
 
-    onPreviousPage() {
-        if (this.pageIndex > 0) {
-            this.pageIndex--;
-            this.loadItems();
-        }
+  onPreviousPage() {
+    if (this.pageIndex > 0) {
+      this.pageIndex--;
+      this.loadItems();
     }
+  }
 
-    onNextPage() {
-        const totalPages = Math.ceil(this.totalItems / this.pageSize);
-        if (this.pageIndex < totalPages - 1) {
-            this.pageIndex++;
-            this.loadItems();
-        }
+  onNextPage() {
+    const totalPages = Math.ceil(this.totalItems / this.pageSize);
+    if (this.pageIndex < totalPages - 1) {
+      this.pageIndex++;
+      this.loadItems();
     }
+  }
 
-    onPageSizeChange(newPageSize: number) {
-        this.pageSize = newPageSize;
-        this.userPreferencesService.setPageSize(newPageSize);
-        this.pageIndex = 0;
-        this.loadItems();
+  onPageSizeChange(newPageSize: number) {
+    this.pageSize = newPageSize;
+    this.userPreferencesService.setPageSize(newPageSize);
+    this.pageIndex = 0;
+    this.loadItems();
+  }
+
+  onItemDoubleClick(item: FileItem): void {
+    if (item.type === 'FOLDER') {
+      this.router.navigate(['/my-folder'], { queryParams: { folderId: item.id } });
+    } else {
+      this.onDownloadItem(item);
     }
+  }
 
-    onItemDoubleClick(item: FileItem): void {
-        if (item.type === 'FOLDER') {
-            this.router.navigate(['/my-folder'], { queryParams: { folderId: item.id } });
-        } else {
-            this.onDownloadItem(item);
-        }
-    }
-
-    abstract loadItems() : void;
+  abstract loadItems(): void;
 }

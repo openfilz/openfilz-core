@@ -1,15 +1,15 @@
-import {Component, ElementRef, OnInit, ViewChild} from '@angular/core';
-import {CommonModule} from '@angular/common';
-import {MatIconModule} from '@angular/material/icon';
-import {MatButtonModule} from '@angular/material/button';
-import {MatTableModule} from '@angular/material/table';
-import {MatPaginatorModule, PageEvent} from '@angular/material/paginator';
-import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
-import {MatSnackBar} from '@angular/material/snack-bar';
-import {DragDropDirective} from '../../directives/drag-drop.directive';
-import {DocumentApiService} from '../../services/document-api.service';
-import {FileIconService} from '../../services/file-icon.service';
-import {DocumentType, ElementInfo, FileItem} from '../../models/document.models';
+import { Component, ElementRef, OnInit, ViewChild, inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+import { MatTableModule } from '@angular/material/table';
+import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { DragDropDirective } from '../../directives/drag-drop.directive';
+import { DocumentApiService } from '../../services/document-api.service';
+import { FileIconService } from '../../services/file-icon.service';
+import { DocumentType, ElementInfo, FileItem } from '../../models/document.models';
 
 export interface DashboardFileItem extends FileItem {
   owner: string;
@@ -49,6 +49,10 @@ export interface FileTypeDistribution {
   styleUrls: ['./dashboard.component.css']
 })
 export class DashboardComponent implements OnInit {
+  private documentApi = inject(DocumentApiService);
+  private fileIconService = inject(FileIconService);
+  private snackBar = inject(MatSnackBar);
+
   recentlyEditedFiles: RecentFile[] = [];
   allFiles: DashboardFileItem[] = [];
   displayedColumns: string[] = ['name', 'size', 'owner', 'lastModified'];
@@ -86,11 +90,7 @@ export class DashboardComponent implements OnInit {
 
   @ViewChild('fileInput') fileInput!: ElementRef;
 
-  constructor(
-    private documentApi: DocumentApiService,
-    private fileIconService: FileIconService,
-    private snackBar: MatSnackBar
-  ) {}
+  constructor() { }
 
   ngOnInit() {
     this.loadDashboardData();

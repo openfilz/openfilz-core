@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnInit, OnChanges, ViewChild } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, OnChanges, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -146,10 +146,10 @@ export class MetadataPanelComponent implements OnInit, OnChanges {
     'tar': 'TAR Archive'
   };
 
-  constructor(
-    private documentApi: DocumentApiService,
-    private snackBar: MatSnackBar
-  ) {}
+  private documentApi = inject(DocumentApiService);
+  private snackBar = inject(MatSnackBar);
+
+  constructor() { }
 
   ngOnInit() {
     if (this.documentId && this.isOpen) {
@@ -200,7 +200,7 @@ export class MetadataPanelComponent implements OnInit, OnChanges {
     });
   }
 
-  
+
   /**
    * Filter out system metadata keys that should not be editable
    */
@@ -295,7 +295,7 @@ export class MetadataPanelComponent implements OnInit, OnChanges {
     }
   }
 
-onMetadataChange(metadata: { [key: string]: any }) {
+  onMetadataChange(metadata: { [key: string]: any }) {
     this.currentMetadata = metadata;
   }
 

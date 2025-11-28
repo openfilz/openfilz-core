@@ -1,4 +1,4 @@
-import { Component, OnInit, HostListener } from '@angular/core';
+import { Component, OnInit, HostListener, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
@@ -30,6 +30,12 @@ import { ThemeService } from './services/theme.service';
   ],
 })
 export class MainComponent implements OnInit {
+  private router = inject(Router);
+  private snackBar = inject(MatSnackBar);
+  private breadcrumbService = inject(BreadcrumbService);
+  private oidcSecurityService = inject(OidcSecurityService);
+  private themeService = inject(ThemeService);
+
   userData$ = this.oidcSecurityService.userData$;
   isAuthenticated$ = this.oidcSecurityService.isAuthenticated$;
   isDownloading = false;
@@ -45,13 +51,7 @@ export class MainComponent implements OnInit {
     return false;
   }
 
-  constructor(
-    private router: Router,
-    private snackBar: MatSnackBar,
-    private breadcrumbService: BreadcrumbService,
-    private oidcSecurityService: OidcSecurityService,
-    private themeService: ThemeService
-  ) { }
+  constructor() { }
 
   ngOnInit() {
     console.log('MainComponent ngOnInit - isMobileMenuOpen:', this.isMobileMenuOpen);
