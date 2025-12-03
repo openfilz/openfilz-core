@@ -510,12 +510,16 @@
       ],
       "realmRoles": [
         "default-roles-your-realm",
-        "CONTRIBUTOR", "CLEANER", "AUDITOR"
+        "CONTRIBUTOR",
+        "CLEANER",
+        "AUDITOR",
+        "ADMIN"
       ],
       "groups": [
         "/GED/CONTRIBUTOR",
         "/GED/CLEANER",
-        "/GED/AUDITOR"
+        "/GED/AUDITOR",
+        "/GED/ADMIN"
       ]
     },
     {
@@ -553,6 +557,10 @@
       {
         "name": "CLEANER",
         "description": "CLEANER role"
+      },
+      {
+        "name": "ADMIN",
+        "description": "ADMIN role"
       }
     ]
   },
@@ -576,6 +584,10 @@
         {
           "name": "CLEANER",
           "path": "/GED/CLEANER"
+        },
+        {
+          "name": "ADMIN",
+          "path": "/GED/ADMIN"
         }
       ]
     }
