@@ -512,8 +512,7 @@
         "default-roles-your-realm",
         "CONTRIBUTOR",
         "CLEANER",
-        "AUDITOR",
-        "ADMIN"
+        "AUDITOR"
       ],
       "groups": [
         "/GED/CONTRIBUTOR",
@@ -557,10 +556,6 @@
       {
         "name": "CLEANER",
         "description": "CLEANER role"
-      },
-      {
-        "name": "ADMIN",
-        "description": "ADMIN role"
       }
     ]
   },
@@ -584,10 +579,6 @@
         {
           "name": "CLEANER",
           "path": "/GED/CLEANER"
-        },
-        {
-          "name": "ADMIN",
-          "path": "/GED/ADMIN"
         }
       ]
     }
