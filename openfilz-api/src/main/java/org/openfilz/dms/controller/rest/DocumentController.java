@@ -12,6 +12,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.RestApiVersion;
+import org.openfilz.dms.converter.CustomJsonPart;
 import org.openfilz.dms.dto.request.*;
 import org.openfilz.dms.dto.response.DocumentInfo;
 import org.openfilz.dms.dto.response.ElementInfo;
@@ -71,14 +72,19 @@ public class DocumentController {
             description = "Uploads multiple files, optionally with metadata and a parent folder ID.")
     public Flux<UploadResponse> uploadDocument(
             @RequestPart("file") Flux<FilePart> filePartFlux,
-            @RequestPart(value = "parametersByFilename", required = false) List<MultipleUploadFileParameter> multipleUploadFileParameters,
+            @CustomJsonPart(value = "parametersByFilename")
+            @Parameter(
+                    description = ApiDescription.UPLOAD_MULTIPLE_DESCRIPTION,
+                    schema = @Schema(type = "string", example = "[{\"filename\":\"file1.txt\",\"fileAttributes\":{\"metadata\":{\"country\": \"UK\", \"info\": {\"key\": \"Value\"}}}}, {\"filename\":\"file2.md\",\"fileAttributes\":{\"metadata\":{\"key1\": \"value1\"}}}]")
+            )
+            List<MultipleUploadFileParameter> parametersByFilename,
             @Parameter(description = ALLOW_DUPLICATE_FILE_NAME_PARAM_DESCRIPTION) @RequestParam(required = false, defaultValue = "false") Boolean allowDuplicateFileNames) {
-        final Map<String, MultipleUploadFileParameterAttributes> parametersByFilename = (multipleUploadFileParameters == null
-                || multipleUploadFileParameters.isEmpty() ? Collections.emptyMap()
-                : multipleUploadFileParameters.stream().collect(Collectors.toMap(MultipleUploadFileParameter::filename, MultipleUploadFileParameter::fileAttributes)));
+        final Map<String, MultipleUploadFileParameterAttributes> parametersByFilenameMap = (parametersByFilename == null
+                || parametersByFilename.isEmpty() ? Collections.emptyMap()
+                : parametersByFilename.stream().collect(Collectors.toMap(MultipleUploadFileParameter::filename, MultipleUploadFileParameter::fileAttributes)));
 
         return filePartFlux.flatMapSequential(filePart -> {
-                    MultipleUploadFileParameterAttributes fileParameters = parametersByFilename.get(filePart.filename());
+                    MultipleUploadFileParameterAttributes fileParameters = parametersByFilenameMap.get(filePart.filename());
 
                     if(fileParameters == null) {
                         log.debug("Processing file: {}", filePart.filename());
