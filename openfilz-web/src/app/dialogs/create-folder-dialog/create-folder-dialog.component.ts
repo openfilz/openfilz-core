@@ -1,11 +1,11 @@
-import {AfterViewInit, Component, ElementRef, Inject, ViewChild} from '@angular/core';
-import {CommonModule} from '@angular/common';
-import {MAT_DIALOG_DATA, MatDialogModule, MatDialogRef} from '@angular/material/dialog';
-import {MatFormFieldModule} from '@angular/material/form-field';
-import {MatInputModule} from '@angular/material/input';
-import {MatButtonModule} from '@angular/material/button';
-import {MatIconModule} from '@angular/material/icon';
-import {FormsModule} from '@angular/forms';
+import { AfterViewInit, Component, ElementRef, ViewChild, inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { FormsModule } from '@angular/forms';
 
 @Component({
   selector: 'app-create-folder-dialog',
@@ -27,10 +27,10 @@ export class CreateFolderDialogComponent implements AfterViewInit {
 
   @ViewChild('nameInput') nameInput!: ElementRef;
 
-  constructor(
-    public dialogRef: MatDialogRef<CreateFolderDialogComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: any
-  ) {}
+  readonly dialogRef = inject(MatDialogRef<CreateFolderDialogComponent>);
+  readonly data = inject(MAT_DIALOG_DATA);
+
+  constructor() { }
 
   ngAfterViewInit() {
     // Auto-focus the input field

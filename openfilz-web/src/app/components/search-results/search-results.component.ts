@@ -1,19 +1,20 @@
-import {Component, OnInit} from '@angular/core';
-import {ActivatedRoute, Router} from '@angular/router';
-import {CommonModule} from '@angular/common';
-import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
-import {MatDialog, MatDialogModule} from '@angular/material/dialog';
-import {MatSnackBar, MatSnackBarModule} from '@angular/material/snack-bar';
+import { Component, OnInit, inject } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
+import { CommonModule } from '@angular/common';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatIconModule } from '@angular/material/icon';
 
-import {SearchService} from '../../services/search.service';
-import {DocumentApiService} from '../../services/document-api.service';
-import {FileIconService} from '../../services/file-icon.service';
+import { SearchService } from '../../services/search.service';
+import { DocumentApiService } from '../../services/document-api.service';
+import { FileIconService } from '../../services/file-icon.service';
 
-import {FileListComponent} from '../file-list/file-list.component';
-import {FileGridComponent} from '../file-grid/file-grid.component';
-import {ToolbarComponent} from '../toolbar/toolbar.component';
-import {FileOperationsComponent} from '../base/file-operations.component';
-import {DocumentSearchInfo, DocumentType, FileItem} from '../../models/document.models';
+import { FileListComponent } from '../file-list/file-list.component';
+import { FileGridComponent } from '../file-grid/file-grid.component';
+import { ToolbarComponent } from '../toolbar/toolbar.component';
+import { FileOperationsComponent } from '../base/file-operations.component';
+import { DocumentSearchInfo, DocumentType, FileItem } from '../../models/document.models';
 
 import { UserPreferencesService } from '../../services/user-preferences.service';
 
@@ -27,7 +28,8 @@ import { UserPreferencesService } from '../../services/user-preferences.service'
     ToolbarComponent,
     MatProgressSpinnerModule,
     MatDialogModule,
-    MatSnackBarModule
+    MatSnackBarModule,
+    MatIconModule
   ],
   templateUrl: './search-results.component.html',
   styleUrls: ['./search-results.component.css']
@@ -35,17 +37,12 @@ import { UserPreferencesService } from '../../services/user-preferences.service'
 export class SearchResultsComponent extends FileOperationsComponent implements OnInit {
   searchQuery = '';
 
-  constructor(
-    private route: ActivatedRoute,
-    private searchService: SearchService,
-    private fileIconService: FileIconService,
-    router: Router,
-    documentApi: DocumentApiService,
-    dialog: MatDialog,
-    snackBar: MatSnackBar,
-    userPreferencesService: UserPreferencesService
-  ) {
-    super(router, documentApi, dialog, snackBar, userPreferencesService);
+  private route = inject(ActivatedRoute);
+  private searchService = inject(SearchService);
+  private fileIconService = inject(FileIconService);
+
+  constructor() {
+    super();
   }
 
   override ngOnInit(): void {
@@ -76,7 +73,7 @@ export class SearchResultsComponent extends FileOperationsComponent implements O
   }
 
   override loadItems() {
-      this.reloadData();
+    this.reloadData();
   }
 
   override reloadData(): void {

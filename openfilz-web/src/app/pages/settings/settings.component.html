@@ -1,6 +1,6 @@
 <div class="settings-container">
   <div class="settings-header">
-    <h1>Settings</h1>
+    <h1>Hello {{ firstName }}</h1>
     <p>Manage your preferences and application settings</p>
   </div>
 
@@ -9,18 +9,16 @@
       <mat-icon>palette</mat-icon>
       Appearance
     </div>
-    
+
     <div class="section-content">
       <div class="setting-item full-width">
         <label class="setting-label">Theme</label>
         <p class="setting-description">Choose a color theme for the application interface.</p>
-        
+
         <div class="theme-grid">
-          <div *ngFor="let theme of availableThemes" 
-               class="theme-card" 
-               [class.active]="currentTheme?.name === theme.name"
-               (click)="onThemeChange(theme.name)">
-            
+          <div *ngFor="let theme of availableThemes" class="theme-card"
+            [class.active]="currentTheme?.name === theme.name" (click)="onThemeChange(theme.name)">
+
             <!-- Apply the theme class to this wrapper so CSS variables are scoped locally -->
             <div class="theme-preview-wrapper" [ngClass]="theme.className">
               <div class="theme-preview-content">

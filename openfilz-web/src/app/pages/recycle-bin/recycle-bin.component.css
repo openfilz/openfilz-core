@@ -1,10 +1,11 @@
 .recycle-bin-container {
-  padding-top: 16px;
   height: 100%;
   width: 100%;
   display: flex;
   flex-direction: column;
   background-color: var(--bg-secondary);
+  overflow-y: auto;
+  padding-top: 16px;
 }
 
 /* Recycle Bin Actions in Toolbar */
@@ -154,6 +155,10 @@ app-file-list {
 }
 
 @media (max-width: 768px) {
+  .recycle-bin-container {
+    padding-top: 0;
+  }
+
   .recycle-bin-actions button {
     font-size: 13px;
     height: 38px;
@@ -167,17 +172,138 @@ app-file-list {
   }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 767px) {
   .recycle-bin-actions {
-    flex-wrap: wrap;
-  }
-
-  .recycle-bin-actions button span {
     display: none;
   }
+}
 
-  .recycle-bin-actions button {
-    min-width: 44px;
-    padding: 0 12px;
+/* ===================================
+   Mobile FAB (Floating Action Button)
+   =================================== */
+
+.recycle-bin-fab-container {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .recycle-bin-fab-container {
+    display: block;
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 1000;
+  }
+
+  .recycle-bin-fab-container.fab-open {
+    z-index: 1100;
+  }
+
+  .main-fab {
+    width: 56px;
+    height: 56px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    position: relative;
+    z-index: 1101;
+    background-color: var(--primary) !important;
+  }
+
+  .fab-icon-rotated {
+    transform: rotate(45deg);
+    transition: transform 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .fab-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1099;
+    animation: fadeIn 200ms ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* Speed Dial Actions */
+  .fab-speed-dial {
+    position: absolute;
+    bottom: 70px;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    z-index: 1100;
+  }
+
+  .speed-dial-item {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    animation: slideUp 250ms cubic-bezier(0.4, 0, 0.2, 1) backwards;
+  }
+
+  .speed-dial-item:nth-child(1) { animation-delay: 50ms; }
+  .speed-dial-item:nth-child(2) { animation-delay: 100ms; }
+  .speed-dial-item:nth-child(3) { animation-delay: 150ms; }
+
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .speed-dial-btn {
+    width: 48px;
+    height: 48px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  }
+
+  .restore-dial-btn {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+    color: white !important;
+  }
+
+  .delete-forever-dial-btn {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+    color: white !important;
+  }
+
+  .empty-bin-dial-btn {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+    color: white !important;
+  }
+
+  .speed-dial-label {
+    background-color: rgba(0, 0, 0, 0.75);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  }
+
+  .restore-label {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  }
+
+  .delete-forever-label {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  }
+
+  .empty-bin-label {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
   }
 }

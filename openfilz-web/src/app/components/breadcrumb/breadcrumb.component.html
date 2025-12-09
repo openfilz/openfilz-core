@@ -1,19 +1,21 @@
-<div class="breadcrumb">
-  <button mat-icon-button (click)="onNavigateToHome()">
-    <mat-icon>home</mat-icon>
+<nav class="breadcrumb" role="navigation" aria-label="Breadcrumb">
+  <button mat-icon-button (click)="onNavigateToHome()" aria-label="Navigate to home">
+    <mat-icon aria-hidden="true">home</mat-icon>
   </button>
 
     @for(item of breadcrumbs; track item.id; let i = $index) {
         <ng-container>
-            <mat-icon class="separator">chevron_right</mat-icon>
+            <mat-icon class="separator" aria-hidden="true">chevron_right</mat-icon>
             <button
                     mat-button
                     class="breadcrumb-item"
                     [class.current]="i === breadcrumbs.length - 1"
+                    [attr.aria-current]="i === breadcrumbs.length - 1 ? 'page' : null"
+                    [attr.aria-label]="'Navigate to ' + item.name"
                     (click)="onNavigate(item)">
                 {{ item.name }}
             </button>
         </ng-container>
     }
 
-</div>
+</nav>

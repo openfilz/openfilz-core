@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, HostListener, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
@@ -30,6 +30,12 @@ import { ThemeService } from './services/theme.service';
   ],
 })
 export class MainComponent implements OnInit {
+  private router = inject(Router);
+  private snackBar = inject(MatSnackBar);
+  private breadcrumbService = inject(BreadcrumbService);
+  private oidcSecurityService = inject(OidcSecurityService);
+  private themeService = inject(ThemeService);
+
   userData$ = this.oidcSecurityService.userData$;
   isAuthenticated$ = this.oidcSecurityService.isAuthenticated$;
   isDownloading = false;
@@ -37,6 +43,7 @@ export class MainComponent implements OnInit {
   currentRoute = '';
   isWipRoute = false;
   isSidebarCollapsed = false;
+  isMobileMenuOpen = false;
 
   // This is needed for the header component
   get hasSelectedItems(): boolean {
@@ -44,15 +51,14 @@ export class MainComponent implements OnInit {
     return false;
   }
 
-  constructor(
-    private router: Router,
-    private snackBar: MatSnackBar,
-    private breadcrumbService: BreadcrumbService,
-    private oidcSecurityService: OidcSecurityService,
-    private themeService: ThemeService
-  ) { }
+  constructor() { }
 
   ngOnInit() {
+    console.log('MainComponent ngOnInit - isMobileMenuOpen:', this.isMobileMenuOpen);
+
+    // Ensure mobile menu starts closed
+    this.isMobileMenuOpen = false;
+
     // Initialize the current route based on the URL
     this.updateCurrentRoute();
 
@@ -102,6 +108,26 @@ export class MainComponent implements OnInit {
 
   onSidebarCollapsedChange(collapsed: boolean) {
     this.isSidebarCollapsed = collapsed;
+  }
+
+  toggleMobileMenu() {
+    console.log('toggleMobileMenu called, current state:', this.isMobileMenuOpen);
+    this.isMobileMenuOpen = !this.isMobileMenuOpen;
+    console.log('toggleMobileMenu new state:', this.isMobileMenuOpen);
+  }
+
+  closeMobileMenu() {
+    console.log('closeMobileMenu called');
+    this.isMobileMenuOpen = false;
+  }
+
+  @HostListener('window:resize', ['$event'])
+  onResize(event: any) {
+    // Close mobile menu when resizing to ensure clean state
+    if (window.innerWidth > 768 && this.isMobileMenuOpen) {
+      console.log('Window resized to desktop, closing mobile menu');
+      this.isMobileMenuOpen = false;
+    }
   }
 
   logout() {

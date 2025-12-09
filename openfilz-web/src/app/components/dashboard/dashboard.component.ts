@@ -1,14 +1,15 @@
-import {Component, ElementRef, OnInit, ViewChild} from '@angular/core';
-import {CommonModule} from '@angular/common';
-import {MatIconModule} from '@angular/material/icon';
-import {MatButtonModule} from '@angular/material/button';
-import {MatTableModule} from '@angular/material/table';
-import {MatPaginatorModule, PageEvent} from '@angular/material/paginator';
-import {MatSnackBar} from '@angular/material/snack-bar';
-import {DragDropDirective} from '../../directives/drag-drop.directive';
-import {DocumentApiService} from '../../services/document-api.service';
-import {FileIconService} from '../../services/file-icon.service';
-import {DocumentType, ElementInfo, FileItem} from '../../models/document.models';
+import { Component, ElementRef, OnInit, ViewChild, inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+import { MatTableModule } from '@angular/material/table';
+import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { DragDropDirective } from '../../directives/drag-drop.directive';
+import { DocumentApiService } from '../../services/document-api.service';
+import { FileIconService } from '../../services/file-icon.service';
+import { DocumentType, ElementInfo, FileItem } from '../../models/document.models';
 
 export interface DashboardFileItem extends FileItem {
   owner: string;
@@ -20,7 +21,6 @@ export interface RecentFile {
   name: string;
   type: string;
   size: number;
-  owner: string;
   lastModified: string;
   updatedAt: string;
   icon: string;
@@ -42,12 +42,17 @@ export interface FileTypeDistribution {
     MatButtonModule,
     MatTableModule,
     MatPaginatorModule,
+    MatProgressSpinnerModule,
     DragDropDirective
   ],
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.css']
 })
 export class DashboardComponent implements OnInit {
+  private documentApi = inject(DocumentApiService);
+  private fileIconService = inject(FileIconService);
+  private snackBar = inject(MatSnackBar);
+
   recentlyEditedFiles: RecentFile[] = [];
   allFiles: DashboardFileItem[] = [];
   displayedColumns: string[] = ['name', 'size', 'owner', 'lastModified'];
@@ -69,6 +74,10 @@ export class DashboardComponent implements OnInit {
   audioSize = 0;
   otherSize = 0;
 
+  // File counts
+  totalFiles = 0;
+  totalFolders = 0;
+
   // Loading states
   isLoadingDashboard = false;
   isLoadingRecentFiles = false;
@@ -81,11 +90,7 @@ export class DashboardComponent implements OnInit {
 
   @ViewChild('fileInput') fileInput!: ElementRef;
 
-  constructor(
-    private documentApi: DocumentApiService,
-    private fileIconService: FileIconService,
-    private snackBar: MatSnackBar
-  ) {}
+  constructor() { }
 
   ngOnInit() {
     this.loadDashboardData();
@@ -124,13 +129,17 @@ export class DashboardComponent implements OnInit {
         });
 
         // Update file type distribution
-        const totalFiles = stats.fileTypeCounts.reduce((sum, ft) => sum + (ft.count || 0), 0);
+        const totalFilesCount = stats.fileTypeCounts.reduce((sum, ft) => sum + (ft.count || 0), 0);
         this.fileTypeDistribution = stats.fileTypeCounts.map(ft => ({
           type: this.capitalizeFirst(ft.type),
           count: ft.count || 0,
-          percentage: totalFiles > 0 ? Math.round(((ft.count || 0) / totalFiles) * 100) : 0,
+          percentage: totalFilesCount > 0 ? Math.round(((ft.count || 0) / totalFilesCount) * 100) : 0,
           color: this.getTypeColor(this.capitalizeFirst(ft.type))
         }));
+
+        // Update file and folder counts
+        this.totalFiles = stats.totalFiles || 0;
+        this.totalFolders = stats.totalFolders || 0;
 
         this.isLoadingDashboard = false;
       },
@@ -156,7 +165,6 @@ export class DashboardComponent implements OnInit {
           name: file.name,
           type: this.getFileTypeCategory(file.contentType || ''),
           size: file.size || 0,
-          owner: file.updatedBy || 'Unknown',
           lastModified: this.formatRelativeTime(file.updatedAt || ''),
           updatedAt: file.updatedAt || '',
           icon: this.getIconForContentType(file.contentType || '')
@@ -271,13 +279,13 @@ export class DashboardComponent implements OnInit {
   getFileIconClass(fileType: string): string {
     switch (fileType) {
       case 'image':
-        return 'fas fa-chart-pie';
+        return 'image';
       case 'document':
-        return 'fas fa-file-word'; // or appropriate document icon
+        return 'description';
       case 'archive':
-        return 'fas fa-file-archive';
+        return 'folder_zip';
       default:
-        return 'fas fa-file';
+        return 'insert_drive_file';
     }
   }
 
@@ -298,5 +306,19 @@ export class DashboardComponent implements OnInit {
     // Format the date to match the design (e.g., "Jun 12")
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  // Circular progress methods for storage indicator
+  getCircleDashArray(): string {
+    const radius = 38;
+    const circumference = 2 * Math.PI * radius;
+    return `${circumference} ${circumference}`;
+  }
+
+  getCircleDashOffset(): number {
+    const radius = 38;
+    const circumference = 2 * Math.PI * radius;
+    const offset = circumference - (this.storagePercentage / 100) * circumference;
+    return offset;
   }
 }

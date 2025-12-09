@@ -1,41 +1,41 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { ThemeService, Theme } from '../../services/theme.service';
-import { Subscription } from 'rxjs';
+import { OidcSecurityService } from 'angular-auth-oidc-client';
 
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [
-    CommonModule,
-    MatIconModule
-  ],
+  imports: [CommonModule, MatIconModule],
   templateUrl: './settings.component.html',
   styleUrls: ['./settings.component.css']
 })
-export class SettingsComponent implements OnInit, OnDestroy {
+export class SettingsComponent implements OnInit {
+  currentTheme: Theme | undefined;
   availableThemes: Theme[] = [];
-  currentTheme: Theme | null = null;
-  private themeSubscription: Subscription | null = null;
+  firstName: string = '';
 
-  constructor(private themeService: ThemeService) {
-    this.availableThemes = this.themeService.availableThemes;
-  }
+  private themeService = inject(ThemeService);
+  private oidcSecurityService = inject(OidcSecurityService);
+
+  constructor() { }
 
   ngOnInit(): void {
-    this.themeSubscription = this.themeService.currentTheme$.subscribe(theme => {
+    this.availableThemes = this.themeService.availableThemes;
+    this.themeService.currentTheme$.subscribe(theme => {
       this.currentTheme = theme;
+    });
+
+    this.oidcSecurityService.userData$.subscribe((result: any) => {
+      const userData = result.userData || result; // Handle both wrapper and direct object
+      if (userData) {
+        this.firstName = userData.given_name || userData.name || 'Openfilz User';
+      }
     });
   }
 
-  ngOnDestroy(): void {
-    if (this.themeSubscription) {
-      this.themeSubscription.unsubscribe();
-    }
-  }
-
-  onThemeChange(themeName: string): void {
+  onThemeChange(themeName: string) {
     this.themeService.setTheme(themeName);
   }
 }

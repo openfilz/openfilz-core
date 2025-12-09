@@ -1,29 +1,29 @@
-import {Injectable} from '@angular/core';
-import {HttpClient, HttpHeaders, HttpParams} from '@angular/common/http';
-import {filter, map, Observable} from 'rxjs';
-import {Apollo, gql} from 'apollo-angular';
+import { Injectable, inject } from '@angular/core';
+import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
+import { filter, map, Observable } from 'rxjs';
+import { Apollo, gql } from 'apollo-angular';
 import {
-    AuditLog,
-    CopyRequest,
-    CreateFolderRequest,
-    DashboardStatistics,
-    DeleteRequest,
-    DocumentInfo,
-    ElementInfo,
-    FolderResponse,
-    ListFolderAndCountResponse,
-    MoveRequest,
-    RecentFileInfo,
-    RenameRequest,
-    SearchByMetadataRequest,
-    UploadResponse,
-    MultipleUploadFileParameter,
-    ListFolderRequest,
-    FilterInput,
-    SearchFilters,
-    DocumentType
+  CopyRequest,
+  CreateFolderRequest,
+  DashboardStatistics,
+  DeleteRequest,
+  DocumentInfo,
+  ElementInfo,
+  AuditLog,
+  FolderResponse,
+  ListFolderAndCountResponse,
+  MoveRequest,
+  RecentFileInfo,
+  RenameRequest,
+  SearchByMetadataRequest,
+  UploadResponse,
+  MultipleUploadFileParameter,
+  ListFolderRequest,
+  FilterInput,
+  SearchFilters,
+  DocumentType
 } from '../models/document.models';
-import {environment} from '../../environments/environment';
+import { environment } from '../../environments/environment';
 
 const LIST_FOLDER_QUERY = gql`
   query listFolder($request: ListFolderRequest!) {
@@ -134,7 +134,10 @@ export class DocumentApiService {
   private readonly baseUrl = environment.apiURL;
   private readonly authToken = localStorage.getItem('token'); // In real app, get from auth service
 
-  constructor(private http: HttpClient, private apollo: Apollo) {}
+  private http = inject(HttpClient);
+  private apollo = inject(Apollo);
+
+  constructor() { }
 
   private getHeaders(): HttpHeaders {
     return new HttpHeaders({
@@ -181,50 +184,50 @@ export class DocumentApiService {
           break;
       }
       if (date) {
-          request.updatedAtAfter = date.toISOString();
+        request.updatedAtAfter = date.toISOString();
       }
     }
 
     if (filters.fileType && filters.fileType !== 'any') {
-        request.contentType = filters.fileType;
+      request.contentType = filters.fileType;
     }
 
-    if(filters.metadata && filters.metadata.length > 0) {
-        request.metadata = this.toJsonMetadata(filters.metadata);
+    if (filters.metadata && filters.metadata.length > 0) {
+      request.metadata = this.toJsonMetadata(filters.metadata);
     }
 
     return request;
   }
 
-    listDeletedFolderAndCount(folderId?: string, page: number = 1, pageSize: number = 50): Observable<ListFolderAndCountResponse> {
-        const request1 = {
-            id: folderId,
-            active: false,
-            pageInfo: {
-                pageNumber: page,
-                pageSize: pageSize
-            }
+  listDeletedFolderAndCount(folderId?: string, page: number = 1, pageSize: number = 50): Observable<ListFolderAndCountResponse> {
+    const request1 = {
+      id: folderId,
+      active: false,
+      pageInfo: {
+        pageNumber: page,
+        pageSize: pageSize
+      }
+    };
+
+    const request2 = {
+      id: folderId,
+      active: false
+    };
+
+    return this.apollo.watchQuery<any>({
+      fetchPolicy: 'no-cache',
+      query: LIST_FOLDER_AND_COUNT_QUERY,
+      variables: { request1, request2 }
+    }).valueChanges.pipe(
+      map(result => {
+        return {
+          listFolder: result.data.listFolder,
+          count: result.data.count
         };
+      })
+    );
 
-        const request2 = {
-            id: folderId,
-            active: false
-        };
-
-        return this.apollo.watchQuery<any>({
-            fetchPolicy: 'no-cache',
-            query: LIST_FOLDER_AND_COUNT_QUERY,
-            variables: { request1, request2 }
-        }).valueChanges.pipe(
-            map(result => {
-                return {
-                    listFolder: result.data.listFolder,
-                    count: result.data.count
-                };
-            })
-        );
-
-    }
+  }
 
 
   // Folder operations
@@ -312,7 +315,7 @@ export class DocumentApiService {
     );
   }
 
- createFolder(request: CreateFolderRequest): Observable<FolderResponse> {
+  createFolder(request: CreateFolderRequest): Observable<FolderResponse> {
     return this.http.post<FolderResponse>(`${this.baseUrl}/folders`, request, {
       headers: this.getHeaders()
     });
@@ -425,7 +428,7 @@ export class DocumentApiService {
       });
     });
     if (parentFolderId || metadata) {
-      formData.append('parametersByFilename', new Blob([JSON.stringify(parametersByFilename)], {type: 'application/json'}));
+      formData.append('parametersByFilename', new Blob([JSON.stringify(parametersByFilename)], { type: 'application/json' }));
     }
 
 
@@ -551,34 +554,34 @@ export class DocumentApiService {
   ): Observable<any> {
     const filterInputs: FilterInput[] = [];
     if (filters) {
-        if (filters.type) {
-            filterInputs.push({ field: 'type', value: filters.type });
+      if (filters.type) {
+        filterInputs.push({ field: 'type', value: filters.type });
+      }
+      if (filters.owner) {
+        filterInputs.push({ field: 'createdBy', value: filters.owner });
+      }
+      if (filters.dateModified && filters.dateModified !== 'any') {
+        const now = new Date();
+        let date: Date | undefined;
+        switch (filters.dateModified) {
+          case 'today': date = new Date(now.setHours(0, 0, 0, 0)); break;
+          case 'last7': date = new Date(now.setDate(now.getDate() - 7)); break;
+          case 'last30': date = new Date(now.setDate(now.getDate() - 30)); break;
         }
-        if (filters.owner) {
-            filterInputs.push({ field: 'createdBy', value: filters.owner });
+        if (date) {
+          filterInputs.push({ field: 'updatedAtAfter', value: date.toISOString() });
         }
-        if (filters.dateModified && filters.dateModified !== 'any') {
-             const now = new Date();
-             let date: Date | undefined;
-             switch (filters.dateModified) {
-               case 'today': date = new Date(now.setHours(0, 0, 0, 0)); break;
-               case 'last7': date = new Date(now.setDate(now.getDate() - 7)); break;
-               case 'last30': date = new Date(now.setDate(now.getDate() - 30)); break;
-             }
-             if (date) {
-                 filterInputs.push({ field: 'updatedAtAfter', value: date.toISOString() });
-             }
-        }
-        if (filters.fileType && filters.fileType !== 'any') {
-            filterInputs.push({ field: 'contentType', value: filters.fileType });
-        }
-        if (filters.metadata) {
-            filters.metadata.forEach(meta => {
-                if (meta.key && meta.value) {
-                    filterInputs.push({ field: 'metadata.' + meta.key, value: meta.value });
-                }
-            });
-        }
+      }
+      if (filters.fileType && filters.fileType !== 'any') {
+        filterInputs.push({ field: 'contentType', value: filters.fileType });
+      }
+      if (filters.metadata) {
+        filters.metadata.forEach(meta => {
+          if (meta.key && meta.value) {
+            filterInputs.push({ field: 'metadata.' + meta.key, value: meta.value });
+          }
+        });
+      }
     }
 
     return this.apollo.watchQuery<any>({

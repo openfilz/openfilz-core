@@ -1,10 +1,11 @@
-import { Component, EventEmitter, Output } from '@angular/core';
+import { Component, EventEmitter, Output, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { Router } from '@angular/router';
+import { Router, NavigationEnd } from '@angular/router';
+import { filter } from 'rxjs/operators';
 
 @Component({
   selector: 'app-sidebar',
@@ -19,11 +20,12 @@ import { Router } from '@angular/router';
     MatTooltipModule
   ],
 })
-export class SidebarComponent {
+export class SidebarComponent implements OnInit {
   isCollapsed = false;
 
   @Output() collapsedChange = new EventEmitter<boolean>();
   @Output() logout = new EventEmitter<void>();
+  @Output() mobileMenuClose = new EventEmitter<void>();
 
   navigationItems = [
     { id: 'dashboard', label: 'Dashboard', active: true, route: '/dashboard' },
@@ -35,7 +37,31 @@ export class SidebarComponent {
     { id: 'logout', label: 'Log Out', active: false, route: null }
   ];
 
-  constructor(private router: Router) { }
+  private router = inject(Router);
+
+  constructor() { }
+
+  ngOnInit() {
+    // Update active state based on current route
+    this.updateActiveState(this.router.url);
+
+    // Listen to route changes
+    this.router.events.pipe(
+      filter(event => event instanceof NavigationEnd)
+    ).subscribe((event: any) => {
+      this.updateActiveState(event.urlAfterRedirects);
+    });
+  }
+
+  private updateActiveState(url: string) {
+    // Extract the base route from the URL (remove query params)
+    const baseRoute = url.split('?')[0];
+
+    // Update active state for all items
+    this.navigationItems.forEach(item => {
+      item.active = item.route === baseRoute;
+    });
+  }
 
   toggleSidebar() {
     this.isCollapsed = !this.isCollapsed;
@@ -44,20 +70,21 @@ export class SidebarComponent {
 
   getIconClass(id: string): string {
     switch (id) {
-      case 'dashboard': return 'chart-line';
+      case 'dashboard': return 'dashboard';
       case 'my-folder': return 'folder';
-      case 'recycle-bin': return 'trash';
-      case 'favorites': return 'heart';
-      //case 'shared-files': return 'share-alt';
-      case 'settings': return 'cog';
-      case 'logout': return 'sign-out-alt';
-      default: return 'question';
+      case 'recycle-bin': return 'delete';
+      case 'favorites': return 'favorite';
+      //case 'shared-files': return 'share';
+      case 'settings': return 'settings';
+      case 'logout': return 'logout';
+      default: return 'help_outline';
     }
   }
 
   onNavigationClick(itemId: string) {
     if (itemId === 'logout') {
       this.logout.emit();
+      this.mobileMenuClose.emit();
       return;
     }
 
@@ -67,16 +94,18 @@ export class SidebarComponent {
     // Navigate to the appropriate route
     const item = this.navigationItems.find(navItem => navItem.id === itemId);
     if (item && item.route) {
-        // --- START: Added logic to force reload ---
-        if (this.router.url === item.route) {
-            // If we are already on the same route, force a reload
-            this.router.navigateByUrl('/', { skipLocationChange: true }).then(() => {
-                this.router.navigate([item.route]);
-            });
-        } else {
-            // Otherwise, navigate normally
-            this.router.navigate([item.route]);
-        }
+      // --- START: Added logic to force reload ---
+      if (this.router.url === item.route) {
+        // If we are already on the same route, force a reload
+        this.router.navigateByUrl('/', { skipLocationChange: true }).then(() => {
+          this.router.navigate([item.route]);
+        });
+      } else {
+        // Otherwise, navigate normally
+        this.router.navigate([item.route]);
+      }
+        // Close mobile menu after navigation
+        this.mobileMenuClose.emit();
     }
   }
 }

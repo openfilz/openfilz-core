@@ -1,15 +1,15 @@
 <div class="dialog-header">
   <div class="header-content">
     <div class="icon-wrapper">
-      <i class="fas fa-folder-plus"></i>
+      <mat-icon aria-hidden="true">create_new_folder</mat-icon>
     </div>
     <div class="header-text">
-      <h2 class="dialog-title">Create New Folder</h2>
-      <p class="dialog-subtitle">Enter a name for your new folder</p>
+      <h2 class="dialog-title" id="dialog-title">Create New Folder</h2>
+      <p class="dialog-subtitle" id="dialog-description">Enter a name for your new folder</p>
     </div>
   </div>
-  <button mat-icon-button class="close-btn" (click)="onCancel()">
-    <i class="fas fa-times"></i>
+  <button mat-icon-button class="close-btn" (click)="onCancel()" aria-label="Close dialog">
+    <mat-icon aria-hidden="true">close</mat-icon>
   </button>
 </div>
 
@@ -22,15 +22,17 @@
       placeholder="e.g., Documents, Projects, Photos"
       (keyup.enter)="onCreate()"
       autocomplete="off"
+      aria-label="Folder name"
+      aria-required="true"
       #nameInput>
-    <mat-icon matPrefix class="input-icon">folder</mat-icon>
+    <mat-icon matPrefix class="input-icon" aria-hidden="true">folder</mat-icon>
   </mat-form-field>
 
 </div>
 
 <div mat-dialog-actions class="dialog-actions">
-  <button mat-stroked-button class="cancel-btn" (click)="onCancel()">
-    <i class="fas fa-times"></i>
+  <button mat-stroked-button class="cancel-btn" (click)="onCancel()" aria-label="Cancel">
+    <mat-icon aria-hidden="true">close</mat-icon>
     <span>&nbsp;&nbsp;Cancel</span>
   </button>
   <button
@@ -38,8 +40,9 @@
     color="primary"
     class="create-btn"
     [disabled]="!folderName.trim()"
-    (click)="onCreate()">
-    <i class="fas fa-check"></i>
+    (click)="onCreate()"
+    aria-label="Create folder">
+    <mat-icon aria-hidden="true">check</mat-icon>
     <span>&nbsp;&nbsp;Create Folder</span>
   </button>
 </div>

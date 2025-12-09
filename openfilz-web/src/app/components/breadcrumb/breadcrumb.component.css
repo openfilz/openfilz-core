@@ -2,10 +2,10 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 8px 24px; /* Reduced vertical padding */
+  padding: 0 24px;
   background-color: var(--bg-primary);
   border-bottom: 1px solid var(--border-color);
-  min-height: 40px;
+  min-height: 28px;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
   position: fixed;
   top: 64px; /* Header height */
@@ -17,15 +17,16 @@
 
 .separator {
   color: var(--text-tertiary);
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .breadcrumb-item {
   color: var(--primary);
   text-transform: none;
   font-weight: 500;
+  font-size: 14px;
   min-width: auto;
-  padding: 4px 8px;
+  padding: 2px 6px;
   cursor: pointer;
 }
 
@@ -42,11 +43,13 @@
 
 mat-icon {
   color: var(--text-tertiary);
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
 }
 
 @media (max-width: 768px) {
   .breadcrumb {
-    left: 0;
-    padding: 8px 16px;
+    display: none; /* Hide separate breadcrumb on mobile - shown inline in toolbar */
   }
 }

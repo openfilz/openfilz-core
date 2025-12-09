@@ -1,11 +1,11 @@
-import {AfterViewInit, Component, ElementRef, Inject, ViewChild} from '@angular/core';
-import {CommonModule} from '@angular/common';
-import {MAT_DIALOG_DATA, MatDialogModule, MatDialogRef} from '@angular/material/dialog';
-import {MatFormFieldModule} from '@angular/material/form-field';
-import {MatInputModule} from '@angular/material/input';
-import {MatButtonModule} from '@angular/material/button';
-import {FormsModule} from '@angular/forms';
-import {MatIconModule} from "@angular/material/icon";
+import { AfterViewInit, Component, ElementRef, ViewChild, inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatButtonModule } from '@angular/material/button';
+import { FormsModule } from '@angular/forms';
+import { MatIconModule } from "@angular/material/icon";
 
 export interface RenameDialogData {
   name: string;
@@ -32,11 +32,11 @@ export class RenameDialogComponent implements AfterViewInit {
 
   @ViewChild('nameInput') nameInput!: ElementRef;
 
-  constructor(
-    public dialogRef: MatDialogRef<RenameDialogComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: RenameDialogData
-  ) {
-    this.newName = data.name;
+  readonly dialogRef = inject(MatDialogRef<RenameDialogComponent>);
+  readonly data = inject<RenameDialogData>(MAT_DIALOG_DATA);
+
+  constructor() {
+    this.newName = this.data.name;
   }
 
   ngAfterViewInit() {

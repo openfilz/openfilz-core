@@ -1,8 +1,10 @@
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Component, ElementRef, EventEmitter, HostListener, Input, OnDestroy, OnInit, Output } from "@angular/core";
+import { Component, ElementRef, HostListener, Input, OnDestroy, OnInit, Output, EventEmitter, inject } from "@angular/core";
 import { Router } from "@angular/router";
 import { Subject, Subscription } from "rxjs";
+import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { SearchService } from "../../services/search.service";
 import { debounceTime, distinctUntilChanged, switchMap } from "rxjs/operators";
 import { Suggestion, SearchFilters } from "../../models/document.models";
@@ -12,7 +14,7 @@ import { SearchFiltersComponent } from "../search-filters/search-filters.compone
 @Component({
   selector: 'app-header',
   standalone: true,
-  imports: [CommonModule, FormsModule, SearchFiltersComponent],
+  imports: [CommonModule, FormsModule, SearchFiltersComponent, MatIconModule, MatTooltipModule],
   templateUrl: './header.component.html',
   styleUrls: ['./header.component.css']
 })
@@ -20,18 +22,27 @@ export class HeaderComponent implements OnInit, OnDestroy {
   searchQuery: string = '';
   suggestions: Suggestion[] = [];
   showFilters = false;
-  @Input() hasSelection: boolean = false;
+  userInitials: string = '';
   currentFilters?: SearchFilters;
 
   private searchSubject = new Subject<string>();
   private searchSubscription!: Subscription;
 
-  constructor(
-    private searchService: SearchService,
-    private apiService: DocumentApiService,
-    private router: Router,
-    private elementRef: ElementRef
-  ) { }
+  private searchService = inject(SearchService);
+  private apiService = inject(DocumentApiService);
+  private router = inject(Router);
+  private elementRef = inject(ElementRef);
+
+  @Input() hasSelection: boolean = false;
+  @Input() set userData(value: any) {
+    if (value) {
+      const data = value.userData || value;
+      this.calculateInitials(data);
+    }
+  }
+
+  @Output() mobileMenuToggle = new EventEmitter<void>();
+  constructor() { }
 
   ngOnInit(): void {
     this.searchSubscription = this.searchSubject.pipe(
@@ -66,6 +77,24 @@ export class HeaderComponent implements OnInit, OnDestroy {
 
   toggleFilters() {
     this.showFilters = !this.showFilters;
+  }
+
+  onMobileMenuToggle() {
+    console.log('Header: onMobileMenuToggle called');
+    this.mobileMenuToggle.emit();
+    console.log('Header: mobileMenuToggle event emitted');
+  }
+
+  hasActiveFilters(): boolean {
+    if (!this.currentFilters) return false;
+
+    return !!(
+      this.currentFilters.type ||
+      this.currentFilters.fileType ||
+      this.currentFilters.dateModified ||
+      this.currentFilters.owner ||
+      (this.currentFilters.metadata && this.currentFilters.metadata.length > 0)
+    );
   }
 
   onFiltersChanged(filters: SearchFilters) {
@@ -146,11 +175,32 @@ export class HeaderComponent implements OnInit, OnDestroy {
   }
 
   protected onOpen(suggestion: Suggestion, event: MouseEvent) {
-
     //console.log(`Opening document with ID: ${suggestion.id}`);
-    if(suggestion.id != null && suggestion.ext == null) {
-        this.router.navigate(['/my-folder'], { queryParams: { folderId: suggestion.id } });
+    if (suggestion.id != null && suggestion.ext == null) {
+      this.router.navigate(['/my-folder'], { queryParams: { folderId: suggestion.id } });
     }
     this.suggestions = [];
+  }
+
+  private calculateInitials(userData: any) {
+    if (!userData) return;
+    const name = userData.name || userData.preferred_username || 'User';
+
+    if (userData.given_name && userData.family_name) {
+      this.userInitials = (userData.given_name[0] + userData.family_name[0]).toUpperCase();
+    } else if (name.includes(' ')) {
+      const parts = name.split(' ');
+      if (parts.length >= 2) {
+        this.userInitials = (parts[0][0] + parts[1][0]).toUpperCase();
+      } else {
+        this.userInitials = name.substring(0, 2).toUpperCase();
+      }
+    } else {
+      this.userInitials = name.substring(0, 2).toUpperCase();
+    }
+  }
+
+  navigateToSettings() {
+    this.router.navigate(['/settings']);
   }
 }

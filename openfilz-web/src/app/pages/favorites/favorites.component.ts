@@ -1,22 +1,22 @@
-import {Component, OnInit} from '@angular/core';
-import {CommonModule} from '@angular/common';
-import {MatButtonModule} from '@angular/material/button';
-import {MatIconModule} from '@angular/material/icon';
-import {MatSnackBar, MatSnackBarModule} from '@angular/material/snack-bar';
-import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
-import {MatButtonToggleModule} from '@angular/material/button-toggle';
-import {DocumentApiService} from '../../services/document-api.service';
-import {FileGridComponent} from '../../components/file-grid/file-grid.component';
-import {FileListComponent} from '../../components/file-list/file-list.component';
-import {ToolbarComponent} from '../../components/toolbar/toolbar.component';
-import {ElementInfo, FileItem, ListFolderAndCountResponse, SearchFilters} from '../../models/document.models';
-import {FileIconService} from '../../services/file-icon.service';
-import {BreadcrumbService} from '../../services/breadcrumb.service';
-import {AppConfig} from '../../config/app.config';
-import {FileOperationsComponent} from "../../components/base/file-operations.component";
-import {ActivatedRoute, Router} from "@angular/router";
-import {SearchService} from "../../services/search.service";
-import {MatDialog} from "@angular/material/dialog";
+import { Component, OnInit, inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { DocumentApiService } from '../../services/document-api.service';
+import { FileGridComponent } from '../../components/file-grid/file-grid.component';
+import { FileListComponent } from '../../components/file-list/file-list.component';
+import { ToolbarComponent } from '../../components/toolbar/toolbar.component';
+import { ElementInfo, FileItem, ListFolderAndCountResponse, SearchFilters } from '../../models/document.models';
+import { FileIconService } from '../../services/file-icon.service';
+import { BreadcrumbService } from '../../services/breadcrumb.service';
+import { AppConfig } from '../../config/app.config';
+import { FileOperationsComponent } from "../../components/base/file-operations.component";
+import { ActivatedRoute, Router } from "@angular/router";
+import { SearchService } from "../../services/search.service";
+import { MatDialog } from "@angular/material/dialog";
 
 import { UserPreferencesService } from '../../services/user-preferences.service';
 
@@ -44,59 +44,54 @@ export class FavoritesComponent extends FileOperationsComponent implements OnIni
   private readonly CLICK_DELAY = 250; // milliseconds
   currentFilters?: SearchFilters;
 
-    constructor(
-        private route: ActivatedRoute,
-        private searchService: SearchService,
-        private fileIconService: FileIconService,
-        router: Router,
-        documentApi: DocumentApiService,
-        dialog: MatDialog,
-        snackBar: MatSnackBar,
-        userPreferencesService: UserPreferencesService
-    ) {
-        super(router, documentApi, dialog, snackBar, userPreferencesService);
-    }
+  private route = inject(ActivatedRoute);
+  private searchService = inject(SearchService);
+  private fileIconService = inject(FileIconService);
 
-    override ngOnInit() {
-        this.searchService.filters$.subscribe(filters => {
-            this.currentFilters = filters;
-            this.loadFavorites();
-        });
-    }
+  constructor() {
+    super();
+  }
 
-    override loadItems() {
-        this.loadFavorites();
-    }
+  override ngOnInit() {
+    this.searchService.filters$.subscribe(filters => {
+      this.currentFilters = filters;
+      this.loadFavorites();
+    });
+  }
 
-    override reloadData() {
-        this.loadFavorites();
-    }
+  override loadItems() {
+    this.loadFavorites();
+  }
+
+  override reloadData() {
+    this.loadFavorites();
+  }
 
 
 
-      loadFavorites() {
-          this.loading = true;
-          this.documentApi.listFavoritesAndCount(this.pageIndex + 1, this.pageSize, this.currentFilters, this.sortBy, this.sortOrder).subscribe({
-              next: (listAndCount: ListFolderAndCountResponse) => {
-                  this.totalItems = listAndCount.count;
-                  this.pageIndex = 0;
-                  this.populateFolderContents(listAndCount.listFolder);
-              },
-              error: (error) => {
-                  this.snackBar.open('Failed to load folder contents', 'Close', { duration: 3000 });
-                  this.loading = false;
-              }
-          });
-      }
-
-    private populateFolderContents(response: ElementInfo[]) {
-        this.items = response.map(item => ({
-            ...item,
-            selected: false,
-            icon: this.fileIconService.getFileIcon(item.name, item.type)
-        }));
+  loadFavorites() {
+    this.loading = true;
+    this.documentApi.listFavoritesAndCount(this.pageIndex + 1, this.pageSize, this.currentFilters, this.sortBy, this.sortOrder).subscribe({
+      next: (listAndCount: ListFolderAndCountResponse) => {
+        this.totalItems = listAndCount.count;
+        this.pageIndex = 0;
+        this.populateFolderContents(listAndCount.listFolder);
+      },
+      error: (error) => {
+        this.snackBar.open('Failed to load folder contents', 'Close', { duration: 3000 });
         this.loading = false;
-    }
+      }
+    });
+  }
+
+  private populateFolderContents(response: ElementInfo[]) {
+    this.items = response.map(item => ({
+      ...item,
+      selected: false,
+      icon: this.fileIconService.getFileIcon(item.name, item.type)
+    }));
+    this.loading = false;
+  }
 
 
   onToggleFavorite(item: FileItem) {

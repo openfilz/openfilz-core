@@ -1,13 +1,14 @@
-import {Component, EventEmitter, Input, Output} from '@angular/core';
-import {CommonModule} from '@angular/common';
-import {MatTableModule} from '@angular/material/table';
-import {MatIconModule} from '@angular/material/icon';
-import {MatButtonModule} from '@angular/material/button';
-import {MatCheckboxModule} from '@angular/material/checkbox';
-import {MatTooltipModule} from '@angular/material/tooltip';
-import {MatSortModule, Sort} from '@angular/material/sort';
-import {FileItem} from '../../models/document.models';
-import {FileIconService} from '../../services/file-icon.service';
+import { Component, EventEmitter, HostListener, Input, Output, inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { MatTableModule } from '@angular/material/table';
+import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatSortModule, Sort } from '@angular/material/sort';
+import { FileItem } from '../../models/document.models';
+import { FileIconService } from '../../services/file-icon.service';
+import {TouchDetectionService} from '../../services/touch-detection.service';
 
 @Component({
   selector: 'app-file-list',
@@ -30,7 +31,7 @@ export class FileListComponent {
   @Input() showFavoriteButton: boolean = true; // Control favorite button visibility
   @Input() sortBy: string = 'name';
   @Input() sortOrder: 'ASC' | 'DESC' = 'ASC';
-  
+
   @Output() itemClick = new EventEmitter<FileItem>();
   @Output() itemDoubleClick = new EventEmitter<FileItem>();
   @Output() selectionChange = new EventEmitter<{ item: FileItem, selected: boolean }>();
@@ -44,6 +45,9 @@ export class FileListComponent {
   @Output() viewProperties = new EventEmitter<FileItem>();
   @Output() sortChange = new EventEmitter<{ sortBy: string, sortOrder: 'ASC' | 'DESC' }>();
 
+  // Keyboard navigation
+  focusedIndex = 0;
+
   get displayedColumns(): string[] {
     if (this.showFavoriteButton) {
       return ['select', 'favorite', 'name', 'size', 'type', 'actions'];
@@ -51,7 +55,12 @@ export class FileListComponent {
     return ['select', 'name', 'size', 'type', 'actions'];
   }
 
-  constructor(private fileIconService: FileIconService) {}
+  
+    private fileIconService = inject(FileIconService);
+    private touchDetectionService= inject(TouchDetectionService
+  );
+
+  constructor() { }
 
   get allSelected(): boolean {
     return this.items.length > 0 && this.items.every(item => item.selected);
@@ -67,6 +76,26 @@ export class FileListComponent {
 
   onItemDoubleClick(item: FileItem) {
     this.itemDoubleClick.emit(item);
+  }
+
+  onIconClick(event: Event, item: FileItem) {
+    event.stopPropagation(); // Prevent parent click handler
+
+    if (this.touchDetectionService.isTouchDevice()) {
+      // On touch devices, single tap on icon = open
+      // Add ripple effect
+      const iconElement = event.currentTarget as HTMLElement;
+      iconElement.classList.add('ripple');
+
+      // Remove ripple class after animation completes
+      setTimeout(() => {
+        iconElement.classList.remove('ripple');
+      }, 600);
+
+      // Navigate immediately (same as double-click)
+      this.itemDoubleClick.emit(item);
+    }
+    // On desktop: do nothing, preserve double-click behavior
   }
 
   onSelectionChange(item: FileItem, selected: boolean) {
@@ -124,5 +153,86 @@ export class FileListComponent {
       sortBy: sort.active,
       sortOrder: sort.direction.toUpperCase() as 'ASC' | 'DESC'
     });
+  }
+
+  // Keyboard navigation methods
+  @HostListener('keydown', ['$event'])
+  handleKeyboardEvent(event: KeyboardEvent) {
+    if (this.items.length === 0) return;
+
+    const target = event.target as HTMLElement;
+    // Only handle if focus is on a table row
+    if (!target.classList.contains('file-row') && !target.closest('.file-row')) {
+      return;
+    }
+
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        this.moveFocusDown();
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        this.moveFocusUp();
+        break;
+      case 'Enter':
+        event.preventDefault();
+        if (this.items[this.focusedIndex]) {
+          this.onItemDoubleClick(this.items[this.focusedIndex]);
+        }
+        break;
+      case ' ':
+        event.preventDefault();
+        if (this.items[this.focusedIndex]) {
+          const item = this.items[this.focusedIndex];
+          this.onSelectionChange(item, !item.selected);
+        }
+        break;
+      case 'Home':
+        event.preventDefault();
+        this.focusedIndex = 0;
+        this.focusRow(this.focusedIndex);
+        break;
+      case 'End':
+        event.preventDefault();
+        this.focusedIndex = this.items.length - 1;
+        this.focusRow(this.focusedIndex);
+        break;
+    }
+  }
+
+  private moveFocusDown() {
+    if (this.focusedIndex < this.items.length - 1) {
+      this.focusedIndex++;
+      this.focusRow(this.focusedIndex);
+    }
+  }
+
+  private moveFocusUp() {
+    if (this.focusedIndex > 0) {
+      this.focusedIndex--;
+      this.focusRow(this.focusedIndex);
+    }
+  }
+
+  private focusRow(index: number) {
+    // Use setTimeout to ensure DOM is updated
+    setTimeout(() => {
+      const tableElement = document.querySelector('.file-list-table');
+      if (tableElement) {
+        const rows = tableElement.querySelectorAll('.file-row');
+        if (rows[index]) {
+          (rows[index] as HTMLElement).focus();
+        }
+      }
+    });
+  }
+
+  getTabIndex(index: number): number {
+    return index === this.focusedIndex ? 0 : -1;
+  }
+
+  isFocused(index: number): boolean {
+    return index === this.focusedIndex;
   }
 }

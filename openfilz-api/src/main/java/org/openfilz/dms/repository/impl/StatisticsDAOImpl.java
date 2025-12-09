@@ -3,6 +3,7 @@ package org.openfilz.dms.repository.impl;
 import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.repository.StatisticsDAO;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
@@ -12,6 +13,7 @@ import static org.openfilz.dms.entity.SqlTableMapping.DOCUMENT;
 
 @Service
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
 public class StatisticsDAOImpl implements StatisticsDAO {
 
     private final DatabaseClient databaseClient;

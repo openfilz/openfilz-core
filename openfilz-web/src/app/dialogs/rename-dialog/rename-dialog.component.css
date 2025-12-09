@@ -24,7 +24,7 @@
   height: 48px;
   min-width: 48px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #6366F1 0%, #7C3AED 100%);
+  background: var(--primary);
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
 }
 
@@ -87,7 +87,6 @@
 .folder-name-field {
   width: 100%;
   max-width: 100%;
-  overflow: hidden;
 }
 
 .folder-name-field ::ng-deep .mat-mdc-text-field-wrapper {
@@ -174,7 +173,7 @@
 }
 
 .create-btn {
-  background: linear-gradient(135deg, #6366F1 0%, #7C3AED 100%) !important;
+  background: var(--primary) !important;
   color: white !important;
   box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
 }

@@ -1,20 +1,20 @@
-import {Component, OnInit} from '@angular/core';
-import {CommonModule} from '@angular/common';
-import {MatButtonModule} from '@angular/material/button';
-import {MatIconModule} from '@angular/material/icon';
-import {MatSnackBar, MatSnackBarModule} from '@angular/material/snack-bar';
-import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
-import {MatButtonToggleModule} from '@angular/material/button-toggle';
-import {MatDialog} from '@angular/material/dialog';
-import {DocumentApiService} from '../../services/document-api.service';
-import {FileGridComponent} from '../../components/file-grid/file-grid.component';
-import {FileListComponent} from '../../components/file-list/file-list.component';
-import {ToolbarComponent} from '../../components/toolbar/toolbar.component';
-import {ElementInfo, FileItem, ListFolderAndCountResponse} from '../../models/document.models';
-import {FileIconService} from '../../services/file-icon.service';
-import {MatTooltipModule} from '@angular/material/tooltip';
-import {BreadcrumbService} from '../../services/breadcrumb.service';
-import {AppConfig} from '../../config/app.config';
+import { Component, OnInit, inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatDialog } from '@angular/material/dialog';
+import { DocumentApiService } from '../../services/document-api.service';
+import { FileGridComponent } from '../../components/file-grid/file-grid.component';
+import { FileListComponent } from '../../components/file-list/file-list.component';
+import { ToolbarComponent } from '../../components/toolbar/toolbar.component';
+import { ElementInfo, FileItem, ListFolderAndCountResponse } from '../../models/document.models';
+import { FileIconService } from '../../services/file-icon.service';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { BreadcrumbService } from '../../services/breadcrumb.service';
+import { AppConfig } from '../../config/app.config';
 
 @Component({
   selector: 'app-recycle-bin',
@@ -52,19 +52,22 @@ export class RecycleBinComponent implements OnInit {
   private clickTimeout: any = null;
   private readonly CLICK_DELAY = 250; // milliseconds
 
-  constructor(
-    private documentApi: DocumentApiService,
-    private fileIconService: FileIconService,
-    private snackBar: MatSnackBar,
-    private dialog: MatDialog,
-    private breadcrumbService: BreadcrumbService
-  ) {}
+  // Mobile FAB state
+  fabOpen = false;
+
+  private documentApi = inject(DocumentApiService);
+  private fileIconService = inject(FileIconService);
+  private snackBar = inject(MatSnackBar);
+  private dialog = inject(MatDialog);
+  private breadcrumbService = inject(BreadcrumbService);
+
+  constructor() { }
 
   ngOnInit() {
     this.loadDeletedItems();
 
     // Listen for breadcrumb navigation
-    this.breadcrumbService.navigation$.subscribe(folder => {
+    this.breadcrumbService.navigation$.subscribe((folder: FileItem | null) => {
       if (folder === null) {
         // Navigate back to recycle bin root
         this.breadcrumbTrail = [];
@@ -117,7 +120,7 @@ export class RecycleBinComponent implements OnInit {
         this.loading = false;
         this.updateBreadcrumbs();
       },
-      error: (error) => {
+      error: (error: any) => {
         console.error('Error loading recycle bin:', error);
         this.snackBar.open('Failed to load recycle bin', 'Close', { duration: 3000 });
         this.loading = false;
@@ -125,14 +128,14 @@ export class RecycleBinComponent implements OnInit {
     });
   }
 
-    private populateFolderContents(response: ElementInfo[]) {
-        this.items = response.map(item => ({
-            ...item,
-            selected: false,
-            icon: this.fileIconService.getFileIcon(item.name, item.type)
-        }));
-        this.loading = false;
-    }
+  private populateFolderContents(response: ElementInfo[]) {
+    this.items = response.map(item => ({
+      ...item,
+      selected: false,
+      icon: this.fileIconService.getFileIcon(item.name, item.type)
+    }));
+    this.loading = false;
+  }
 
   loadFolder(folder: FileItem) {
     this.loading = true;
@@ -141,11 +144,11 @@ export class RecycleBinComponent implements OnInit {
     // Load the folder's contents (max page size is 100)
     this.documentApi.listDeletedFolderAndCount(folder.id, 1, 100).subscribe({
       next: (listAndCount: ListFolderAndCountResponse) => {
-          this.totalItems = listAndCount.count;
-          this.pageIndex = 0;
-          this.populateFolderContents(listAndCount.listFolder);
+        this.totalItems = listAndCount.count;
+        this.pageIndex = 0;
+        this.populateFolderContents(listAndCount.listFolder);
       },
-      error: (error) => {
+      error: (error: any) => {
         console.error('Error loading folder:', error);
         this.snackBar.open('Failed to load folder contents', 'Close', { duration: 3000 });
         this.loading = false;
@@ -155,6 +158,25 @@ export class RecycleBinComponent implements OnInit {
 
   private updateBreadcrumbs() {
     this.breadcrumbService.updateBreadcrumbs(this.breadcrumbTrail);
+  }
+
+  navigateToHome() {
+    this.breadcrumbTrail = [];
+    this.currentFolder = undefined;
+    this.loadDeletedItems();
+  }
+
+  navigateBack() {
+    if (this.breadcrumbTrail.length > 1) {
+      // Navigate to parent folder (second to last in trail)
+      this.breadcrumbTrail.pop(); // Remove current folder
+      const parentFolder = this.breadcrumbTrail[this.breadcrumbTrail.length - 1];
+      this.currentFolder = parentFolder;
+      this.loadDeletedItems();
+    } else if (this.breadcrumbTrail.length === 1) {
+      // Navigate to root
+      this.navigateToHome();
+    }
   }
 
   onViewModeChange(mode: 'grid' | 'list') {
@@ -261,7 +283,7 @@ export class RecycleBinComponent implements OnInit {
         this.items = this.items.filter(item => !item.selected);
         this.totalItems = this.items.length;
       },
-      error: (error) => {
+      error: (error: any) => {
         console.error('Error restoring items:', error);
         this.snackBar.open('Failed to restore items', 'Close', { duration: 3000 });
       }
@@ -290,7 +312,7 @@ export class RecycleBinComponent implements OnInit {
         this.items = this.items.filter(item => !item.selected);
         this.totalItems = this.items.length;
       },
-      error: (error) => {
+      error: (error: any) => {
         console.error('Error permanently deleting items:', error);
         this.snackBar.open('Failed to permanently delete items', 'Close', { duration: 3000 });
       }
@@ -317,7 +339,7 @@ export class RecycleBinComponent implements OnInit {
         this.items = [];
         this.totalItems = 0;
       },
-      error: (error) => {
+      error: (error: any) => {
         console.error('Error emptying recycle bin:', error);
         this.snackBar.open('Failed to empty recycle bin', 'Close', { duration: 3000 });
       }
@@ -336,7 +358,7 @@ export class RecycleBinComponent implements OnInit {
   onDownloadItem(item: FileItem) {
     if (item.type === 'FILE') {
       this.documentApi.downloadDocument(item.id).subscribe({
-        next: (blob) => {
+        next: (blob: Blob) => {
           const url = window.URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
@@ -347,7 +369,7 @@ export class RecycleBinComponent implements OnInit {
           window.URL.revokeObjectURL(url);
           this.snackBar.open('Download started', 'Close', { duration: 2000 });
         },
-        error: (error) => {
+        error: (error: any) => {
           console.error('Error downloading file:', error);
           this.snackBar.open('Failed to download file', 'Close', { duration: 3000 });
         }
@@ -376,7 +398,7 @@ export class RecycleBinComponent implements OnInit {
         this.snackBar.open(`"${item.name}" permanently deleted`, 'Close', { duration: 3000 });
         this.items = this.items.filter(i => i.id !== item.id);
       },
-      error: (error) => {
+      error: (error: any) => {
         console.error('Error permanently deleting item:', error);
         this.snackBar.open('Failed to permanently delete item', 'Close', { duration: 3000 });
       }
@@ -390,10 +412,34 @@ export class RecycleBinComponent implements OnInit {
         this.snackBar.open(`"${item.name}" restored successfully`, 'Close', { duration: 2000 });
         this.items = this.items.filter(i => i.id !== item.id);
       },
-      error: (error) => {
+      error: (error: any) => {
         console.error('Error restoring item:', error);
         this.snackBar.open('Failed to restore item', 'Close', { duration: 3000 });
       }
     });
+  }
+
+  // Mobile FAB methods
+  toggleFab() {
+    this.fabOpen = !this.fabOpen;
+  }
+
+  closeFab() {
+    this.fabOpen = false;
+  }
+
+  onRestoreFromFab() {
+    this.closeFab();
+    this.restoreSelected();
+  }
+
+  onDeleteForeverFromFab() {
+    this.closeFab();
+    this.permanentlyDeleteSelected();
+  }
+
+  onEmptyBinFromFab() {
+    this.closeFab();
+    this.emptyRecycleBin();
   }
 }

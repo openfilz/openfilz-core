@@ -13,7 +13,7 @@
         (click)="toggleSidebar()"
         matTooltip="Collapse"
         matTooltipPosition="right">
-        <i class="fas fa-chevron-left"></i>
+        <mat-icon>chevron_left</mat-icon>
       </button>
     }
   </div>
@@ -26,21 +26,21 @@
       (click)="toggleSidebar()"
       matTooltip="Expand sidebar"
       matTooltipPosition="right">
-      <i class="fas fa-chevron-right"></i>
+      <mat-icon>chevron_right</mat-icon>
     </button>
   }
   
   <div class="sidebar-nav">
     @for(item of navigationItems; track item.id; let i = $index) {
       @if(item.id !== 'logout') {
-        <div 
-          class="nav-item" 
+        <div
+          class="nav-item"
           [class.active]="item.active"
           (click)="onNavigationClick(item.id)"
           [matTooltip]="item.label"
           [matTooltipPosition]="'right'"
           [matTooltipDisabled]="!isCollapsed">
-          <div class="nav-icon"><i class="fas" [class]="'fa-' + getIconClass(item.id)"></i></div>
+          <div class="nav-icon"><mat-icon>{{ getIconClass(item.id) }}</mat-icon></div>
           @if(!isCollapsed) {
             <span>{{ item.label }}</span>
           }
@@ -56,7 +56,7 @@
       [matTooltip]="'Log Out'"
       [matTooltipPosition]="'right'"
       [matTooltipDisabled]="!isCollapsed">
-      <div class="nav-icon"><i class="fas fa-sign-out-alt"></i></div>
+      <div class="nav-icon"><mat-icon>logout</mat-icon></div>
       @if(!isCollapsed) {
         <span>Log Out</span>
       }

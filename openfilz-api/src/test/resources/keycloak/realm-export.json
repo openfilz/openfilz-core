@@ -510,7 +510,9 @@
       ],
       "realmRoles": [
         "default-roles-your-realm",
-        "CONTRIBUTOR", "CLEANER", "AUDITOR"
+        "CONTRIBUTOR",
+        "CLEANER",
+        "AUDITOR"
       ],
       "groups": [
         "/GED/CONTRIBUTOR",

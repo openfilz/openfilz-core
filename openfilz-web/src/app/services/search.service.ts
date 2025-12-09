@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { environment } from "../../environments/environment";
@@ -19,11 +19,11 @@ export class SearchService {
   private sortSubject = new BehaviorSubject<{ sortBy: string, sortOrder: 'ASC' | 'DESC' }>({ sortBy: 'name', sortOrder: 'ASC' });
   public sort$ = this.sortSubject.asObservable();
 
-  constructor(
-    private http: HttpClient, 
-    private documentApi: DocumentApiService,
-    private userPreferencesService: UserPreferencesService
-  ) {
+  private http = inject(HttpClient);
+  private documentApi = inject(DocumentApiService);
+  private userPreferencesService = inject(UserPreferencesService);
+
+  constructor() {
     const prefs = this.userPreferencesService.getPreferences();
     this.sortSubject.next({ sortBy: prefs.sortBy, sortOrder: prefs.sortOrder });
   }

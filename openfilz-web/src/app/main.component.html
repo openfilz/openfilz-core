@@ -1,9 +1,24 @@
 @if ((isAuthenticated$ | async)?.isAuthenticated) {
-<div class="app-layout" [class.sidebar-collapsed]="isSidebarCollapsed"
-  [class.dashboard-view]="currentRoute === 'dashboard'">
-  <app-sidebar (collapsedChange)="onSidebarCollapsedChange($event)" (logout)="logout()"></app-sidebar>
+<div class="app-layout"
+     [class.sidebar-collapsed]="isSidebarCollapsed"
+     [class.mobile-menu-open]="isMobileMenuOpen"
+     [class.dashboard-view]="currentRoute === 'dashboard'">
 
-  <app-header [hasSelection]="hasSelectedItems">
+  <!-- Mobile Overlay -->
+  @if (isMobileMenuOpen) {
+    <div class="mobile-overlay" (click)="closeMobileMenu()"></div>
+  }
+
+  <app-sidebar
+    [class.mobile-open]="isMobileMenuOpen"
+    (collapsedChange)="onSidebarCollapsedChange($event)"
+    (logout)="logout()"
+    (mobileMenuClose)="closeMobileMenu()">
+  </app-sidebar>
+
+  <app-header
+    [hasSelection]="hasSelectedItems" [userData]="(userData$ | async)"
+    (mobileMenuToggle)="toggleMobileMenu()">
   </app-header>
 
   @if(currentRoute == 'my-folder' || currentRoute == 'recycle-bin') {

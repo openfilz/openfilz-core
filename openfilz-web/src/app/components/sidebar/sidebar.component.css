@@ -155,7 +155,7 @@
 }
 
 .nav-icon {
-  width: 20px;
+  width: 22px;
   height: 20px;
   display: flex;
   align-items: center;
@@ -164,7 +164,7 @@
 }
 
 .nav-icon i {
-  width: 20px;
+  width: 22px;
   height: 20px;
   display: flex;
   align-items: center;
@@ -195,8 +195,35 @@
   padding: 16px 8px 0 8px;
 }
 
+/* Tablet breakpoint (769px - 1024px) */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .sidebar {
+    width: 200px;
+  }
+
+  .sidebar.collapsed {
+    width: 60px;
+  }
+}
+
+/* Mobile breakpoint (max-width: 768px) */
 @media (max-width: 768px) {
   .sidebar {
-    display: none;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    z-index: 101;
+    /* Above overlay (98) */
+    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.2);
+  }
+
+  /* When mobile-open class is on host element */
+  :host.mobile-open .sidebar {
+    transform: translateX(0);
+  }
+
+  /* Hide collapse buttons on mobile */
+  .toggle-btn,
+  .toggle-btn-floating {
+    display: none !important;
   }
 }
