@@ -12,10 +12,14 @@ import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.web.server.authorization.AuthorizationContext;
+import org.springframework.util.CollectionUtils;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+
+import static java.util.List.of;
 
 @RequiredArgsConstructor
 public abstract class AbstractSecurityService implements SecurityService {
@@ -37,7 +41,7 @@ public abstract class AbstractSecurityService implements SecurityService {
         ServerHttpRequest request = context.getExchange().getRequest();
         HttpMethod method = request.getMethod();
         if(isDeleteAccess(request)) {
-            return isAuthorized((JwtAuthenticationToken) auth, Role.CLEANER);
+            return isAuthorized((JwtAuthenticationToken) auth, Role.CLEANER.toString());
         }
         String path = request.getPath().value();
         int i = getRootContextPathIndex(path);
@@ -46,12 +50,12 @@ public abstract class AbstractSecurityService implements SecurityService {
         }
         path = getContextPath(path, i);
         if (isQueryOrSearch(method, path))
-            return isAuthorized((JwtAuthenticationToken) auth, Role.READER, Role.CONTRIBUTOR);
+            return isAuthorized((JwtAuthenticationToken) auth, of(Role.READER.toString(), Role.CONTRIBUTOR.toString()));
         if(isAudit(path)) {
-            return isAuthorized((JwtAuthenticationToken) auth, Role.AUDITOR);
+            return isAuthorized((JwtAuthenticationToken) auth, Role.AUDITOR.toString());
         }
         if(isInsertOrUpdateAccess(method, path)) {
-            return isAuthorized((JwtAuthenticationToken) auth, Role.CONTRIBUTOR);
+            return isAuthorized((JwtAuthenticationToken) auth, Role.CONTRIBUTOR.toString());
         }
         return isCustomAccessAuthorized(auth, context, method, path);
     }
@@ -65,53 +69,77 @@ public abstract class AbstractSecurityService implements SecurityService {
     }
 
     protected boolean isGraphQlAuthorized(JwtAuthenticationToken auth, String path) {
-        return isGraphQlSearch(graphQlBaseUrl, path) && isAuthorized(auth, Role.READER, Role.CONTRIBUTOR);
+        return isGraphQlSearch(graphQlBaseUrl, path) && isAuthorized(auth, of(Role.READER.toString(), Role.CONTRIBUTOR.toString()));
     }
 
     protected boolean isCustomAccessAuthorized(Authentication auth, AuthorizationContext context, HttpMethod method, String path) {
         return false;
     }
 
-    protected boolean isAuthorized(JwtAuthenticationToken auth, Role... requiredRoles) {
+    @Override
+    public boolean isAuthorized(JwtAuthenticationToken auth, List<String> anyRoles) {
         /*if(roleTokenLookup == RoleTokenLookup.AUTHORITIES) {
-            return isInAuthorities(auth, requiredRoles);
+            return isInAuthorities(auth, anyRoles);
         }*/
         if(roleTokenLookup == RoleTokenLookup.GROUPS) {
-            return isInOneOfGroups(auth, requiredRoles);
+            return isInOneOfGroups(auth, anyRoles);
         }
-        return isInOneOfRealmRoles(auth, requiredRoles);
+        return isInOneOfRealmRoles(auth, anyRoles);
     }
 
-    protected boolean isInOneOfGroups(JwtAuthenticationToken auth, Role[] requiredRoles) {
-        List<String> groups = (List<String>) auth.getTokenAttributes().get(GROUPS);
+    @Override
+    public boolean isAuthorized(JwtAuthenticationToken auth, String role) {
+        /*if(roleTokenLookup == RoleTokenLookup.AUTHORITIES) {
+            return isInAuthorities(auth, anyRoles);
+        }*/
+        if(roleTokenLookup == RoleTokenLookup.GROUPS) {
+            return hasGroup(auth, role);
+        }
+        return hasRealmRole(auth, role);
+    }
+
+    private boolean hasGroup(JwtAuthenticationToken auth, String groupSuffix) {
+        List<String> groups = auth.getToken().getClaim(GROUPS);
         if(groups != null && !groups.isEmpty()) {
-            return groups.stream().filter(g->g.startsWith(FileConstants.SLASH + rootGroupName + FileConstants.SLASH))
-                    .map(g->g.substring(rootGroupName.length() + 2))
-                    .anyMatch(g -> Arrays.stream(requiredRoles).anyMatch(r->r.toString().equals(g)));
+            String group = FileConstants.SLASH + rootGroupName + FileConstants.SLASH + groupSuffix;
+            return groups.contains(group);
         }
         return false;
     }
 
-    protected boolean isInOneOfRealmRoles(JwtAuthenticationToken auth, Role... requiredRoles) {
-        List<String> accessRoles = getAccessRoles(auth);
-        return accessRoles != null && !accessRoles.isEmpty() && Arrays.stream(requiredRoles)
-                .anyMatch(requiredRole -> accessRoles.contains(requiredRole.toString()));
-    }
-
-    protected List<String> getAccessRoles(JwtAuthenticationToken auth) {
-        return getRealmAccessRoles(auth);
-    }
-
-    protected List<String> getRealmAccessRoles(JwtAuthenticationToken auth) {
-        Map<String, Object> tokenAttributes = auth.getTokenAttributes();
-        if(tokenAttributes != null &&  tokenAttributes.containsKey(REALM_ACCESS)) {
-            Map<String, List<String>> realmAccess = (Map<String, List<String>>) tokenAttributes.get(REALM_ACCESS);
-            if(realmAccess != null && realmAccess.containsKey(ROLES)) {
-                return realmAccess.get(ROLES);
-            }
+    private boolean hasRealmRole(JwtAuthenticationToken auth, String role) {
+        Map<String, Object> realmAccess = auth.getToken().getClaim(REALM_ACCESS);
+        if (!CollectionUtils.isEmpty(realmAccess)) {
+            @SuppressWarnings("unchecked")
+            List<String> roles = (List<String>) realmAccess.getOrDefault(ROLES, Collections.emptyList());
+            return roles.contains(role);
         }
-        return null;
+        return false;
     }
+
+    protected boolean isInGroups(String groupSuffix, List<String> groups) {
+        String group = FileConstants.SLASH + rootGroupName + FileConstants.SLASH + groupSuffix;
+        return groups.contains(group);
+    }
+
+    protected boolean isInOneOfGroups(JwtAuthenticationToken auth, List<String> requiredRoles) {
+        List<String> groups = auth.getToken().getClaim(GROUPS);
+        if(groups != null && !groups.isEmpty()) {
+            return requiredRoles.stream().anyMatch(r->isInGroups(r, groups));
+        }
+        return false;
+    }
+
+    protected boolean isInOneOfRealmRoles(JwtAuthenticationToken auth, List<String> requiredRoles) {
+        Map<String, Object> realmAccess = auth.getToken().getClaim(REALM_ACCESS);
+        if (!CollectionUtils.isEmpty(realmAccess)) {
+            @SuppressWarnings("unchecked")
+            List<String> roles = (List<String>) realmAccess.getOrDefault(ROLES, Collections.emptyList());
+            return requiredRoles.stream().anyMatch(roles::contains);
+        }
+        return false;
+    }
+
 
     /*private boolean isInAuthorities(Authentication auth, Role... requiredRoles) {
         return auth.getAuthorities() != null && auth.getAuthorities().stream().anyMatch(role -> Arrays.stream(requiredRoles).anyMatch(r->r.toString().equals(role.getAuthority())));
