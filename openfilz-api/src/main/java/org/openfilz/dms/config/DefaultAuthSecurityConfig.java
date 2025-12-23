@@ -49,7 +49,10 @@ public class DefaultAuthSecurityConfig {
             "/swagger-ui.html",
             "/webjars/swagger-ui/**",
             // Actuator endpoints
-            "/actuator/**"
+            "/actuator/**",
+            // GraphiQL
+            "/graphiql",
+            "/graphiql/**"
     };
 
     @Bean
