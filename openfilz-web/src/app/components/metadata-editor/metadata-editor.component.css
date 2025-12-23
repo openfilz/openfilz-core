@@ -16,7 +16,7 @@
   margin: 0;
   font-size: 18px;
   font-weight: 500;
-  color: #1f2937;
+  color: var(--text-primary);
 }
 
 .clear-button {
@@ -38,16 +38,16 @@
   align-items: start;
   padding: 12px;
   border-radius: 8px;
-  background-color: #f9fafb;
+  background-color: var(--bg-tertiary);
   transition: background-color 0.2s;
 }
 
 .metadata-entry:hover {
-  background-color: #f3f4f6;
+  background-color: var(--bg-secondary);
 }
 
 .metadata-entry.has-error {
-  background-color: #fef2f2;
+  background-color: rgba(220, 38, 38, 0.1);
   border: 1px solid #fca5a5;
 }
 
@@ -55,6 +55,18 @@
 .value-field {
   width: 100%;
   margin: 0;
+}
+
+/* Ensure input text is visible in dark mode */
+.key-field ::ng-deep input,
+.value-field ::ng-deep input {
+  color: var(--text-primary);
+  caret-color: var(--text-primary);
+}
+
+.key-field ::ng-deep .mat-mdc-form-field-input-control::placeholder,
+.value-field ::ng-deep .mat-mdc-form-field-input-control::placeholder {
+  color: var(--text-tertiary);
 }
 
 .remove-button {
@@ -83,7 +95,7 @@
   align-items: center;
   justify-content: center;
   padding: 32px;
-  color: #6b7280;
+  color: var(--text-secondary);
   text-align: center;
 }
 
