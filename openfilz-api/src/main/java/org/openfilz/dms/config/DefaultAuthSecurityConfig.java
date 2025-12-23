@@ -48,8 +48,8 @@ public class DefaultAuthSecurityConfig {
             "/swagger-ui/**",
             "/swagger-ui.html",
             "/webjars/swagger-ui/**",
-            // Actuator health
-            "/actuator/health/**"
+            // Actuator endpoints
+            "/actuator/**"
     };
 
     @Bean
