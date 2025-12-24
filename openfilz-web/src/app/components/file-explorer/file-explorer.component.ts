@@ -703,14 +703,63 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
           parentId: this.currentFolder?.id
         };
         this.documentApi.createFolder(request).subscribe({
-          next: () => {
+          next: (response) => {
             this.snackBar.open('Folder created successfully', 'Close', { duration: 3000 });
-            this.loadFolder(this.currentFolder);
+            this.navigateToNewFolder(response.id);
           },
           error: () => {
             this.snackBar.open('Failed to create folder', 'Close', { duration: 3000 });
           }
         });
+      }
+    });
+  }
+
+  private navigateToNewFolder(folderId: string): void {
+    this.loading = true;
+
+    // Get the position of the new folder based on current sorting
+    this.documentApi.getDocumentPosition(folderId, this.sortBy, this.sortOrder).subscribe({
+      next: (position) => {
+        // Calculate target page (0-indexed)
+        const targetPage = Math.floor(position.position / this.pageSize);
+        this.pageIndex = targetPage;
+
+        // Load items on the target page and focus the new folder
+        this.loadItemsAndFocusFolder(folderId);
+      },
+      error: () => {
+        // Fallback: just reload the current folder
+        this.loadFolder(this.currentFolder);
+      }
+    });
+  }
+
+  private loadItemsAndFocusFolder(folderId: string): void {
+    this.documentApi.listFolder(
+      this.currentFolder?.id,
+      this.pageIndex + 1,
+      this.pageSize,
+      this.currentFilters,
+      this.sortBy,
+      this.sortOrder
+    ).subscribe({
+      next: (response: ElementInfo[]) => {
+        this.populateFolderContents(response);
+
+        // Find and focus the target folder
+        const targetIndex = this.items.findIndex(item => item.id === folderId);
+        if (targetIndex !== -1) {
+          // Select the folder
+          this.items[targetIndex].selected = true;
+
+          // Focus the folder item (scroll into view)
+          this.focusFileItem(folderId);
+        }
+      },
+      error: () => {
+        this.snackBar.open('Failed to load folder contents', 'Close', { duration: 3000 });
+        this.loading = false;
       }
     });
   }
