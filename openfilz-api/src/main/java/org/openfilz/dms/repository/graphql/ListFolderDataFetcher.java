@@ -95,8 +95,9 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
     }
 
     public void applySort(StringBuilder query, ListFolderRequest request) {
-        query.append(SqlUtils.ORDER_BY).append("CASE WHEN type = 'FOLDER' THEN 0 ELSE 1 END, ");
+        query.append(SqlUtils.ORDER_BY).append("CASE WHEN type = 'FOLDER' THEN 0 ELSE 1 END");
         if(request.pageInfo().sortBy() != null) {
+            query.append(", ");
             appendSort(query, request);
         }
     }
