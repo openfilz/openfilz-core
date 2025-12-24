@@ -7,6 +7,7 @@
                 [class.selected]="item.selected"
                 [class.focused]="isFocused(i)"
                 [attr.tabindex]="getTabIndex(i)"
+                [attr.data-file-id]="item.id"
                 [attr.aria-label]="item.type === 'FOLDER' ? 'Folder: ' + item.name : 'File: ' + item.name"
                 [attr.aria-selected]="item.selected"
                 (click)="onItemClick(item)"

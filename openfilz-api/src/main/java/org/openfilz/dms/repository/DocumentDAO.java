@@ -2,7 +2,9 @@ package org.openfilz.dms.repository;
 
 import jakarta.annotation.Nonnull;
 import org.openfilz.dms.dto.request.SearchByMetadataRequest;
+import org.openfilz.dms.dto.response.AncestorInfo;
 import org.openfilz.dms.dto.response.ChildElementInfo;
+import org.openfilz.dms.dto.response.DocumentPosition;
 import org.openfilz.dms.dto.response.FolderElementInfo;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.AccessType;
@@ -39,4 +41,22 @@ public interface DocumentDAO {
     Mono<Void> delete(Document document);
 
     Mono<Document> create(Document document);
+
+    /**
+     * Get all ancestors (parent folders) of a document, ordered from root to immediate parent.
+     *
+     * @param documentId The UUID of the document.
+     * @return A Flux of AncestorInfo ordered from root to immediate parent.
+     */
+    Flux<AncestorInfo> getAncestors(UUID documentId);
+
+    /**
+     * Get the position of a document within its parent folder.
+     *
+     * @param documentId The UUID of the document.
+     * @param sortBy     The field to sort by (e.g., "name", "updated_at").
+     * @param sortOrder  The sort order ("ASC" or "DESC").
+     * @return A Mono containing the document's position information.
+     */
+    Mono<DocumentPosition> getDocumentPosition(UUID documentId, String sortBy, String sortOrder);
 }

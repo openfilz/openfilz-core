@@ -14,7 +14,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.converter.CustomJsonPart;
 import org.openfilz.dms.dto.request.*;
+import org.openfilz.dms.dto.response.AncestorInfo;
 import org.openfilz.dms.dto.response.DocumentInfo;
+import org.openfilz.dms.dto.response.DocumentPosition;
 import org.openfilz.dms.dto.response.ElementInfo;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.entity.Document;
@@ -209,6 +211,22 @@ public class DocumentController {
             @PathVariable UUID documentId,
             @Parameter(description = "if false : only name, type and parentId are sent (when not null) - if true : metadata and size are added in the response") @RequestParam(required = false) Boolean withMetadata) {
         return documentService.getDocumentInfo(documentId, withMetadata)
+                .map(ResponseEntity::ok);
+    }
+
+    @GetMapping("/{documentId}/ancestors")
+    @Operation(summary = "Get document ancestors", description = "Retrieves all ancestor folders (parent path) of a document, ordered from root to immediate parent.")
+    public Flux<AncestorInfo> getDocumentAncestors(@PathVariable UUID documentId) {
+        return documentService.getDocumentAncestors(documentId);
+    }
+
+    @GetMapping("/{documentId}/position")
+    @Operation(summary = "Get document position in folder", description = "Retrieves the position of a document within its parent folder, useful for pagination.")
+    public Mono<ResponseEntity<DocumentPosition>> getDocumentPosition(
+            @PathVariable UUID documentId,
+            @Parameter(description = "Field to sort by (name, updated_at, created_at, size, type). Defaults to 'name'.") @RequestParam(defaultValue = "name") String sortBy,
+            @Parameter(description = "Sort order (ASC or DESC). Defaults to 'ASC'.") @RequestParam(defaultValue = "ASC") String sortOrder) {
+        return documentService.getDocumentPosition(documentId, sortBy, sortOrder)
                 .map(ResponseEntity::ok);
     }
 }

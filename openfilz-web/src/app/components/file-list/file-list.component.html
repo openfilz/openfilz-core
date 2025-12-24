@@ -93,6 +93,7 @@
         [class.selected]="row.selected"
         [class.focused]="isFocused(i)"
         [attr.tabindex]="getTabIndex(i)"
+        [attr.data-file-id]="row.id"
         [attr.aria-label]="row.type === 'FOLDER' ? 'Folder: ' + row.name : 'File: ' + row.name"
         [attr.aria-selected]="row.selected"
         class="file-row"

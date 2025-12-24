@@ -99,11 +99,12 @@ public class OpenSearchIndexService implements IndexService {
 
     private Mono<Void> doUpdateIndexField(Document document, String key, Object value) {
         Map<String, Object> updateDoc = Collections.singletonMap(key, value);
-        // Build the UpdateRequest
+        // Build the UpdateRequest with retryOnConflict to handle concurrent updates
         UpdateRequest<Void, Map<String, Object>> updateRequest = new UpdateRequest.Builder<Void, Map<String, Object>>()
                 .index(indexNameProvider.getIndexName(document))
                 .id(document.getId().toString())
                 .doc(updateDoc)
+                .retryOnConflict(APPEND_RETRY_NUMBER)
                 .build();
 
         // Execute the update asynchronously and convert the CompletableFuture to Mono

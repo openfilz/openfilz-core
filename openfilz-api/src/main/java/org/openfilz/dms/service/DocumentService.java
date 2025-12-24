@@ -59,4 +59,22 @@ public interface DocumentService {
     Flux<FolderElementInfo> listFolderInfo(UUID folderId, Boolean onlyFiles, Boolean onlyFolders);
 
     Mono<Long> countFolderElements(UUID folderId);
+
+    /**
+     * Get all ancestors (parent folders) of a document, ordered from root to immediate parent.
+     *
+     * @param documentId The UUID of the document.
+     * @return A Flux of AncestorInfo ordered from root to immediate parent.
+     */
+    Flux<AncestorInfo> getDocumentAncestors(UUID documentId);
+
+    /**
+     * Get the position of a document within its parent folder.
+     *
+     * @param documentId The UUID of the document.
+     * @param sortBy     The field to sort by.
+     * @param sortOrder  The sort order ("ASC" or "DESC").
+     * @return A Mono containing the document's position information.
+     */
+    Mono<DocumentPosition> getDocumentPosition(UUID documentId, String sortBy, String sortOrder);
 }

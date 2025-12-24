@@ -30,7 +30,7 @@
             @if (suggestions.length > 0) {
             <ul class="suggestions-list">
                 @for (suggestion of suggestions; track $index) {
-                <li class="suggestion-info" (click)="selectSuggestion(suggestion.id)">
+                <li class="suggestion-info" (click)="selectSuggestion(suggestion)">
                     <i class="suggestion-icon" [ngClass]="getIconForExtension(suggestion.ext)"></i>
                     <span class="suggestion-text">{{ suggestion.s }}</span>
                     <div class="suggestion-actions">

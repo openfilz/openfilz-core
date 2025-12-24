@@ -226,3 +226,17 @@ export interface SearchFilters {
   fileType?: string;
   metadata?: { key: string; value: string }[];
 }
+
+// Navigation interfaces for search suggestion navigation
+export interface AncestorInfo {
+  id: string;
+  name: string;
+  type: string;
+}
+
+export interface DocumentPosition {
+  documentId: string;
+  parentId: string | null;
+  position: number;
+  totalItems: number;
+}

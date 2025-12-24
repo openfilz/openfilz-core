@@ -1,7 +1,7 @@
 import { Component, ElementRef, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
-import { filter, Subscription, take } from 'rxjs';
+import { filter, forkJoin, Subscription, take } from 'rxjs';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -27,7 +27,9 @@ import { UserPreferencesService } from '../../services/user-preferences.service'
 import { KeyboardShortcutsService } from '../../services/keyboard-shortcuts.service';
 
 import {
+  AncestorInfo,
   CreateFolderRequest,
+  DocumentPosition,
   ElementInfo,
   FileItem,
   ListFolderAndCountResponse,
@@ -201,6 +203,9 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
   private clickTimeout: any = null;
   private readonly CLICK_DELAY = 250; // milliseconds
 
+  // Flag to skip navigation event when clearing query params
+  private skipNextNavigation = false;
+
   @ViewChild('fileInput') fileInput!: ElementRef;
 
   private routerEventsSubscription!: Subscription;
@@ -218,7 +223,11 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
 
   private handleFolderIdChange(): void {
     const folderId = this.route.snapshot.queryParamMap.get('folderId');
-    if (folderId) {
+    const targetFileId = this.route.snapshot.queryParamMap.get('targetFileId');
+
+    if (targetFileId) {
+      this.navigateToFile(targetFileId);
+    } else if (folderId) {
       this.loadFolderById(folderId);
     } else {
       this.loadFolder();
@@ -368,6 +377,11 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
       // Filter for the NavigationEnd event
       filter(event => event instanceof NavigationEnd)
     ).subscribe(() => {
+      // Skip navigation if flag is set (when clearing query params)
+      if (this.skipNextNavigation) {
+        this.skipNextNavigation = false;
+        return;
+      }
       // Manually trigger the logic when navigation ends
       this.handleFolderIdChange();
     });
@@ -400,19 +414,36 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
 
   private loadFolderById(folderId: string) {
     this.loading = true;
-    this.documentApi.getDocumentInfo(folderId).subscribe({
-      next: (folderInfo) => {
-        const folderItem: FileItem = {
-          id: folderId,
-          name: folderInfo.name,
-          type: DocumentType.FOLDER,
-          size: folderInfo.size,
-          icon: this.fileIconService.getFileIcon(folderInfo.name, 'FOLDER'),
-          selected: false
-        };
-        this.breadcrumbTrail = [folderItem];
-        this.loadFolder(folderItem, true);
 
+    // Fetch folder info and ancestors in parallel
+    forkJoin({
+      folderInfo: this.documentApi.getDocumentInfo(folderId),
+      ancestors: this.documentApi.getDocumentAncestors(folderId)
+    }).subscribe({
+      next: ({ folderInfo, ancestors }) => {
+        // Build breadcrumb trail from ancestors + current folder
+        this.breadcrumbTrail = [
+          ...ancestors.map(ancestor => ({
+            id: ancestor.id,
+            name: ancestor.name,
+            type: DocumentType.FOLDER,
+            selected: false,
+            icon: this.fileIconService.getFileIcon(ancestor.name, 'FOLDER')
+          } as FileItem)),
+          {
+            id: folderId,
+            name: folderInfo.name,
+            type: DocumentType.FOLDER,
+            size: folderInfo.size,
+            icon: this.fileIconService.getFileIcon(folderInfo.name, 'FOLDER'),
+            selected: false
+          }
+        ];
+
+        this.loadFolder(this.breadcrumbTrail[this.breadcrumbTrail.length - 1], true);
+
+        // Set flag to skip next navigation event when clearing query params
+        this.skipNextNavigation = true;
         this.router.navigate([], {
           relativeTo: this.route,
           queryParams: { folderId: null },
@@ -426,6 +457,113 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
         this.loadFolder();
       }
     });
+  }
+
+  private navigateToFile(fileId: string): void {
+    this.loading = true;
+
+    // Fetch file info, ancestors, and position in parallel
+    forkJoin({
+      documentInfo: this.documentApi.getDocumentInfo(fileId),
+      ancestors: this.documentApi.getDocumentAncestors(fileId),
+      position: this.documentApi.getDocumentPosition(fileId, this.sortBy, this.sortOrder)
+    }).subscribe({
+      next: ({ documentInfo, ancestors, position }) => {
+        // Build breadcrumb trail from ancestors (this is the path to the file's parent folder)
+        this.breadcrumbTrail = ancestors.map(ancestor => ({
+          id: ancestor.id,
+          name: ancestor.name,
+          type: DocumentType.FOLDER,
+          selected: false,
+          icon: this.fileIconService.getFileIcon(ancestor.name, 'FOLDER')
+        } as FileItem));
+
+        // Calculate target page (0-indexed)
+        const targetPage = Math.floor(position.position / this.pageSize);
+        this.pageIndex = targetPage;
+
+        // Set current folder to the file's parent
+        if (position.parentId) {
+          const parentFolder = this.breadcrumbTrail[this.breadcrumbTrail.length - 1];
+          this.currentFolder = parentFolder;
+        } else {
+          this.currentFolder = undefined;
+        }
+
+        // Update breadcrumbs
+        this.updateBreadcrumbs();
+
+        // Set total items
+        this.totalItems = position.totalItems;
+
+        // Load the correct page and focus on the file
+        this.loadItemsAndFocusFile(fileId);
+
+        // Set flag to skip next navigation event when clearing query params
+        this.skipNextNavigation = true;
+        this.router.navigate([], {
+          relativeTo: this.route,
+          queryParams: { targetFileId: null },
+          queryParamsHandling: 'merge',
+        });
+      },
+      error: (err) => {
+        this.snackBar.open('Could not navigate to the file.', 'Close', { duration: 3000 });
+        this.loading = false;
+        this.router.navigate(['/my-folder']);
+        this.loadFolder();
+      }
+    });
+  }
+
+  private loadItemsAndFocusFile(targetFileId: string): void {
+    this.documentApi.listFolder(
+      this.currentFolder?.id,
+      this.pageIndex + 1,
+      this.pageSize,
+      this.currentFilters,
+      this.sortBy,
+      this.sortOrder
+    ).subscribe({
+      next: (response: ElementInfo[]) => {
+        this.populateFolderContents(response);
+
+        // Find and focus the target file
+        const targetIndex = this.items.findIndex(item => item.id === targetFileId);
+        if (targetIndex !== -1) {
+          // Select the file
+          this.items[targetIndex].selected = true;
+
+          // Focus the file item (scroll into view)
+          this.focusFileItem(targetFileId);
+
+          // Open metadata panel after a short delay
+          setTimeout(() => {
+            this.openMetadataPanel(targetFileId);
+          }, 300);
+        }
+      },
+      error: (error) => {
+        this.snackBar.open('Failed to load folder contents', 'Close', { duration: 3000 });
+        this.loading = false;
+      }
+    });
+  }
+
+  private focusFileItem(fileId: string): void {
+    // Use setTimeout to ensure DOM is rendered
+    setTimeout(() => {
+      const element = document.querySelector(`[data-file-id="${fileId}"]`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        element.classList.add('highlighted');
+
+        // Remove highlight after animation
+        setTimeout(() => {
+          element.classList.remove('highlighted');
+        }, 2000);
+      }
+    }, 100);
   }
 
   loadFolder(folder?: FileItem, fromBreadcrumb: boolean = false, appendBreadCrumb: boolean = false) {

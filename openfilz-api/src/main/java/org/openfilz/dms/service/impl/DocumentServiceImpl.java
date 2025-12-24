@@ -765,4 +765,14 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
         return documentDAO.countDocument(folderId);
     }
 
+    @Override
+    public Flux<AncestorInfo> getDocumentAncestors(UUID documentId) {
+        return documentDAO.getAncestors(documentId);
+    }
+
+    @Override
+    public Mono<DocumentPosition> getDocumentPosition(UUID documentId, String sortBy, String sortOrder) {
+        return documentDAO.getDocumentPosition(documentId, sortBy, sortOrder);
+    }
+
 }

@@ -173,3 +173,17 @@
     padding-top: 0;
   }
 }
+
+/* Highlight animation for navigating to files from search */
+:host ::ng-deep .highlighted {
+  animation: highlight-pulse 2s ease-in-out;
+}
+
+@keyframes highlight-pulse {
+  0%, 100% {
+    background-color: transparent;
+  }
+  25%, 75% {
+    background-color: rgba(99, 102, 241, 0.25);
+  }
+}

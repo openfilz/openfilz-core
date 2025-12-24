@@ -3,11 +3,13 @@ import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { filter, map, Observable } from 'rxjs';
 import { Apollo, gql } from 'apollo-angular';
 import {
+  AncestorInfo,
   CopyRequest,
   CreateFolderRequest,
   DashboardStatistics,
   DeleteRequest,
   DocumentInfo,
+  DocumentPosition,
   ElementInfo,
   AuditLog,
   FolderResponse,
@@ -612,6 +614,27 @@ export class DocumentApiService {
       jsonMetadata[meta.key] = meta.value;
     });
     return jsonMetadata;
+  }
+
+  // Navigation operations for search suggestions
+  getDocumentAncestors(documentId: string): Observable<AncestorInfo[]> {
+    return this.http.get<AncestorInfo[]>(`${this.baseUrl}/documents/${documentId}/ancestors`, {
+      headers: this.getHeaders()
+    });
+  }
+
+  getDocumentPosition(
+    documentId: string,
+    sortBy: string = 'name',
+    sortOrder: 'ASC' | 'DESC' = 'ASC'
+  ): Observable<DocumentPosition> {
+    const params = new HttpParams()
+      .set('sortBy', sortBy)
+      .set('sortOrder', sortOrder);
+    return this.http.get<DocumentPosition>(`${this.baseUrl}/documents/${documentId}/position`, {
+      headers: this.getHeaders(),
+      params
+    });
   }
 
 }

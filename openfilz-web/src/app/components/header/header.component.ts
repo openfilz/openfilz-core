@@ -103,8 +103,24 @@ export class HeaderComponent implements OnInit, OnDestroy {
     this.searchService.updateFilters(filters);
   }
 
-  selectSuggestion(docId: string): void {
-    console.log(`Selected Suggestion: ${docId}`);
+  selectSuggestion(suggestion: Suggestion): void {
+    // Clear suggestions and search query
+    this.suggestions = [];
+    this.searchQuery = '';
+
+    const isFolder = suggestion.ext === null;
+
+    if (isFolder) {
+      // Navigate to folder with folderId param
+      this.router.navigate(['/my-folder'], {
+        queryParams: { folderId: suggestion.id }
+      });
+    } else {
+      // Navigate to file's parent folder with target file info
+      this.router.navigate(['/my-folder'], {
+        queryParams: { targetFileId: suggestion.id }
+      });
+    }
   }
 
   ngOnDestroy(): void {
