@@ -102,6 +102,30 @@ openfilz:
   soft-delete:
     active: false
 
+# OnlyOffice DocumentServer Integration
+onlyoffice:
+  enabled: ${ONLYOFFICE_ENABLED:false}
+  document-server:
+    url: ${ONLYOFFICE_URL:https://localhost}
+    api-path: /web-apps/apps/api/documents/api.js
+  # URL that OnlyOffice DocumentServer uses to reach OpenFilz API
+  # Use host.docker.internal when OnlyOffice runs in Docker and OpenFilz runs on host
+  api-base-url: ${ONLYOFFICE_API_BASE_URL:http://host.docker.internal:8081}
+  jwt:
+    enabled: true
+    secret: ${ONLYOFFICE_JWT_SECRET:openfilz-onlyoffice-jwt-secret-2024}
+  supported-extensions:
+    - docx
+    - doc
+    - xlsx
+    - xls
+    - pptx
+    - ppt
+    - odt
+    - ods
+    - odp
+    - pdf
+
 # Database schema initialization (e.g., Flyway or Liquibase if preferred)
 # For simple R2DBC, you might use an InitializingBean to create tables
 # Example:

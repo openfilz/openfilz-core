@@ -21,6 +21,8 @@ import org.openfilz.dms.dto.response.ElementInfo;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.service.DocumentService;
+import org.openfilz.dms.service.OnlyOfficeJwtService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -53,6 +55,10 @@ public class DocumentController {
     private final DocumentService documentService;
 
     private final ObjectMapper objectMapper; // For parsing metadata string
+
+    // Optional: Only available when OnlyOffice is enabled
+    @Autowired(required = false)
+    private OnlyOfficeJwtService onlyOfficeJwtService;
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Upload a single document",
@@ -170,10 +176,49 @@ public class DocumentController {
                 );
     }
 
+    /**
+     * Download endpoint for OnlyOffice DocumentServer.
+     * This endpoint uses a short-lived access token instead of OAuth2 authentication
+     * to allow OnlyOffice server to fetch documents.
+     */
+    @GetMapping("/{documentId}/onlyoffice-download")
+    @Operation(summary = "Download document for OnlyOffice",
+            description = "Internal endpoint for OnlyOffice DocumentServer to fetch document content. Uses token-based authentication.")
+    public Mono<ResponseEntity<Resource>> downloadForOnlyOffice(
+            @PathVariable UUID documentId,
+            @RequestParam("token") String accessToken) {
+
+        // Validate access token
+        if (onlyOfficeJwtService == null) {
+            log.warn("OnlyOffice download attempted but OnlyOffice is not enabled");
+            return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build());
+        }
+
+        UUID tokenDocumentId = onlyOfficeJwtService.extractDocumentId(accessToken);
+        if (tokenDocumentId == null || !tokenDocumentId.equals(documentId)) {
+            log.warn("Invalid or mismatched OnlyOffice access token for document {}", documentId);
+            return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
+        }
+
+        return documentService.findDocumentToDownloadById(documentId)
+                .flatMap(docInfo -> documentService.downloadDocument(docInfo)
+                        .map(resource -> sendOnlyOfficeDownloadResponse(docInfo, resource))
+                )
+                .defaultIfEmpty(ResponseEntity.notFound().build());
+    }
+
     private ResponseEntity<Resource> sendDownloadResponse(Document document, Resource resource) {
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + document.getName() + (document.getType() == FILE ? "" : ZIP) + "\"")
                 .contentType(document.getType() == FILE && document.getContentType() != null ? MediaType.parseMediaType(document.getContentType()) : MediaType.APPLICATION_OCTET_STREAM)
+                .body(resource);
+    }
+
+    private ResponseEntity<Resource> sendOnlyOfficeDownloadResponse(Document document, Resource resource) {
+        // OnlyOffice expects inline content disposition for viewing/editing
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + document.getName() + "\"")
+                .contentType(document.getContentType() != null ? MediaType.parseMediaType(document.getContentType()) : MediaType.APPLICATION_OCTET_STREAM)
                 .body(resource);
     }
 

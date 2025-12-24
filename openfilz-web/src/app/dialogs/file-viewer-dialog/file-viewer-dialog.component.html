@@ -10,36 +10,42 @@
 
     <div class="toolbar-center">
       <!-- Page Navigation (PDF only) -->
-      <div class="page-navigation" *ngIf="showPageNavigation">
-        <button mat-icon-button (click)="previousPage()" [disabled]="currentPage === 1" matTooltip="Previous page">
-          <mat-icon>chevron_left</mat-icon>
-        </button>
-        <span class="page-info">Page {{ currentPage }} of {{ totalPages }}</span>
-        <button mat-icon-button (click)="nextPage()" [disabled]="currentPage === totalPages" matTooltip="Next page">
-          <mat-icon>chevron_right</mat-icon>
-        </button>
-      </div>
+      @if (showPageNavigation) {
+        <div class="page-navigation">
+          <button mat-icon-button (click)="previousPage()" [disabled]="currentPage === 1" matTooltip="Previous page">
+            <mat-icon>chevron_left</mat-icon>
+          </button>
+          <span class="page-info">Page {{ currentPage }} of {{ totalPages }}</span>
+          <button mat-icon-button (click)="nextPage()" [disabled]="currentPage === totalPages" matTooltip="Next page">
+            <mat-icon>chevron_right</mat-icon>
+          </button>
+        </div>
+      }
     </div>
 
     <div class="toolbar-right">
       <!-- Zoom Controls -->
-      <div class="zoom-controls" *ngIf="showZoomControls">
-        <button mat-icon-button (click)="zoomOut()" matTooltip="Zoom out">
-          <mat-icon>zoom_out</mat-icon>
-        </button>
-        <span class="zoom-level">{{ (currentZoom * 100) | number:'1.0-0' }}%</span>
-        <button mat-icon-button (click)="zoomIn()" matTooltip="Zoom in">
-          <mat-icon>zoom_in</mat-icon>
-        </button>
-        <button mat-icon-button (click)="resetZoom()" matTooltip="Reset zoom">
-          <mat-icon>zoom_out_map</mat-icon>
-        </button>
-      </div>
+      @if (showZoomControls) {
+        <div class="zoom-controls">
+          <button mat-icon-button (click)="zoomOut()" matTooltip="Zoom out">
+            <mat-icon>zoom_out</mat-icon>
+          </button>
+          <span class="zoom-level">{{ (currentZoom * 100) | number:'1.0-0' }}%</span>
+          <button mat-icon-button (click)="zoomIn()" matTooltip="Zoom in">
+            <mat-icon>zoom_in</mat-icon>
+          </button>
+          <button mat-icon-button (click)="resetZoom()" matTooltip="Reset zoom">
+            <mat-icon>zoom_out_map</mat-icon>
+          </button>
+        </div>
+      }
 
       <!-- Rotate (Images and PDF) -->
-      <button mat-icon-button (click)="rotate()" *ngIf="viewerMode === 'pdf' || viewerMode === 'image'" matTooltip="Rotate">
-        <mat-icon>rotate_right</mat-icon>
-      </button>
+      @if (viewerMode === 'pdf' || viewerMode === 'image') {
+        <button mat-icon-button (click)="rotate()" matTooltip="Rotate">
+          <mat-icon>rotate_right</mat-icon>
+        </button>
+      }
 
       <!-- Download -->
       <button mat-icon-button (click)="download()" matTooltip="Download">
@@ -56,53 +62,81 @@
   <!-- Content Area -->
   <div class="viewer-content" [class.loading]="loading">
     <!-- Loading Spinner -->
-    <div class="loading-container" *ngIf="loading">
-      <mat-spinner diameter="60"></mat-spinner>
-      <p>Loading document...</p>
-    </div>
+    @if (loading) {
+      <div class="loading-container">
+        <mat-spinner diameter="60"></mat-spinner>
+        <p>Loading document...</p>
+      </div>
+    }
 
     <!-- Error Message -->
-    <div class="error-container" *ngIf="error && !loading">
-      <mat-icon class="error-icon">error_outline</mat-icon>
-      <h3>{{ error }}</h3>
-      <p>Unable to preview this file.</p>
-      <button mat-raised-button color="primary" (click)="download()">
-        <mat-icon>download</mat-icon>
-        Download File
-      </button>
-    </div>
+    @if (error && !loading) {
+      <div class="error-container">
+        <mat-icon class="error-icon">error_outline</mat-icon>
+        <h3>{{ error }}</h3>
+        <p>Unable to preview this file.</p>
+        <button mat-raised-button color="primary" (click)="download()">
+          <mat-icon>download</mat-icon>
+          Download File
+        </button>
+      </div>
+    }
 
     <!-- PDF Viewer -->
-    <div class="pdf-viewer" *ngIf="viewerMode === 'pdf' && !loading && !error">
-      <div class="pdf-canvas-container">
-        <canvas #pdfCanvas></canvas>
+    @if (viewerMode === 'pdf' && !loading && !error) {
+      <div class="pdf-viewer">
+        <div class="pdf-canvas-container">
+          <canvas #pdfCanvas></canvas>
+        </div>
       </div>
-    </div>
+    }
 
     <!-- Image Viewer -->
-    <div class="image-viewer" *ngIf="viewerMode === 'image' && !loading && !error" #imageContainer>
-      <img [src]="imageSrc" [style.transform]="imageTransform" alt="{{ data.fileName }}" />
-    </div>
+    @if (viewerMode === 'image' && !loading && !error) {
+      <div class="image-viewer" #imageContainer>
+        <img [src]="imageSrc" [style.transform]="imageTransform" alt="{{ data.fileName }}" />
+      </div>
+    }
 
     <!-- Text Viewer -->
-    <div class="text-viewer" *ngIf="viewerMode === 'text' && !loading && !error">
-      <div class="code-container" [innerHTML]="highlightedContent"></div>
-    </div>
+    @if (viewerMode === 'text' && !loading && !error) {
+      <div class="text-viewer">
+        <div class="code-container" [innerHTML]="highlightedContent"></div>
+      </div>
+    }
 
-    <!-- Office Document Viewer -->
-    <div class="office-viewer" *ngIf="viewerMode === 'office' && !loading && !error">
-      <div class="office-content" [innerHTML]="officeContent"></div>
-    </div>
+    <!-- Office Document Viewer (fallback when OnlyOffice is disabled) -->
+    @if (viewerMode === 'office' && !loading && !error) {
+      <div class="office-viewer">
+        <div class="office-content" [innerHTML]="officeContent"></div>
+      </div>
+    }
+
+    <!-- OnlyOffice Document Editor -->
+    @if (viewerMode === 'onlyoffice') {
+      <div class="onlyoffice-viewer">
+        <app-onlyoffice-editor
+          [documentId]="data.documentId"
+          [canEdit]="true"
+          (editorReady)="onEditorReady()"
+          (documentSaved)="onDocumentSaved()"
+          (editorClosed)="onClose()"
+          (editorError)="onEditorError($event)">
+        </app-onlyoffice-editor>
+      </div>
+    }
 
     <!-- Unsupported File Type -->
-    <div class="unsupported-container" *ngIf="viewerMode === 'unsupported' && !loading && !error">
-      <mat-icon class="unsupported-icon">insert_drive_file</mat-icon>
-      <h3>Preview not available</h3>
-      <p>This file type cannot be previewed in the browser.</p>
-      <button mat-raised-button color="primary" (click)="download()">
-        <mat-icon>download</mat-icon>
-        Download File
-      </button>
-    </div>
+    @if (viewerMode === 'unsupported' && !loading && !error) {
+      <div class="unsupported-container">
+        <mat-icon class="unsupported-icon">insert_drive_file</mat-icon>
+        <h3>Preview not available</h3>
+        <p>This file type cannot be previewed in the browser.</p>
+        <button mat-raised-button color="primary" (click)="download()">
+          <mat-icon>download</mat-icon>
+          Download File
+        </button>
+      </div>
+    }
   </div>
 </div>

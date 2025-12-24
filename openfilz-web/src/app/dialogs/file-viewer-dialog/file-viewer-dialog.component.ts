@@ -1,5 +1,5 @@
 import { Component, inject, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { DecimalPipe } from '@angular/common';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -10,6 +10,8 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { DomSanitizer, SafeResourceUrl, SafeHtml } from '@angular/platform-browser';
 
 import { DocumentApiService } from '../../services/document-api.service';
+import { OnlyOfficeService } from '../../services/onlyoffice.service';
+import { OnlyOfficeEditorComponent } from '../../components/onlyoffice-editor/onlyoffice-editor.component';
 import { saveAs } from 'file-saver';
 
 // PDF.js imports
@@ -28,7 +30,7 @@ export interface FileViewerDialogData {
   contentType: string;
 }
 
-type ViewerMode = 'pdf' | 'image' | 'text' | 'office' | 'unsupported';
+type ViewerMode = 'pdf' | 'image' | 'text' | 'office' | 'onlyoffice' | 'unsupported';
 
 @Component({
   selector: 'app-file-viewer-dialog',
@@ -36,13 +38,14 @@ type ViewerMode = 'pdf' | 'image' | 'text' | 'office' | 'unsupported';
   templateUrl: './file-viewer-dialog.component.html',
   styleUrls: ['./file-viewer-dialog.component.css'],
   imports: [
-    CommonModule,
+    DecimalPipe,
     MatDialogModule,
     MatButtonModule,
     MatIconModule,
     MatProgressSpinnerModule,
     MatToolbarModule,
-    MatTooltipModule
+    MatTooltipModule,
+    OnlyOfficeEditorComponent
   ],
 })
 export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestroy {
@@ -80,6 +83,7 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
   readonly dialogRef = inject(MatDialogRef<FileViewerDialogComponent>);
   readonly data = inject<FileViewerDialogData>(MAT_DIALOG_DATA);
   private documentApi = inject(DocumentApiService);
+  private onlyOfficeService = inject(OnlyOfficeService);
   private snackBar = inject(MatSnackBar);
   private sanitizer = inject(DomSanitizer);
 
@@ -109,6 +113,13 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
     const contentType = this.data.contentType?.toLowerCase() || '';
     const fileName = this.data.fileName?.toLowerCase() || '';
 
+    // Check if OnlyOffice is enabled and file is supported
+    if (this.onlyOfficeService.isOnlyOfficeEnabled() &&
+        this.onlyOfficeService.isSupportedExtension(fileName)) {
+      this.viewerMode = 'onlyoffice';
+      return;
+    }
+
     // PDF
     if (contentType === 'application/pdf' || fileName.endsWith('.pdf')) {
       this.viewerMode = 'pdf';
@@ -125,7 +136,7 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
       /\.(txt|json|xml|html|css|js|ts|java|py|md|yml|yaml|sh|bat|log)$/i.test(fileName)) {
       this.viewerMode = 'text';
     }
-    // Office documents
+    // Office documents (fallback when OnlyOffice is disabled)
     else if (contentType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
       contentType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
       /\.(docx|xlsx)$/i.test(fileName)) {
@@ -137,6 +148,12 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
   }
 
   private loadDocument() {
+    // OnlyOffice handles its own loading
+    if (this.viewerMode === 'onlyoffice') {
+      this.loading = false;
+      return;
+    }
+
     this.loading = true;
     this.error = undefined;
 
@@ -169,6 +186,22 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
         this.snackBar.open(this.error, 'Close', { duration: 3000 });
       }
     });
+  }
+
+  // ========== OnlyOffice Event Handlers ==========
+  onEditorReady() {
+    console.log('OnlyOffice editor is ready');
+  }
+
+  onDocumentSaved() {
+    console.log('Document saved via OnlyOffice');
+    this.snackBar.open('Document saved', 'Close', { duration: 2000 });
+  }
+
+  onEditorError(error: string) {
+    console.error('OnlyOffice editor error:', error);
+    this.error = error;
+    this.snackBar.open(error, 'Close', { duration: 5000 });
   }
 
   // ========== PDF Viewer ==========

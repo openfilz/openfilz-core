@@ -1,6 +1,7 @@
 package org.openfilz.dms.security.impl;
 
 import lombok.RequiredArgsConstructor;
+import org.openfilz.dms.config.OnlyOfficeProperties;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.enums.Role;
 import org.openfilz.dms.enums.RoleTokenLookup;
@@ -37,6 +38,8 @@ public abstract class AbstractSecurityService implements SecurityService {
     @Value("${spring.graphql.http.path:/graphql}")
     protected String graphQlBaseUrl;
 
+    protected final OnlyOfficeProperties onlyOfficeProperties;
+
     public boolean authorize(Authentication auth, AuthorizationContext context) {
         ServerHttpRequest request = context.getExchange().getRequest();
         HttpMethod method = request.getMethod();
@@ -57,7 +60,26 @@ public abstract class AbstractSecurityService implements SecurityService {
         if(isInsertOrUpdateAccess(method, path)) {
             return isAuthorized((JwtAuthenticationToken) auth, Role.CONTRIBUTOR.toString());
         }
+        if(isOnlyOffice(method, path)) {
+            if(path.startsWith("/onlyoffice/config/")) {
+                List<String> edit = request.getQueryParams().get("canEdit");
+                if(!CollectionUtils.isEmpty(edit)) {
+                    boolean canEdit = Boolean.parseBoolean(edit.getFirst());
+                    if(canEdit) {
+                        return isAuthorized((JwtAuthenticationToken) auth, Role.CONTRIBUTOR.toString());
+                    }
+                }
+                return isAuthorized((JwtAuthenticationToken) auth, Role.READER.toString());
+            }
+            return isAuthorized((JwtAuthenticationToken) auth, Role.CONTRIBUTOR.toString());
+        }
         return isCustomAccessAuthorized(auth, context, method, path);
+    }
+
+    private boolean isOnlyOffice(HttpMethod method, String path) {
+        return onlyOfficeProperties.isEnabled()
+                && (method.equals(HttpMethod.GET) || method.equals(HttpMethod.POST))
+                && pathStartsWith(path, "/onlyoffice");
     }
 
     protected int getRootContextPathIndex(String path) {
