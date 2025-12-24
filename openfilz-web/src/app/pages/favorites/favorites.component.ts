@@ -9,6 +9,7 @@ import { DocumentApiService } from '../../services/document-api.service';
 import { FileGridComponent } from '../../components/file-grid/file-grid.component';
 import { FileListComponent } from '../../components/file-list/file-list.component';
 import { ToolbarComponent } from '../../components/toolbar/toolbar.component';
+import { MetadataPanelComponent } from '../../components/metadata-panel/metadata-panel.component';
 import { ElementInfo, FileItem, ListFolderAndCountResponse, SearchFilters } from '../../models/document.models';
 import { FileIconService } from '../../services/file-icon.service';
 import { BreadcrumbService } from '../../services/breadcrumb.service';
@@ -17,6 +18,7 @@ import { FileOperationsComponent } from "../../components/base/file-operations.c
 import { ActivatedRoute, Router } from "@angular/router";
 import { SearchService } from "../../services/search.service";
 import { MatDialog } from "@angular/material/dialog";
+import { FileViewerDialogComponent } from '../../dialogs/file-viewer-dialog/file-viewer-dialog.component';
 
 import { UserPreferencesService } from '../../services/user-preferences.service';
 
@@ -32,7 +34,8 @@ import { UserPreferencesService } from '../../services/user-preferences.service'
     MatButtonToggleModule,
     FileGridComponent,
     FileListComponent,
-    ToolbarComponent
+    ToolbarComponent,
+    MetadataPanelComponent
   ],
   templateUrl: './favorites.component.html',
   styleUrls: ['./favorites.component.css']
@@ -43,6 +46,9 @@ export class FavoritesComponent extends FileOperationsComponent implements OnIni
   private clickTimeout: any = null;
   private readonly CLICK_DELAY = 250; // milliseconds
   currentFilters?: SearchFilters;
+
+  metadataPanelOpen: boolean = false;
+  selectedDocumentForMetadata?: string;
 
   private route = inject(ActivatedRoute);
   private searchService = inject(SearchService);
@@ -106,6 +112,57 @@ export class FavoritesComponent extends FileOperationsComponent implements OnIni
       error: (error) => {
         console.error('Error toggling favorite:', error);
         this.snackBar.open('Failed to update favorite status', 'Close', { duration: 3000 });
+      }
+    });
+  }
+
+  openMetadataPanel(documentId: string) {
+    this.selectedDocumentForMetadata = documentId;
+    this.metadataPanelOpen = true;
+  }
+
+  closeMetadataPanel() {
+    this.metadataPanelOpen = false;
+    this.selectedDocumentForMetadata = undefined;
+  }
+
+  onMetadataSaved() {
+    this.loadFavorites();
+  }
+
+  onViewProperties(item: FileItem) {
+    this.openMetadataPanel(item.id);
+  }
+
+  override onItemDoubleClick(item: FileItem) {
+    // Clear the pending single-click timeout
+    if (this.clickTimeout) {
+      clearTimeout(this.clickTimeout);
+      this.clickTimeout = null;
+    }
+
+    // Deselect the item if it was selected
+    item.selected = false;
+
+    if (item.type === 'FOLDER') {
+      this.router.navigate(['/my-folder'], { queryParams: { folderId: item.id } });
+    } else {
+      // Open file viewer for files
+      this.openFileViewer(item);
+    }
+  }
+
+  private openFileViewer(item: FileItem) {
+    this.dialog.open(FileViewerDialogComponent, {
+      width: '95vw',
+      height: '95vh',
+      maxWidth: '1400px',
+      maxHeight: '900px',
+      panelClass: 'file-viewer-dialog-container',
+      data: {
+        documentId: item.id,
+        fileName: item.name,
+        contentType: item.contentType || ''
       }
     });
   }

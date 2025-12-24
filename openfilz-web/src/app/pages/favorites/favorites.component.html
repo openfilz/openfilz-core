@@ -63,7 +63,8 @@
           (download)="onDownloadItem($event)"
           (move)="onMoveItem($event)"
           (copy)="onCopyItem($event)"
-          (delete)="onDeleteItem($event)">
+          (delete)="onDeleteItem($event)"
+          (viewProperties)="onViewProperties($event)">
         </app-file-grid>
       }
 
@@ -79,8 +80,8 @@
           (download)="onDownloadItem($event)"
           (move)="onMoveItem($event)"
           (copy)="onCopyItem($event)"
-          (copy)="onCopyItem($event)"
           (delete)="onDeleteItem($event)"
+          (viewProperties)="onViewProperties($event)"
           [sortBy]="sortBy"
           [sortOrder]="sortOrder"
           (sortChange)="onSortChange($event)">
@@ -88,4 +89,12 @@
       }
     }
   </div>
+
+  <!-- Metadata Panel -->
+  <app-metadata-panel
+    [documentId]="selectedDocumentForMetadata"
+    [isOpen]="metadataPanelOpen"
+    (closePanel)="closeMetadataPanel()"
+    (metadataSaved)="onMetadataSaved()">
+  </app-metadata-panel>
 </div>

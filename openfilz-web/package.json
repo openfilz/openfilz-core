@@ -37,6 +37,7 @@
     "@angular/compiler-cli": "^20.0.0",
     "@ngx-env/builder": "^20.0.0",
     "@types/node": "^24.10.1",
+    "baseline-browser-mapping": "^2.9.11",
     "typescript": "^5.8.2"
   }
 }
