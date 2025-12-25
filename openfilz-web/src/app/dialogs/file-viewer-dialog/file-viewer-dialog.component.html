@@ -56,6 +56,11 @@
       <button mat-icon-button (click)="print()" matTooltip="Print">
         <mat-icon>print</mat-icon>
       </button>
+
+      <!-- Fullscreen Toggle -->
+      <button mat-icon-button (click)="toggleFullscreen()" [matTooltip]="isFullscreen ? 'Exit fullscreen' : 'Fullscreen'">
+        <mat-icon>{{ isFullscreen ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
+      </button>
     </div>
   </mat-toolbar>
 
@@ -121,7 +126,9 @@
           (editorReady)="onEditorReady()"
           (documentSaved)="onDocumentSaved()"
           (editorClosed)="onClose()"
-          (editorError)="onEditorError($event)">
+          (editorError)="onEditorError($event)"
+          style="height: 100%"
+        >
         </app-onlyoffice-editor>
       </div>
     }

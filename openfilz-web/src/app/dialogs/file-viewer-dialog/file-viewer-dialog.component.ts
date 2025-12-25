@@ -54,6 +54,7 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
 
   loading: boolean = true;
   error?: string;
+  isFullscreen: boolean = false;
 
   viewerMode: ViewerMode = 'unsupported';
 
@@ -430,6 +431,22 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
 
   print() {
     window.print();
+  }
+
+  toggleFullscreen() {
+    this.isFullscreen = !this.isFullscreen;
+    if (this.isFullscreen) {
+      this.dialogRef.updateSize('100vw', '100vh');
+      this.dialogRef.addPanelClass('fullscreen-dialog');
+    } else {
+      this.dialogRef.updateSize('95vw', '95vh');
+      this.dialogRef.removePanelClass('fullscreen-dialog');
+    }
+
+    // Re-render PDF if in PDF mode to adjust to new size
+    if (this.viewerMode === 'pdf') {
+      setTimeout(() => this.renderPdfPage(), 100);
+    }
   }
 
   onClose() {

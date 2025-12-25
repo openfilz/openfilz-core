@@ -326,6 +326,29 @@ html {
   overflow: hidden;
 }
 
+/* Fullscreen Dialog Mode */
+.cdk-overlay-pane.fullscreen-dialog {
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  width: 100vw !important;
+  height: 100vh !important;
+}
+
+.fullscreen-dialog .mat-mdc-dialog-container {
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.fullscreen-dialog .mat-mdc-dialog-surface {
+  border-radius: 0 !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
 /* ==================================
    ACCESSIBILITY ENHANCEMENTS
    ================================== */
