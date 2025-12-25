@@ -1,5 +1,6 @@
 package org.openfilz.dms.utils;
 
+import org.openfilz.dms.security.OnlyOfficeAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.core.context.SecurityContext;
@@ -32,8 +33,15 @@ public interface UserInfoService {
 
     default Mono<String> getConnectedUserEmail() {
         return getAuthenticationMono()
-                .map(auth -> getUserAttribute(auth, EMAIL))
+                .map(this::getUserEmail)
                 .switchIfEmpty(Mono.just(ANONYMOUS_USER));
+    }
+
+    private String getUserEmail(Authentication auth) {
+        if(auth instanceof OnlyOfficeAuthenticationToken jwt) {
+            return jwt.getUserId();
+        }
+        return getUserAttribute(auth, EMAIL);
     }
 
     default Mono<Authentication> getAuthenticationMono() {

@@ -1,6 +1,7 @@
 package org.openfilz.dms.security.impl;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.OnlyOfficeProperties;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.enums.Role;
@@ -22,6 +23,7 @@ import java.util.Map;
 
 import static java.util.List.of;
 
+@Slf4j
 @RequiredArgsConstructor
 public abstract class AbstractSecurityService implements SecurityService {
 
@@ -47,11 +49,13 @@ public abstract class AbstractSecurityService implements SecurityService {
             return isAuthorized((JwtAuthenticationToken) auth, Role.CLEANER.toString());
         }
         String path = request.getPath().value();
+        log.debug("method {} -  path {}", method, path);
         int i = getRootContextPathIndex(path);
         if(i < 0) {
             return isGraphQlAuthorized((JwtAuthenticationToken) auth, path);
         }
         path = getContextPath(path, i);
+        log.debug("method {} -  path {}", method, path);
         if (isQueryOrSearch(method, path))
             return isAuthorized((JwtAuthenticationToken) auth, of(Role.READER.toString(), Role.CONTRIBUTOR.toString()));
         if(isAudit(path)) {
@@ -69,7 +73,9 @@ public abstract class AbstractSecurityService implements SecurityService {
                         return isAuthorized((JwtAuthenticationToken) auth, Role.CONTRIBUTOR.toString());
                     }
                 }
-                return isAuthorized((JwtAuthenticationToken) auth, Role.READER.toString());
+                boolean authorized = isAuthorized((JwtAuthenticationToken) auth, of(Role.READER.toString(), Role.CONTRIBUTOR.toString()));
+                log.debug("path {} - authorized {}", path, authorized);
+                return authorized;
             }
             return isAuthorized((JwtAuthenticationToken) auth, Role.CONTRIBUTOR.toString());
         }

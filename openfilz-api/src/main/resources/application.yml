@@ -67,7 +67,7 @@ logging:
     org.openfilz: DEBUG
     io.r2dbc.postgresql.QUERY: DEBUG # for queries
     # io.r2dbc.postgresql.PARAM: DEBUG # for parameters
-    # org.springframework: DEBUG
+    org.springframework.security: TRACE
 
 server:
   port: 8081
