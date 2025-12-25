@@ -16,12 +16,10 @@ public interface OnlyOfficeService {
      * Generate the configuration needed to initialize the OnlyOffice editor.
      *
      * @param documentId The document ID to edit
-     * @param userId     The user ID opening the editor (optional)
-     * @param userName   The user name to display (optional)
      * @param canEdit    Whether the user can edit the document
      * @return Editor configuration including JWT token
      */
-    Mono<OnlyOfficeConfigResponse> generateEditorConfig(UUID documentId, String userId, String userName, boolean canEdit);
+    Mono<OnlyOfficeConfigResponse> generateEditorConfig(UUID documentId, boolean canEdit);
 
     /**
      * Handle a callback from OnlyOffice DocumentServer.

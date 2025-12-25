@@ -10,9 +10,9 @@ import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.OnlyOfficeCallbackRequest;
 import org.openfilz.dms.dto.response.OnlyOfficeConfigResponse;
 import org.openfilz.dms.service.OnlyOfficeService;
+import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
@@ -30,7 +30,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Tag(name = "OnlyOffice", description = "OnlyOffice Document Editor integration endpoints")
 @ConditionalOnProperty(name = "onlyoffice.enabled", havingValue = "true")
-public class OnlyOfficeController {
+public class OnlyOfficeController implements UserInfoService {
 
     private final OnlyOfficeService onlyOfficeService;
 
@@ -39,7 +39,6 @@ public class OnlyOfficeController {
      *
      * @param documentId The document ID to edit
      * @param canEdit    Whether the user can edit the document (default: true)
-     * @param jwt        The authenticated user's JWT token
      * @return Editor configuration including JWT token for OnlyOffice
      */
     @GetMapping(value = "/config/{documentId}", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -51,15 +50,11 @@ public class OnlyOfficeController {
     public Mono<OnlyOfficeConfigResponse> getEditorConfig(
             @PathVariable UUID documentId,
             @Parameter(description = "Whether the user can edit the document")
-            @RequestParam(defaultValue = "true") boolean canEdit,
-            @AuthenticationPrincipal Jwt jwt) {
+            @RequestParam(defaultValue = "true") boolean canEdit) {
 
-        String userId = jwt != null ? jwt.getSubject() : null;
-        String userName = jwt != null ? extractUserName(jwt) : null;
+        log.debug("Generating OnlyOffice config for document {}, canEdit={}", documentId, canEdit);
 
-        log.debug("Generating OnlyOffice config for document {}, user {}, canEdit={}", documentId, userId, canEdit);
-
-        return onlyOfficeService.generateEditorConfig(documentId, userId, userName, canEdit);
+        return onlyOfficeService.generateEditorConfig(documentId, canEdit);
     }
 
     /**

@@ -55,17 +55,8 @@ public record OnlyOfficeConfigResponse(
             String callbackUrl,
             String lang,
             String mode,  // "edit" or "view"
-            UserInfo user,
+            IUserInfo user,
             Customization customization
-    ) {}
-
-    /**
-     * User information for the editor.
-     */
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record UserInfo(
-            String id,
-            String name
     ) {}
 
     /**

@@ -14,11 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.converter.CustomJsonPart;
 import org.openfilz.dms.dto.request.*;
-import org.openfilz.dms.dto.response.AncestorInfo;
-import org.openfilz.dms.dto.response.DocumentInfo;
-import org.openfilz.dms.dto.response.DocumentPosition;
-import org.openfilz.dms.dto.response.ElementInfo;
-import org.openfilz.dms.dto.response.UploadResponse;
+import org.openfilz.dms.dto.response.*;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.service.DocumentService;
 import org.openfilz.dms.service.OnlyOfficeJwtService;
@@ -58,7 +54,7 @@ public class DocumentController {
 
     // Optional: Only available when OnlyOffice is enabled
     @Autowired(required = false)
-    private OnlyOfficeJwtService onlyOfficeJwtService;
+    private OnlyOfficeJwtService<? extends OnlyOfficeUserInfo> onlyOfficeJwtService;
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Upload a single document",
@@ -193,8 +189,11 @@ public class DocumentController {
             log.warn("OnlyOffice download attempted but OnlyOffice is not enabled");
             return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build());
         }
-
-        UUID tokenDocumentId = onlyOfficeJwtService.extractDocumentId(accessToken);
+        Map<String, Object> claims = onlyOfficeJwtService.validateAndDecode(accessToken);
+        if(claims == null) {
+            return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
+        }
+        UUID tokenDocumentId = onlyOfficeJwtService.extractDocumentId(claims);
         if (tokenDocumentId == null || !tokenDocumentId.equals(documentId)) {
             log.warn("Invalid or mismatched OnlyOffice access token for document {}", documentId);
             return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());

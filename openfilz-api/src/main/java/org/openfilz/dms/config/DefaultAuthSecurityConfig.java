@@ -52,7 +52,12 @@ public class DefaultAuthSecurityConfig {
             "/actuator/**",
             // GraphiQL
             "/graphiql",
-            "/graphiql/**"
+            "/graphiql/**",
+            // OnlyOffice DocumentServer endpoints (handled by OnlyOfficeSecurityConfig)
+            // These are called by OnlyOffice server, not by authenticated users
+            "/api/v1/documents/*/onlyoffice-download",
+            "/api/v1/onlyoffice/callback/*"
+            // NOTE: /api/v1/onlyoffice/config/* uses OAuth2 (called by frontend)
     };
 
     @Bean
