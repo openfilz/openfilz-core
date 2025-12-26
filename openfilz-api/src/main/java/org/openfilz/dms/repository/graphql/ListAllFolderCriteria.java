@@ -5,7 +5,7 @@ import org.openfilz.dms.utils.SqlUtils;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
-import static org.openfilz.dms.entity.SqlColumnMapping.*;
+import static org.openfilz.dms.entity.SqlColumnMapping.PARENT_ID;
 import static org.openfilz.dms.utils.SqlUtils.WHERE;
 
 @Component("allFolders")

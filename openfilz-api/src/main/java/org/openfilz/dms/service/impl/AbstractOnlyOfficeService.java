@@ -12,26 +12,27 @@ import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.AccessType;
 import org.openfilz.dms.repository.DocumentDAO;
 import org.openfilz.dms.service.*;
+import org.openfilz.dms.utils.ContentInfo;
+import org.openfilz.dms.utils.PathFilePart;
 import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferUtils;
+import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
-import java.io.PipedInputStream;
-import java.io.PipedOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.time.OffsetDateTime;
+import java.security.DigestOutputStream;
+import java.security.MessageDigest;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.Map;
 import java.util.UUID;
 
-import static org.openfilz.dms.enums.AuditAction.REPLACE_DOCUMENT_CONTENT;
-import static org.openfilz.dms.enums.DocumentType.FILE;
+import static org.openfilz.dms.service.ChecksumService.SHA_256;
 
 /**
  * Implementation of OnlyOfficeService for document editing with OnlyOffice DocumentServer.
@@ -45,7 +46,7 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
     private final OnlyOfficeJwtExtractor<T> jwtExtactor;
     private final DocumentDAO documentDAO;
     private final StorageService storageService;
-    private final AuditService auditService;
+    private final DocumentService documentService;
     private final WebClient.Builder webClientBuilder;
 
     @Override
@@ -249,109 +250,92 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
 
         return documentDAO.findById(documentId, AccessType.RW)
                 .switchIfEmpty(Mono.error(new IllegalArgumentException("Document not found: " + documentId)))
-                .flatMap(document -> downloadAndSaveDocument(document, callback.url()));
-    }
-
-    private Mono<Void> downloadAndSaveDocument(Document document, String downloadUrl) {
-        WebClient webClient = webClientBuilder.build();
-
-        return webClient.get()
-                .uri(downloadUrl)
-                .retrieve()
-                .bodyToFlux(DataBuffer.class)
-                .collectList()
-                .flatMap(dataBuffers -> {
-                    // Write to a temporary file first
-                    return Mono.fromCallable(() -> {
-                        Path tempFile = Files.createTempFile("onlyoffice_", "_" + document.getName());
-                        try (var outputStream = Files.newOutputStream(tempFile)) {
-                            for (DataBuffer buffer : dataBuffers) {
-                                byte[] bytes = new byte[buffer.readableByteCount()];
-                                buffer.read(bytes);
-                                outputStream.write(bytes);
-                                DataBufferUtils.release(buffer);
-                            }
-                        }
-                        return tempFile;
-                    }).subscribeOn(Schedulers.boundedElastic());
-                })
-                .flatMap(tempFile -> {
-                    // Update the document in storage
-                    return updateDocumentInStorage(document, tempFile);
-                })
-                .then(auditService.logAction(REPLACE_DOCUMENT_CONTENT, FILE, document.getId()))
-                .doOnSuccess(v -> log.info("Document {} saved from OnlyOffice", document.getId()))
-                .doOnError(e -> log.error("Failed to save document {} from OnlyOffice: {}", document.getId(), e.getMessage()));
-    }
-
-    private Mono<Void> updateDocumentInStorage(Document document, Path tempFile) {
-        return Mono.fromCallable(() -> {
-                    return Files.size(tempFile);
-                })
-                .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(newSize -> {
-                    // Delete old file and save new one
-                    return storageService.deleteFile(document.getStoragePath())
-                            .then(Mono.defer(() -> {
-                                // Read temp file and save to storage
-                                try {
-                                    PipedInputStream pis = new PipedInputStream();
-                                    PipedOutputStream pos = new PipedOutputStream(pis);
-
-                                    // Write temp file content to piped stream in background
-                                    Mono.fromRunnable(() -> {
-                                        try {
-                                            Files.copy(tempFile, pos);
-                                            pos.close();
-                                        } catch (IOException e) {
-                                            throw new RuntimeException("Failed to copy temp file", e);
-                                        } finally {
-                                            try {
-                                                Files.deleteIfExists(tempFile);
-                                            } catch (IOException ignored) {}
-                                        }
-                                    }).subscribeOn(Schedulers.boundedElastic()).subscribe();
-
-                                    // This is a simplified approach - in production, you'd want to use FilePart
-                                    // For now, we'll use the existing storage path approach
-                                    return copyTempFileToStorage(document, tempFile, newSize);
-                                } catch (IOException e) {
-                                    return Mono.error(e);
-                                }
-                            }));
-                });
-    }
-
-    private Mono<Void> copyTempFileToStorage(Document document, Path tempFile, long newSize) {
-        // For file system storage, we can directly copy
-        // For MinIO, we'd need to upload the file
-        return Mono.fromRunnable(() -> {
-                    try {
-                        // Get the base storage path from config
-                        String storagePath = document.getStoragePath();
-                        Path targetPath = Path.of(storagePath);
-
-                        // Ensure parent directories exist
-                        if (targetPath.getParent() != null) {
-                            Files.createDirectories(targetPath.getParent());
-                        }
-
-                        // Copy the temp file to storage location
-                        Files.copy(tempFile, targetPath, StandardCopyOption.REPLACE_EXISTING);
-
-                        // Delete temp file
-                        Files.deleteIfExists(tempFile);
-                    } catch (IOException e) {
-                        throw new RuntimeException("Failed to save document to storage", e);
-                    }
-                })
-                .subscribeOn(Schedulers.boundedElastic())
-                .then(Mono.defer(() -> {
-                    // Update document size and timestamp
-                    document.setSize(newSize);
-                    document.setUpdatedAt(OffsetDateTime.now());
-                    return documentDAO.update(document);
-                }))
+                .flatMap(document -> downloadAndSaveDocument(document, callback.url()))
                 .then();
     }
+
+    private Mono<Document> downloadAndSaveDocument(Document document, String downloadUrl) {
+        WebClient webClient = webClientBuilder.build();
+
+        // Stream to temp file while computing checksum - no full file in memory
+        return Mono.using(
+                // Resource supplier: create temp file
+                () -> Files.createTempFile("onlyoffice-", "-" + sanitizeFilename(document.getName())),
+                // Resource usage: stream download to temp file, compute checksum, then save
+                tempFile -> streamToTempFileWithChecksum(webClient, downloadUrl, tempFile)
+                        .flatMap(contentInfo -> {
+                            FilePart filePart = new PathFilePart("file", document.getName(), tempFile);
+                            return documentService.replaceDocumentContent(document.getId(), filePart, contentInfo);
+                        })
+                        .doOnSuccess(v -> log.info("Document {} saved from OnlyOffice", document.getId()))
+                        .doOnError(e -> {
+                            log.error("Failed to save document {} from OnlyOffice: {}", document.getId(), e.getMessage());
+                            log.error("Exception while saving document from OnlyOffice", e);
+                        }),
+                // Cleanup: delete temp file
+                tempFile -> {
+                    try {
+                        Files.deleteIfExists(tempFile);
+                    } catch (IOException e) {
+                        log.warn("Failed to delete temp file: {}", tempFile, e);
+                    }
+                }
+        );
+    }
+
+    /**
+     * Streams content from URL to a temp file while computing checksum in a single pass.
+     * Uses DigestOutputStream to compute checksum during write - no buffering of entire file.
+     * DataBufferUtils.write() handles buffer lifecycle (release) properly.
+     */
+    private Mono<ContentInfo> streamToTempFileWithChecksum(WebClient webClient, String downloadUrl, Path tempFile) {
+        return Mono.fromCallable(() -> MessageDigest.getInstance(SHA_256))
+                .flatMap(digest -> Mono.usingWhen(
+                        // Resource: create DigestOutputStream wrapping file output
+                        Mono.fromCallable(() -> new DigestOutputStream(Files.newOutputStream(tempFile), digest))
+                                .subscribeOn(Schedulers.boundedElastic()),
+                        // Use resource: stream download through DigestOutputStream
+                        outputStream -> {
+                            var dataBufferFlux = webClient.get()
+                                    .uri(downloadUrl)
+                                    .retrieve()
+                                    .bodyToFlux(DataBuffer.class);
+
+                            // DataBufferUtils.write handles buffer release internally
+                            return DataBufferUtils.write(dataBufferFlux, outputStream)
+                                    .publishOn(Schedulers.boundedElastic())
+                                    .then(Mono.fromCallable(() -> {
+                                        outputStream.flush();
+                                        long length = Files.size(tempFile);
+                                        String checksum = HexFormat.of().formatHex(digest.digest());
+                                        return new ContentInfo(length, checksum);
+                                    }));
+                        },
+                        // Cleanup on success
+                        outputStream -> Mono.fromRunnable(() -> closeQuietly(outputStream))
+                                .subscribeOn(Schedulers.boundedElastic()),
+                        // Cleanup on error
+                        (outputStream, err) -> Mono.fromRunnable(() -> closeQuietly(outputStream))
+                                .subscribeOn(Schedulers.boundedElastic()),
+                        // Cleanup on cancel
+                        outputStream -> Mono.fromRunnable(() -> closeQuietly(outputStream))
+                                .subscribeOn(Schedulers.boundedElastic())
+                ));
+    }
+
+    private void closeQuietly(java.io.OutputStream outputStream) {
+        try {
+            outputStream.close();
+        } catch (IOException e) {
+            log.warn("Failed to close output stream", e);
+        }
+    }
+
+    private String sanitizeFilename(String filename) {
+        // Remove characters that are invalid in temp file names
+        return filename.replaceAll("[^a-zA-Z0-9._-]", "_");
+    }
+
+
+
 }

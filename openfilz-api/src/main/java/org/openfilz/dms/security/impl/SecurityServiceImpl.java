@@ -1,6 +1,5 @@
 package org.openfilz.dms.security.impl;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.DefaultRolesNoWormCondition;
 import org.openfilz.dms.config.OnlyOfficeProperties;

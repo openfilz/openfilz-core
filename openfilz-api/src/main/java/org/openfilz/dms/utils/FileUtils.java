@@ -1,7 +1,19 @@
 package org.openfilz.dms.utils;
 
 import lombok.experimental.UtilityClass;
+import org.jetbrains.annotations.NotNull;
 import org.openfilz.dms.enums.DocumentType;
+import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.core.io.buffer.DataBufferUtils;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+
+import java.security.MessageDigest;
+import java.util.HashMap;
+import java.util.HexFormat;
+import java.util.Map;
+
+import static org.openfilz.dms.service.ChecksumService.HASH_SHA256_KEY;
 
 @UtilityClass
 public class FileUtils {
@@ -23,6 +35,48 @@ public class FileUtils {
             return name.substring(endIndex + 1);
         }
         return "";
+    }
+
+    public static Map<String, Object> getMetadataWithChecksum(Map<String, Object> metadata, String checksum) {
+        Map<String, Object> newMap;
+        if(metadata == null) {
+            newMap = Map.of(HASH_SHA256_KEY, checksum);
+        } else {
+            newMap = new HashMap<>(metadata);
+            newMap.put(HASH_SHA256_KEY, checksum);
+        }
+        return newMap;
+    }
+
+
+    public static Mono<ContentInfo> computeLengthAndChecksum(
+            Flux<DataBuffer> flux, String algorithm) {
+
+        return Mono.fromCallable(() -> MessageDigest.getInstance(algorithm))
+                .flatMap(digest ->
+                        flux.reduce(
+                                new long[]{0L}, // length[0]
+                                (length, buffer) -> {
+                                    try {
+                                        // Update digest with buffer content
+                                        int readable = buffer.readableByteCount();
+                                        length[0] += readable;
+                                        byte[] bytes = new byte[readable];
+                                        buffer.read(bytes); // Read data from DataBuffer into the byte array
+                                        digest.update(bytes);
+                                        return length;
+                                    } finally {
+                                        // CRITICAL: Release buffer to prevent memory leaks
+                                        DataBufferUtils.release(buffer);
+                                    }
+                                }
+                        ).map(length ->
+                                new ContentInfo(
+                                        length[0],
+                                        HexFormat.of().formatHex(digest.digest())
+                                )
+                        )
+                );
     }
 
 }

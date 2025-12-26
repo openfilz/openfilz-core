@@ -33,6 +33,8 @@ public class OnlyOfficeAuthenticationManager implements ReactiveAuthenticationMa
             return Mono.error(new BadCredentialsException("Missing OnlyOffice access token"));
         }
 
+        log.debug("Received OnlyOffice JWT token: {}", rawToken);
+
         Map<String, Object> claims = jwtService.validateAndDecode(rawToken);
         // Validate token
         if (claims == null) {

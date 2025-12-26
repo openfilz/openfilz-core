@@ -2,7 +2,6 @@
 package org.openfilz.dms.config;
 
 import lombok.RequiredArgsConstructor;
-
 import org.openfilz.dms.security.SecurityService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;

@@ -2,7 +2,6 @@ package org.openfilz.dms.controller.rest;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -46,7 +45,6 @@ public class OnlyOfficeController implements UserInfoService {
             summary = "Get OnlyOffice editor configuration",
             description = "Generates the configuration object needed to initialize the OnlyOffice editor, including the JWT token for authentication."
     )
-    @SecurityRequirement(name = "keycloak_auth")
     public Mono<OnlyOfficeConfigResponse> getEditorConfig(
             @PathVariable UUID documentId,
             @Parameter(description = "Whether the user can edit the document")

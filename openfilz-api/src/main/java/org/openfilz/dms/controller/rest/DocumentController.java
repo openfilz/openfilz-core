@@ -18,6 +18,7 @@ import org.openfilz.dms.dto.response.*;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.service.DocumentService;
 import org.openfilz.dms.service.OnlyOfficeJwtService;
+import org.openfilz.dms.utils.ContentInfo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -126,7 +127,7 @@ public class DocumentController {
             @PathVariable UUID documentId,
             @RequestPart("file") Mono<FilePart> newFilePartMono,
             @Parameter(hidden = true) @RequestHeader(name = "Content-Length", required = false) Long contentLength) {
-        return newFilePartMono.flatMap(filePart -> documentService.replaceDocumentContent(documentId, filePart, contentLength))
+        return newFilePartMono.flatMap(filePart -> documentService.replaceDocumentContent(documentId, filePart, new ContentInfo(contentLength, null)))
                 .map(doc -> new ElementInfo(doc.getId(), doc.getName(), doc.getType().name()))
                 .map(ResponseEntity::ok);
     }

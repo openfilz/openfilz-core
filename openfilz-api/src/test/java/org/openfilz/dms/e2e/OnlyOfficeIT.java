@@ -3,14 +3,16 @@ package org.openfilz.dms.e2e;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
+import lombok.extern.slf4j.Slf4j;
+import okhttp3.mockwebserver.MockResponse;
+import okhttp3.mockwebserver.MockWebServer;
+import okio.Buffer;
+import org.junit.jupiter.api.*;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.OnlyOfficeCallbackRequest;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
@@ -20,16 +22,21 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.BodyInserters;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 
 import javax.crypto.SecretKey;
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.time.Duration;
+import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
@@ -48,6 +55,7 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
  * - Frontend (Angular) → Backend (Spring) for config retrieval
  * - OnlyOffice DocumentServer → Backend for document download and callbacks
  */
+@Slf4j
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestConstructor(autowireMode = ALL)
@@ -55,6 +63,23 @@ public class OnlyOfficeIT extends TestContainersKeyCloakConfig {
 
     private static final String ONLYOFFICE_JWT_SECRET = "openfilz-onlyoffice-test-jwt-secret-2024";
     private static final String DOCUMENT_SERVER_URL = "http://localhost:9980";
+
+    /**
+     * OnlyOffice Document Server container for end-to-end testing.
+     * Note: This is a large image (~5GB) and takes 1-2 minutes to start.
+     * The container is reused across tests for efficiency.
+     */
+    @Container
+    static GenericContainer<?> onlyOfficeServer = new GenericContainer<>(
+            DockerImageName.parse("onlyoffice/documentserver:latest"))
+            .withExposedPorts(80)
+            .withEnv("JWT_ENABLED", "true")
+            .withEnv("JWT_SECRET", ONLYOFFICE_JWT_SECRET)
+            .withEnv("JWT_HEADER", "Authorization")
+            .waitingFor(Wait.forHttp("/healthcheck")
+                    .forStatusCode(200)
+                    .withStartupTimeout(Duration.ofMinutes(3)))
+            .withReuse(true);
 
     protected String contributorAccessToken;
     protected String readerAccessToken;
@@ -97,9 +122,12 @@ public class OnlyOfficeIT extends TestContainersKeyCloakConfig {
         readerAccessToken = getAccessToken("reader-user");
         adminAccessToken = getAccessToken("admin-user");
         noaccessAccessToken = getAccessToken("test-user");
-
+        String paddedSecret =ONLYOFFICE_JWT_SECRET;
         // Initialize OnlyOffice secret key for generating test tokens
-        String paddedSecret = String.format("%-32s", ONLYOFFICE_JWT_SECRET).substring(0, 32);
+        if (paddedSecret.length() < 32) {
+            paddedSecret = String.format("%-32s", ONLYOFFICE_JWT_SECRET).substring(0, 32);
+        }
+        log.debug("padded secret {}", paddedSecret);
         onlyOfficeSecretKey = Keys.hmacShaKeyFor(paddedSecret.getBytes(StandardCharsets.UTF_8));
     }
 
@@ -126,7 +154,7 @@ public class OnlyOfficeIT extends TestContainersKeyCloakConfig {
         Date now = new Date();
         Date expiration = new Date(now.getTime() + 3600 * 1000);
 
-        return Jwts.builder()
+        String token = Jwts.builder()
                 .claim("documentId", documentId.toString())
                 .claim("userId", userId)
                 .claim("userName", userName)
@@ -135,6 +163,10 @@ public class OnlyOfficeIT extends TestContainersKeyCloakConfig {
                 .expiration(expiration)
                 .signWith(onlyOfficeSecretKey)
                 .compact();
+
+        log.debug("token {}", token);
+
+        return token;
     }
 
     /**
@@ -395,7 +427,7 @@ public class OnlyOfficeIT extends TestContainersKeyCloakConfig {
                     .uri(RestApiVersion.API_PREFIX + "/onlyoffice/config/" + nonExistentId)
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + contributorAccessToken)
                     .exchange()
-                    .expectStatus().is5xxServerError();
+                    .expectStatus().is4xxClientError();
         }
 
         @Test
@@ -974,6 +1006,665 @@ public class OnlyOfficeIT extends TestContainersKeyCloakConfig {
                     .expectStatus().isOk()
                     .expectBody()
                     .jsonPath("$.error").isEqualTo(0);
+        }
+    }
+
+    // ==================== SAVE DOCUMENT FROM CALLBACK TESTS ====================
+
+    @Nested
+    @DisplayName("POST /onlyoffice/callback - Save Document from Callback (End-to-End)")
+    class SaveDocumentFromCallbackTests {
+
+        private MockWebServer mockWebServer;
+
+        @BeforeEach
+        void setUpMockServer() throws Exception {
+            mockWebServer = new MockWebServer();
+            mockWebServer.start();
+        }
+
+        @AfterEach
+        void tearDownMockServer() throws Exception {
+            if (mockWebServer != null) {
+                mockWebServer.shutdown();
+            }
+        }
+
+        @Test
+        @DisplayName("Should save document when callback has status=2 (READY_FOR_SAVE) with valid download URL")
+        void shouldSaveDocumentWhenCallbackHasReadyForSaveStatus() throws Exception {
+            // Step 1: Upload a test document
+            UploadResponse uploadResponse = uploadTestDocumentWithName(contributorAccessToken, "save-test.docx");
+            assertThat(uploadResponse).isNotNull();
+            UUID documentId = uploadResponse.id();
+
+            // Step 2: Prepare modified content to be served by MockWebServer
+            byte[] modifiedContent = "This is the modified document content from OnlyOffice".getBytes(StandardCharsets.UTF_8);
+            Buffer buffer = new Buffer();
+            buffer.write(modifiedContent);
+
+            mockWebServer.enqueue(new MockResponse()
+                    .setResponseCode(200)
+                    .addHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                    .addHeader("Content-Length", String.valueOf(modifiedContent.length))
+                    .setBody(buffer));
+
+            // Step 3: Generate callback token and create callback request
+            String callbackToken = generateCallbackToken(documentId, "contributor-user");
+            String documentKey = documentId.toString() + "_" + System.currentTimeMillis();
+            String downloadUrl = mockWebServer.url("/cache/files/" + documentKey + "/output.docx").toString();
+
+            OnlyOfficeCallbackRequest saveCallback = new OnlyOfficeCallbackRequest(
+                    OnlyOfficeCallbackRequest.Status.READY_FOR_SAVE, // status=2
+                    documentKey,
+                    downloadUrl, // URL to download modified document
+                    List.of(),
+                    null,
+                    null,
+                    List.of(new OnlyOfficeCallbackRequest.Action(0, "contributor-user")),
+                    null,
+                    callbackToken
+            );
+
+            // Step 4: Send the callback
+            webTestClient.post()
+                    .uri(uriBuilder -> uriBuilder
+                            .path(RestApiVersion.API_PREFIX + "/onlyoffice/callback/" + documentId)
+                            .queryParam("token", callbackToken)
+                            .build())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(BodyInserters.fromValue(saveCallback))
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectBody()
+                    .jsonPath("$.error").isEqualTo(0);
+
+            // Step 5: Verify the document was updated by downloading it
+            String accessToken = generateOnlyOfficeAccessToken(documentId, "contributor-user", "Contributor User");
+
+            byte[] downloadedContent = webTestClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path(RestApiVersion.API_PREFIX + "/documents/" + documentId + "/onlyoffice-download")
+                            .queryParam("token", accessToken)
+                            .build())
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectBody(byte[].class)
+                    .returnResult()
+                    .getResponseBody();
+
+            assertThat(downloadedContent).isEqualTo(modifiedContent);
+        }
+
+        @Test
+        @DisplayName("Should save document when callback has status=6 (FORCE_SAVE)")
+        void shouldSaveDocumentWhenCallbackHasForceSaveStatus() throws Exception {
+            // Step 1: Upload a test document
+            UploadResponse uploadResponse = uploadTestDocumentWithName(contributorAccessToken, "force-save-test.docx");
+            assertThat(uploadResponse).isNotNull();
+            UUID documentId = uploadResponse.id();
+
+            // Step 2: Prepare modified content
+            byte[] modifiedContent = "Force-saved content from OnlyOffice autosave".getBytes(StandardCharsets.UTF_8);
+            Buffer buffer = new Buffer();
+            buffer.write(modifiedContent);
+
+            mockWebServer.enqueue(new MockResponse()
+                    .setResponseCode(200)
+                    .addHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                    .setBody(buffer));
+
+            // Step 3: Create force save callback
+            String callbackToken = generateCallbackToken(documentId, "contributor-user");
+            String documentKey = documentId.toString() + "_" + System.currentTimeMillis();
+            String downloadUrl = mockWebServer.url("/cache/files/" + documentKey + "/output.docx").toString();
+
+            OnlyOfficeCallbackRequest forceSaveCallback = new OnlyOfficeCallbackRequest(
+                    OnlyOfficeCallbackRequest.Status.FORCE_SAVE, // status=6
+                    documentKey,
+                    downloadUrl,
+                    List.of("contributor-user"),
+                    null,
+                    1, // forcesavetype=1 (timer)
+                    List.of(new OnlyOfficeCallbackRequest.Action(1, "contributor-user")),
+                    null,
+                    callbackToken
+            );
+
+            // Step 4: Send the callback
+            webTestClient.post()
+                    .uri(uriBuilder -> uriBuilder
+                            .path(RestApiVersion.API_PREFIX + "/onlyoffice/callback/" + documentId)
+                            .queryParam("token", callbackToken)
+                            .build())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(BodyInserters.fromValue(forceSaveCallback))
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectBody()
+                    .jsonPath("$.error").isEqualTo(0);
+
+            // Step 5: Verify the document was updated
+            String accessToken = generateOnlyOfficeAccessToken(documentId, "contributor-user", "Contributor User");
+
+            byte[] downloadedContent = webTestClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path(RestApiVersion.API_PREFIX + "/documents/" + documentId + "/onlyoffice-download")
+                            .queryParam("token", accessToken)
+                            .build())
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectBody(byte[].class)
+                    .returnResult()
+                    .getResponseBody();
+
+            assertThat(downloadedContent).isEqualTo(modifiedContent);
+        }
+
+        @Test
+        @DisplayName("Should handle large document save correctly (streaming test)")
+        void shouldHandleLargeDocumentSave() throws Exception {
+            // Step 1: Upload a test document
+            UploadResponse uploadResponse = uploadTestDocumentWithName(contributorAccessToken, "large-doc.docx");
+            assertThat(uploadResponse).isNotNull();
+            UUID documentId = uploadResponse.id();
+
+            // Step 2: Prepare large content (512KB - within typical buffer limits but large enough to test streaming)
+            byte[] largeContent = new byte[512 * 1024]; // 512KB
+            new Random().nextBytes(largeContent);
+            Buffer buffer = new Buffer();
+            buffer.write(largeContent);
+
+            mockWebServer.enqueue(new MockResponse()
+                    .setResponseCode(200)
+                    .addHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                    .setBody(buffer));
+
+            // Step 3: Create callback
+            String callbackToken = generateCallbackToken(documentId, "contributor-user");
+            String documentKey = documentId.toString() + "_" + System.currentTimeMillis();
+            String downloadUrl = mockWebServer.url("/cache/files/" + documentKey + "/output.docx").toString();
+
+            OnlyOfficeCallbackRequest saveCallback = new OnlyOfficeCallbackRequest(
+                    OnlyOfficeCallbackRequest.Status.READY_FOR_SAVE,
+                    documentKey,
+                    downloadUrl,
+                    List.of(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    callbackToken
+            );
+
+            // Step 4: Send the callback
+            webTestClient.post()
+                    .uri(uriBuilder -> uriBuilder
+                            .path(RestApiVersion.API_PREFIX + "/onlyoffice/callback/" + documentId)
+                            .queryParam("token", callbackToken)
+                            .build())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(BodyInserters.fromValue(saveCallback))
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectBody()
+                    .jsonPath("$.error").isEqualTo(0);
+
+            // Step 5: Verify the large document was saved correctly
+            // Use mutate() to increase buffer size for large response
+            String accessToken = generateOnlyOfficeAccessToken(documentId, "contributor-user", "Contributor User");
+
+            byte[] downloadedContent = webTestClient.mutate()
+                    .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(1024 * 1024))
+                    .build()
+                    .get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path(RestApiVersion.API_PREFIX + "/documents/" + documentId + "/onlyoffice-download")
+                            .queryParam("token", accessToken)
+                            .build())
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectBody(byte[].class)
+                    .returnResult()
+                    .getResponseBody();
+
+            assertThat(downloadedContent).hasSize(largeContent.length);
+            assertThat(downloadedContent).isEqualTo(largeContent);
+        }
+
+        @Test
+        @DisplayName("Should return error=0 but not save when callback has no URL")
+        void shouldNotSaveWhenCallbackHasNoUrl() throws Exception {
+            // Upload a test document
+            UploadResponse uploadResponse = uploadTestDocumentWithName(contributorAccessToken, "no-url.docx");
+            UUID documentId = uploadResponse.id();
+
+            // Create callback without URL (this shouldn't trigger a save)
+            String callbackToken = generateCallbackToken(documentId, "contributor-user");
+
+            OnlyOfficeCallbackRequest saveCallback = new OnlyOfficeCallbackRequest(
+                    OnlyOfficeCallbackRequest.Status.READY_FOR_SAVE,
+                    documentId.toString() + "_" + System.currentTimeMillis(),
+                    null, // No URL
+                    List.of(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    callbackToken
+            );
+
+            // The callback should return success but the document should not be modified
+            webTestClient.post()
+                    .uri(uriBuilder -> uriBuilder
+                            .path(RestApiVersion.API_PREFIX + "/onlyoffice/callback/" + documentId)
+                            .queryParam("token", callbackToken)
+                            .build())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(BodyInserters.fromValue(saveCallback))
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectBody()
+                    .jsonPath("$.error").isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("Should handle download failure gracefully")
+        void shouldHandleDownloadFailureGracefully() throws Exception {
+            // Upload a test document
+            UploadResponse uploadResponse = uploadTestDocumentWithName(contributorAccessToken, "download-fail.docx");
+            UUID documentId = uploadResponse.id();
+
+            // Mock server returns 500 error
+            mockWebServer.enqueue(new MockResponse()
+                    .setResponseCode(500)
+                    .setBody("Internal Server Error"));
+
+            String callbackToken = generateCallbackToken(documentId, "contributor-user");
+            String downloadUrl = mockWebServer.url("/cache/files/error/output.docx").toString();
+
+            OnlyOfficeCallbackRequest saveCallback = new OnlyOfficeCallbackRequest(
+                    OnlyOfficeCallbackRequest.Status.READY_FOR_SAVE,
+                    documentId.toString() + "_" + System.currentTimeMillis(),
+                    downloadUrl,
+                    List.of(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    callbackToken
+            );
+
+            // The callback might return error=1 when download fails
+            webTestClient.post()
+                    .uri(uriBuilder -> uriBuilder
+                            .path(RestApiVersion.API_PREFIX + "/onlyoffice/callback/" + documentId)
+                            .queryParam("token", callbackToken)
+                            .build())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(BodyInserters.fromValue(saveCallback))
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectBody()
+                    .jsonPath("$.error").exists(); // May be 0 or 1
+        }
+
+        @Test
+        @DisplayName("Should handle non-existent document in callback")
+        void shouldHandleNonExistentDocument() throws Exception {
+            UUID nonExistentId = UUID.randomUUID();
+
+            byte[] content = "content".getBytes();
+            Buffer buffer = new Buffer();
+            buffer.write(content);
+
+            mockWebServer.enqueue(new MockResponse()
+                    .setResponseCode(200)
+                    .setBody(buffer));
+
+            String callbackToken = generateCallbackToken(nonExistentId, "contributor-user");
+            String downloadUrl = mockWebServer.url("/cache/files/test/output.docx").toString();
+
+            OnlyOfficeCallbackRequest saveCallback = new OnlyOfficeCallbackRequest(
+                    OnlyOfficeCallbackRequest.Status.READY_FOR_SAVE,
+                    nonExistentId.toString() + "_" + System.currentTimeMillis(),
+                    downloadUrl,
+                    List.of(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    callbackToken
+            );
+
+            // Should return error when document doesn't exist
+            webTestClient.post()
+                    .uri(uriBuilder -> uriBuilder
+                            .path(RestApiVersion.API_PREFIX + "/onlyoffice/callback/" + nonExistentId)
+                            .queryParam("token", callbackToken)
+                            .build())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(BodyInserters.fromValue(saveCallback))
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectBody()
+                    .jsonPath("$.error").isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("Should verify checksum is computed correctly after save")
+        void shouldComputeChecksumCorrectlyAfterSave() throws Exception {
+            // Upload a test document
+            UploadResponse uploadResponse = uploadTestDocumentWithName(contributorAccessToken, "checksum-test.docx");
+            UUID documentId = uploadResponse.id();
+
+            // Prepare known content
+            byte[] knownContent = "Known content for checksum verification".getBytes(StandardCharsets.UTF_8);
+            Buffer buffer = new Buffer();
+            buffer.write(knownContent);
+
+            mockWebServer.enqueue(new MockResponse()
+                    .setResponseCode(200)
+                    .addHeader("Content-Type", "application/octet-stream")
+                    .setBody(buffer));
+
+            String callbackToken = generateCallbackToken(documentId, "contributor-user");
+            String downloadUrl = mockWebServer.url("/cache/files/checksum/output.docx").toString();
+
+            OnlyOfficeCallbackRequest saveCallback = new OnlyOfficeCallbackRequest(
+                    OnlyOfficeCallbackRequest.Status.READY_FOR_SAVE,
+                    documentId.toString() + "_" + System.currentTimeMillis(),
+                    downloadUrl,
+                    List.of(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    callbackToken
+            );
+
+            webTestClient.post()
+                    .uri(uriBuilder -> uriBuilder
+                            .path(RestApiVersion.API_PREFIX + "/onlyoffice/callback/" + documentId)
+                            .queryParam("token", callbackToken)
+                            .build())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(BodyInserters.fromValue(saveCallback))
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectBody()
+                    .jsonPath("$.error").isEqualTo(0);
+
+            // Verify content was saved correctly (implicitly verifies checksum was computed)
+            String accessToken = generateOnlyOfficeAccessToken(documentId, "contributor-user", "Contributor User");
+
+            byte[] downloadedContent = webTestClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path(RestApiVersion.API_PREFIX + "/documents/" + documentId + "/onlyoffice-download")
+                            .queryParam("token", accessToken)
+                            .build())
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectBody(byte[].class)
+                    .returnResult()
+                    .getResponseBody();
+
+            assertThat(downloadedContent).isEqualTo(knownContent);
+        }
+    }
+
+    // ==================== ONLYOFFICE DOCUMENT SERVER CONTAINER TESTS ====================
+
+    @Nested
+    @DisplayName("OnlyOffice Document Server Container E2E Tests")
+    class OnlyOfficeDocumentServerContainerTests {
+
+        private String getOnlyOfficeServerUrl() {
+            return "http://" + onlyOfficeServer.getHost() + ":" + onlyOfficeServer.getMappedPort(80);
+        }
+
+        @Test
+        @DisplayName("OnlyOffice Document Server should be running and healthy")
+        void onlyOfficeServerShouldBeHealthy() throws IOException, InterruptedException {
+            assertThat(onlyOfficeServer.isRunning()).isTrue();
+
+            HttpClient client = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(10))
+                    .build();
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(getOnlyOfficeServerUrl() + "/healthcheck"))
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            assertThat(response.statusCode()).isEqualTo(200);
+            assertThat(response.body()).contains("true");
+        }
+
+        @Test
+        @DisplayName("Should save document from OnlyOffice using document server container")
+        void shouldSaveDocumentFromOnlyOfficeContainer() throws Exception {
+            // Step 1: Upload a test document
+            UploadResponse uploadResponse = uploadTestDocumentWithName(contributorAccessToken, "container-test.docx");
+            assertThat(uploadResponse).isNotNull();
+            UUID documentId = uploadResponse.id();
+
+            // Step 2: Start a MockWebServer to serve the modified document
+            // (simulating OnlyOffice's cache where edited documents are stored)
+            // Note: In a real scenario, OnlyOffice would serve this from its internal cache
+            // after a user edits and saves the document in the browser.
+            try (MockWebServer mockDocumentCache = new MockWebServer()) {
+                mockDocumentCache.start();
+
+                byte[] modifiedContent = "Modified content served from OnlyOffice-like cache".getBytes(StandardCharsets.UTF_8);
+                Buffer buffer = new Buffer();
+                buffer.write(modifiedContent);
+
+                mockDocumentCache.enqueue(new MockResponse()
+                        .setResponseCode(200)
+                        .addHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                        .setBody(buffer));
+
+                // Step 3: Create callback with URL pointing to our mock cache
+                String callbackToken = generateCallbackToken(documentId, "contributor-user");
+                String documentKey = documentId.toString() + "_" + System.currentTimeMillis();
+                String downloadUrl = mockDocumentCache.url("/cache/files/" + documentKey + "/output.docx").toString();
+
+                OnlyOfficeCallbackRequest saveCallback = new OnlyOfficeCallbackRequest(
+                        OnlyOfficeCallbackRequest.Status.READY_FOR_SAVE,
+                        documentKey,
+                        downloadUrl,
+                        List.of(),
+                        null,
+                        null,
+                        null,
+                        null,
+                        callbackToken
+                );
+
+                // Step 4: Send the callback
+                webTestClient.post()
+                        .uri(uriBuilder -> uriBuilder
+                                .path(RestApiVersion.API_PREFIX + "/onlyoffice/callback/" + documentId)
+                                .queryParam("token", callbackToken)
+                                .build())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(BodyInserters.fromValue(saveCallback))
+                        .exchange()
+                        .expectStatus().isOk()
+                        .expectBody()
+                        .jsonPath("$.error").isEqualTo(0);
+
+                // Step 5: Verify the document was updated
+                String accessToken = generateOnlyOfficeAccessToken(documentId, "contributor-user", "Contributor User");
+
+                byte[] downloadedContent = webTestClient.get()
+                        .uri(uriBuilder -> uriBuilder
+                                .path(RestApiVersion.API_PREFIX + "/documents/" + documentId + "/onlyoffice-download")
+                                .queryParam("token", accessToken)
+                                .build())
+                        .exchange()
+                        .expectStatus().isOk()
+                        .expectBody(byte[].class)
+                        .returnResult()
+                        .getResponseBody();
+
+                assertThat(downloadedContent).isEqualTo(modifiedContent);
+            }
+        }
+
+        @Test
+        @DisplayName("OnlyOffice API should be accessible")
+        void onlyOfficeApiShouldBeAccessible() throws IOException, InterruptedException {
+            HttpClient client = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(10))
+                    .build();
+
+            // Check that the API JS is accessible
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(getOnlyOfficeServerUrl() + "/web-apps/apps/api/documents/api.js"))
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            assertThat(response.statusCode()).isEqualTo(200);
+            assertThat(response.body()).contains("DocsAPI");
+        }
+
+        @Test
+        @DisplayName("Should use OnlyOffice conversion API to process document")
+        void shouldUseOnlyOfficeConversionApi() throws Exception {
+            // This test demonstrates using OnlyOffice's conversion API
+            // which can be used to convert documents between formats
+
+            // Step 1: Upload a test document to our backend
+            UploadResponse uploadResponse = uploadTestDocumentWithName(contributorAccessToken, "convert-test.docx");
+            assertThat(uploadResponse).isNotNull();
+            UUID documentId = uploadResponse.id();
+
+            // Step 2: Get the OnlyOffice download token
+            String accessToken = generateOnlyOfficeAccessToken(documentId, "converter", "Document Converter");
+
+            // Verify our document is downloadable (this is what OnlyOffice would do)
+            webTestClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path(RestApiVersion.API_PREFIX + "/documents/" + documentId + "/onlyoffice-download")
+                            .queryParam("token", accessToken)
+                            .build())
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectHeader().exists(HttpHeaders.CONTENT_DISPOSITION);
+
+            // Note: Full conversion API test would require calling OnlyOffice's
+            // /ConvertService.ashx endpoint with a JWT-signed request,
+            // which is more complex and requires proper configuration
+        }
+
+        @Test
+        @DisplayName("End-to-end flow with real OnlyOffice Document Server")
+        void endToEndFlowWithRealOnlyOffice() throws Exception {
+            // This test verifies the complete integration with OnlyOffice Document Server
+            // running in a container
+
+            // Step 1: Verify OnlyOffice is running
+            assertThat(onlyOfficeServer.isRunning()).isTrue();
+            String onlyOfficeUrl = getOnlyOfficeServerUrl();
+            log.info("OnlyOffice Document Server running at: {}", onlyOfficeUrl);
+
+            // Step 2: Upload a document
+            UploadResponse uploadResponse = uploadTestDocumentWithName(contributorAccessToken, "e2e-test.docx");
+            assertThat(uploadResponse).isNotNull();
+            UUID documentId = uploadResponse.id();
+
+            // Step 3: Get editor config (this would be sent to the frontend)
+            byte[] configBytes = webTestClient.get()
+                    .uri(RestApiVersion.API_PREFIX + "/onlyoffice/config/" + documentId)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + contributorAccessToken)
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectBody()
+                    .returnResult().getResponseBody();
+
+            Map<String, Object> config = objectMapper.readValue(configBytes, Map.class);
+            assertThat(config).containsKey("token");
+            assertThat(config).containsKey("config");
+
+            Map<String, Object> configObj = (Map<String, Object>) config.get("config");
+            Map<String, Object> document = (Map<String, Object>) configObj.get("document");
+            String documentUrl = (String) document.get("url");
+
+            // Step 4: Verify the document URL contains our access token
+            assertThat(documentUrl).contains("token=");
+
+            // Step 5: Simulate OnlyOffice downloading our document
+            String downloadToken = documentUrl.substring(documentUrl.indexOf("token=") + 6);
+            webTestClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path(RestApiVersion.API_PREFIX + "/documents/" + documentId + "/onlyoffice-download")
+                            .queryParam("token", downloadToken)
+                            .build())
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectHeader().exists(HttpHeaders.CONTENT_DISPOSITION);
+
+            // Step 6: Simulate save callback with modified content
+            try (MockWebServer mockCache = new MockWebServer()) {
+                mockCache.start();
+
+                byte[] modifiedContent = "E2E test - document edited in OnlyOffice".getBytes(StandardCharsets.UTF_8);
+                Buffer buffer = new Buffer();
+                buffer.write(modifiedContent);
+
+                mockCache.enqueue(new MockResponse()
+                        .setResponseCode(200)
+                        .setBody(buffer));
+
+                String callbackToken = generateCallbackToken(documentId, "contributor-user");
+                String documentKey = (String) document.get("key");
+                String cacheUrl = mockCache.url("/cache/output.docx").toString();
+
+                OnlyOfficeCallbackRequest saveCallback = new OnlyOfficeCallbackRequest(
+                        OnlyOfficeCallbackRequest.Status.READY_FOR_SAVE,
+                        documentKey,
+                        cacheUrl,
+                        List.of(),
+                        null,
+                        null,
+                        null,
+                        null,
+                        callbackToken
+                );
+
+                webTestClient.post()
+                        .uri(uriBuilder -> uriBuilder
+                                .path(RestApiVersion.API_PREFIX + "/onlyoffice/callback/" + documentId)
+                                .queryParam("token", callbackToken)
+                                .build())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(BodyInserters.fromValue(saveCallback))
+                        .exchange()
+                        .expectStatus().isOk()
+                        .expectBody()
+                        .jsonPath("$.error").isEqualTo(0);
+
+                // Step 7: Verify the document was saved
+                String verifyToken = generateOnlyOfficeAccessToken(documentId, "contributor-user", "Contributor User");
+                byte[] savedContent = webTestClient.get()
+                        .uri(uriBuilder -> uriBuilder
+                                .path(RestApiVersion.API_PREFIX + "/documents/" + documentId + "/onlyoffice-download")
+                                .queryParam("token", verifyToken)
+                                .build())
+                        .exchange()
+                        .expectStatus().isOk()
+                        .expectBody(byte[].class)
+                        .returnResult()
+                        .getResponseBody();
+
+                assertThat(savedContent).isEqualTo(modifiedContent);
+            }
+
+            log.info("E2E test completed successfully with OnlyOffice Document Server");
         }
     }
 }

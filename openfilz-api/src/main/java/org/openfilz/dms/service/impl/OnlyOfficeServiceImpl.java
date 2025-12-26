@@ -4,7 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.OnlyOfficeProperties;
 import org.openfilz.dms.dto.response.OnlyOfficeUserInfo;
 import org.openfilz.dms.repository.DocumentDAO;
-import org.openfilz.dms.service.AuditService;
+import org.openfilz.dms.service.DocumentService;
 import org.openfilz.dms.service.OnlyOfficeJwtExtractor;
 import org.openfilz.dms.service.OnlyOfficeJwtService;
 import org.openfilz.dms.service.StorageService;
@@ -24,7 +24,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 })
 public class OnlyOfficeServiceImpl extends AbstractOnlyOfficeService<OnlyOfficeUserInfo> {
 
-    public OnlyOfficeServiceImpl(OnlyOfficeProperties properties, OnlyOfficeJwtService<OnlyOfficeUserInfo> jwtService, OnlyOfficeJwtExtractor<OnlyOfficeUserInfo> jwtExtactor, DocumentDAO documentDAO, StorageService storageService, AuditService auditService, WebClient.Builder webClientBuilder) {
-        super(properties, jwtService, jwtExtactor, documentDAO, storageService, auditService, webClientBuilder);
+    public OnlyOfficeServiceImpl(OnlyOfficeProperties properties, OnlyOfficeJwtService<OnlyOfficeUserInfo> jwtService, OnlyOfficeJwtExtractor<OnlyOfficeUserInfo> jwtExtactor, DocumentDAO documentDAO, StorageService storageService, DocumentService documentService, WebClient.Builder webClientBuilder) {
+        super(properties, jwtService, jwtExtactor, documentDAO, storageService, documentService, webClientBuilder);
     }
 }

@@ -3,6 +3,7 @@ package org.openfilz.dms.service;
 import org.openfilz.dms.dto.request.*;
 import org.openfilz.dms.dto.response.*;
 import org.openfilz.dms.entity.Document;
+import org.openfilz.dms.utils.ContentInfo;
 import org.springframework.core.io.Resource;
 import org.springframework.http.codec.multipart.FilePart;
 import reactor.core.publisher.Flux;
@@ -36,7 +37,7 @@ public interface DocumentService {
     // Document (File/Folder) Operations
     Mono<UploadResponse> uploadDocument(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, Boolean allowDuplicateFileNames);
 
-    Mono<Document> replaceDocumentContent(UUID documentId, FilePart newFilePart, Long contentLength);
+    Mono<Document> replaceDocumentContent(UUID documentId, FilePart newFilePart, ContentInfo contentInfo);
 
     Mono<Document> replaceDocumentMetadata(UUID documentId, Map<String, Object> newMetadata);
 

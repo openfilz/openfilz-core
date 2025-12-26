@@ -5,7 +5,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.audit.AuditLog;
-import org.openfilz.dms.dto.request.*;
+import org.openfilz.dms.dto.request.CreateFolderRequest;
+import org.openfilz.dms.dto.request.DeleteRequest;
+import org.openfilz.dms.dto.request.ListFolderRequest;
 import org.openfilz.dms.dto.response.DocumentInfo;
 import org.openfilz.dms.dto.response.FolderElementInfo;
 import org.openfilz.dms.dto.response.FolderResponse;
@@ -28,9 +30,12 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
 
-import static org.openfilz.dms.enums.AuditAction.*;
+import static org.openfilz.dms.enums.AuditAction.CREATE_FOLDER;
+import static org.openfilz.dms.enums.AuditAction.DELETE_FOLDER;
 import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 
 @Testcontainers

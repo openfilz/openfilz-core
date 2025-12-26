@@ -67,7 +67,7 @@ logging:
     org.openfilz: DEBUG
     io.r2dbc.postgresql.QUERY: DEBUG # for queries
     # io.r2dbc.postgresql.PARAM: DEBUG # for parameters
-    org.springframework.security: TRACE
+    # org.springframework.security: TRACE
 
 server:
   port: 8081
@@ -106,7 +106,7 @@ openfilz:
 onlyoffice:
   enabled: ${ONLYOFFICE_ENABLED:false}
   document-server:
-    url: ${ONLYOFFICE_URL:https://localhost}
+    url: ${ONLYOFFICE_URL:http://localhost}
     api-path: /web-apps/apps/api/documents/api.js
   # URL that OnlyOffice DocumentServer uses to reach OpenFilz API
   # Use host.docker.internal when OnlyOffice runs in Docker and OpenFilz runs on host

@@ -4,24 +4,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.openfilz.dms.config.RestApiVersion;
-import org.openfilz.dms.dto.audit.AuditLog;
-import org.openfilz.dms.dto.request.CreateFolderRequest;
 import org.openfilz.dms.dto.request.DeleteRequest;
 import org.openfilz.dms.dto.request.ListFolderRequest;
-import org.openfilz.dms.dto.response.DocumentInfo;
-import org.openfilz.dms.dto.response.FolderElementInfo;
-import org.openfilz.dms.dto.response.FolderResponse;
 import org.openfilz.dms.dto.response.UploadResponse;
-import org.openfilz.dms.enums.SortOrder;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.graphql.client.ClientGraphQlResponse;
 import org.springframework.graphql.client.HttpGraphQlClient;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.http.codec.json.Jackson2JsonEncoder;
-import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
@@ -31,14 +22,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import java.time.Duration;
-import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 
-import static org.openfilz.dms.enums.AuditAction.CREATE_FOLDER;
-import static org.openfilz.dms.enums.AuditAction.DELETE_FOLDER;
 import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 
 @Testcontainers
