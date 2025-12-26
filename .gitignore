@@ -8,3 +8,8 @@
 /**/*.iml
 /**/logs/**
 /**/dist/*
+
+# Docker Compose environment files (may contain secrets)
+.env
+.env.local
+.env.*.local
