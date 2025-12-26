@@ -15,6 +15,7 @@ import { FileIconService } from '../../services/file-icon.service';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { BreadcrumbService } from '../../services/breadcrumb.service';
 import { AppConfig } from '../../config/app.config';
+import { ConfirmDialogComponent, ConfirmDialogData } from '../../dialogs/confirm-dialog/confirm-dialog.component';
 
 @Component({
   selector: 'app-recycle-bin',
@@ -298,24 +299,34 @@ export class RecycleBinComponent implements OnInit {
       return;
     }
 
-    // Confirm deletion
-    const confirmed = confirm(
-      `Are you sure you want to permanently delete ${selectedItems.length} item(s)? This action cannot be undone.`
-    );
+    const dialogData: ConfirmDialogData = {
+      title: 'Permanently Delete',
+      message: `Are you sure you want to permanently delete ${selectedItems.length} item(s)?`,
+      details: 'This action cannot be undone. These items will be permanently removed.',
+      type: 'danger',
+      confirmText: 'Delete Forever',
+      cancelText: 'Cancel',
+      icon: 'delete_forever'
+    };
+    const dialogRef = this.dialog.open(ConfirmDialogComponent, {
+      width: '450px',
+      data: dialogData
+    });
+    dialogRef.afterClosed().subscribe(confirmed => {
+      if (!confirmed) return;
 
-    if (!confirmed) return;
-
-    const documentIds = selectedItems.map(item => item.id);
-    this.documentApi.permanentlyDeleteItems({ documentIds }).subscribe({
-      next: () => {
-        this.snackBar.open(`${selectedItems.length} item(s) permanently deleted`, 'Close', { duration: 3000 });
-        this.items = this.items.filter(item => !item.selected);
-        this.totalItems = this.items.length;
-      },
-      error: (error: any) => {
-        console.error('Error permanently deleting items:', error);
-        this.snackBar.open('Failed to permanently delete items', 'Close', { duration: 3000 });
-      }
+      const documentIds = selectedItems.map(item => item.id);
+      this.documentApi.permanentlyDeleteItems({ documentIds }).subscribe({
+        next: () => {
+          this.snackBar.open(`${selectedItems.length} item(s) permanently deleted`, 'Close', { duration: 3000 });
+          this.items = this.items.filter(item => !item.selected);
+          this.totalItems = this.items.length;
+        },
+        error: (error: any) => {
+          console.error('Error permanently deleting items:', error);
+          this.snackBar.open('Failed to permanently delete items', 'Close', { duration: 3000 });
+        }
+      });
     });
   }
 
@@ -326,23 +337,33 @@ export class RecycleBinComponent implements OnInit {
       return;
     }
 
-    // Confirm deletion
-    const confirmed = confirm(
-      `Are you sure you want to permanently delete all ${this.items.length} item(s) in the recycle bin? This action cannot be undone.`
-    );
+    const dialogData: ConfirmDialogData = {
+      title: 'Empty Recycle Bin',
+      message: `Are you sure you want to permanently delete all ${this.items.length} item(s) in the recycle bin?`,
+      details: 'This action cannot be undone. All items will be permanently removed.',
+      type: 'danger',
+      confirmText: 'Empty Recycle Bin',
+      cancelText: 'Cancel',
+      icon: 'delete_sweep'
+    };
+    const dialogRef = this.dialog.open(ConfirmDialogComponent, {
+      width: '450px',
+      data: dialogData
+    });
+    dialogRef.afterClosed().subscribe(confirmed => {
+      if (!confirmed) return;
 
-    if (!confirmed) return;
-
-    this.documentApi.emptyRecycleBin().subscribe({
-      next: () => {
-        this.snackBar.open('Recycle bin emptied successfully', 'Close', { duration: 3000 });
-        this.items = [];
-        this.totalItems = 0;
-      },
-      error: (error: any) => {
-        console.error('Error emptying recycle bin:', error);
-        this.snackBar.open('Failed to empty recycle bin', 'Close', { duration: 3000 });
-      }
+      this.documentApi.emptyRecycleBin().subscribe({
+        next: () => {
+          this.snackBar.open('Recycle bin emptied successfully', 'Close', { duration: 3000 });
+          this.items = [];
+          this.totalItems = 0;
+        },
+        error: (error: any) => {
+          console.error('Error emptying recycle bin:', error);
+          this.snackBar.open('Failed to empty recycle bin', 'Close', { duration: 3000 });
+        }
+      });
     });
   }
 
@@ -387,21 +408,32 @@ export class RecycleBinComponent implements OnInit {
 
   onDeleteItem(item: FileItem) {
     // In recycle bin, "delete" means permanent delete
-    const confirmed = confirm(
-      `Are you sure you want to permanently delete "${item.name}"? This action cannot be undone.`
-    );
+    const dialogData: ConfirmDialogData = {
+      title: 'Permanently Delete',
+      message: `Are you sure you want to permanently delete "${item.name}"?`,
+      details: 'This action cannot be undone. This item will be permanently removed.',
+      type: 'danger',
+      confirmText: 'Delete Forever',
+      cancelText: 'Cancel',
+      icon: 'delete_forever'
+    };
+    const dialogRef = this.dialog.open(ConfirmDialogComponent, {
+      width: '450px',
+      data: dialogData
+    });
+    dialogRef.afterClosed().subscribe(confirmed => {
+      if (!confirmed) return;
 
-    if (!confirmed) return;
-
-    this.documentApi.permanentlyDeleteItems({ documentIds: [item.id] }).subscribe({
-      next: () => {
-        this.snackBar.open(`"${item.name}" permanently deleted`, 'Close', { duration: 3000 });
-        this.items = this.items.filter(i => i.id !== item.id);
-      },
-      error: (error: any) => {
-        console.error('Error permanently deleting item:', error);
-        this.snackBar.open('Failed to permanently delete item', 'Close', { duration: 3000 });
-      }
+      this.documentApi.permanentlyDeleteItems({ documentIds: [item.id] }).subscribe({
+        next: () => {
+          this.snackBar.open(`"${item.name}" permanently deleted`, 'Close', { duration: 3000 });
+          this.items = this.items.filter(i => i.id !== item.id);
+        },
+        error: (error: any) => {
+          console.error('Error permanently deleting item:', error);
+          this.snackBar.open('Failed to permanently delete item', 'Close', { duration: 3000 });
+        }
+      });
     });
   }
 

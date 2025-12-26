@@ -445,6 +445,15 @@ export class DocumentApiService {
     });
   }
 
+  replaceDocumentContent(documentId: string, file: File): Observable<ElementInfo> {
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+
+    return this.http.put<ElementInfo>(`${this.baseUrl}/documents/${documentId}/replace-content`, formData, {
+      headers: this.getMultipartHeaders()
+    });
+  }
+
   searchDocumentIdsByMetadata(request: SearchByMetadataRequest): Observable<string[]> {
     return this.http.post<string[]>(`${this.baseUrl}/documents/search/ids-by-metadata`, request, {
       headers: this.getHeaders()

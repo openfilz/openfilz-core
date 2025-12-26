@@ -5,6 +5,7 @@ import { CopyRequest, DocumentType, FileItem, MoveRequest, RenameRequest } from 
 import { DocumentApiService } from '../../services/document-api.service';
 import { RenameDialogComponent, RenameDialogData } from '../../dialogs/rename-dialog/rename-dialog.component';
 import { FolderTreeDialogComponent } from '../../dialogs/folder-tree-dialog/folder-tree-dialog.component';
+import { ConfirmDialogComponent, ConfirmDialogData } from '../../dialogs/confirm-dialog/confirm-dialog.component';
 import { Observable } from "rxjs";
 import { AppConfig } from '../../config/app.config';
 import { Router } from "@angular/router";
@@ -182,9 +183,23 @@ export abstract class FileOperationsComponent implements OnInit {
   }
 
   onDeleteItem(item: FileItem): void {
-    if (confirm(`Are you sure you want to delete "${item.name}"?`)) {
-      this.deleteItems([item]);
-    }
+    const dialogData: ConfirmDialogData = {
+      title: 'Delete Item',
+      message: `Are you sure you want to delete "${item.name}"?`,
+      details: 'This item will be moved to the recycle bin.',
+      type: 'danger',
+      confirmText: 'Delete',
+      cancelText: 'Cancel'
+    };
+    const dialogRef = this.dialog.open(ConfirmDialogComponent, {
+      width: '450px',
+      data: dialogData
+    });
+    dialogRef.afterClosed().subscribe(confirmed => {
+      if (confirmed) {
+        this.deleteItems([item]);
+      }
+    });
   }
 
   onDownloadSelected(): void {
@@ -263,9 +278,23 @@ export abstract class FileOperationsComponent implements OnInit {
     const selected = this.selectedItems;
     if (selected.length > 0) {
       const itemNames = selected.map(item => item.name).join(', ');
-      if (confirm(`Are you sure you want to delete: ${itemNames}?`)) {
-        this.deleteItems(selected);
-      }
+      const dialogData: ConfirmDialogData = {
+        title: `Delete ${selected.length} Item${selected.length > 1 ? 's' : ''}`,
+        message: `Are you sure you want to delete the selected item${selected.length > 1 ? 's' : ''}?`,
+        details: itemNames,
+        type: 'danger',
+        confirmText: 'Delete',
+        cancelText: 'Cancel'
+      };
+      const dialogRef = this.dialog.open(ConfirmDialogComponent, {
+        width: '450px',
+        data: dialogData
+      });
+      dialogRef.afterClosed().subscribe(confirmed => {
+        if (confirmed) {
+          this.deleteItems(selected);
+        }
+      });
     }
   }
 

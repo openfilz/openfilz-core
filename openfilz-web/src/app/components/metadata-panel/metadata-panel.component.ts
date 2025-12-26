@@ -7,11 +7,13 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatTabsModule } from '@angular/material/tabs';
+import { MatDialog } from '@angular/material/dialog';
 import { trigger, state, style, transition, animate } from '@angular/animations';
 
 import { MetadataEditorComponent } from '../metadata-editor/metadata-editor.component';
 import { DocumentApiService } from '../../services/document-api.service';
 import { AuditLog, DocumentInfo } from '../../models/document.models';
+import { ConfirmDialogComponent, ConfirmDialogData } from '../../dialogs/confirm-dialog/confirm-dialog.component';
 
 @Component({
   selector: 'app-metadata-panel',
@@ -148,6 +150,7 @@ export class MetadataPanelComponent implements OnInit, OnChanges {
 
   private documentApi = inject(DocumentApiService);
   private snackBar = inject(MatSnackBar);
+  private dialog = inject(MatDialog);
 
   constructor() { }
 
@@ -370,9 +373,24 @@ export class MetadataPanelComponent implements OnInit, OnChanges {
 
   onClose() {
     if (this.editMode && this.hasChanges) {
-      if (confirm('You have unsaved changes. Are you sure you want to close?')) {
-        this.closePanel.emit();
-      }
+      const dialogData: ConfirmDialogData = {
+        title: 'Unsaved Changes',
+        message: 'You have unsaved changes. Are you sure you want to close?',
+        details: 'Your changes will be lost if you close without saving.',
+        type: 'warning',
+        confirmText: 'Discard Changes',
+        cancelText: 'Keep Editing',
+        icon: 'edit_off'
+      };
+      const dialogRef = this.dialog.open(ConfirmDialogComponent, {
+        width: '450px',
+        data: dialogData
+      });
+      dialogRef.afterClosed().subscribe(confirmed => {
+        if (confirmed) {
+          this.closePanel.emit();
+        }
+      });
     } else {
       this.closePanel.emit();
     }

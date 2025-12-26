@@ -1,6 +1,6 @@
 import { Component, inject, OnInit, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
+import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTabsModule } from '@angular/material/tabs';
@@ -12,6 +12,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { DocumentApiService } from '../../services/document-api.service';
 import { DocumentInfo } from '../../models/document.models';
 import { MetadataEditorComponent } from '../../components/metadata-editor/metadata-editor.component';
+import { ConfirmDialogComponent, ConfirmDialogData } from '../confirm-dialog/confirm-dialog.component';
 
 export interface DocumentPropertiesDialogData {
   documentId: string;
@@ -90,6 +91,7 @@ export class DocumentPropertiesDialogComponent implements OnInit {
   readonly data = inject<DocumentPropertiesDialogData>(MAT_DIALOG_DATA);
   private documentApi = inject(DocumentApiService);
   private snackBar = inject(MatSnackBar);
+  private dialog = inject(MatDialog);
 
   constructor() { }
 
@@ -324,9 +326,24 @@ export class DocumentPropertiesDialogComponent implements OnInit {
 
   onClose() {
     if (this.editMode && this.hasChanges) {
-      if (confirm('You have unsaved changes. Are you sure you want to close?')) {
-        this.dialogRef.close();
-      }
+      const dialogData: ConfirmDialogData = {
+        title: 'Unsaved Changes',
+        message: 'You have unsaved changes. Are you sure you want to close?',
+        details: 'Your changes will be lost if you close without saving.',
+        type: 'warning',
+        confirmText: 'Discard Changes',
+        cancelText: 'Keep Editing',
+        icon: 'edit_off'
+      };
+      const confirmDialogRef = this.dialog.open(ConfirmDialogComponent, {
+        width: '450px',
+        data: dialogData
+      });
+      confirmDialogRef.afterClosed().subscribe(confirmed => {
+        if (confirmed) {
+          this.dialogRef.close();
+        }
+      });
     } else {
       this.dialogRef.close();
     }
