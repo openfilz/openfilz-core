@@ -57,6 +57,10 @@ export class FolderTreeDialogComponent implements OnInit {
   readonly data = inject<FolderTreeDialogData>(MAT_DIALOG_DATA);
   private documentApi = inject(DocumentApiService);
 
+  get direction(): 'ltr' | 'rtl' {
+    return (document.documentElement.dir as 'ltr' | 'rtl') || 'ltr';
+  }
+
   constructor() { }
 
   ngOnInit() {

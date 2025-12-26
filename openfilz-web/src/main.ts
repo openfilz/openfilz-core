@@ -14,6 +14,7 @@ import { provideAuth, LogLevel, authInterceptor, OidcSecurityService } from 'ang
 import { MockAuthService } from './app/services/mock-auth.service';
 import { provideTranslateService } from '@ngx-translate/core';
 import { provideTranslateHttpLoader } from '@ngx-translate/http-loader';
+import { providePaginatorIntl } from './app/i18n/paginator-intl';
 
 @Component({
   selector: 'app-root',
@@ -74,6 +75,7 @@ bootstrapApplication(App, {
         prefix: './i18n/',
         suffix: '.json'
       })
-    })
+    }),
+    providePaginatorIntl()
   ]
 });

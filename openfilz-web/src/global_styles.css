@@ -239,6 +239,19 @@ body {
   color: var(--text-primary) !important;
 }
 
+[dir="rtl"] .mat-mdc-paginator .mat-mdc-icon-button .mat-icon {
+  transform: scaleX(-1);
+}
+
+/* Fix transparency for MDC select panels and other overlays */
+.mat-mdc-select-panel,
+.mat-mdc-autocomplete-panel,
+.mat-mdc-menu-panel,
+.mdc-menu-surface {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
 .mat-paginator .mat-paginator-container {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
 }

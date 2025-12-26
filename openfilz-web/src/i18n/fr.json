@@ -79,6 +79,8 @@
         "listView": "Vue en liste",
         "previousPage": "Page précédente",
         "nextPage": "Page suivante",
+        "firstPage": "Première page",
+        "lastPage": "Dernière page",
         "itemsPerPage": "éléments par page",
         "sortBy": "Trier par",
         "ascending": "Croissant",

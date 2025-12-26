@@ -55,7 +55,7 @@
   <div class="pagination-container">
     <mat-paginator [length]="totalItems" [pageSize]="pageSize" [pageIndex]="pageIndex"
       [pageSizeOptions]="pageSizeOptions" (page)="onPageChange($event)"
-      [attr.aria-label]="'dialogs.folderTree.selectPage' | translate">
+      [attr.aria-label]="'dialogs.folderTree.selectPage' | translate" [dir]="direction">
     </mat-paginator>
   </div>
   }

@@ -79,6 +79,8 @@
         "listView": "عرض القائمة",
         "previousPage": "الصفحة السابقة",
         "nextPage": "الصفحة التالية",
+        "firstPage": "الصفحة الأولى",
+        "lastPage": "الصفحة الأخيرة",
         "itemsPerPage": "عناصر لكل صفحة",
         "sortBy": "فرز حسب",
         "ascending": "تصاعدي",
