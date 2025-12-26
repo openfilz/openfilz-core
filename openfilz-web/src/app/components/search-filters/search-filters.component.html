@@ -11,7 +11,7 @@
   <div class="filters-content">
     <!-- Type Filter -->
     <div class="filter-section">
-      <label>{{ 'searchFilters.type' | translate }}</label>
+      <label>{{ 'common.type' | translate }}</label>
       <select [(ngModel)]="filters.type">
         <option *ngFor="let type of documentTypes" [ngValue]="type.value">
           {{ type.labelKey | translate }}
@@ -21,7 +21,7 @@
 
     <!-- Date Modified Filter -->
     <div class="filter-section">
-      <label>{{ 'searchFilters.dateModified' | translate }}</label>
+      <label>{{ 'common.dateModified' | translate }}</label>
       <select [(ngModel)]="filters.dateModified">
         <option *ngFor="let date of dateOptions" [value]="date.value">
           {{ date.labelKey | translate }}
@@ -31,7 +31,7 @@
 
     <!-- Owner Filter -->
     <div class="filter-section">
-      <label>{{ 'searchFilters.owner' | translate }}</label>
+      <label>{{ 'common.owner' | translate }}</label>
       <input type="text" [(ngModel)]="filters.owner" [placeholder]="'searchFilters.ownerPlaceholder' | translate" />
     </div>
 
@@ -49,13 +49,11 @@
 
     <!-- Metadata Filter -->
     <div class="filter-section">
-      <label>{{ 'searchFilters.metadata' | translate }}</label>
+      <label>{{ 'common.metadata' | translate }}</label>
       <div class="metadata-list">
         <div *ngFor="let meta of metadataFilters; let i = index" class="metadata-item">
-          <input type="text" [(ngModel)]="meta.key" [placeholder]="'searchFilters.key' | translate"
-            class="meta-input" />
-          <input type="text" [(ngModel)]="meta.value" [placeholder]="'searchFilters.value' | translate"
-            class="meta-input" />
+          <input type="text" [(ngModel)]="meta.key" [placeholder]="'common.key' | translate" class="meta-input" />
+          <input type="text" [(ngModel)]="meta.value" [placeholder]="'common.value' | translate" class="meta-input" />
           <button class="btn-remove" (click)="$event.stopPropagation(); removeMetadataFilter(i)"
             [matTooltip]="'searchFilters.remove' | translate">
             <mat-icon>close</mat-icon>
@@ -71,7 +69,7 @@
 
   <!-- Footer Actions -->
   <div class="filter-actions">
-    <button class="btn-clear" (click)="clearFilters()">{{ 'searchFilters.clear' | translate }}</button>
+    <button class="btn-clear" (click)="clearFilters()">{{ 'common.clear' | translate }}</button>
     <button class="btn-apply" (click)="applyFilters()">{{ 'searchFilters.applyFilters' | translate }}</button>
   </div>
 </div>

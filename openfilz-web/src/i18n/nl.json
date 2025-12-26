@@ -21,10 +21,19 @@
         "success": "Succes",
         "folder": "Map",
         "file": "Bestand",
-        "fileWithType": "{{type}} Bestant",
+        "fileWithType": "{{type}} Bestand",
         "user": "Openfilz Gebruiker",
         "downloadProgress": "Bestanden downloaden...",
-        "downloadInProgress": "Download bezig..."
+        "downloadInProgress": "Download bezig...",
+        "name": "Naam",
+        "size": "Grootte",
+        "type": "Type",
+        "dateModified": "Datum gewijzigd",
+        "owner": "Eigenaar",
+        "metadata": "Metadata",
+        "key": "Sleutel",
+        "value": "Waarde",
+        "dropFilesHere": "Sleep bestanden hierheen om te uploaden"
     },
     "languages": {
         "en": "Engels",
@@ -52,7 +61,6 @@
         "toggleMobileMenu": "Mobiel menu in-/uitschakelen",
         "activeFilters": "Actieve filters",
         "changeLanguage": "Taal wijzigen",
-        "download": "Downloaden",
         "open": "Openen"
     },
     "breadcrumb": {
@@ -64,20 +72,16 @@
         "of": "van",
         "managementToolbar": "Bestandsbeheer werkbalk",
         "selected": "{{count}} geselecteerd",
-        "upload": "Uploaden",
         "uploadFiles": "Bestanden uploaden",
         "newFolder": "Nieuwe Map",
         "createNewFolder": "Nieuwe map aanmaken",
         "clearSelection": "Selectie wissen",
-        "rename": "Hernoemen",
         "renameSelected": "Geselecteerd item hernoemen",
-        "download": "Downloaden",
         "downloadSelected": "Geselecteerde items downloaden",
         "move": "Verplaatsen",
         "moveSelected": "Geselecteerde items verplaatsen",
         "copy": "Kopiëren",
         "copySelected": "Geselecteerde items kopiëren",
-        "delete": "Verwijderen",
         "deleteSelected": "Geselecteerde items verwijderen",
         "gridView": "Rasterweergave",
         "listView": "Lijstweergave",
@@ -90,30 +94,20 @@
         "ascending": "Oplopend",
         "descending": "Aflopend",
         "moreOptions": "Meer opties",
-        "actions": "Acties",
         "actionsFor": "Acties voor {{count}} items",
         "quickActions": "Snelle acties",
         "openActionsMenu": "Actiemenu openen",
         "closeActionsMenu": "Actiemenu sluiten"
     },
     "sortOptions": {
-        "name": "Naam",
-        "size": "Grootte",
-        "type": "Type",
         "date": "Datum",
-        "dateModified": "Datum gewijzigd",
-        "owner": "Eigenaar",
         "dateCreated": "Datum aangemaakt"
     },
     "fileList": {
         "filesTable": "Lijst met bestanden en mappen",
-        "name": "Naam",
-        "size": "Grootte",
-        "type": "Type",
         "selectAll": "Alle bestanden selecteren",
         "selectItem": "Selecteer {{name}}",
         "select": "Selecteren",
-        "folder": "Map",
         "folderDetail": "Map: {{name}}",
         "fileDetail": "Bestand: {{name}}",
         "favorite": "Favoriet",
@@ -122,8 +116,7 @@
         "addToFavorites": "Toevoegen aan favorieten",
         "addToFavoritesDetail": "Voeg {{name}} toe aan favorieten",
         "removeFromFavorites": "Verwijderen uit favorieten",
-        "removeFromFavoritesDetail": "Verwijder {{name}} uit favorieten",
-        "dropFilesHere": "Sleep bestanden hierheen om te uploaden"
+        "removeFromFavoritesDetail": "Verwijder {{name}} uit favorieten"
     },
     "fileExplorer": {
         "emptyTitle": "Deze map is leeg",
@@ -131,17 +124,10 @@
     },
     "searchFilters": {
         "title": "Zoekfilters",
-        "type": "Type",
-        "dateModified": "Datum gewijzigd",
-        "owner": "Eigenaar",
         "ownerPlaceholder": "Aangemaakt door...",
         "fileType": "Bestandstype",
-        "metadata": "Metadata",
-        "key": "Sleutel",
-        "value": "Waarde",
         "addMetadataFilter": "Metadatafilter toevoegen",
         "applyFilters": "Filters toepassen",
-        "clear": "Wissen",
         "remove": "Verwijderen",
         "documentTypes": {
             "all": "Alle",
@@ -163,7 +149,6 @@
         }
     },
     "uploadZone": {
-        "dropFiles": "Sleep bestanden hierheen om te uploaden",
         "orClick": "of klik om bestanden te selecteren",
         "chooseFiles": "Kies Bestanden"
     },
@@ -171,13 +156,10 @@
         "title": "Eigenschappen",
         "description": "Documenteigenschappen paneel",
         "closePanel": "Eigenschappenpaneel sluiten",
-        "close": "Sluiten",
         "loading": "Documentinformatie laden...",
         "errorLoading": "Laden van documentinformatie mislukt",
-        "retry": "Opnieuw proberen",
         "general": "Algemeen",
         "generalInfo": "Algemene Informatie",
-        "metadata": "Metadata",
         "audit": "Audit",
         "auditHistory": "Auditgeschiedenis",
         "name": "Naam:",
@@ -199,7 +181,6 @@
         "cancelEditing": "Bewerken annuleren",
         "saveMetadata": "Metadatawijzigingen opslaat",
         "savingDots": "Opslaan...",
-        "save": "Opslaan",
         "unsavedChangesTitle": "Niet-opgeslagen wijzigingen",
         "unsavedChangesMessage": "U hebt niet-opgeslagen wijzigingen. Weet u zeker dat u wilt sluiten?",
         "unsavedChangesDetails": "Uw wijzigingen gaan verloren als u sluit zonder op te slaan.",
@@ -210,12 +191,9 @@
         "saveSuccess": "Metadata succesvol opgeslagen"
     },
     "metadataEditor": {
-        "title": "Metadata",
         "clearAll": "Alles wissen",
         "clearAllTooltip": "Wis alle metadata-items",
         "noMetadata": "Geen metadata beschikbaar",
-        "keyLabel": "Sleutel",
-        "valueLabel": "Waarde",
         "keyPlaceholder": "bijv. auteur, afdeling",
         "valuePlaceholder": "bijv. Jan de Vries",
         "keyAriaLabel": "Metadatasleutel",
@@ -245,8 +223,7 @@
             "subtitle": "Voer een nieuwe naam in voor uw item",
             "folderName": "Mapnaam",
             "fileName": "Bestandsnaam",
-            "placeholder": "Voer nieuwe naam in",
-            "renameButton": "Hernoemen"
+            "placeholder": "Voer nieuwe naam in"
         },
         "upload": {
             "title": "Bestanden uploaden",
@@ -270,10 +247,7 @@
             "copyItem": "Item kopiëren",
             "copyItems": "{{count}} items kopiëren"
         },
-        "confirm": {
-            "defaultCancel": "Annuleren",
-            "defaultConfirm": "Bevestigen"
-        }
+        "confirm": {}
     },
     "recycleBin": {
         "title": "Prullenbak",
@@ -328,16 +302,12 @@
         }
     },
     "bottomSheet": {
-        "actions": "Acties",
         "organize": "ORGANISEREN",
         "moveTo": "Verplaatsen naar...",
         "copyTo": "Kopiëren naar...",
-        "rename": "Hernoemen",
         "oneItemOnly": "Slechts 1 item",
         "shareAndDownload": "DELEN & DOWNLOADEN",
-        "download": "Downloaden",
         "dangerZone": "GEVARENZONE",
-        "delete": "Verwijderen",
         "item": "{{count}} item",
         "items": "{{count}} items"
     },
@@ -440,15 +410,11 @@
         "gz": "GZip-archief",
         "tar": "TAR-archief",
         "unknown": "Onbekend",
-        "folder": "Map",
-        "file": "Bestand",
         "imageType": "{{type}} Afbeelding",
         "videoType": "{{type}} Video",
-        "audioType": "{{type}} Audio",
-        "fileType": "{{type}} Bestand"
+        "audioType": "{{type}} Audio"
     },
     "fileViewer": {
-        "close": "Sluiten",
         "pageInfo": "Pagina {{current}} van {{total}}",
         "previousPage": "Vorige pagina",
         "nextPage": "Volgende pagina",
@@ -456,7 +422,6 @@
         "zoomIn": "Inzoomen",
         "resetZoom": "Zoom herstellen",
         "rotate": "Draaien",
-        "download": "Downloaden",
         "print": "Afdrukken",
         "fullscreen": "Volledig scherm",
         "exitFullscreen": "Volledig scherm verlaten",

@@ -24,7 +24,16 @@
         "fileWithType": "{{type}}-Datei",
         "user": "Openfilz-Benutzer",
         "downloadProgress": "Dateien werden heruntergeladen...",
-        "downloadInProgress": "Download läuft..."
+        "downloadInProgress": "Download läuft...",
+        "name": "Name",
+        "size": "Größe",
+        "type": "Typ",
+        "dateModified": "Änderungsdatum",
+        "owner": "Eigentümer",
+        "metadata": "Metadaten",
+        "key": "Schlüssel",
+        "value": "Wert",
+        "dropFilesHere": "Dateien zum Hochladen hier ablegen"
     },
     "languages": {
         "en": "English",
@@ -52,7 +61,6 @@
         "toggleMobileMenu": "Mobiles Menü umschalten",
         "activeFilters": "Aktive Filter",
         "changeLanguage": "Sprache ändern",
-        "download": "Herunterladen",
         "open": "Öffnen"
     },
     "breadcrumb": {
@@ -64,20 +72,16 @@
         "of": "von",
         "managementToolbar": "Dateiverwaltungs-Symbolleiste",
         "selected": "{{count}} ausgewählt",
-        "upload": "Hochladen",
         "uploadFiles": "Dateien hochladen",
         "newFolder": "Neuer Ordner",
         "createNewFolder": "Neuen Ordner erstellen",
         "clearSelection": "Auswahl aufheben",
-        "rename": "Umbenennen",
         "renameSelected": "Ausgewähltes Element umbenennen",
-        "download": "Herunterladen",
         "downloadSelected": "Ausgewählte Elemente herunterladen",
         "move": "Verschieben",
         "moveSelected": "Ausgewählte Elemente verschieben",
         "copy": "Kopieren",
         "copySelected": "Ausgewählte Elemente kopieren",
-        "delete": "Löschen",
         "deleteSelected": "Ausgewählte Elemente löschen",
         "gridView": "Rasteransicht",
         "listView": "Listenansicht",
@@ -90,30 +94,20 @@
         "ascending": "Aufsteigend",
         "descending": "Absteigend",
         "moreOptions": "Weitere Optionen",
-        "actions": "Aktionen",
         "actionsFor": "Aktionen für {{count}} Elemente",
         "quickActions": "Schnellaktionen",
         "openActionsMenu": "Aktionsmenü öffnen",
         "closeActionsMenu": "Aktionsmenü schließen"
     },
     "sortOptions": {
-        "name": "Name",
-        "size": "Größe",
-        "type": "Typ",
         "date": "Datum",
-        "dateModified": "Änderungsdatum",
-        "owner": "Besitzer",
         "dateCreated": "Erstellungsdatum"
     },
     "fileList": {
         "filesTable": "Datei- und Ordnerliste",
-        "name": "Name",
-        "size": "Größe",
-        "type": "Typ",
         "selectAll": "Alle Dateien auswählen",
         "selectItem": "{{name}} auswählen",
         "select": "Auswählen",
-        "folder": "Ordner",
         "folderDetail": "Ordner: {{name}}",
         "fileDetail": "Datei: {{name}}",
         "favorite": "Favorit",
@@ -122,8 +116,7 @@
         "addToFavorites": "Zu Favoriten hinzufügen",
         "addToFavoritesDetail": "{{name}} zu Favoriten hinzufügen",
         "removeFromFavorites": "Von Favoriten entfernen",
-        "removeFromFavoritesDetail": "{{name}} von Favoriten entfernen",
-        "dropFilesHere": "Dateien hier ablegen zum Hochladen"
+        "removeFromFavoritesDetail": "{{name}} von Favoriten entfernen"
     },
     "fileExplorer": {
         "emptyTitle": "Dieser Ordner ist leer",
@@ -131,17 +124,10 @@
     },
     "searchFilters": {
         "title": "Suchfilter",
-        "type": "Typ",
-        "dateModified": "Änderungsdatum",
-        "owner": "Besitzer",
         "ownerPlaceholder": "Erstellt von...",
         "fileType": "Dateityp",
-        "metadata": "Metadaten",
-        "key": "Schlüssel",
-        "value": "Wert",
         "addMetadataFilter": "Metadatenfilter hinzufügen",
         "applyFilters": "Filter anwenden",
-        "clear": "Leeren",
         "remove": "Entfernen",
         "documentTypes": {
             "all": "Alle",
@@ -163,7 +149,6 @@
         }
     },
     "uploadZone": {
-        "dropFiles": "Dateien hier ablegen zum Hochladen",
         "orClick": "oder klicken Sie, um Dateien auszuwählen",
         "chooseFiles": "Dateien auswählen"
     },
@@ -171,13 +156,10 @@
         "title": "Eigenschaften",
         "description": "Dokumenteigenschafts-Fenster",
         "closePanel": "Eigenschafts-Fenster schließen",
-        "close": "Schließen",
         "loading": "Dokumentinformationen werden geladen...",
         "errorLoading": "Fehler beim Laden der Dokumentinformationen",
-        "retry": "Wiederholen",
         "general": "Allgemein",
         "generalInfo": "Allgemeine Informationen",
-        "metadata": "Metadaten",
         "audit": "Audit",
         "auditHistory": "Audit-Verlauf",
         "name": "Name:",
@@ -199,7 +181,6 @@
         "cancelEditing": "Bearbeiten abbrechen",
         "saveMetadata": "Metadaten-Änderungen speichern",
         "savingDots": "Speichern...",
-        "save": "Speichern",
         "unsavedChangesTitle": "Ungespeicherte Änderungen",
         "unsavedChangesMessage": "Sie haben ungespeicherte Änderungen. Sind Sie sicher, dass Sie schließen möchten?",
         "unsavedChangesDetails": "Ihre Änderungen gehen verloren, wenn Sie ohne Speichern schließen.",
@@ -210,12 +191,9 @@
         "saveSuccess": "Metadaten erfolgreich gespeichert"
     },
     "metadataEditor": {
-        "title": "Metadaten",
         "clearAll": "Alles löschen",
         "clearAllTooltip": "Alle Metadateneinträge löschen",
         "noMetadata": "Keine Metadaten verfügbar",
-        "keyLabel": "Schlüssel",
-        "valueLabel": "Wert",
         "keyPlaceholder": "z.B. Autor, Abteilung",
         "valuePlaceholder": "z.B. Max Mustermann",
         "keyAriaLabel": "Metadatenschlüssel",
@@ -245,8 +223,7 @@
             "subtitle": "Geben Sie einen neuen Namen für Ihr Element ein",
             "folderName": "Ordnername",
             "fileName": "Dateiname",
-            "placeholder": "Neuen Namen eingeben",
-            "renameButton": "Umbenennen"
+            "placeholder": "Neuen Namen eingeben"
         },
         "upload": {
             "title": "Dateien hochladen",
@@ -270,10 +247,7 @@
             "copyItem": "Element kopieren",
             "copyItems": "{{count}} Elemente kopieren"
         },
-        "confirm": {
-            "defaultCancel": "Abbrechen",
-            "defaultConfirm": "Bestätigen"
-        }
+        "confirm": {}
     },
     "recycleBin": {
         "title": "Papierkorb",
@@ -328,16 +302,12 @@
         }
     },
     "bottomSheet": {
-        "actions": "Aktionen",
         "organize": "ORGANISIEREN",
         "moveTo": "Verschieben nach...",
         "copyTo": "Kopieren nach...",
-        "rename": "Umbenennen",
         "oneItemOnly": "Nur 1 Element",
         "shareAndDownload": "TEILEN & HERUNTERLADEN",
-        "download": "Herunterladen",
         "dangerZone": "GEFAHRENZONE",
-        "delete": "Löschen",
         "item": "{{count}} Element",
         "items": "{{count}} Elemente"
     },
@@ -440,15 +410,11 @@
         "gz": "GZip-Archiv",
         "tar": "TAR-Archiv",
         "unknown": "Unbekannt",
-        "folder": "Ordner",
-        "file": "Datei",
         "imageType": "{{type}}-Bild",
         "videoType": "{{type}}-Video",
-        "audioType": "{{type}}-Audio",
-        "fileType": "{{type}}-Datei"
+        "audioType": "{{type}}-Audio"
     },
     "fileViewer": {
-        "close": "Schließen",
         "pageInfo": "Seite {{current}} von {{total}}",
         "previousPage": "Vorherige Seite",
         "nextPage": "Nächste Seite",
@@ -456,7 +422,6 @@
         "zoomIn": "Vergrößern",
         "resetZoom": "Zoom zurücksetzen",
         "rotate": "Drehen",
-        "download": "Herunterladen",
         "print": "Drucken",
         "fullscreen": "Vollbild",
         "exitFullscreen": "Vollbild beenden",

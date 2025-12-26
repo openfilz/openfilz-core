@@ -234,7 +234,7 @@ export class MetadataPanelComponent implements OnInit, OnChanges {
       return { key: 'mimeTypes.unknown' };
     }
     if (this.documentInfo.type === 'FOLDER') {
-      return { key: 'mimeTypes.folder' };
+      return { key: 'common.folder' };
     }
 
     const contentType = this.documentInfo.contentType;
@@ -258,8 +258,8 @@ export class MetadataPanelComponent implements OnInit, OnChanges {
           case 'image': return { key: 'mimeTypes.imageType', params: { type: friendlySubtype } };
           case 'video': return { key: 'mimeTypes.videoType', params: { type: friendlySubtype } };
           case 'audio': return { key: 'mimeTypes.audioType', params: { type: friendlySubtype } };
-          case 'text': return { key: 'mimeTypes.fileType', params: { type: friendlySubtype } };
-          default: return { key: 'mimeTypes.fileType', params: { type: friendlySubtype } };
+          case 'text': return { key: 'common.fileWithType', params: { type: friendlySubtype } };
+          default: return { key: 'common.fileWithType', params: { type: friendlySubtype } };
         }
       }
     }
@@ -272,7 +272,7 @@ export class MetadataPanelComponent implements OnInit, OnChanges {
       }
     }
 
-    return { key: 'mimeTypes.file' };
+    return { key: 'common.file' };
   }
 
   /**

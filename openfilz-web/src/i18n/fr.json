@@ -24,7 +24,16 @@
         "fileWithType": "Fichier {{type}}",
         "user": "Utilisateur Openfilz",
         "downloadProgress": "Téléchargement des fichiers...",
-        "downloadInProgress": "Téléchargement en cours..."
+        "downloadInProgress": "Téléchargement en cours...",
+        "name": "Nom",
+        "size": "Taille",
+        "type": "Type",
+        "dateModified": "Date de modification",
+        "owner": "Propriétaire",
+        "metadata": "Métadonnées",
+        "key": "Clé",
+        "value": "Valeur",
+        "dropFilesHere": "Déposez les fichiers ici pour téléverser"
     },
     "languages": {
         "en": "English",
@@ -52,7 +61,6 @@
         "toggleMobileMenu": "Basculer le menu mobile",
         "activeFilters": "Filtres actifs",
         "changeLanguage": "Changer la langue",
-        "download": "Télécharger",
         "open": "Ouvrir"
     },
     "breadcrumb": {
@@ -64,20 +72,16 @@
         "of": "de",
         "managementToolbar": "Barre d'outils de gestion de fichiers",
         "selected": "{{count}} sélectionné(s)",
-        "upload": "Téléverser",
         "uploadFiles": "Téléverser des fichiers",
         "newFolder": "Nouveau dossier",
         "createNewFolder": "Créer un nouveau dossier",
         "clearSelection": "Effacer la sélection",
-        "rename": "Renommer",
         "renameSelected": "Renommer l'élément sélectionné",
-        "download": "Télécharger",
         "downloadSelected": "Télécharger les éléments sélectionnés",
         "move": "Déplacer",
         "moveSelected": "Déplacer les éléments sélectionnés",
         "copy": "Copier",
         "copySelected": "Copier les éléments sélectionnés",
-        "delete": "Supprimer",
         "deleteSelected": "Supprimer les éléments sélectionnés",
         "gridView": "Vue en grille",
         "listView": "Vue en liste",
@@ -90,30 +94,20 @@
         "ascending": "Croissant",
         "descending": "Décroissant",
         "moreOptions": "Plus d'options",
-        "actions": "Actions",
         "actionsFor": "Actions pour {{count}} éléments",
         "quickActions": "Actions rapides",
         "openActionsMenu": "Ouvrir le menu des actions",
         "closeActionsMenu": "Fermer le menu des actions"
     },
     "sortOptions": {
-        "name": "Nom",
-        "size": "Taille",
-        "type": "Type",
         "date": "Date",
-        "dateModified": "Date de modification",
-        "owner": "Propriétaire",
         "dateCreated": "Date de création"
     },
     "fileList": {
         "filesTable": "Liste des fichiers et dossiers",
-        "name": "Nom",
-        "size": "Taille",
-        "type": "Type",
         "selectAll": "Sélectionner tous les fichiers",
         "selectItem": "Sélectionner {{name}}",
         "select": "Sélectionner",
-        "folder": "Dossier",
         "folderDetail": "Dossier : {{name}}",
         "fileDetail": "Fichier : {{name}}",
         "favorite": "Favori",
@@ -122,8 +116,7 @@
         "addToFavorites": "Ajouter aux favoris",
         "addToFavoritesDetail": "Ajouter {{name}} aux favoris",
         "removeFromFavorites": "Retirer des favoris",
-        "removeFromFavoritesDetail": "Retirer {{name}} des favoris",
-        "dropFilesHere": "Déposez les fichiers ici pour téléverser"
+        "removeFromFavoritesDetail": "Retirer {{name}} des favoris"
     },
     "fileExplorer": {
         "emptyTitle": "Ce dossier est vide",
@@ -131,17 +124,10 @@
     },
     "searchFilters": {
         "title": "Filtres de recherche",
-        "type": "Type",
-        "dateModified": "Date de modification",
-        "owner": "Propriétaire",
         "ownerPlaceholder": "Créé par...",
         "fileType": "Type de fichier",
-        "metadata": "Métadonnées",
-        "key": "Clé",
-        "value": "Valeur",
         "addMetadataFilter": "Ajouter un filtre de métadonnées",
         "applyFilters": "Appliquer les filtres",
-        "clear": "Effacer",
         "remove": "Supprimer",
         "documentTypes": {
             "all": "Tous",
@@ -163,7 +149,6 @@
         }
     },
     "uploadZone": {
-        "dropFiles": "Déposez les fichiers ici pour téléverser",
         "orClick": "ou cliquez pour sélectionner des fichiers",
         "chooseFiles": "Choisir des fichiers"
     },
@@ -171,13 +156,10 @@
         "title": "Propriétés",
         "description": "Panneau des propriétés du document",
         "closePanel": "Fermer le panneau des propriétés",
-        "close": "Fermer",
         "loading": "Chargement des informations du document...",
         "errorLoading": "Échec du chargement des informations du document",
-        "retry": "Réessayer",
         "general": "Général",
         "generalInfo": "Informations générales",
-        "metadata": "Métadonnées",
         "audit": "Audit",
         "auditHistory": "Historique d'audit",
         "name": "Nom :",
@@ -199,7 +181,6 @@
         "cancelEditing": "Annuler l'édition",
         "saveMetadata": "Enregistrer les modifications de métadonnées",
         "savingDots": "Sauvegarde...",
-        "save": "Enregistrer",
         "unsavedChangesTitle": "Modifications non enregistrées",
         "unsavedChangesMessage": "Vous avez des modifications non enregistrées. Êtes-vous sûr de vouloir fermer ?",
         "unsavedChangesDetails": "Vos modifications seront perdues si vous fermez sans enregistrer.",
@@ -210,12 +191,9 @@
         "saveSuccess": "Métadonnées enregistrées avec succès"
     },
     "metadataEditor": {
-        "title": "Métadonnées",
         "clearAll": "Tout effacer",
         "clearAllTooltip": "Effacer toutes les entrées de métadonnées",
         "noMetadata": "Aucune métadonnée disponible",
-        "keyLabel": "Clé",
-        "valueLabel": "Valeur",
         "keyPlaceholder": "ex: auteur, département",
         "valuePlaceholder": "ex: Jean Dupont",
         "keyAriaLabel": "Clé de métadonnée",
@@ -245,8 +223,7 @@
             "subtitle": "Entrez un nouveau nom pour votre élément",
             "folderName": "Nom du dossier",
             "fileName": "Nom du fichier",
-            "placeholder": "Entrez le nouveau nom",
-            "renameButton": "Renommer"
+            "placeholder": "Entrez le nouveau nom"
         },
         "upload": {
             "title": "Téléverser des fichiers",
@@ -270,10 +247,7 @@
             "copyItem": "Copier l'élément",
             "copyItems": "Copier {{count}} éléments"
         },
-        "confirm": {
-            "defaultCancel": "Annuler",
-            "defaultConfirm": "Confirmer"
-        }
+        "confirm": {}
     },
     "recycleBin": {
         "title": "Corbeille",
@@ -328,16 +302,12 @@
         }
     },
     "bottomSheet": {
-        "actions": "Actions",
         "organize": "ORGANISER",
         "moveTo": "Déplacer vers...",
         "copyTo": "Copier vers...",
-        "rename": "Renommer",
         "oneItemOnly": "1 seul élément",
         "shareAndDownload": "PARTAGER & TÉLÉCHARGER",
-        "download": "Télécharger",
         "dangerZone": "ZONE DE DANGER",
-        "delete": "Supprimer",
         "item": "{{count}} élément",
         "items": "{{count}} éléments"
     },
@@ -440,15 +410,11 @@
         "gz": "Archive GZip",
         "tar": "Archive TAR",
         "unknown": "Inconnu",
-        "folder": "Dossier",
-        "file": "Fichier",
         "imageType": "Image {{type}}",
         "videoType": "Vidéo {{type}}",
-        "audioType": "Audio {{type}}",
-        "fileType": "Fichier {{type}}"
+        "audioType": "Audio {{type}}"
     },
     "fileViewer": {
-        "close": "Fermer",
         "pageInfo": "Page {{current}} sur {{total}}",
         "previousPage": "Page précédente",
         "nextPage": "Page suivante",
@@ -456,7 +422,6 @@
         "zoomIn": "Zoom avant",
         "resetZoom": "Réinitialiser le zoom",
         "rotate": "Pivoter",
-        "download": "Télécharger",
         "print": "Imprimer",
         "fullscreen": "Plein écran",
         "exitFullscreen": "Quitter le plein écran",

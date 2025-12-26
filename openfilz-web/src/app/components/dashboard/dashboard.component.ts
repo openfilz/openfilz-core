@@ -305,7 +305,7 @@ export class DashboardComponent implements OnInit {
       case 'archive':
         return this.translate.instant('mimeTypes.zip');
       default:
-        return this.translate.instant('mimeTypes.file');
+        return this.translate.instant('common.file');
     }
   }
 

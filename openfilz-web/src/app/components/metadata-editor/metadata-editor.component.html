@@ -1,7 +1,7 @@
 <div class="metadata-editor">
   @if(showTitle) {
   <div class="metadata-header">
-    <h3>{{ 'metadataEditor.title' | translate }}</h3>
+    <h3>{{ 'common.metadata' | translate }}</h3>
     @if(!readonly && metadataEntries.length > 0) {
     <button mat-button color="warn" (click)="clearAll()" [matTooltip]="'metadataEditor.clearAllTooltip' | translate"
       class="clear-button">
@@ -23,14 +23,14 @@
     @for(entry of metadataEntries; track $index) {
     <div class="metadata-entry" [class.has-error]="entry.error">
       <mat-form-field appearance="outline" class="key-field">
-        <mat-label>{{ 'metadataEditor.keyLabel' | translate }}</mat-label>
+        <mat-label>{{ 'common.key' | translate }}</mat-label>
         <input matInput [(ngModel)]="entry.key" (ngModelChange)="onMetadataChange()" [readonly]="readonly"
           [placeholder]="'metadataEditor.keyPlaceholder' | translate"
           [attr.aria-label]="'metadataEditor.keyAriaLabel' | translate">
       </mat-form-field>
 
       <mat-form-field appearance="outline" class="value-field">
-        <mat-label>{{ 'metadataEditor.valueLabel' | translate }}</mat-label>
+        <mat-label>{{ 'common.value' | translate }}</mat-label>
         <input matInput [(ngModel)]="entry.value" (ngModelChange)="onMetadataChange()" [readonly]="readonly"
           [placeholder]="'metadataEditor.valuePlaceholder' | translate"
           [attr.aria-label]="'metadataEditor.valueAriaLabel' | translate">

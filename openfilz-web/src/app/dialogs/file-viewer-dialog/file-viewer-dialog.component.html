@@ -2,7 +2,7 @@
   <!-- Toolbar -->
   <mat-toolbar class="viewer-toolbar">
     <div class="toolbar-left">
-      <button mat-icon-button (click)="onClose()" [matTooltip]="'fileViewer.close' | translate">
+      <button mat-icon-button (click)="onClose()" [matTooltip]="'common.close' | translate">
         <mat-icon>close</mat-icon>
       </button>
       <span class="file-name">{{ data.fileName }}</span>
@@ -50,7 +50,7 @@
       }
 
       <!-- Download -->
-      <button mat-icon-button (click)="download()" [matTooltip]="'fileViewer.download' | translate">
+      <button mat-icon-button (click)="download()" [matTooltip]="'common.download' | translate">
         <mat-icon>download</mat-icon>
       </button>
 

@@ -34,8 +34,8 @@
   </button>
   <button mat-raised-button color="primary" class="create-btn"
     [disabled]="!newName.trim() || newName.trim() === data.name" (click)="onRename()"
-    [attr.aria-label]="'dialogs.rename.renameButton' | translate">
+    [attr.aria-label]="'common.rename' | translate">
     <mat-icon aria-hidden="true">check</mat-icon>
-    <span>&nbsp;&nbsp;{{ 'dialogs.rename.renameButton' | translate }}</span>
+    <span>&nbsp;&nbsp;{{ 'common.rename' | translate }}</span>
   </button>
 </div>

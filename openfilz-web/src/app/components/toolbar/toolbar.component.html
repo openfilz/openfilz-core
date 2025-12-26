@@ -35,7 +35,7 @@
       <button mat-raised-button color="primary" class="upload-btn" (click)="onUploadFiles()"
         [attr.aria-label]="'toolbar.uploadFiles' | translate">
         <mat-icon aria-hidden="true">cloud_upload</mat-icon>
-        <span>{{ 'toolbar.upload' | translate }}</span>
+        <span>{{ 'common.upload' | translate }}</span>
       </button>
       }
 
@@ -81,13 +81,13 @@
       <button mat-stroked-button (click)="onRenameSelected()" [matTooltip]="'toolbar.rename' | translate"
         [attr.aria-label]="'toolbar.renameSelected' | translate">
         <mat-icon aria-hidden="true">edit</mat-icon>
-        <span>{{ 'toolbar.rename' | translate }}</span>
+        <span>{{ 'common.rename' | translate }}</span>
       </button>
       }
       <button mat-stroked-button (click)="onDownloadSelected()" [matTooltip]="'toolbar.download' | translate"
         [attr.aria-label]="'toolbar.downloadSelected' | translate">
         <mat-icon aria-hidden="true">download</mat-icon>
-        <span>{{ 'toolbar.download' | translate }}</span>
+        <span>{{ 'common.download' | translate }}</span>
       </button>
       <button mat-stroked-button (click)="onMoveSelected()" [matTooltip]="'toolbar.move' | translate"
         [attr.aria-label]="'toolbar.moveSelected' | translate">
@@ -102,7 +102,7 @@
       <button mat-stroked-button color="warn" (click)="onDeleteSelected()" [matTooltip]="'toolbar.delete' | translate"
         [attr.aria-label]="'toolbar.deleteSelected' | translate">
         <mat-icon aria-hidden="true">delete</mat-icon>
-        <span>{{ 'toolbar.delete' | translate }}</span>
+        <span>{{ 'common.delete' | translate }}</span>
       </button>
     </div>
 
@@ -112,7 +112,7 @@
       <button mat-raised-button color="primary" (click)="toggleBottomSheet()" [attr.aria-expanded]="bottomSheetOpen"
         [attr.aria-label]="'toolbar.actionsFor' | translate:{count: selectionCount}" class="mobile-actions-button">
         <mat-icon aria-hidden="true">checklist</mat-icon>
-        <span>{{ 'toolbar.actions' | translate }}</span>
+        <span>{{ 'common.actions' | translate }}</span>
         @if(getAvailableActionsCount() > 0) {
         <span class="action-count-badge">{{ getAvailableActionsCount() }}</span>
         }
@@ -271,7 +271,7 @@
 <!-- Mobile Selection Bottom Sheet -->
 @if(hasSelection && bottomSheetOpen) {
 <div class="selection-bottom-sheet" role="dialog"
-  [attr.aria-label]="('bottomSheet.actions' | translate) + ' ' + ('toolbar.managementToolbar' | translate)"
+  [attr.aria-label]="('common.actions' | translate) + ' ' + ('toolbar.managementToolbar' | translate)"
   aria-modal="true">
 
   <!-- Backdrop -->
@@ -282,7 +282,7 @@
     <!-- Header -->
     <div class="bottom-sheet-header">
       <div class="drag-handle"></div>
-      <h3>{{ 'bottomSheet.actions' | translate }}</h3>
+      <h3>{{ 'common.actions' | translate }}</h3>
     </div>
 
     <!-- Organize Actions -->
@@ -302,7 +302,7 @@
       <button class="action-item" (click)="onActionSelected('rename')" [disabled]="selectionCount !== 1" role="menuitem"
         tabindex="0" [attr.aria-disabled]="selectionCount !== 1">
         <mat-icon class="action-item-icon" aria-hidden="true">edit</mat-icon>
-        <span class="action-item-label">{{ 'bottomSheet.rename' | translate }}</span>
+        <span class="action-item-label">{{ 'common.rename' | translate }}</span>
         @if(selectionCount !== 1) {
         <span class="action-item-meta">{{ 'bottomSheet.oneItemOnly' | translate }}</span>
         }
@@ -317,7 +317,7 @@
 
       <button class="action-item" (click)="onActionSelected('download')" role="menuitem" tabindex="0">
         <mat-icon class="action-item-icon" aria-hidden="true">download</mat-icon>
-        <span class="action-item-label">{{ 'bottomSheet.download' | translate }}</span>
+        <span class="action-item-label">{{ 'common.download' | translate }}</span>
       </button>
     </div>
 
@@ -331,7 +331,7 @@
 
       <button class="action-item action-item-danger" (click)="onActionSelected('delete')" role="menuitem" tabindex="0">
         <mat-icon class="action-item-icon" aria-hidden="true">delete</mat-icon>
-        <span class="action-item-label">{{ 'bottomSheet.delete' | translate }}</span>
+        <span class="action-item-label">{{ 'common.delete' | translate }}</span>
         <span class="action-item-meta">{{ selectionCount === 1 ? ('bottomSheet.item' | translate:{count: 1}) :
           ('bottomSheet.items' | translate:{count: selectionCount}) }}</span>
       </button>

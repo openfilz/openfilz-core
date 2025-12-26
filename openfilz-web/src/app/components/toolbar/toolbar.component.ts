@@ -58,11 +58,11 @@ export class ToolbarComponent {
   @Input() sortOrder: 'ASC' | 'DESC' = 'ASC';
 
   sortOptions = [
-    { labelKey: 'sortOptions.name', value: 'name' },
-    { labelKey: 'sortOptions.dateModified', value: 'updatedAt' },
-    { labelKey: 'sortOptions.size', value: 'size' },
-    { labelKey: 'sortOptions.type', value: 'type' },
-    { labelKey: 'sortOptions.owner', value: 'createdBy' },
+    { labelKey: 'common.name', value: 'name' },
+    { labelKey: 'common.dateModified', value: 'updatedAt' },
+    { labelKey: 'common.size', value: 'size' },
+    { labelKey: 'common.type', value: 'type' },
+    { labelKey: 'common.owner', value: 'createdBy' },
     { labelKey: 'sortOptions.dateCreated', value: 'createdAt' }
   ];
 
@@ -190,7 +190,7 @@ export class ToolbarComponent {
 
   getSortLabelKey(): string {
     const option = this.sortOptions.find(opt => opt.value === this.sortBy);
-    return option ? option.labelKey : 'sortOptions.name';
+    return option ? option.labelKey : 'common.name';
   }
 
   // Bottom sheet methods for mobile selection actions

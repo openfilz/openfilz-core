@@ -31,8 +31,8 @@
       <mat-icon aria-hidden="true">error</mat-icon>
       <p>{{ error | translate }}</p>
       <button mat-raised-button color="primary" (click)="loadDocumentInfo()"
-        [attr.aria-label]="'metadataPanel.retry' | translate">
-        {{ 'metadataPanel.retry' | translate }}
+        [attr.aria-label]="'common.retry' | translate">
+        {{ 'common.retry' | translate }}
       </button>
     </div>
     }
@@ -50,13 +50,13 @@
         <div class="tab-content">
           <div class="info-content">
             <div class="info-row">
-              <span class="info-label">{{ 'metadataPanel.name' | translate }}</span>
+              <span class="info-label">{{ 'common.name' | translate }}</span>
               <span class="info-value">{{ documentInfo.name }}</span>
             </div>
             <mat-divider></mat-divider>
 
             <div class="info-row">
-              <span class="info-label">{{ 'metadataPanel.type' | translate }}</span>
+              <span class="info-label">{{ 'common.type' | translate }}</span>
               <span class="info-value">
                 <span class="type-badge" [class.type-folder]="documentInfo.type === 'FOLDER'">
                   <ng-container *ngIf="getFriendlyTypeKey() as typeData">
@@ -69,7 +69,7 @@
 
             @if(documentInfo.size) {
             <div class="info-row">
-              <span class="info-label">{{ 'metadataPanel.size' | translate }}</span>
+              <span class="info-label">{{ 'common.size' | translate }}</span>
               <span class="info-value">{{ formatFileSize(documentInfo.size) }}</span>
             </div>
             <mat-divider></mat-divider>
@@ -93,10 +93,10 @@
       </mat-tab>
 
       <!-- Metadata Tab -->
-      <mat-tab [attr.aria-label]="'metadataPanel.metadata' | translate">
+      <mat-tab [attr.aria-label]="'common.metadata' | translate">
         <ng-template mat-tab-label>
           <mat-icon aria-hidden="true">label</mat-icon>
-          <span>{{ 'metadataPanel.metadata' | translate }}</span>
+          <span>{{ 'common.metadata' | translate }}</span>
         </ng-template>
 
         <div class="tab-content">
@@ -149,8 +149,8 @@
             <mat-icon aria-hidden="true">error</mat-icon>
             <p>{{ auditError | translate }}</p>
             <button mat-raised-button color="primary" (click)="loadAuditTrail()"
-              [attr.aria-label]="'metadataPanel.retry' | translate">
-              {{ 'metadataPanel.retry' | translate }}
+              [attr.aria-label]="'common.retry' | translate">
+              {{ 'common.retry' | translate }}
             </button>
           </div>
           }
@@ -197,10 +197,9 @@
   <!-- Panel Footer -->
   <div class="panel-footer" *ngIf="documentInfo">
     @if(!editMode) {
-    <button mat-stroked-button class="cancel-btn" (click)="onClose()"
-      [attr.aria-label]="'metadataPanel.close' | translate">
+    <button mat-stroked-button class="cancel-btn" (click)="onClose()" [attr.aria-label]="'common.close' | translate">
       <mat-icon aria-hidden="true">close</mat-icon>
-      <span>{{ 'metadataPanel.close' | translate }}</span>
+      <span>{{ 'common.close' | translate }}</span>
     </button>
     <button mat-raised-button class="primary-btn" (click)="toggleEditMode()"
       [attr.aria-label]="'metadataPanel.editMetadata' | translate">
@@ -211,7 +210,7 @@
     <button mat-stroked-button class="cancel-btn" (click)="toggleEditMode()" [disabled]="saving"
       [attr.aria-label]="'metadataPanel.cancelEditing' | translate">
       <mat-icon aria-hidden="true">close</mat-icon>
-      <span>{{ 'metadataPanel.close' | translate }}</span>
+      <span>{{ 'common.close' | translate }}</span>
     </button>
     <button mat-raised-button class="primary-btn" (click)="saveMetadata()" [disabled]="!canSave"
       [attr.aria-label]="'metadataPanel.saveMetadata' | translate">
@@ -221,7 +220,7 @@
       </ng-container>
       <ng-template #saveReady>
         <mat-icon aria-hidden="true">save</mat-icon>
-        <span>{{ 'metadataPanel.save' | translate }}</span>
+        <span>{{ 'common.save' | translate }}</span>
       </ng-template>
     </button>
     }

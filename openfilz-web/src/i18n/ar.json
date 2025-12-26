@@ -24,7 +24,16 @@
         "fileWithType": "ملف {{type}}",
         "user": "مستخدم أوبنفيلز",
         "downloadProgress": "جاري تنزيل الملفات...",
-        "downloadInProgress": "جاري التنزيل..."
+        "downloadInProgress": "جاري التنزيل...",
+        "name": "الاسم",
+        "size": "الحجم",
+        "type": "النوع",
+        "dateModified": "تاريخ التعديل",
+        "owner": "المالك",
+        "metadata": "البيانات الوصفية",
+        "key": "المفتاح",
+        "value": "القيمة",
+        "dropFilesHere": "اسحب الملفات هنا للرفع"
     },
     "languages": {
         "en": "English",
@@ -52,7 +61,6 @@
         "toggleMobileMenu": "تبديل القائمة المحمولة",
         "activeFilters": "الفلاتر النشطة",
         "changeLanguage": "تغيير اللغة",
-        "download": "تنزيل",
         "open": "فتح"
     },
     "breadcrumb": {
@@ -64,20 +72,16 @@
         "of": "من",
         "managementToolbar": "شريط أدوات إدارة الملفات",
         "selected": "تم تحديد {{count}}",
-        "upload": "رفع",
         "uploadFiles": "رفع ملفات",
         "newFolder": "مجلد جديد",
         "createNewFolder": "إنشاء مجلد جديد",
         "clearSelection": "مسح التحديد",
-        "rename": "إعادة تسمية",
         "renameSelected": "إعادة تسمية العنصر المحدد",
-        "download": "تنزيل",
         "downloadSelected": "تنزيل العناصر المحددة",
         "move": "نقل",
         "moveSelected": "نقل العناصر المحددة",
         "copy": "نسخ",
         "copySelected": "نسخ العناصر المحددة",
-        "delete": "حذف",
         "deleteSelected": "حذف العناصر المحددة",
         "gridView": "عرض الشبكة",
         "listView": "عرض القائمة",
@@ -90,30 +94,20 @@
         "ascending": "تصاعدي",
         "descending": "تنازلي",
         "moreOptions": "خيارات إضافية",
-        "actions": "إجراءات",
         "actionsFor": "إجراءات لـ {{count}} عناصر",
         "quickActions": "إجراءات سريعة",
         "openActionsMenu": "فتح قائمة الإجراءات",
         "closeActionsMenu": "إغلاق قائمة الإجراءات"
     },
     "sortOptions": {
-        "name": "الاسم",
-        "size": "الحجم",
-        "type": "النوع",
         "date": "التاريخ",
-        "dateModified": "تاريخ التعديل",
-        "owner": "المالك",
         "dateCreated": "تاريخ الإنشاء"
     },
     "fileList": {
         "filesTable": "قائمة الملفات والمجلدات",
-        "name": "الاسم",
-        "size": "الحجم",
-        "type": "النوع",
         "selectAll": "تحديد الكل",
         "selectItem": "تحديد {{name}}",
         "select": "تحديد",
-        "folder": "مجلد",
         "folderDetail": "مجلد: {{name}}",
         "fileDetail": "ملف: {{name}}",
         "favorite": "مفضل",
@@ -122,8 +116,7 @@
         "addToFavorites": "إضافة إلى المفضلة",
         "addToFavoritesDetail": "إضافة {{name}} إلى المفضلة",
         "removeFromFavorites": "إزالة من المفضلة",
-        "removeFromFavoritesDetail": "إزالة {{name}} من المفضلة",
-        "dropFilesHere": "اسحب الملفات هنا للرفع"
+        "removeFromFavoritesDetail": "إزالة {{name}} من المفضلة"
     },
     "fileExplorer": {
         "emptyTitle": "هذا المجلد فارغ",
@@ -131,17 +124,10 @@
     },
     "searchFilters": {
         "title": "فلاتر البحث",
-        "type": "النوع",
-        "dateModified": "تاريخ التعديل",
-        "owner": "المالك",
         "ownerPlaceholder": "أنشأه...",
         "fileType": "نوع الملف",
-        "metadata": "البيانات الوصفية",
-        "key": "المفتاح",
-        "value": "القيمة",
         "addMetadataFilter": "إضافة فلتر البيانات الوصفية",
         "applyFilters": "تطبيق الفلاتر",
-        "clear": "مسح",
         "remove": "إزالة",
         "documentTypes": {
             "all": "الكل",
@@ -163,7 +149,6 @@
         }
     },
     "uploadZone": {
-        "dropFiles": "اسحب الملفات هنا للرفع",
         "orClick": "أو انقر لاختيار الملفات",
         "chooseFiles": "اختر الملفات"
     },
@@ -171,13 +156,10 @@
         "title": "الخصائص",
         "description": "لوحة خصائص المستند",
         "closePanel": "إغلاق لوحة الخصائص",
-        "close": "إغلاق",
         "loading": "جاري تحميل معلومات المستند...",
         "errorLoading": "فشل تحميل معلومات المستند",
-        "retry": "إعادة المحاولة",
         "general": "عام",
         "generalInfo": "معلومات عامة",
-        "metadata": "البيانات الوصفية",
         "audit": "التدقيق",
         "auditHistory": "سجل التدقيق",
         "name": "الاسم:",
@@ -199,7 +181,6 @@
         "cancelEditing": "إلغاء التعديل",
         "saveMetadata": "حفظ تغييرات البيانات الوصفية",
         "savingDots": "جاري الحفظ...",
-        "save": "حفظ",
         "unsavedChangesTitle": "تغييرات غير محفوظة",
         "unsavedChangesMessage": "لديك تغييرات غير محفوظة. هل أنت متأكد أنك تريد الإغلاق؟",
         "unsavedChangesDetails": "ستفقد تغييراتك إذا أغلقت دون حفظ.",
@@ -210,12 +191,9 @@
         "saveSuccess": "تم حفظ البيانات الوصفية بنجاح"
     },
     "metadataEditor": {
-        "title": "البيانات الوصفية",
         "clearAll": "مسح الكل",
         "clearAllTooltip": "مسح جميع مدخلات البيانات الوصفية",
         "noMetadata": "لا توجد بيانات وصفية متاحة",
-        "keyLabel": "المفتاح",
-        "valueLabel": "القيمة",
         "keyPlaceholder": "على سبيل المثال: المؤلف، القسم",
         "valuePlaceholder": "على سبيل المثال: محمد أحمد",
         "keyAriaLabel": "مفتاح البيانات الوصفية",
@@ -245,8 +223,7 @@
             "subtitle": "أدخل اسمًا جديدًا لعنصرك",
             "folderName": "اسم المجلد",
             "fileName": "اسم الملف",
-            "placeholder": "أدخل الاسم الجديد",
-            "renameButton": "إعادة تسمية"
+            "placeholder": "أدخل الاسم الجديد"
         },
         "upload": {
             "title": "رفع الملفات",
@@ -270,10 +247,7 @@
             "copyItem": "نسخ العنصر",
             "copyItems": "نسخ {{count}} عناصر"
         },
-        "confirm": {
-            "defaultCancel": "إلغاء",
-            "defaultConfirm": "تأكيد"
-        }
+        "confirm": {}
     },
     "recycleBin": {
         "title": "سلة المحذوفات",
@@ -328,16 +302,12 @@
         }
     },
     "bottomSheet": {
-        "actions": "إجراءات",
         "organize": "تنظيم",
         "moveTo": "نقل إلى...",
         "copyTo": "نسخ إلى...",
-        "rename": "إعادة تسمية",
         "oneItemOnly": "عنصر واحد فقط",
         "shareAndDownload": "المشاركة والتنزيل",
-        "download": "تنزيل",
         "dangerZone": "منطقة خطر",
-        "delete": "حذف",
         "item": "{{count}} عنصر",
         "items": "{{count}} عناصر"
     },
@@ -440,15 +410,11 @@
         "gz": "أرشيف GZip",
         "tar": "أرشيف TAR",
         "unknown": "غير معروف",
-        "folder": "مجلد",
-        "file": "ملف",
         "imageType": "صورة {{type}}",
         "videoType": "فيديو {{type}}",
-        "audioType": "صوت {{type}}",
-        "fileType": "ملف {{type}}"
+        "audioType": "صوت {{type}}"
     },
     "fileViewer": {
-        "close": "إغلاق",
         "pageInfo": "صفحة {{current}} من {{total}}",
         "previousPage": "الصفحة السابقة",
         "nextPage": "الصفحة التالية",
@@ -456,7 +422,6 @@
         "zoomIn": "تكبير",
         "resetZoom": "إعادة تعيين الزوم",
         "rotate": "تدوير",
-        "download": "تنزيل",
         "print": "طباعة",
         "fullscreen": "ملء الشاشة",
         "exitFullscreen": "خروج من ملء الشاشة",
