@@ -301,7 +301,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
 
     @Override
     public Mono<Boolean> existsByNameAndParentId(String name, UUID parentId) {
-        return parentId == null ? documentRepository.existsByNameAndParentIdIsNull(name) : documentRepository.existsByNameAndParentId(name, parentId);
+        return parentId == null ? documentRepository.existsByNameAndParentIdIsNullAndActiveIsTrue(name) : documentRepository.existsByNameAndParentIdAndActiveIsTrue(name, parentId);
     }
 
     @Override
