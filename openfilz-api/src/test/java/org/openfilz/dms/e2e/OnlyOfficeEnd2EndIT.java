@@ -22,12 +22,12 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import org.testcontainers.Testcontainers;
 import org.testcontainers.containers.BrowserWebDriverContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import javax.crypto.SecretKey;
@@ -43,6 +43,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
@@ -57,12 +58,18 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
  * from the Document Server to our backend.
  */
 @Slf4j
-@Testcontainers
+@org.testcontainers.junit.jupiter.Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestConstructor(autowireMode = ALL)
 public class OnlyOfficeEnd2EndIT extends TestContainersKeyCloakConfig {
 
     private static final String ONLYOFFICE_JWT_SECRET = "openfilz-onlyoffice-test-jwt-secret-2024";
+
+    /**
+     * Detect if running in GitHub Actions CI environment.
+     */
+    private static final boolean IS_CI = System.getenv("GITHUB_ACTIONS") != null ||
+            System.getenv("CI") != null;
 
     /**
      * Port allocated for this test instance, needed to configure callback URLs
@@ -80,6 +87,9 @@ public class OnlyOfficeEnd2EndIT extends TestContainersKeyCloakConfig {
      * OnlyOffice Document Server container for end-to-end testing.
      * Note: This is a large image (~5GB) and takes 1-2 minutes to start.
      * The container is reused across tests for efficiency.
+     *
+     * Uses withExtraHost to allow the container to reach the host via host.docker.internal.
+     * This works on Docker Desktop (Windows/Mac). On Linux/CI, the behavior may differ.
      */
     @Container
     static GenericContainer<?> onlyOfficeServer = new GenericContainer<>(
@@ -114,6 +124,7 @@ public class OnlyOfficeEnd2EndIT extends TestContainersKeyCloakConfig {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private SecretKey onlyOfficeSecretKey;
     private HttpClient httpClient;
+    private boolean commandServiceReady = false;
 
     public OnlyOfficeEnd2EndIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
         super(webTestClient, customJackson2JsonEncoder);
@@ -136,6 +147,7 @@ public class OnlyOfficeEnd2EndIT extends TestContainersKeyCloakConfig {
                 () -> "http://" + onlyOfficeServer.getHost() + ":" + onlyOfficeServer.getMappedPort(80));
         registry.add("onlyoffice.document-server.api-path", () -> "/web-apps/apps/api/documents/api.js");
         // Use host.docker.internal so OnlyOffice container can reach our backend
+        // This is configured via withExtraHost("host.docker.internal", "host-gateway")
         // Note: This URL is used in editor config and will be updated per-test
         registry.add("onlyoffice.api-base-url", () -> "http://host.docker.internal:8081");
         registry.add("onlyoffice.jwt.enabled", () -> true);
@@ -161,9 +173,79 @@ public class OnlyOfficeEnd2EndIT extends TestContainersKeyCloakConfig {
                 .connectTimeout(Duration.ofSeconds(30))
                 .build();
 
+        // On CI, expose the host port for containers to reach via host.testcontainers.internal
+        // This must be done after the server port is available
+        if (IS_CI && !commandServiceReady) {
+            log.info("CI environment detected - exposing host port {} for containers", serverPort);
+            Testcontainers.exposeHostPorts(serverPort);
+        }
+
+        // Wait for Command Service to be ready (it takes longer than healthcheck)
+        if (!commandServiceReady) {
+            log.info("Waiting for OnlyOffice Command Service to be ready...");
+            waitForCommandService();
+        }
+
         log.info("Test server running on port: {}", serverPort);
+        log.info("Running in CI: {}", IS_CI);
         log.info("Backend URL for containers: {}", getBackendUrlForContainers());
         log.info("OnlyOffice Document Server: {}", getOnlyOfficeServerUrl());
+    }
+
+    /**
+     * Wait for the OnlyOffice Command Service to be ready.
+     * The service may return 502 Bad Gateway while starting up.
+     */
+    private void waitForCommandService() {
+        int maxAttempts = 30;
+        int attemptDelay = 2000; // 2 seconds
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                // Create a simple version command request
+                Map<String, Object> requestBody = new HashMap<>();
+                requestBody.put("c", "version");
+
+                String token = Jwts.builder()
+                        .claims(requestBody)
+                        .issuedAt(new Date())
+                        .expiration(new Date(System.currentTimeMillis() + 3600 * 1000))
+                        .signWith(onlyOfficeSecretKey)
+                        .compact();
+                requestBody.put("token", token);
+
+                String jsonBody = objectMapper.writeValueAsString(requestBody);
+
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(getOnlyOfficeServerUrl() + "/coauthoring/CommandService.ashx"))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                        .build();
+
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+                if (response.statusCode() == 200 && !response.body().contains("<html>")) {
+                    log.info("Command Service is ready after {} attempts", attempt);
+                    commandServiceReady = true;
+                    return;
+                } else {
+                    log.debug("Command Service not ready (attempt {}/{}): status={}, body={}",
+                            attempt, maxAttempts, response.statusCode(),
+                            response.body().substring(0, Math.min(100, response.body().length())));
+                }
+            } catch (Exception e) {
+                log.debug("Command Service check failed (attempt {}/{}): {}", attempt, maxAttempts, e.getMessage());
+            }
+
+            try {
+                TimeUnit.MILLISECONDS.sleep(attemptDelay);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+
+        log.warn("Command Service may not be fully ready after {} attempts", maxAttempts);
     }
 
     // ==================== HELPER METHODS ====================
@@ -177,15 +259,30 @@ public class OnlyOfficeEnd2EndIT extends TestContainersKeyCloakConfig {
 
     /**
      * Get the base URL for our backend that containers can reach.
-     * Uses host.docker.internal which is set up via withExtraHost("host.docker.internal", "host-gateway").
+     *
+     * On local development (Docker Desktop on Windows/Mac):
+     *   Uses host.docker.internal which is set up via withExtraHost("host.docker.internal", "host-gateway").
+     *
+     * On CI (GitHub Actions on Linux):
+     *   Uses host.testcontainers.internal which is set up via Testcontainers.exposeHostPorts().
      */
     private String getBackendUrlForContainers() {
+        if (IS_CI) {
+            return "http://host.testcontainers.internal:" + serverPort;
+        }
         return "http://host.docker.internal:" + serverPort;
     }
 
     /**
+     * Get the hostname that containers should use to reach the host.
+     * Used for URL replacements in editor config.
+     */
+    private String getContainerHostname() {
+        return IS_CI ? "host.testcontainers.internal" : "host.docker.internal";
+    }
+
+    /**
      * Get the base URL for our backend that OnlyOffice container can reach.
-     * Uses host.docker.internal to allow container-to-host communication.
      */
     private String getBackendUrlForOnlyOffice() {
         return getBackendUrlForContainers();
@@ -239,7 +336,8 @@ public class OnlyOfficeEnd2EndIT extends TestContainersKeyCloakConfig {
     }
 
     /**
-     * Call OnlyOffice Command Service API.
+     * Call OnlyOffice Command Service API with retry logic.
+     * Retries on 502 Bad Gateway errors which can occur while the service is warming up.
      *
      * @param command The command to execute (info, drop, forcesave, version, license)
      * @param key     The document key (required for most commands)
@@ -266,10 +364,38 @@ public class OnlyOfficeEnd2EndIT extends TestContainersKeyCloakConfig {
                 .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
                 .build();
 
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        log.debug("Command Service response: {} - {}", response.statusCode(), response.body());
+        // Retry logic for 502 Bad Gateway errors
+        int maxRetries = 5;
+        int retryDelay = 2000; // 2 seconds
 
-        return objectMapper.readValue(response.body(), Map.class);
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            log.debug("Command Service response: {} - {}", response.statusCode(), response.body());
+
+            if (response.statusCode() == 200 && !response.body().trim().startsWith("<")) {
+                return objectMapper.readValue(response.body(), Map.class);
+            }
+
+            if (response.statusCode() == 502 || response.body().trim().startsWith("<")) {
+                if (attempt < maxRetries) {
+                    log.warn("Command Service returned {} (attempt {}/{}), retrying in {}ms...",
+                            response.statusCode(), attempt, maxRetries, retryDelay);
+                    TimeUnit.MILLISECONDS.sleep(retryDelay);
+                    // Increase delay for next retry
+                    retryDelay = Math.min(retryDelay * 2, 10000);
+                } else {
+                    log.error("Command Service failed after {} attempts: {} - {}",
+                            maxRetries, response.statusCode(), response.body());
+                    throw new IOException("Command Service returned " + response.statusCode() +
+                            " after " + maxRetries + " attempts: " + response.body());
+                }
+            } else {
+                // Some other error, return immediately
+                return objectMapper.readValue(response.body(), Map.class);
+            }
+        }
+
+        throw new IOException("Command Service failed after " + maxRetries + " attempts");
     }
 
     /**
@@ -669,20 +795,23 @@ public class OnlyOfficeEnd2EndIT extends TestContainersKeyCloakConfig {
         Map<String, Object> config = (Map<String, Object>) editorResponse.get("config");
 
         // Step 3: Modify config URLs to be accessible from containers
-        // Both browser and OnlyOffice need to access backend via host.docker.internal
+        // Both browser and OnlyOffice need to access backend via the appropriate hostname
+        String hostname = getContainerHostname();
         Map<String, Object> document = (Map<String, Object>) config.get("document");
         String originalUrl = (String) document.get("url");
-        // Replace any host references with host.docker.internal
+        // Replace any host references with the appropriate container hostname
         String containerAccessibleUrl = originalUrl
-                .replace("localhost:" + serverPort, "host.docker.internal:" + serverPort)
-                .replace("host.docker.internal:8081", "host.docker.internal:" + serverPort);
+                .replace("localhost:" + serverPort, hostname + ":" + serverPort)
+                .replace("host.docker.internal:8081", hostname + ":" + serverPort)
+                .replace("host.testcontainers.internal:8081", hostname + ":" + serverPort);
         document.put("url", containerAccessibleUrl);
         log.info("Document URL for containers: {}", containerAccessibleUrl);
 
         Map<String, Object> editorConfig = (Map<String, Object>) config.get("editorConfig");
         String callbackUrl = (String) editorConfig.get("callbackUrl");
         String containerAccessibleCallbackUrl = callbackUrl
-                .replace("host.docker.internal:8081", "host.docker.internal:" + serverPort);
+                .replace("host.docker.internal:8081", hostname + ":" + serverPort)
+                .replace("host.testcontainers.internal:8081", hostname + ":" + serverPort);
         editorConfig.put("callbackUrl", containerAccessibleCallbackUrl);
         log.info("Callback URL for containers: {}", containerAccessibleCallbackUrl);
 
@@ -774,19 +903,22 @@ public class OnlyOfficeEnd2EndIT extends TestContainersKeyCloakConfig {
         Map<String, Object> config = (Map<String, Object>) editorResponse.get("config");
 
         // Step 3: Update URLs for container access
+        String hostname = getContainerHostname();
         Map<String, Object> document = (Map<String, Object>) config.get("document");
         String documentKey = (String) document.get("key");
         String originalUrl = (String) document.get("url");
         String containerAccessibleUrl = originalUrl
-                .replace("localhost:" + serverPort, "host.docker.internal:" + serverPort)
-                .replace("host.docker.internal:8081", "host.docker.internal:" + serverPort);
+                .replace("localhost:" + serverPort, hostname + ":" + serverPort)
+                .replace("host.docker.internal:8081", hostname + ":" + serverPort)
+                .replace("host.testcontainers.internal:8081", hostname + ":" + serverPort);
         document.put("url", containerAccessibleUrl);
         log.info("Document URL for containers: {}", containerAccessibleUrl);
 
         Map<String, Object> editorConfig = (Map<String, Object>) config.get("editorConfig");
         String callbackUrl = (String) editorConfig.get("callbackUrl");
         String containerAccessibleCallbackUrl = callbackUrl
-                .replace("host.docker.internal:8081", "host.docker.internal:" + serverPort);
+                .replace("host.docker.internal:8081", hostname + ":" + serverPort)
+                .replace("host.testcontainers.internal:8081", hostname + ":" + serverPort);
         editorConfig.put("callbackUrl", containerAccessibleCallbackUrl);
         log.info("Callback URL for containers: {}", containerAccessibleCallbackUrl);
 
@@ -882,18 +1014,21 @@ public class OnlyOfficeEnd2EndIT extends TestContainersKeyCloakConfig {
         String documentKey = (String) ((Map<String, Object>) config.get("document")).get("key");
 
         // Step 3: Update URLs for container access
+        String hostname = getContainerHostname();
         Map<String, Object> document = (Map<String, Object>) config.get("document");
         String originalUrl = (String) document.get("url");
         String containerAccessibleUrl = originalUrl
-                .replace("localhost:" + serverPort, "host.docker.internal:" + serverPort)
-                .replace("host.docker.internal:8081", "host.docker.internal:" + serverPort);
+                .replace("localhost:" + serverPort, hostname + ":" + serverPort)
+                .replace("host.docker.internal:8081", hostname + ":" + serverPort)
+                .replace("host.testcontainers.internal:8081", hostname + ":" + serverPort);
         document.put("url", containerAccessibleUrl);
         log.info("Document URL for containers: {}", containerAccessibleUrl);
 
         Map<String, Object> editorConfig = (Map<String, Object>) config.get("editorConfig");
         String callbackUrl = (String) editorConfig.get("callbackUrl");
         String containerAccessibleCallbackUrl = callbackUrl
-                .replace("host.docker.internal:8081", "host.docker.internal:" + serverPort);
+                .replace("host.docker.internal:8081", hostname + ":" + serverPort)
+                .replace("host.testcontainers.internal:8081", hostname + ":" + serverPort);
         editorConfig.put("callbackUrl", containerAccessibleCallbackUrl);
         log.info("Callback URL for containers: {}", containerAccessibleCallbackUrl);
 
