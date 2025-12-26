@@ -12,7 +12,6 @@ import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.OnlyOfficeCallbackRequest;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;

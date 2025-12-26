@@ -48,35 +48,4 @@ public class FileUtils {
         return newMap;
     }
 
-
-    public static Mono<ContentInfo> computeLengthAndChecksum(
-            Flux<DataBuffer> flux, String algorithm) {
-
-        return Mono.fromCallable(() -> MessageDigest.getInstance(algorithm))
-                .flatMap(digest ->
-                        flux.reduce(
-                                new long[]{0L}, // length[0]
-                                (length, buffer) -> {
-                                    try {
-                                        // Update digest with buffer content
-                                        int readable = buffer.readableByteCount();
-                                        length[0] += readable;
-                                        byte[] bytes = new byte[readable];
-                                        buffer.read(bytes); // Read data from DataBuffer into the byte array
-                                        digest.update(bytes);
-                                        return length;
-                                    } finally {
-                                        // CRITICAL: Release buffer to prevent memory leaks
-                                        DataBufferUtils.release(buffer);
-                                    }
-                                }
-                        ).map(length ->
-                                new ContentInfo(
-                                        length[0],
-                                        HexFormat.of().formatHex(digest.digest())
-                                )
-                        )
-                );
-    }
-
 }
