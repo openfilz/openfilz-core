@@ -3,62 +3,45 @@
     <div class="logo-container">
       <div class="logo">O</div>
       @if(!isCollapsed) {
-        <div class="logo-text">OPENFILZ</div>
+      <div class="logo-text">OPENFILZ</div>
       }
     </div>
     @if(!isCollapsed) {
-      <button
-        mat-icon-button
-        class="toggle-btn"
-        (click)="toggleSidebar()"
-        matTooltip="Collapse"
-        matTooltipPosition="right">
-        <mat-icon>chevron_left</mat-icon>
-      </button>
+    <button mat-icon-button class="toggle-btn" (click)="toggleSidebar()" [matTooltip]="'sidebar.collapse' | translate"
+      matTooltipPosition="right">
+      <mat-icon class="rtl-flip">chevron_left</mat-icon>
+    </button>
     }
   </div>
 
   <!-- Floating toggle button for collapsed state -->
   @if(isCollapsed) {
-    <button
-      mat-icon-button
-      class="toggle-btn-floating"
-      (click)="toggleSidebar()"
-      matTooltip="Expand sidebar"
-      matTooltipPosition="right">
-      <mat-icon>chevron_right</mat-icon>
-    </button>
+  <button mat-icon-button class="toggle-btn-floating" (click)="toggleSidebar()"
+    [matTooltip]="'sidebar.expandSidebar' | translate" matTooltipPosition="right">
+    <mat-icon class="rtl-flip">chevron_right</mat-icon>
+  </button>
   }
-  
+
   <div class="sidebar-nav">
     @for(item of navigationItems; track item.id; let i = $index) {
-      @if(item.id !== 'logout') {
-        <div
-          class="nav-item"
-          [class.active]="item.active"
-          (click)="onNavigationClick(item.id)"
-          [matTooltip]="item.label"
-          [matTooltipPosition]="'right'"
-          [matTooltipDisabled]="!isCollapsed">
-          <div class="nav-icon"><mat-icon>{{ getIconClass(item.id) }}</mat-icon></div>
-          @if(!isCollapsed) {
-            <span>{{ item.label }}</span>
-          }
-        </div>
+    @if(item.id !== 'logout') {
+    <div class="nav-item" [class.active]="item.active" (click)="onNavigationClick(item.id)"
+      [matTooltip]="item.labelKey | translate" [matTooltipPosition]="'right'" [matTooltipDisabled]="!isCollapsed">
+      <div class="nav-icon"><mat-icon>{{ getIconClass(item.id) }}</mat-icon></div>
+      @if(!isCollapsed) {
+      <span>{{ item.labelKey | translate }}</span>
       }
+    </div>
+    }
     }
   </div>
 
   <div class="sidebar-footer">
-    <div
-      class="nav-item"
-      (click)="onNavigationClick('logout')"
-      [matTooltip]="'Log Out'"
-      [matTooltipPosition]="'right'"
-      [matTooltipDisabled]="!isCollapsed">
-      <div class="nav-icon"><mat-icon>logout</mat-icon></div>
+    <div class="nav-item" (click)="onNavigationClick('logout')" [matTooltip]="'sidebar.logout' | translate"
+      [matTooltipPosition]="'right'" [matTooltipDisabled]="!isCollapsed">
+      <div class="nav-icon"><mat-icon class="rtl-flip">logout</mat-icon></div>
       @if(!isCollapsed) {
-        <span>Log Out</span>
+      <span>{{ 'sidebar.logout' | translate }}</span>
       }
     </div>
   </div>

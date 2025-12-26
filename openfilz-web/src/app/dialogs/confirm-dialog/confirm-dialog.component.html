@@ -1,26 +1,29 @@
-<div class="dialog-header" [class.danger]="dialogType === 'danger'" [class.warning]="dialogType === 'warning'" [class.info]="dialogType === 'info'">
+<div class="dialog-header" [class.danger]="dialogType === 'danger'" [class.warning]="dialogType === 'warning'"
+  [class.info]="dialogType === 'info'">
   <div class="header-content">
-    <div class="icon-wrapper" [class.danger]="dialogType === 'danger'" [class.warning]="dialogType === 'warning'" [class.info]="dialogType === 'info'">
+    <div class="icon-wrapper" [class.danger]="dialogType === 'danger'" [class.warning]="dialogType === 'warning'"
+      [class.info]="dialogType === 'info'">
       <mat-icon>{{ icon }}</mat-icon>
     </div>
     <div class="header-text">
-      <h2 class="dialog-title">{{ data.title }}</h2>
+      <h2 class="dialog-title">{{ data.title | translate: data.messageParams }}</h2>
     </div>
   </div>
 </div>
 
 <mat-dialog-content class="dialog-content">
-  <p class="message">{{ data.message }}</p>
-  <p *ngIf="data.details" class="details">{{ data.details }}</p>
+  <p class="message">{{ data.message | translate: data.messageParams }}</p>
+  <p *ngIf="data.details" class="details">{{ data.details | translate: data.messageParams }}</p>
 </mat-dialog-content>
 
 <mat-dialog-actions class="dialog-actions">
   <button mat-stroked-button class="cancel-btn" (click)="onCancel()">
     <mat-icon>close</mat-icon>
-    {{ cancelText }}
+    {{ cancelText | translate }}
   </button>
-  <button mat-flat-button class="confirm-btn" [class.danger]="dialogType === 'danger'" [class.warning]="dialogType === 'warning'" [class.info]="dialogType === 'info'" (click)="onConfirm()">
+  <button mat-flat-button class="confirm-btn" [class.danger]="dialogType === 'danger'"
+    [class.warning]="dialogType === 'warning'" [class.info]="dialogType === 'info'" (click)="onConfirm()">
     <mat-icon>{{ dialogType === 'danger' ? 'delete' : 'check' }}</mat-icon>
-    {{ confirmText }}
+    {{ confirmText | translate }}
   </button>
 </mat-dialog-actions>

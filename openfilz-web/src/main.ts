@@ -12,6 +12,9 @@ import { provideRouter } from '@angular/router';
 import { routes } from './app/app.routes';
 import { provideAuth, LogLevel, authInterceptor, OidcSecurityService } from 'angular-auth-oidc-client';
 import { MockAuthService } from './app/services/mock-auth.service';
+import { provideTranslateService } from '@ngx-translate/core';
+import { provideTranslateHttpLoader } from '@ngx-translate/http-loader';
+import { providePaginatorIntl } from './app/i18n/paginator-intl';
 
 @Component({
   selector: 'app-root',
@@ -65,6 +68,14 @@ bootstrapApplication(App, {
         link: ApolloLink.from([basic, httpLink.create({ uri: environment.graphQlURL })]),
         cache: new InMemoryCache(),
       };
-    })
+    }),
+    provideTranslateService({
+      defaultLanguage: 'en',
+      loader: provideTranslateHttpLoader({
+        prefix: './i18n/',
+        suffix: '.json'
+      })
+    }),
+    providePaginatorIntl()
   ]
 });

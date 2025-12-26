@@ -6,6 +6,7 @@ import { MatListModule } from '@angular/material/list';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Router, NavigationEnd } from '@angular/router';
 import { filter } from 'rxjs/operators';
+import { TranslatePipe } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-sidebar',
@@ -17,7 +18,8 @@ import { filter } from 'rxjs/operators';
     MatButtonModule,
     MatIconModule,
     MatListModule,
-    MatTooltipModule
+    MatTooltipModule,
+    TranslatePipe
   ],
 })
 export class SidebarComponent implements OnInit {
@@ -28,13 +30,13 @@ export class SidebarComponent implements OnInit {
   @Output() mobileMenuClose = new EventEmitter<void>();
 
   navigationItems = [
-    { id: 'dashboard', label: 'Dashboard', active: true, route: '/dashboard' },
-    { id: 'my-folder', label: 'My Folder', active: false, route: '/my-folder' },
-    { id: 'recycle-bin', label: 'Recycle Bin', active: false, route: '/recycle-bin' },
-    { id: 'favorites', label: 'Favorites', active: false, route: '/favorites' },
-    //{ id: 'shared-files', label: 'Shared Files', active: false, route: '/shared-files' },
-    { id: 'settings', label: 'Settings', active: false, route: '/settings' },
-    { id: 'logout', label: 'Log Out', active: false, route: null }
+    { id: 'dashboard', labelKey: 'sidebar.dashboard', active: true, route: '/dashboard' },
+    { id: 'my-folder', labelKey: 'sidebar.myFolder', active: false, route: '/my-folder' },
+    { id: 'recycle-bin', labelKey: 'sidebar.recycleBin', active: false, route: '/recycle-bin' },
+    { id: 'favorites', labelKey: 'sidebar.favorites', active: false, route: '/favorites' },
+    //{ id: 'shared-files', labelKey: 'sidebar.sharedFiles', active: false, route: '/shared-files' },
+    { id: 'settings', labelKey: 'sidebar.settings', active: false, route: '/settings' },
+    { id: 'logout', labelKey: 'sidebar.logout', active: false, route: null }
   ];
 
   private router = inject(Router);
@@ -104,8 +106,8 @@ export class SidebarComponent implements OnInit {
         // Otherwise, navigate normally
         this.router.navigate([item.route]);
       }
-        // Close mobile menu after navigation
-        this.mobileMenuClose.emit();
+      // Close mobile menu after navigation
+      this.mobileMenuClose.emit();
     }
   }
 }

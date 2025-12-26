@@ -3,12 +3,14 @@ import { CommonModule } from '@angular/common';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { TranslatePipe } from '@ngx-translate/core';
 
 export type ConfirmDialogType = 'danger' | 'warning' | 'info';
 
 export interface ConfirmDialogData {
   title: string;
   message: string;
+  messageParams?: { [key: string]: any };
   details?: string;
   type?: ConfirmDialogType;
   confirmText?: string;
@@ -25,7 +27,8 @@ export interface ConfirmDialogData {
     CommonModule,
     MatDialogModule,
     MatButtonModule,
-    MatIconModule
+    MatIconModule,
+    TranslatePipe
   ],
 })
 export class ConfirmDialogComponent {
@@ -47,11 +50,11 @@ export class ConfirmDialogComponent {
   }
 
   get confirmText(): string {
-    return this.data.confirmText || 'Confirm';
+    return this.data.confirmText || 'common.confirm';
   }
 
   get cancelText(): string {
-    return this.data.cancelText || 'Cancel';
+    return this.data.cancelText || 'common.cancel';
   }
 
   onConfirm() {

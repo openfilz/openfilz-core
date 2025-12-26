@@ -1,19 +1,20 @@
-import {Component, EventEmitter, Output} from '@angular/core';
-import {CommonModule} from '@angular/common';
-import {MatCardModule} from '@angular/material/card';
-import {MatIconModule} from '@angular/material/icon';
-import {MatButtonModule} from '@angular/material/button';
+import { Component, EventEmitter, Output } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { MatCardModule } from '@angular/material/card';
+import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+import { TranslatePipe } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-upload-zone',
   standalone: true,
   templateUrl: './upload-zone.component.html',
   styleUrls: ['./upload-zone.component.css'],
-  imports: [CommonModule, MatCardModule, MatIconModule, MatButtonModule],
+  imports: [CommonModule, MatCardModule, MatIconModule, MatButtonModule, TranslatePipe],
 })
 export class UploadZoneComponent {
   @Output() filesSelected = new EventEmitter<FileList>();
-  
+
   showUploadZone = true;
   isDragOver = false;
 
@@ -33,7 +34,7 @@ export class UploadZoneComponent {
     event.preventDefault();
     event.stopPropagation();
     this.isDragOver = false;
-    
+
     const files = event.dataTransfer?.files;
     if (files && files.length > 0) {
       this.filesSelected.emit(files);

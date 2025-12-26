@@ -1,15 +1,16 @@
-import {Component, EventEmitter, Input, Output} from '@angular/core';
-import {CommonModule} from '@angular/common';
-import {MatButtonModule} from '@angular/material/button';
-import {MatIconModule} from '@angular/material/icon';
-import {ElementInfo, Root} from '../../models/document.models';
+import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { ElementInfo, Root } from '../../models/document.models';
+import { TranslatePipe } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-breadcrumb',
   standalone: true,
   templateUrl: './breadcrumb.component.html',
   styleUrls: ['./breadcrumb.component.css'],
-  imports: [CommonModule, MatButtonModule, MatIconModule],
+  imports: [CommonModule, MatButtonModule, MatIconModule, TranslatePipe],
 })
 export class BreadcrumbComponent {
   @Input() breadcrumbs: ElementInfo[] = [];

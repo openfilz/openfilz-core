@@ -14,6 +14,13 @@
   transition: width 0.3s ease;
 }
 
+:host-context([dir="rtl"]) .sidebar {
+  left: auto;
+  right: 0;
+  border-right: none;
+  border-left: 1px solid var(--border-color);
+}
+
 .sidebar.collapsed {
   width: 60px;
 }
@@ -113,6 +120,11 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
+:host-context([dir="rtl"]) .toggle-btn-floating {
+  left: auto;
+  right: 52px;
+}
+
 .toggle-btn-floating:hover {
   background-color: var(--bg-tertiary);
   color: var(--text-primary);
@@ -175,13 +187,13 @@
   margin: 0 auto;
 }
 
-.nav-item > span {
+.nav-item>span {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.sidebar.collapsed .nav-item > span {
+.sidebar.collapsed .nav-item>span {
   display: none;
 }
 
@@ -216,8 +228,17 @@
     box-shadow: 2px 0 12px rgba(0, 0, 0, 0.2);
   }
 
+  :host-context([dir="rtl"]) .sidebar {
+    transform: translateX(100%);
+    box-shadow: -2px 0 12px rgba(0, 0, 0, 0.2);
+  }
+
   /* When mobile-open class is on host element */
   :host.mobile-open .sidebar {
+    transform: translateX(0);
+  }
+
+  :host-context([dir="rtl"]) :host.mobile-open .sidebar {
     transform: translateX(0);
   }
 

@@ -7,7 +7,8 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { FileItem } from '../../models/document.models';
 import { FileIconService } from '../../services/file-icon.service';
-import {TouchDetectionService} from '../../services/touch-detection.service';
+import { TouchDetectionService } from '../../services/touch-detection.service';
+import { TranslatePipe } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-file-grid',
@@ -20,7 +21,8 @@ import {TouchDetectionService} from '../../services/touch-detection.service';
     MatIconModule,
     MatButtonModule,
     MatCheckboxModule,
-    MatTooltipModule
+    MatTooltipModule,
+    TranslatePipe
   ],
 })
 export class FileGridComponent {
@@ -43,7 +45,7 @@ export class FileGridComponent {
   focusedIndex = 0;
   private gridColumns = 5; // Approximate columns, will be calculated dynamically
 
-  
+
   private fileIconService = inject(FileIconService);
   private touchDetectionService = inject(TouchDetectionService);
 

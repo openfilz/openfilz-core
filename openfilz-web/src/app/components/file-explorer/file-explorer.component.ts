@@ -7,6 +7,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatIcon, MatIconModule } from "@angular/material/icon";
 import { MatButtonModule } from "@angular/material/button";
+import { TranslatePipe } from "@ngx-translate/core";
 
 import { FileGridComponent } from '../file-grid/file-grid.component';
 import { FileListComponent } from '../file-list/file-list.component';
@@ -108,8 +109,8 @@ import { AppConfig } from '../../config/app.config';
               <div class="empty-state">
                   <div class="empty-content">
                       <mat-icon class="empty-icon">folder_open</mat-icon>
-                      <h3>This folder is empty</h3>
-                      <p>Drop files here or create a new folder to get started</p>
+                      <h3>{{ 'fileExplorer.emptyTitle' | translate }}</h3>
+                      <p>{{ 'fileExplorer.emptyMessage' | translate }}</p>
                   </div>
               </div>
           }
@@ -187,7 +188,8 @@ import { AppConfig } from '../../config/app.config';
     MetadataPanelComponent,
     MatIcon,
     DragDropDirective,
-    DownloadProgressComponent
+    DownloadProgressComponent,
+    TranslatePipe
   ],
 })
 export class FileExplorerComponent extends FileOperationsComponent implements OnInit, OnDestroy {
@@ -818,7 +820,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
     const dialogRef = this.dialog.open(FolderTreeDialogComponent, {
       width: '700px',
       data: {
-        title: 'Move item',
+        title: 'dialogs.folderTree.moveItem',
         actionType: 'move',
         currentFolderId: this.currentFolder?.id,
         excludeIds: [item.id]
@@ -836,7 +838,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
     const dialogRef = this.dialog.open(FolderTreeDialogComponent, {
       width: '700px',
       data: {
-        title: 'Copy item',
+        title: 'dialogs.folderTree.copyItem',
         actionType: 'copy',
         currentFolderId: this.currentFolder?.id,
         excludeIds: []
@@ -894,10 +896,12 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
   override onMoveSelected() {
     const selectedItems = this.selectedItems;
     if (selectedItems.length > 0) {
+      const isSingle = selectedItems.length === 1;
       const dialogRef = this.dialog.open(FolderTreeDialogComponent, {
         width: '700px',
         data: {
-          title: `Move ${selectedItems.length} item${selectedItems.length > 1 ? 's' : ''}`,
+          title: isSingle ? 'dialogs.folderTree.moveItem' : 'dialogs.folderTree.moveItems',
+          titleParams: isSingle ? undefined : { count: selectedItems.length },
           actionType: 'move',
           currentFolderId: this.currentFolder?.id,
           excludeIds: selectedItems.map(item => item.id)
@@ -915,10 +919,12 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
   override onCopySelected() {
     const selectedItems = this.selectedItems;
     if (selectedItems.length > 0) {
+      const isSingle = selectedItems.length === 1;
       const dialogRef = this.dialog.open(FolderTreeDialogComponent, {
         width: '700px',
         data: {
-          title: `Copy ${selectedItems.length} item${selectedItems.length > 1 ? 's' : ''}`,
+          title: isSingle ? 'dialogs.folderTree.copyItem' : 'dialogs.folderTree.copyItems',
+          titleParams: isSingle ? undefined : { count: selectedItems.length },
           actionType: 'copy',
           currentFolderId: this.currentFolder?.id,
           excludeIds: []

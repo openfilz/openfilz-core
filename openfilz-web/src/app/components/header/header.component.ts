@@ -10,11 +10,14 @@ import { debounceTime, distinctUntilChanged, switchMap } from "rxjs/operators";
 import { Suggestion, SearchFilters } from "../../models/document.models";
 import { DocumentApiService } from "../../services/document-api.service";
 import { SearchFiltersComponent } from "../search-filters/search-filters.component";
+import { TranslateService, TranslatePipe } from "@ngx-translate/core";
+import { MatMenuModule } from '@angular/material/menu';
+import { MatButtonModule } from '@angular/material/button';
 
 @Component({
   selector: 'app-header',
   standalone: true,
-  imports: [CommonModule, FormsModule, SearchFiltersComponent, MatIconModule, MatTooltipModule],
+  imports: [CommonModule, FormsModule, SearchFiltersComponent, MatIconModule, MatTooltipModule, TranslatePipe, MatMenuModule, MatButtonModule],
   templateUrl: './header.component.html',
   styleUrls: ['./header.component.css']
 })
@@ -32,6 +35,20 @@ export class HeaderComponent implements OnInit, OnDestroy {
   private apiService = inject(DocumentApiService);
   private router = inject(Router);
   private elementRef = inject(ElementRef);
+  private translate = inject(TranslateService);
+
+  // Language selector
+  availableLanguages = [
+    { code: 'ar', name: 'العربية', flag: '🇸🇦' },
+    { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
+    { code: 'en', name: 'English', flag: '🇬🇧' },
+    { code: 'es', name: 'Español', flag: '🇪🇸' },
+    { code: 'fr', name: 'Français', flag: '🇫🇷' },
+    { code: 'it', name: 'Italiano', flag: '🇮🇹' },
+    { code: 'nl', name: 'Nederlands', flag: '🇳🇱' },
+    { code: 'pt', name: 'Português', flag: '🇵🇹' }
+  ];
+  currentLanguage = this.availableLanguages.find(l => l.code === 'en') || this.availableLanguages[2];
 
   @Input() hasSelection: boolean = false;
   @Input() set userData(value: any) {
@@ -45,6 +62,9 @@ export class HeaderComponent implements OnInit, OnDestroy {
   constructor() { }
 
   ngOnInit(): void {
+    // Initialize language from localStorage or browser default
+    this.initializeLanguage();
+
     this.searchSubscription = this.searchSubject.pipe(
       debounceTime(300),
       distinctUntilChanged(),
@@ -52,6 +72,30 @@ export class HeaderComponent implements OnInit, OnDestroy {
     ).subscribe(suggestions => {
       this.suggestions = suggestions;
     });
+  }
+
+  private initializeLanguage(): void {
+    const savedLang = localStorage.getItem('preferredLanguage');
+    const browserLang = this.translate.getBrowserLang();
+    const supportedLangs = ['en', 'fr', 'de', 'ar', 'es', 'pt', 'it', 'nl'];
+    const defaultLang = savedLang || (browserLang && supportedLangs.includes(browserLang) ? browserLang : 'en');
+
+    this.currentLanguage = this.availableLanguages.find(l => l.code === defaultLang) || this.availableLanguages[0];
+    this.translate.use(this.currentLanguage.code);
+    this.updateDocumentDirection(this.currentLanguage.code);
+  }
+
+  switchLanguage(lang: { code: string; name: string; flag: string }): void {
+    this.currentLanguage = lang;
+    this.translate.use(lang.code);
+    localStorage.setItem('preferredLanguage', lang.code);
+    this.updateDocumentDirection(lang.code);
+  }
+
+  private updateDocumentDirection(langCode: string): void {
+    const dir = langCode === 'ar' ? 'rtl' : 'ltr';
+    document.documentElement.setAttribute('dir', dir);
+    document.documentElement.setAttribute('lang', langCode);
   }
 
   @HostListener('document:click', ['$event'])

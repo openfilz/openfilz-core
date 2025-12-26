@@ -4,45 +4,35 @@
       <mat-icon aria-hidden="true">create_new_folder</mat-icon>
     </div>
     <div class="header-text">
-      <h2 class="dialog-title" id="dialog-title">Create New Folder</h2>
-      <p class="dialog-subtitle" id="dialog-description">Enter a name for your new folder</p>
+      <h2 class="dialog-title" id="dialog-title">{{ 'dialogs.createFolder.title' | translate }}</h2>
+      <p class="dialog-subtitle" id="dialog-description">{{ 'dialogs.createFolder.subtitle' | translate }}</p>
     </div>
   </div>
-  <button mat-icon-button class="close-btn" (click)="onCancel()" aria-label="Close dialog">
+  <button mat-icon-button class="close-btn" (click)="onCancel()"
+    [attr.aria-label]="'dialogs.createFolder.closeDialog' | translate">
     <mat-icon aria-hidden="true">close</mat-icon>
   </button>
 </div>
 
 <div mat-dialog-content class="dialog-content">
   <mat-form-field appearance="outline" class="folder-name-field">
-    <mat-label>Folder Name</mat-label>
-    <input
-      matInput
-      [(ngModel)]="folderName"
-      placeholder="e.g., Documents, Projects, Photos"
-      (keyup.enter)="onCreate()"
-      autocomplete="off"
-      aria-label="Folder name"
-      aria-required="true"
-      #nameInput>
+    <mat-label>{{ 'dialogs.createFolder.folderName' | translate }}</mat-label>
+    <input matInput [(ngModel)]="folderName" [placeholder]="'dialogs.createFolder.placeholder' | translate"
+      (keyup.enter)="onCreate()" autocomplete="off" [attr.aria-label]="'dialogs.createFolder.folderName' | translate"
+      aria-required="true" #nameInput>
     <mat-icon matPrefix class="input-icon" aria-hidden="true">folder</mat-icon>
   </mat-form-field>
 
 </div>
 
 <div mat-dialog-actions class="dialog-actions">
-  <button mat-stroked-button class="cancel-btn" (click)="onCancel()" aria-label="Cancel">
+  <button mat-stroked-button class="cancel-btn" (click)="onCancel()" [attr.aria-label]="'common.cancel' | translate">
     <mat-icon aria-hidden="true">close</mat-icon>
-    <span>&nbsp;&nbsp;Cancel</span>
+    <span>&nbsp;&nbsp;{{ 'common.cancel' | translate }}</span>
   </button>
-  <button
-    mat-raised-button
-    color="primary"
-    class="create-btn"
-    [disabled]="!folderName.trim()"
-    (click)="onCreate()"
-    aria-label="Create folder">
+  <button mat-raised-button color="primary" class="create-btn" [disabled]="!folderName.trim()" (click)="onCreate()"
+    [attr.aria-label]="'dialogs.createFolder.createButton' | translate">
     <mat-icon aria-hidden="true">check</mat-icon>
-    <span>&nbsp;&nbsp;Create Folder</span>
+    <span>&nbsp;&nbsp;{{ 'dialogs.createFolder.createButton' | translate }}</span>
   </button>
 </div>

@@ -108,6 +108,31 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+
+  /* Custom Scrollbar Styling */
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-tertiary) transparent;
+}
+
+/* Webkit Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--text-tertiary);
+  border-radius: 20px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-secondary);
 }
 
 body {
@@ -163,7 +188,19 @@ body {
   box-shadow: inset 3px 0 0 var(--primary);
 }
 
-.mat-button, .mat-raised-button, .mat-icon-button {
+/* RTL Icon Flipping */
+[dir="rtl"] .rtl-flip {
+  transform: scaleX(-1);
+  display: inline-block;
+}
+
+[dir="rtl"] .mat-list-item.active {
+  box-shadow: inset -3px 0 0 var(--primary);
+}
+
+.mat-button,
+.mat-raised-button,
+.mat-icon-button {
   border-radius: 6px;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
 }
@@ -227,6 +264,19 @@ body {
   color: var(--text-primary) !important;
 }
 
+[dir="rtl"] .mat-mdc-paginator .mat-mdc-icon-button .mat-icon {
+  transform: scaleX(-1);
+}
+
+/* Fix transparency for MDC select panels and other overlays */
+.mat-mdc-select-panel,
+.mat-mdc-autocomplete-panel,
+.mat-mdc-menu-panel,
+.mdc-menu-surface {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
 .mat-paginator .mat-paginator-container {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
 }
@@ -235,39 +285,29 @@ body {
 .mat-mdc-tooltip,
 .mat-mdc-tooltip-panel,
 .mat-tooltip {
-  --mdc-plain-tooltip-container-color: var(--primary) !important;
-  --mdc-plain-tooltip-supporting-text-color: #ffffff !important;
-  --mat-plain-tooltip-container-color: var(--primary) !important;
-  --mat-plain-tooltip-supporting-text-color: #ffffff !important;
-  background: var(--primary) !important;
-  color: white !important;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif !important;
-  font-size: 11px !important;
-  font-weight: 500 !important;
-  padding: 6px 10px !important;
-  border-radius: 6px !important;
-  border: none !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15), 0 1px 4px rgba(0, 0, 0, 0.1) !important;
-  letter-spacing: 0.01em !important;
-  line-height: 1.4 !important;
-  max-width: 200px !important;
-  opacity: 1 !important;
+  --mdc-plain-tooltip-container-color: transparent !important;
+  --mdc-plain-tooltip-supporting-text-color: white !important;
+  --mat-plain-tooltip-container-color: transparent !important;
+  --mat-plain-tooltip-supporting-text-color: white !important;
 }
 
 .mat-mdc-tooltip .mdc-tooltip__surface,
 .mat-mdc-tooltip-panel .mdc-tooltip__surface {
-  background: var(--primary) !important;
+  background-color: var(--primary) !important;
   color: white !important;
-  border-radius: 6px !important;
-  border: none !important;
-  padding: 6px 10px !important;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif !important;
   font-size: 11px !important;
   font-weight: 500 !important;
-  line-height: 1.4 !important;
+  padding: 6px 10px !important;
+  border-radius: 6px !important;
+  border: none !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
   letter-spacing: 0.01em !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15), 0 1px 4px rgba(0, 0, 0, 0.1) !important;
+  line-height: 1.4 !important;
+  max-width: 200px !important;
   opacity: 1 !important;
+  transform: none !important;
+  /* Prevent double scaling if animation is also applied */
 }
 
 /* Tooltip surface label */
@@ -287,6 +327,7 @@ body {
     opacity: 0;
     transform: scale(0.95);
   }
+
   to {
     opacity: 1;
     transform: scale(1);
@@ -303,7 +344,7 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0,0,0,0.5);
+  background-color: rgba(0, 0, 0, 0.5);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -462,6 +503,7 @@ a,
 
 /* Reduced motion for users who prefer it */
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {
@@ -484,4 +526,20 @@ a,
   .mat-mdc-raised-button {
     border: 2px solid currentColor;
   }
+}
+
+/* Global RTL Support for Material Form Fields */
+[dir="rtl"] .mat-mdc-form-field {
+  direction: rtl !important;
+}
+
+[dir="rtl"] .mat-mdc-form-field-input-control {
+  direction: ltr !important;
+  /* Keep filenames LTR */
+  text-align: left !important;
+}
+
+[dir="rtl"] .mat-mdc-form-field-icon-prefix {
+  margin-left: 8px !important;
+  margin-right: 0 !important;
 }

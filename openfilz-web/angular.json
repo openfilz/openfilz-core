@@ -40,10 +40,15 @@
           "options": {
             "ngxEnv": {
               "prefix": "NG_APP_",
-              "runtime":true
+              "runtime": true
             },
             "assets": [
-              "src/favicon.ico"
+              "src/favicon.ico",
+              {
+                "glob": "**/*",
+                "input": "src/i18n",
+                "output": "/i18n"
+              }
             ],
             "index": "src/index.html",
             "browser": "src/main.ts",

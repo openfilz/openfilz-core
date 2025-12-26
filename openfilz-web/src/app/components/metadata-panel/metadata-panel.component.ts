@@ -14,6 +14,8 @@ import { MetadataEditorComponent } from '../metadata-editor/metadata-editor.comp
 import { DocumentApiService } from '../../services/document-api.service';
 import { AuditLog, DocumentInfo } from '../../models/document.models';
 import { ConfirmDialogComponent, ConfirmDialogData } from '../../dialogs/confirm-dialog/confirm-dialog.component';
+import { TranslateService, TranslatePipe } from '@ngx-translate/core';
+import { FileIconService } from '../../services/file-icon.service';
 
 @Component({
   selector: 'app-metadata-panel',
@@ -29,7 +31,8 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../dialogs/confirm
     MatDividerModule,
     MatTooltipModule,
     MatTabsModule,
-    MetadataEditorComponent
+    MetadataEditorComponent,
+    TranslatePipe
   ],
   animations: [
     trigger('slideInOut', [
@@ -72,85 +75,87 @@ export class MetadataPanelComponent implements OnInit, OnChanges {
   // System metadata keys that should not be editable
   private readonly SYSTEM_METADATA_KEYS = ['sha256'];
 
-  // MIME type to friendly name mapping
-  private readonly MIME_TYPE_NAMES: { [key: string]: string } = {
-    'application/pdf': 'PDF Document',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'Word Document',
-    'application/msword': 'Word Document (Legacy)',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'Excel Spreadsheet',
-    'application/vnd.ms-excel': 'Excel Spreadsheet (Legacy)',
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PowerPoint Presentation',
-    'application/vnd.ms-powerpoint': 'PowerPoint Presentation (Legacy)',
-    'text/plain': 'Text File',
-    'text/html': 'HTML Document',
-    'text/css': 'CSS Stylesheet',
-    'text/javascript': 'JavaScript File',
-    'application/json': 'JSON File',
-    'application/xml': 'XML File',
-    'text/xml': 'XML File',
-    'image/png': 'PNG Image',
-    'image/jpeg': 'JPEG Image',
-    'image/gif': 'GIF Image',
-    'image/webp': 'WebP Image',
-    'image/svg+xml': 'SVG Image',
-    'image/bmp': 'BMP Image',
-    'image/tiff': 'TIFF Image',
-    'audio/mpeg': 'MP3 Audio',
-    'audio/wav': 'WAV Audio',
-    'audio/ogg': 'OGG Audio',
-    'video/mp4': 'MP4 Video',
-    'video/webm': 'WebM Video',
-    'video/quicktime': 'QuickTime Video',
-    'application/zip': 'ZIP Archive',
-    'application/x-rar-compressed': 'RAR Archive',
-    'application/x-7z-compressed': '7-Zip Archive',
-    'application/gzip': 'GZip Archive',
-    'application/x-tar': 'TAR Archive'
+  // MIME type to translation key mapping
+  private readonly MIME_TYPE_KEYS: { [key: string]: string } = {
+    'application/pdf': 'mimeTypes.pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'mimeTypes.word',
+    'application/msword': 'mimeTypes.wordLegacy',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'mimeTypes.excel',
+    'application/vnd.ms-excel': 'mimeTypes.excelLegacy',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'mimeTypes.powerpoint',
+    'application/vnd.ms-powerpoint': 'mimeTypes.powerpointLegacy',
+    'text/plain': 'mimeTypes.text',
+    'text/html': 'mimeTypes.html',
+    'text/css': 'mimeTypes.css',
+    'text/javascript': 'mimeTypes.js',
+    'application/json': 'mimeTypes.json',
+    'application/xml': 'mimeTypes.xml',
+    'text/xml': 'mimeTypes.xml',
+    'image/png': 'mimeTypes.png',
+    'image/jpeg': 'mimeTypes.jpg',
+    'image/gif': 'mimeTypes.gif',
+    'image/webp': 'mimeTypes.webp',
+    'image/svg+xml': 'mimeTypes.svg',
+    'image/bmp': 'mimeTypes.bmp',
+    'image/tiff': 'mimeTypes.tiff',
+    'audio/mpeg': 'mimeTypes.mp3',
+    'audio/wav': 'mimeTypes.wav',
+    'audio/ogg': 'mimeTypes.ogg',
+    'video/mp4': 'mimeTypes.mp4',
+    'video/webm': 'mimeTypes.webm',
+    'video/quicktime': 'mimeTypes.mov',
+    'application/zip': 'mimeTypes.zip',
+    'application/x-rar-compressed': 'mimeTypes.rar',
+    'application/x-7z-compressed': 'mimeTypes.7z',
+    'application/gzip': 'mimeTypes.gz',
+    'application/x-tar': 'mimeTypes.tar'
   };
 
-  // File extension to friendly name mapping (fallback when contentType is unavailable)
-  private readonly EXTENSION_NAMES: { [key: string]: string } = {
-    'pdf': 'PDF Document',
-    'doc': 'Word Document (Legacy)',
-    'docx': 'Word Document',
-    'xls': 'Excel Spreadsheet (Legacy)',
-    'xlsx': 'Excel Spreadsheet',
-    'ppt': 'PowerPoint Presentation (Legacy)',
-    'pptx': 'PowerPoint Presentation',
-    'txt': 'Text File',
-    'html': 'HTML Document',
-    'htm': 'HTML Document',
-    'css': 'CSS Stylesheet',
-    'js': 'JavaScript File',
-    'ts': 'TypeScript File',
-    'json': 'JSON File',
-    'xml': 'XML File',
-    'png': 'PNG Image',
-    'jpg': 'JPEG Image',
-    'jpeg': 'JPEG Image',
-    'gif': 'GIF Image',
-    'webp': 'WebP Image',
-    'svg': 'SVG Image',
-    'bmp': 'BMP Image',
-    'tiff': 'TIFF Image',
-    'tif': 'TIFF Image',
-    'mp3': 'MP3 Audio',
-    'wav': 'WAV Audio',
-    'ogg': 'OGG Audio',
-    'mp4': 'MP4 Video',
-    'webm': 'WebM Video',
-    'mov': 'QuickTime Video',
-    'avi': 'AVI Video',
-    'zip': 'ZIP Archive',
-    'rar': 'RAR Archive',
-    '7z': '7-Zip Archive',
-    'gz': 'GZip Archive',
-    'tar': 'TAR Archive'
+  // File extension to translation key mapping (fallback when contentType is unavailable)
+  private readonly EXTENSION_KEYS: { [key: string]: string } = {
+    'pdf': 'mimeTypes.pdf',
+    'doc': 'mimeTypes.wordLegacy',
+    'docx': 'mimeTypes.word',
+    'xls': 'mimeTypes.excelLegacy',
+    'xlsx': 'mimeTypes.excel',
+    'ppt': 'mimeTypes.powerpointLegacy',
+    'pptx': 'mimeTypes.powerpoint',
+    'txt': 'mimeTypes.text',
+    'html': 'mimeTypes.html',
+    'htm': 'mimeTypes.html',
+    'css': 'mimeTypes.css',
+    'js': 'mimeTypes.js',
+    'ts': 'mimeTypes.js',
+    'json': 'mimeTypes.json',
+    'xml': 'mimeTypes.xml',
+    'png': 'mimeTypes.png',
+    'jpg': 'mimeTypes.jpg',
+    'jpeg': 'mimeTypes.jpg',
+    'gif': 'mimeTypes.gif',
+    'webp': 'mimeTypes.webp',
+    'svg': 'mimeTypes.svg',
+    'bmp': 'mimeTypes.bmp',
+    'tiff': 'mimeTypes.tiff',
+    'tif': 'mimeTypes.tiff',
+    'mp3': 'mimeTypes.mp3',
+    'wav': 'mimeTypes.wav',
+    'ogg': 'mimeTypes.ogg',
+    'mp4': 'mimeTypes.mp4',
+    'webm': 'mimeTypes.webm',
+    'mov': 'mimeTypes.mov',
+    'avi': 'mimeTypes.mp4',
+    'zip': 'mimeTypes.zip',
+    'rar': 'mimeTypes.rar',
+    '7z': 'mimeTypes.7z',
+    'gz': 'mimeTypes.gz',
+    'tar': 'mimeTypes.tar'
   };
 
   private documentApi = inject(DocumentApiService);
+  private fileIconService = inject(FileIconService);
   private snackBar = inject(MatSnackBar);
   private dialog = inject(MatDialog);
+  private translate = inject(TranslateService);
 
   constructor() { }
 
@@ -196,9 +201,9 @@ export class MetadataPanelComponent implements OnInit, OnChanges {
         this.loading = false;
       },
       error: (err) => {
-        this.error = 'Failed to load document information';
+        this.error = 'metadataPanel.errorLoading';
         this.loading = false;
-        this.snackBar.open(this.error, 'Close', { duration: 3000 });
+        this.snackBar.open(this.translate.instant(this.error), this.translate.instant('common.close'), { duration: 3000 });
       }
     });
   }
@@ -224,22 +229,18 @@ export class MetadataPanelComponent implements OnInit, OnChanges {
     return this.documentInfo?.metadata?.['sha256'];
   }
 
-  /**
-   * Get friendly file type name from MIME type or file extension
-   */
-  getFriendlyTypeName(): string {
+  getFriendlyTypeKey(): { key: string, params?: any } {
     if (!this.documentInfo) {
-      return 'Unknown';
+      return { key: 'mimeTypes.unknown' };
     }
     if (this.documentInfo.type === 'FOLDER') {
-      return 'Folder';
+      return { key: 'common.folder' };
     }
 
-    // Try to get type from contentType first
     const contentType = this.documentInfo.contentType;
     if (contentType) {
-      if (this.MIME_TYPE_NAMES[contentType]) {
-        return this.MIME_TYPE_NAMES[contentType];
+      if (this.MIME_TYPE_KEYS[contentType]) {
+        return { key: this.MIME_TYPE_KEYS[contentType] };
       }
       // Try to parse the MIME type
       const parts = contentType.split('/');
@@ -247,41 +248,31 @@ export class MetadataPanelComponent implements OnInit, OnChanges {
       const subtype = parts[1];
       if (subtype) {
         const subtypeLower = subtype.toLowerCase();
-        if (subtypeLower.includes('pdf')) return 'PDF Document';
-        if (subtypeLower.includes('word')) return 'Word Document';
-        if (subtypeLower.includes('excel') || subtypeLower.includes('spreadsheet')) return 'Spreadsheet';
-        if (subtypeLower.includes('powerpoint') || subtypeLower.includes('presentation')) return 'Presentation';
+        if (subtypeLower.includes('pdf')) return { key: 'mimeTypes.pdf' };
+        if (subtypeLower.includes('word')) return { key: 'mimeTypes.word' };
+        if (subtypeLower.includes('excel') || subtypeLower.includes('spreadsheet')) return { key: 'mimeTypes.excel' };
+        if (subtypeLower.includes('powerpoint') || subtypeLower.includes('presentation')) return { key: 'mimeTypes.powerpoint' };
         const friendlySubtype = subtypeLower.replace(/^x-/, '').replace(/-/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
         switch (category) {
-          case 'image': return friendlySubtype + ' Image';
-          case 'video': return friendlySubtype + ' Video';
-          case 'audio': return friendlySubtype + ' Audio';
-          case 'text': return friendlySubtype + ' File';
-          default: return friendlySubtype + ' File';
+          case 'image': return { key: 'mimeTypes.imageType', params: { type: friendlySubtype } };
+          case 'video': return { key: 'mimeTypes.videoType', params: { type: friendlySubtype } };
+          case 'audio': return { key: 'mimeTypes.audioType', params: { type: friendlySubtype } };
+          case 'text': return { key: 'common.fileWithType', params: { type: friendlySubtype } };
+          default: return { key: 'common.fileWithType', params: { type: friendlySubtype } };
         }
       }
     }
 
     // Fallback: try to get type from file extension
     if (this.documentInfo.name) {
-      const extension = this.getFileExtension(this.documentInfo.name);
-      if (extension && this.EXTENSION_NAMES[extension]) {
-        return this.EXTENSION_NAMES[extension];
+      const extension = this.fileIconService.getFileExtension(this.documentInfo.name);
+      if (extension && (this.EXTENSION_KEYS as any)[extension]) {
+        return { key: (this.EXTENSION_KEYS as any)[extension] };
       }
     }
 
-    return 'File';
-  }
-
-  /**
-   * Extract file extension from filename (lowercase, without dot)
-   */
-  private getFileExtension(filename: string): string | null {
-    const lastDot = filename.lastIndexOf('.');
-    if (lastDot === -1 || lastDot === filename.length - 1) {
-      return null;
-    }
-    return filename.substring(lastDot + 1).toLowerCase();
+    return { key: 'common.file' };
   }
 
   /**
@@ -291,9 +282,9 @@ export class MetadataPanelComponent implements OnInit, OnChanges {
     const hash = this.sha256Hash;
     if (hash) {
       navigator.clipboard.writeText(hash).then(() => {
-        this.snackBar.open('SHA256 hash copied to clipboard', 'Close', { duration: 2000 });
+        this.snackBar.open(this.translate.instant('metadataPanel.hashCopied'), this.translate.instant('common.close'), { duration: 2000 });
       }).catch(() => {
-        this.snackBar.open('Failed to copy to clipboard', 'Close', { duration: 2000 });
+        this.snackBar.open(this.translate.instant('metadataPanel.copyFailed'), this.translate.instant('common.close'), { duration: 2000 });
       });
     }
   }
@@ -330,7 +321,7 @@ export class MetadataPanelComponent implements OnInit, OnChanges {
 
     this.documentApi.updateDocumentMetadata(this.documentId, metadataToSave).subscribe({
       next: () => {
-        this.snackBar.open('Metadata saved successfully', 'Close', { duration: 3000 });
+        this.snackBar.open(this.translate.instant('metadataPanel.saveSuccess'), this.translate.instant('common.close'), { duration: 3000 });
         this.originalMetadata = { ...metadataToSave };
         this.currentMetadata = { ...metadataToSave };
         this.editMode = false;
@@ -344,18 +335,15 @@ export class MetadataPanelComponent implements OnInit, OnChanges {
         this.metadataSaved.emit();
       },
       error: (err) => {
-        this.snackBar.open('Failed to save metadata', 'Close', { duration: 3000 });
+        this.snackBar.open(this.translate.instant('metadataPanel.saveFailed'), this.translate.instant('common.close'), { duration: 3000 });
         this.saving = false;
       }
     });
   }
 
   formatFileSize(bytes?: number): string {
-    if (!bytes || bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+    if (bytes === undefined || bytes === 0) return '0 B';
+    return this.fileIconService.getFileSize(bytes);
   }
 
   formatDate(date?: string): string {
@@ -374,12 +362,12 @@ export class MetadataPanelComponent implements OnInit, OnChanges {
   onClose() {
     if (this.editMode && this.hasChanges) {
       const dialogData: ConfirmDialogData = {
-        title: 'Unsaved Changes',
-        message: 'You have unsaved changes. Are you sure you want to close?',
-        details: 'Your changes will be lost if you close without saving.',
+        title: this.translate.instant('metadataPanel.unsavedChangesTitle'),
+        message: this.translate.instant('metadataPanel.unsavedChangesMessage'),
+        details: this.translate.instant('metadataPanel.unsavedChangesDetails'),
         type: 'warning',
-        confirmText: 'Discard Changes',
-        cancelText: 'Keep Editing',
+        confirmText: this.translate.instant('metadataPanel.discardChanges'),
+        cancelText: this.translate.instant('metadataPanel.keepEditing'),
         icon: 'edit_off'
       };
       const dialogRef = this.dialog.open(ConfirmDialogComponent, {
@@ -426,33 +414,8 @@ export class MetadataPanelComponent implements OnInit, OnChanges {
     });
   }
 
-  getAuditActionLabel(action: string): string {
-    const labels: { [key: string]: string } = {
-      'COPY_FILE': 'File Copied',
-      'COPY_FILE_CHILD': 'Child File Copied',
-      'RENAME_FILE': 'File Renamed',
-      'RENAME_FOLDER': 'Folder Renamed',
-      'COPY_FOLDER': 'Folder Copied',
-      'DELETE_FILE': 'File Deleted',
-      'DELETE_FILE_CHILD': 'Child File Deleted',
-      'DELETE_FOLDER': 'Folder Deleted',
-      'CREATE_FOLDER': 'Folder Created',
-      'MOVE_FILE': 'File Moved',
-      'MOVE_FOLDER': 'Folder Moved',
-      'UPLOAD_DOCUMENT': 'Document Uploaded',
-      'REPLACE_DOCUMENT_CONTENT': 'Content Replaced',
-      'REPLACE_DOCUMENT_METADATA': 'Metadata Replaced',
-      'UPDATE_DOCUMENT_METADATA': 'Metadata Updated',
-      'DOWNLOAD_DOCUMENT': 'Document Downloaded',
-      'DELETE_DOCUMENT_METADATA': 'Metadata Deleted',
-      'SHARE_DOCUMENTS': 'Documents Shared',
-      'RESTORE_FILE': 'File Restored',
-      'RESTORE_FOLDER': 'Folder Restored',
-      'PERMANENT_DELETE_FILE': 'File Permanently Deleted',
-      'PERMANENT_DELETE_FOLDER': 'Folder Permanently Deleted',
-      'EMPTY_RECYCLE_BIN': 'Recycle Bin Emptied'
-    };
-    return labels[action] || action.replace(/_/g, ' ');
+  getAuditActionKey(action: string): string {
+    return `audit.actions.${action}`;
   }
 
   getAuditActionIcon(action: string): string {
@@ -491,7 +454,7 @@ export class MetadataPanelComponent implements OnInit, OnChanges {
     return 'primary';
   }
 
-  formatAuditDate(timestamp: string): string {
+  formatAuditDateKey(timestamp: string): { key: string, params?: any } {
     const date = new Date(timestamp);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
@@ -499,11 +462,11 @@ export class MetadataPanelComponent implements OnInit, OnChanges {
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins} min ago`;
-    if (diffHours < 24) return `${diffHours} hours ago`;
-    if (diffDays < 7) return `${diffDays} days ago`;
+    if (diffMins < 1) return { key: 'audit.time.justNow' };
+    if (diffMins < 60) return { key: diffMins === 1 ? 'audit.time.minAgo' : 'audit.time.minsAgo', params: { count: diffMins } };
+    if (diffHours < 24) return { key: diffHours === 1 ? 'audit.time.hourAgo' : 'audit.time.hoursAgo', params: { count: diffHours } };
+    if (diffDays < 7) return { key: diffDays === 1 ? 'audit.time.dayAgo' : 'audit.time.daysAgo', params: { count: diffDays } };
 
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return { key: date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
   }
 }

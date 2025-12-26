@@ -139,7 +139,7 @@ export abstract class FileOperationsComponent implements OnInit {
   onMoveItem(item: FileItem): void {
     const dialogRef = this.dialog.open(FolderTreeDialogComponent, {
       width: '700px',
-      data: { title: 'Move item', actionType: 'move', excludeIds: [item.id] }
+      data: { title: 'dialogs.folderTree.moveItem', actionType: 'move', excludeIds: [item.id] }
     });
 
     dialogRef.afterClosed().subscribe(targetFolderId => {
@@ -162,7 +162,7 @@ export abstract class FileOperationsComponent implements OnInit {
   onCopyItem(item: FileItem): void {
     const dialogRef = this.dialog.open(FolderTreeDialogComponent, {
       width: '700px',
-      data: { title: 'Copy item', actionType: 'copy', excludeIds: [] }
+      data: { title: 'dialogs.folderTree.copyItem', actionType: 'copy', excludeIds: [] }
     });
 
     dialogRef.afterClosed().subscribe(targetFolderId => {
@@ -184,12 +184,13 @@ export abstract class FileOperationsComponent implements OnInit {
 
   onDeleteItem(item: FileItem): void {
     const dialogData: ConfirmDialogData = {
-      title: 'Delete Item',
-      message: `Are you sure you want to delete "${item.name}"?`,
-      details: 'This item will be moved to the recycle bin.',
+      title: 'recycleBin.deleteConfirmItem',
+      messageParams: { name: item.name },
+      message: 'recycleBin.deleteConfirmItem', // Using title key as message for consistency with existing keys
+      details: 'recycleBin.deleteDetails',
       type: 'danger',
-      confirmText: 'Delete',
-      cancelText: 'Cancel'
+      confirmText: 'common.delete',
+      cancelText: 'common.cancel'
     };
     const dialogRef = this.dialog.open(ConfirmDialogComponent, {
       width: '450px',
@@ -236,7 +237,8 @@ export abstract class FileOperationsComponent implements OnInit {
       const dialogRef = this.dialog.open(FolderTreeDialogComponent, {
         width: '700px',
         data: {
-          title: `Move ${selected.length} item(s)`,
+          title: 'dialogs.folderTree.moveItems',
+          titleParams: { count: selected.length },
           actionType: 'move',
           excludeIds: selected.map(item => item.id)
         }
@@ -255,7 +257,8 @@ export abstract class FileOperationsComponent implements OnInit {
       const dialogRef = this.dialog.open(FolderTreeDialogComponent, {
         width: '700px',
         data: {
-          title: `Copy ${selected.length} item(s)`,
+          title: 'dialogs.folderTree.copyItems',
+          titleParams: { count: selected.length },
           actionType: 'copy',
           excludeIds: []
         }
@@ -279,12 +282,13 @@ export abstract class FileOperationsComponent implements OnInit {
     if (selected.length > 0) {
       const itemNames = selected.map(item => item.name).join(', ');
       const dialogData: ConfirmDialogData = {
-        title: `Delete ${selected.length} Item${selected.length > 1 ? 's' : ''}`,
-        message: `Are you sure you want to delete the selected item${selected.length > 1 ? 's' : ''}?`,
-        details: itemNames,
+        title: 'recycleBin.deleteConfirmMessage',
+        messageParams: { count: selected.length },
+        message: 'recycleBin.deleteConfirmMessage',
+        details: 'recycleBin.deleteDetails',
         type: 'danger',
-        confirmText: 'Delete',
-        cancelText: 'Cancel'
+        confirmText: 'common.delete',
+        cancelText: 'common.cancel'
       };
       const dialogRef = this.dialog.open(ConfirmDialogComponent, {
         width: '450px',

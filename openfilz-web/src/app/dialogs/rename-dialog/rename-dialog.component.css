@@ -126,7 +126,8 @@
 
 .input-icon {
   color: var(--primary);
-  margin-right: 8px;
+  margin-inline-end: 8px;
+  margin-inline-start: 0;
 }
 
 /* Dialog Actions */
@@ -220,6 +221,7 @@
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
