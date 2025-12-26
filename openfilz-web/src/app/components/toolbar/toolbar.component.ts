@@ -1,11 +1,12 @@
-import {Component, EventEmitter, Input, Output} from '@angular/core';
-import {CommonModule} from '@angular/common';
-import {MatButtonModule} from '@angular/material/button';
-import {MatIconModule} from '@angular/material/icon';
-import {MatMenuModule} from '@angular/material/menu';
-import {MatTooltipModule} from '@angular/material/tooltip';
-import {MatDividerModule} from '@angular/material/divider';
-import {AppConfig} from '../../config/app.config';
+import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatDividerModule } from '@angular/material/divider';
+import { AppConfig } from '../../config/app.config';
+import { TranslatePipe } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-toolbar',
@@ -18,7 +19,8 @@ import {AppConfig} from '../../config/app.config';
     MatIconModule,
     MatMenuModule,
     MatTooltipModule,
-    MatDividerModule
+    MatDividerModule,
+    TranslatePipe
   ],
 })
 export class ToolbarComponent {
@@ -56,12 +58,12 @@ export class ToolbarComponent {
   @Input() sortOrder: 'ASC' | 'DESC' = 'ASC';
 
   sortOptions = [
-    { label: 'Name', value: 'name' },
-    { label: 'Date Modified', value: 'updatedAt' },
-    { label: 'Size', value: 'size' },
-    { label: 'Type', value: 'type' },
-    { label: 'Owner', value: 'createdBy' },
-    { label: 'Date Created', value: 'createdAt' }
+    { labelKey: 'sortOptions.name', value: 'name' },
+    { labelKey: 'sortOptions.dateModified', value: 'updatedAt' },
+    { labelKey: 'sortOptions.size', value: 'size' },
+    { labelKey: 'sortOptions.type', value: 'type' },
+    { labelKey: 'sortOptions.owner', value: 'createdBy' },
+    { labelKey: 'sortOptions.dateCreated', value: 'createdAt' }
   ];
 
   // Pagination outputs
@@ -186,9 +188,9 @@ export class ToolbarComponent {
     this.pageSizeChange.emit(newPageSize);
   }
 
-  getSortLabel(): string {
+  getSortLabelKey(): string {
     const option = this.sortOptions.find(opt => opt.value === this.sortBy);
-    return option ? option.label : 'Name';
+    return option ? option.labelKey : 'sortOptions.name';
   }
 
   // Bottom sheet methods for mobile selection actions
@@ -212,7 +214,7 @@ export class ToolbarComponent {
 
   onActionSelected(action: string): void {
     // Execute action based on type
-    switch(action) {
+    switch (action) {
       case 'move':
         this.onMoveSelected();
         break;

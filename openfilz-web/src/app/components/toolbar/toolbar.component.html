@@ -5,23 +5,23 @@
 
     <!-- Page Title (if provided) -->
     @if(pageTitle && !hasSelection) {
-      <div class="page-title-section">
-        @if(pageIcon) {
-          <mat-icon class="page-icon">{{ pageIcon }}</mat-icon>
-        }
-        <h1 class="page-title">{{ pageTitle }}</h1>
-      </div>
+    <div class="page-title-section">
+      @if(pageIcon) {
+      <mat-icon class="page-icon">{{ pageIcon }}</mat-icon>
+      }
+      <h1 class="page-title">{{ pageTitle }}</h1>
+    </div>
     }
 
     <!-- Selection info -->
     @if(hasSelection) {
-      <div class="selection-info" role="status" aria-live="polite">
-        <span>{{ selectionCount }} selected</span>
-        <button mat-icon-button class="clear-selection" (click)="onClearSelection()"
-                matTooltip="Clear selection" aria-label="Clear selection">
-          <mat-icon aria-hidden="true">close</mat-icon>
-        </button>
-      </div>
+    <div class="selection-info" role="status" aria-live="polite">
+      <span>{{ selectionCount }} selected</span>
+      <button mat-icon-button class="clear-selection" (click)="onClearSelection()" matTooltip="Clear selection"
+        aria-label="Clear selection">
+        <mat-icon aria-hidden="true">close</mat-icon>
+      </button>
+    </div>
     }
 
     <!-- Custom action buttons (projected content) -->
@@ -29,175 +29,140 @@
 
     <!-- Action buttons - Desktop: text + icon, Mobile: FAB only -->
     @if(!hasSelection && !isSearchResultsPage) {
-      <div class="action-buttons-desktop">
-        @if(showUploadButton) {
-          <button mat-raised-button color="primary" class="upload-btn" (click)="onUploadFiles()"
-                  aria-label="Upload files">
-            <mat-icon aria-hidden="true">cloud_upload</mat-icon>
-            <span>Upload</span>
-          </button>
-        }
-
-        @if(showCreateFolderButton) {
-          <button mat-stroked-button class="new-folder-btn" (click)="onCreateFolder()"
-                  aria-label="Create new folder">
-            <mat-icon aria-hidden="true">create_new_folder</mat-icon>
-            <span>New Folder</span>
-          </button>
-        }
-      </div>
-
-      <!-- Overflow menu for mobile -->
-      <button mat-icon-button class="overflow-menu-btn" [matMenuTriggerFor]="overflowMenu"
-              aria-label="More options"
-              aria-haspopup="menu">
-        <mat-icon aria-hidden="true">more_vert</mat-icon>
+    <div class="action-buttons-desktop">
+      @if(showUploadButton) {
+      <button mat-raised-button color="primary" class="upload-btn" (click)="onUploadFiles()" aria-label="Upload files">
+        <mat-icon aria-hidden="true">cloud_upload</mat-icon>
+        <span>Upload</span>
       </button>
+      }
 
-      <mat-menu #overflowMenu="matMenu" class="overflow-menu">
-        <div class="overflow-section-title">Sort By</div>
-        @for(option of sortOptions; track option.value) {
-          <button mat-menu-item (click)="onSortChange(option.value)"
-                  [class.active]="sortBy === option.value">
-            <span>{{ option.label }}</span>
-            @if(sortBy === option.value) {
-              <mat-icon aria-hidden="true">check</mat-icon>
-            }
-          </button>
+      @if(showCreateFolderButton) {
+      <button mat-stroked-button class="new-folder-btn" (click)="onCreateFolder()" aria-label="Create new folder">
+        <mat-icon aria-hidden="true">create_new_folder</mat-icon>
+        <span>New Folder</span>
+      </button>
+      }
+    </div>
+
+    <!-- Overflow menu for mobile -->
+    <button mat-icon-button class="overflow-menu-btn" [matMenuTriggerFor]="overflowMenu" aria-label="More options"
+      aria-haspopup="menu">
+      <mat-icon aria-hidden="true">more_vert</mat-icon>
+    </button>
+
+    <mat-menu #overflowMenu="matMenu" class="overflow-menu">
+      <div class="overflow-section-title">Sort By</div>
+      @for(option of sortOptions; track option.value) {
+      <button mat-menu-item (click)="onSortChange(option.value)" [class.active]="sortBy === option.value">
+        <span>{{ option.labelKey | translate }}</span>
+        @if(sortBy === option.value) {
+        <mat-icon aria-hidden="true">check</mat-icon>
         }
-        <mat-divider></mat-divider>
-        <button mat-menu-item (click)="toggleSortOrder()">
-          <mat-icon aria-hidden="true">{{ sortOrder === 'ASC' ? 'arrow_upward' : 'arrow_downward' }}</mat-icon>
-          <span>{{ sortOrder === 'ASC' ? 'Ascending' : 'Descending' }}</span>
-        </button>
-      </mat-menu>
+      </button>
+      }
+      <mat-divider></mat-divider>
+      <button mat-menu-item (click)="toggleSortOrder()">
+        <mat-icon aria-hidden="true">{{ sortOrder === 'ASC' ? 'arrow_upward' : 'arrow_downward' }}</mat-icon>
+        <span>{{ sortOrder === 'ASC' ? 'Ascending' : 'Descending' }}</span>
+      </button>
+    </mat-menu>
     }
 
     <!-- Selection actions - Desktop: all visible, Mobile: primary + more -->
     @if(hasSelection && showStandardSelectionActions) {
-      <!-- Desktop: Traditional horizontal layout -->
-      <div class="selection-actions desktop-selection" role="group" aria-label="Selection actions">
-        @if(selectionCount === 1) {
-          <button mat-stroked-button (click)="onRenameSelected()"
-                  matTooltip="Rename" aria-label="Rename selected item">
-            <mat-icon aria-hidden="true">edit</mat-icon>
-            <span>Rename</span>
-          </button>
-        }
-        <button mat-stroked-button (click)="onDownloadSelected()"
-                matTooltip="Download" aria-label="Download selected items">
-          <mat-icon aria-hidden="true">download</mat-icon>
-          <span>Download</span>
-        </button>
-        <button mat-stroked-button (click)="onMoveSelected()"
-                matTooltip="Move" aria-label="Move selected items">
-          <mat-icon aria-hidden="true">open_with</mat-icon>
-          <span>Move</span>
-        </button>
-        <button mat-stroked-button (click)="onCopySelected()"
-                matTooltip="Copy" aria-label="Copy selected items">
-          <mat-icon aria-hidden="true">content_copy</mat-icon>
-          <span>Copy</span>
-        </button>
-        <button mat-stroked-button color="warn" (click)="onDeleteSelected()"
-                matTooltip="Delete" aria-label="Delete selected items">
-          <mat-icon aria-hidden="true">delete</mat-icon>
-          <span>Delete</span>
-        </button>
-      </div>
+    <!-- Desktop: Traditional horizontal layout -->
+    <div class="selection-actions desktop-selection" role="group" aria-label="Selection actions">
+      @if(selectionCount === 1) {
+      <button mat-stroked-button (click)="onRenameSelected()" matTooltip="Rename" aria-label="Rename selected item">
+        <mat-icon aria-hidden="true">edit</mat-icon>
+        <span>Rename</span>
+      </button>
+      }
+      <button mat-stroked-button (click)="onDownloadSelected()" matTooltip="Download"
+        aria-label="Download selected items">
+        <mat-icon aria-hidden="true">download</mat-icon>
+        <span>Download</span>
+      </button>
+      <button mat-stroked-button (click)="onMoveSelected()" matTooltip="Move" aria-label="Move selected items">
+        <mat-icon aria-hidden="true">open_with</mat-icon>
+        <span>Move</span>
+      </button>
+      <button mat-stroked-button (click)="onCopySelected()" matTooltip="Copy" aria-label="Copy selected items">
+        <mat-icon aria-hidden="true">content_copy</mat-icon>
+        <span>Copy</span>
+      </button>
+      <button mat-stroked-button color="warn" (click)="onDeleteSelected()" matTooltip="Delete"
+        aria-label="Delete selected items">
+        <mat-icon aria-hidden="true">delete</mat-icon>
+        <span>Delete</span>
+      </button>
+    </div>
 
-      <!-- Mobile: Actions button only -->
-      <div class="selection-actions mobile-selection" role="group" aria-label="Selection actions">
-        <button mat-raised-button color="primary" (click)="toggleBottomSheet()"
-                [attr.aria-expanded]="bottomSheetOpen"
-                [attr.aria-label]="'Actions for ' + selectionCount + ' items'"
-                class="mobile-actions-button">
-          <mat-icon aria-hidden="true">checklist</mat-icon>
-          <span>Actions</span>
-          @if(getAvailableActionsCount() > 0) {
-            <span class="action-count-badge">{{ getAvailableActionsCount() }}</span>
-          }
-        </button>
-      </div>
+    <!-- Mobile: Actions button only -->
+    <div class="selection-actions mobile-selection" role="group" aria-label="Selection actions">
+      <button mat-raised-button color="primary" (click)="toggleBottomSheet()" [attr.aria-expanded]="bottomSheetOpen"
+        [attr.aria-label]="'Actions for ' + selectionCount + ' items'" class="mobile-actions-button">
+        <mat-icon aria-hidden="true">checklist</mat-icon>
+        <span>Actions</span>
+        @if(getAvailableActionsCount() > 0) {
+        <span class="action-count-badge">{{ getAvailableActionsCount() }}</span>
+        }
+      </button>
+    </div>
     }
   </div>
 
   <!-- Pagination Controls (center) - Desktop only -->
   @if(!hasSelection && totalItems > 0) {
-    <div class="toolbar-center desktop-only">
-      <nav class="pagination-controls" role="navigation" aria-label="Pagination">
-        <span class="pagination-info" role="status" aria-live="polite">
-          {{ getStartIndex() }}-{{ getEndIndex() }} of {{ totalItems }}
-        </span>
+  <div class="toolbar-center desktop-only">
+    <nav class="pagination-controls" role="navigation" aria-label="Pagination">
+      <span class="pagination-info" role="status" aria-live="polite">
+        {{ getStartIndex() }}-{{ getEndIndex() }} of {{ totalItems }}
+      </span>
 
-        <!-- Page size selector -->
-        <button mat-button [matMenuTriggerFor]="pageSizeMenu" class="page-size-btn"
-                matTooltip="Items per page"
-                [attr.aria-label]="'Items per page: ' + pageSize"
-                aria-haspopup="menu"
-                [attr.aria-expanded]="pageSizeMenuOpen">
-          <span>{{ pageSize }}</span>
-          <mat-icon aria-hidden="true">expand_more</mat-icon>
-        </button>
-        <mat-menu #pageSizeMenu="matMenu" class="page-size-menu"
-                  (opened)="pageSizeMenuOpen = true" (closed)="pageSizeMenuOpen = false">
-          @for(size of pageSizeOptions; track size) {
-            <button mat-menu-item (click)="onPageSizeChange(size)"
-                    [class.active]="size === pageSize"
-                    class="page-size-option"
-                    role="menuitemradio"
-                    [attr.aria-checked]="size === pageSize"
-                    [attr.aria-label]="size + ' items per page'">
-              <span class="option-value">{{ size }}</span>
-              <span class="option-label">items per page</span>
-              @if(size === pageSize) {
-                <mat-icon class="option-check" aria-hidden="true">check</mat-icon>
-              }
-            </button>
+      <!-- Page size selector -->
+      <button mat-button [matMenuTriggerFor]="pageSizeMenu" class="page-size-btn" matTooltip="Items per page"
+        [attr.aria-label]="'Items per page: ' + pageSize" aria-haspopup="menu" [attr.aria-expanded]="pageSizeMenuOpen">
+        <span>{{ pageSize }}</span>
+        <mat-icon aria-hidden="true">expand_more</mat-icon>
+      </button>
+      <mat-menu #pageSizeMenu="matMenu" class="page-size-menu" (opened)="pageSizeMenuOpen = true"
+        (closed)="pageSizeMenuOpen = false">
+        @for(size of pageSizeOptions; track size) {
+        <button mat-menu-item (click)="onPageSizeChange(size)" [class.active]="size === pageSize"
+          class="page-size-option" role="menuitemradio" [attr.aria-checked]="size === pageSize"
+          [attr.aria-label]="size + ' items per page'">
+          <span class="option-value">{{ size }}</span>
+          <span class="option-label">items per page</span>
+          @if(size === pageSize) {
+          <mat-icon class="option-check" aria-hidden="true">check</mat-icon>
           }
-        </mat-menu>
+        </button>
+        }
+      </mat-menu>
 
-        <button
-          mat-icon-button
-          class="pagination-btn"
-          [disabled]="!hasPreviousPage()"
-          (click)="onPreviousPage()"
-          matTooltip="Previous page"
-          aria-label="Go to previous page">
-          <mat-icon aria-hidden="true">chevron_left</mat-icon>
-        </button>
-        <button
-          mat-icon-button
-          class="pagination-btn"
-          [disabled]="!hasNextPage()"
-          (click)="onNextPage()"
-          matTooltip="Next page"
-          aria-label="Go to next page">
-          <mat-icon aria-hidden="true">chevron_right</mat-icon>
-        </button>
-      </nav>
-    </div>
+      <button mat-icon-button class="pagination-btn" [disabled]="!hasPreviousPage()" (click)="onPreviousPage()"
+        matTooltip="Previous page" aria-label="Go to previous page">
+        <mat-icon aria-hidden="true" class="rtl-flip">chevron_left</mat-icon>
+      </button>
+      <button mat-icon-button class="pagination-btn" [disabled]="!hasNextPage()" (click)="onNextPage()"
+        matTooltip="Next page" aria-label="Go to next page">
+        <mat-icon aria-hidden="true" class="rtl-flip">chevron_right</mat-icon>
+      </button>
+    </nav>
+  </div>
   }
 
   <div class="toolbar-right">
     <!-- View toggle - always visible -->
     <div class="view-toggle" role="group" aria-label="View mode toggle">
-      <button
-        mat-icon-button
-        [class.active]="viewMode === 'grid'"
-        (click)="viewMode !== 'grid' && toggleViewMode()"
-        matTooltip="Grid view"
-        aria-label="Grid view"
-        [attr.aria-pressed]="viewMode === 'grid'">
+      <button mat-icon-button [class.active]="viewMode === 'grid'" (click)="viewMode !== 'grid' && toggleViewMode()"
+        matTooltip="Grid view" aria-label="Grid view" [attr.aria-pressed]="viewMode === 'grid'">
         <mat-icon aria-hidden="true">grid_view</mat-icon>
       </button>
-      <button
-        mat-icon-button
-        [class.active]="viewMode === 'list'"
-        (click)="viewMode !== 'list' && toggleViewMode()"
-        matTooltip="List view"
-        aria-label="List view"
-        [attr.aria-pressed]="viewMode === 'list'">
+      <button mat-icon-button [class.active]="viewMode === 'list'" (click)="viewMode !== 'list' && toggleViewMode()"
+        matTooltip="List view" aria-label="List view" [attr.aria-pressed]="viewMode === 'list'">
         <mat-icon aria-hidden="true">view_list</mat-icon>
       </button>
     </div>
@@ -205,197 +170,154 @@
 
   <!-- Pagination - Mobile only (separate row) -->
   @if(totalItems > 0) {
-    <div class="toolbar-pagination mobile-only">
-      <nav class="pagination-controls" role="navigation" aria-label="Pagination">
-        <span class="pagination-info" role="status" aria-live="polite">
-          {{ getStartIndex() }}-{{ getEndIndex() }} of {{ totalItems }}
-        </span>
+  <div class="toolbar-pagination mobile-only">
+    <nav class="pagination-controls" role="navigation" aria-label="Pagination">
+      <span class="pagination-info" role="status" aria-live="polite">
+        {{ getStartIndex() }}-{{ getEndIndex() }} of {{ totalItems }}
+      </span>
 
-        <!-- Page size selector -->
-        <button mat-button [matMenuTriggerFor]="pageSizeMenuMobile" class="page-size-btn"
-                matTooltip="Items per page"
-                [attr.aria-label]="'Items per page: ' + pageSize"
-                aria-haspopup="menu"
-                [attr.aria-expanded]="pageSizeMenuOpen">
-          <span>{{ pageSize }}</span>
-          <mat-icon aria-hidden="true">expand_more</mat-icon>
-        </button>
-        <mat-menu #pageSizeMenuMobile="matMenu" class="page-size-menu"
-                  (opened)="pageSizeMenuOpen = true" (closed)="pageSizeMenuOpen = false">
-          @for(size of pageSizeOptions; track size) {
-            <button mat-menu-item (click)="onPageSizeChange(size)"
-                    [class.active]="size === pageSize"
-                    class="page-size-option"
-                    role="menuitemradio"
-                    [attr.aria-checked]="size === pageSize"
-                    [attr.aria-label]="size + ' items per page'">
-              <span class="option-value">{{ size }}</span>
-              <span class="option-label">items per page</span>
-              @if(size === pageSize) {
-                <mat-icon class="option-check" aria-hidden="true">check</mat-icon>
-              }
-            </button>
+      <!-- Page size selector -->
+      <button mat-button [matMenuTriggerFor]="pageSizeMenuMobile" class="page-size-btn" matTooltip="Items per page"
+        [attr.aria-label]="'Items per page: ' + pageSize" aria-haspopup="menu" [attr.aria-expanded]="pageSizeMenuOpen">
+        <span>{{ pageSize }}</span>
+        <mat-icon aria-hidden="true">expand_more</mat-icon>
+      </button>
+      <mat-menu #pageSizeMenuMobile="matMenu" class="page-size-menu" (opened)="pageSizeMenuOpen = true"
+        (closed)="pageSizeMenuOpen = false">
+        @for(size of pageSizeOptions; track size) {
+        <button mat-menu-item (click)="onPageSizeChange(size)" [class.active]="size === pageSize"
+          class="page-size-option" role="menuitemradio" [attr.aria-checked]="size === pageSize"
+          [attr.aria-label]="size + ' items per page'">
+          <span class="option-value">{{ size }}</span>
+          <span class="option-label">items per page</span>
+          @if(size === pageSize) {
+          <mat-icon class="option-check" aria-hidden="true">check</mat-icon>
           }
-        </mat-menu>
+        </button>
+        }
+      </mat-menu>
 
-        <button
-          mat-icon-button
-          class="pagination-btn"
-          [disabled]="!hasPreviousPage()"
-          (click)="onPreviousPage()"
-          matTooltip="Previous page"
-          aria-label="Go to previous page">
-          <mat-icon aria-hidden="true">chevron_left</mat-icon>
-        </button>
-        <button
-          mat-icon-button
-          class="pagination-btn"
-          [disabled]="!hasNextPage()"
-          (click)="onNextPage()"
-          matTooltip="Next page"
-          aria-label="Go to next page">
-          <mat-icon aria-hidden="true">chevron_right</mat-icon>
-        </button>
-      </nav>
-    </div>
+      <button mat-icon-button class="pagination-btn" [disabled]="!hasPreviousPage()" (click)="onPreviousPage()"
+        matTooltip="Previous page" aria-label="Go to previous page">
+        <mat-icon aria-hidden="true" class="rtl-flip">chevron_left</mat-icon>
+      </button>
+      <button mat-icon-button class="pagination-btn" [disabled]="!hasNextPage()" (click)="onNextPage()"
+        matTooltip="Next page" aria-label="Go to next page">
+        <mat-icon aria-hidden="true" class="rtl-flip">chevron_right</mat-icon>
+      </button>
+    </nav>
+  </div>
   }
 </div>
 
 <!-- Floating Action Button (Mobile Only) -->
 @if(!hasSelection && !isSearchResultsPage && (showUploadButton || showCreateFolderButton)) {
-  <div class="fab-container" [class.fab-open]="fabOpen">
-    <!-- Main FAB -->
-    <button mat-fab color="primary" class="main-fab"
-            (click)="toggleFab()"
-            [attr.aria-label]="fabOpen ? 'Close actions menu' : 'Open actions menu'"
-            [attr.aria-expanded]="fabOpen">
-      <mat-icon [class.fab-icon-rotated]="fabOpen" aria-hidden="true">
-        {{ fabOpen ? 'close' : 'add' }}
-      </mat-icon>
-    </button>
+<div class="fab-container" [class.fab-open]="fabOpen">
+  <!-- Main FAB -->
+  <button mat-fab color="primary" class="main-fab" (click)="toggleFab()"
+    [attr.aria-label]="fabOpen ? 'Close actions menu' : 'Open actions menu'" [attr.aria-expanded]="fabOpen">
+    <mat-icon [class.fab-icon-rotated]="fabOpen" aria-hidden="true">
+      {{ fabOpen ? 'close' : 'add' }}
+    </mat-icon>
+  </button>
 
-    <!-- Speed Dial Actions -->
-    @if(fabOpen) {
-      <div class="fab-speed-dial" role="menu" aria-label="Quick actions">
-        @if(showUploadButton) {
-          <div class="speed-dial-item">
-            <button mat-mini-fab class="speed-dial-btn upload-dial-btn"
-                    (click)="onUploadFilesFromFab()"
-                    aria-label="Upload files"
-                    role="menuitem">
-              <mat-icon aria-hidden="true">cloud_upload</mat-icon>
-            </button>
-            <span class="speed-dial-label upload-label">Upload</span>
-          </div>
-        }
-
-        @if(showCreateFolderButton) {
-          <div class="speed-dial-item">
-            <button mat-mini-fab class="speed-dial-btn folder-dial-btn"
-                    (click)="onCreateFolderFromFab()"
-                    aria-label="Create new folder"
-                    role="menuitem">
-              <mat-icon aria-hidden="true">create_new_folder</mat-icon>
-            </button>
-            <span class="speed-dial-label folder-label">New Folder</span>
-          </div>
-        }
-      </div>
+  <!-- Speed Dial Actions -->
+  @if(fabOpen) {
+  <div class="fab-speed-dial" role="menu" aria-label="Quick actions">
+    @if(showUploadButton) {
+    <div class="speed-dial-item">
+      <button mat-mini-fab class="speed-dial-btn upload-dial-btn" (click)="onUploadFilesFromFab()"
+        aria-label="Upload files" role="menuitem">
+        <mat-icon aria-hidden="true">cloud_upload</mat-icon>
+      </button>
+      <span class="speed-dial-label upload-label">Upload</span>
+    </div>
     }
 
-    <!-- Backdrop overlay -->
-    @if(fabOpen) {
-      <div class="fab-backdrop" (click)="closeFab()" aria-hidden="true"></div>
+    @if(showCreateFolderButton) {
+    <div class="speed-dial-item">
+      <button mat-mini-fab class="speed-dial-btn folder-dial-btn" (click)="onCreateFolderFromFab()"
+        aria-label="Create new folder" role="menuitem">
+        <mat-icon aria-hidden="true">create_new_folder</mat-icon>
+      </button>
+      <span class="speed-dial-label folder-label">New Folder</span>
+    </div>
     }
   </div>
+  }
+
+  <!-- Backdrop overlay -->
+  @if(fabOpen) {
+  <div class="fab-backdrop" (click)="closeFab()" aria-hidden="true"></div>
+  }
+</div>
 }
 
 <!-- Mobile Selection Bottom Sheet -->
 @if(hasSelection && bottomSheetOpen) {
-  <div class="selection-bottom-sheet"
-       role="dialog"
-       aria-label="Selection actions menu"
-       aria-modal="true">
+<div class="selection-bottom-sheet" role="dialog" aria-label="Selection actions menu" aria-modal="true">
 
-    <!-- Backdrop -->
-    <div class="bottom-sheet-backdrop"
-         (click)="closeBottomSheet()"
-         aria-hidden="true"></div>
+  <!-- Backdrop -->
+  <div class="bottom-sheet-backdrop" (click)="closeBottomSheet()" aria-hidden="true"></div>
 
-    <!-- Panel -->
-    <div class="bottom-sheet-panel">
-      <!-- Header -->
-      <div class="bottom-sheet-header">
-        <div class="drag-handle"></div>
-        <h3>Actions</h3>
+  <!-- Panel -->
+  <div class="bottom-sheet-panel">
+    <!-- Header -->
+    <div class="bottom-sheet-header">
+      <div class="drag-handle"></div>
+      <h3>Actions</h3>
+    </div>
+
+    <!-- Organize Actions -->
+    <div class="action-category" role="group" aria-labelledby="organize-heading">
+      <div class="action-category-title" id="organize-heading">ORGANIZE</div>
+
+      <button class="action-item" (click)="onActionSelected('move')" role="menuitem" tabindex="0">
+        <mat-icon class="action-item-icon" aria-hidden="true">open_with</mat-icon>
+        <span class="action-item-label">Move to...</span>
+      </button>
+
+      <button class="action-item" (click)="onActionSelected('copy')" role="menuitem" tabindex="0">
+        <mat-icon class="action-item-icon" aria-hidden="true">content_copy</mat-icon>
+        <span class="action-item-label">Copy to...</span>
+      </button>
+
+      <button class="action-item" (click)="onActionSelected('rename')" [disabled]="selectionCount !== 1" role="menuitem"
+        tabindex="0" [attr.aria-disabled]="selectionCount !== 1">
+        <mat-icon class="action-item-icon" aria-hidden="true">edit</mat-icon>
+        <span class="action-item-label">Rename</span>
+        @if(selectionCount !== 1) {
+        <span class="action-item-meta">1 item only</span>
+        }
+      </button>
+    </div>
+
+    <mat-divider></mat-divider>
+
+    <!-- Share & Download Actions -->
+    <div class="action-category" role="group" aria-labelledby="share-heading">
+      <div class="action-category-title" id="share-heading">SHARE & DOWNLOAD</div>
+
+      <button class="action-item" (click)="onActionSelected('download')" role="menuitem" tabindex="0">
+        <mat-icon class="action-item-icon" aria-hidden="true">download</mat-icon>
+        <span class="action-item-label">Download</span>
+      </button>
+    </div>
+
+    <mat-divider></mat-divider>
+
+    <!-- Danger Zone -->
+    <div class="action-category" role="group" aria-labelledby="danger-heading">
+      <div class="action-category-title danger-title" id="danger-heading">
+        DANGER ZONE
       </div>
 
-      <!-- Organize Actions -->
-      <div class="action-category" role="group" aria-labelledby="organize-heading">
-        <div class="action-category-title" id="organize-heading">ORGANIZE</div>
-
-        <button class="action-item"
-                (click)="onActionSelected('move')"
-                role="menuitem"
-                tabindex="0">
-          <mat-icon class="action-item-icon" aria-hidden="true">open_with</mat-icon>
-          <span class="action-item-label">Move to...</span>
-        </button>
-
-        <button class="action-item"
-                (click)="onActionSelected('copy')"
-                role="menuitem"
-                tabindex="0">
-          <mat-icon class="action-item-icon" aria-hidden="true">content_copy</mat-icon>
-          <span class="action-item-label">Copy to...</span>
-        </button>
-
-        <button class="action-item"
-                (click)="onActionSelected('rename')"
-                [disabled]="selectionCount !== 1"
-                role="menuitem"
-                tabindex="0"
-                [attr.aria-disabled]="selectionCount !== 1">
-          <mat-icon class="action-item-icon" aria-hidden="true">edit</mat-icon>
-          <span class="action-item-label">Rename</span>
-          @if(selectionCount !== 1) {
-            <span class="action-item-meta">1 item only</span>
-          }
-        </button>
-      </div>
-
-      <mat-divider></mat-divider>
-
-      <!-- Share & Download Actions -->
-      <div class="action-category" role="group" aria-labelledby="share-heading">
-        <div class="action-category-title" id="share-heading">SHARE & DOWNLOAD</div>
-
-        <button class="action-item"
-                (click)="onActionSelected('download')"
-                role="menuitem"
-                tabindex="0">
-          <mat-icon class="action-item-icon" aria-hidden="true">download</mat-icon>
-          <span class="action-item-label">Download</span>
-        </button>
-      </div>
-
-      <mat-divider></mat-divider>
-
-      <!-- Danger Zone -->
-      <div class="action-category" role="group" aria-labelledby="danger-heading">
-        <div class="action-category-title danger-title" id="danger-heading">
-          DANGER ZONE
-        </div>
-
-        <button class="action-item action-item-danger"
-                (click)="onActionSelected('delete')"
-                role="menuitem"
-                tabindex="0">
-          <mat-icon class="action-item-icon" aria-hidden="true">delete</mat-icon>
-          <span class="action-item-label">Delete</span>
-          <span class="action-item-meta">{{ selectionCount }} item{{ selectionCount > 1 ? 's' : '' }}</span>
-        </button>
-      </div>
+      <button class="action-item action-item-danger" (click)="onActionSelected('delete')" role="menuitem" tabindex="0">
+        <mat-icon class="action-item-icon" aria-hidden="true">delete</mat-icon>
+        <span class="action-item-label">Delete</span>
+        <span class="action-item-meta">{{ selectionCount }} item{{ selectionCount > 1 ? 's' : '' }}</span>
+      </button>
     </div>
   </div>
+</div>
 }

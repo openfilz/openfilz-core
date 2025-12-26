@@ -3,19 +3,15 @@
     <mat-icon aria-hidden="true">home</mat-icon>
   </button>
 
-    @for(item of breadcrumbs; track item.id; let i = $index) {
-        <ng-container>
-            <mat-icon class="separator" aria-hidden="true">chevron_right</mat-icon>
-            <button
-                    mat-button
-                    class="breadcrumb-item"
-                    [class.current]="i === breadcrumbs.length - 1"
-                    [attr.aria-current]="i === breadcrumbs.length - 1 ? 'page' : null"
-                    [attr.aria-label]="'Navigate to ' + item.name"
-                    (click)="onNavigate(item)">
-                {{ item.name }}
-            </button>
-        </ng-container>
-    }
+  @for(item of breadcrumbs; track item.id; let i = $index) {
+  <ng-container>
+    <mat-icon class="separator rtl-flip" aria-hidden="true">chevron_right</mat-icon>
+    <button mat-button class="breadcrumb-item" [class.current]="i === breadcrumbs.length - 1"
+      [attr.aria-current]="i === breadcrumbs.length - 1 ? 'page' : null" [attr.aria-label]="'Navigate to ' + item.name"
+      (click)="onNavigate(item)">
+      {{ item.name }}
+    </button>
+  </ng-container>
+  }
 
 </nav>

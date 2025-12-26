@@ -1,0 +1,212 @@
+{
+    "common": {
+        "cancel": "إلغاء",
+        "close": "إغلاق",
+        "save": "حفظ",
+        "delete": "حذف",
+        "rename": "إعادة تسمية",
+        "download": "تنزيل",
+        "upload": "رفع",
+        "create": "إنشاء",
+        "retry": "إعادة المحاولة",
+        "apply": "تطبيق",
+        "clear": "مسح",
+        "actions": "إجراءات",
+        "selected": "محدد",
+        "yes": "نعم",
+        "no": "لا",
+        "confirm": "تأكيد",
+        "loading": "جاري التحميل...",
+        "error": "خطأ",
+        "success": "نجاح",
+        "folder": "مجلد",
+        "file": "ملف"
+    },
+    "languages": {
+        "en": "English",
+        "fr": "Français",
+        "de": "Deutsch",
+        "ar": "العربية"
+    },
+    "sidebar": {
+        "dashboard": "لوحة التحكم",
+        "myFolder": "مجلدي",
+        "recycleBin": "سلة المحذوفات",
+        "favorites": "المفضلة",
+        "settings": "الإعدادات",
+        "logout": "تسجيل الخروج",
+        "collapse": "طي",
+        "expandSidebar": "توسيع الشريط الجانبي"
+    },
+    "header": {
+        "searchPlaceholder": "اكتب أي شيء للبحث",
+        "searchFilters": "فلاتر البحث",
+        "toggleMobileMenu": "تبديل القائمة المحمولة",
+        "activeFilters": "الفلاتر النشطة"
+    },
+    "toolbar": {
+        "upload": "رفع",
+        "newFolder": "مجلد جديد",
+        "clearSelection": "إلغاء التحديد",
+        "rename": "إعادة تسمية",
+        "download": "تنزيل",
+        "move": "نقل",
+        "copy": "نسخ",
+        "delete": "حذف",
+        "gridView": "عرض شبكي",
+        "listView": "عرض قائمة",
+        "previousPage": "الصفحة السابقة",
+        "nextPage": "الصفحة التالية",
+        "itemsPerPage": "عناصر لكل صفحة",
+        "sortBy": "ترتيب حسب",
+        "ascending": "تصاعدي",
+        "descending": "تنازلي",
+        "moreOptions": "المزيد من الخيارات",
+        "openActionsMenu": "فتح قائمة الإجراءات",
+        "closeActionsMenu": "إغلاق قائمة الإجراءات"
+    },
+    "sortOptions": {
+        "name": "الاسم",
+        "size": "الحجم",
+        "type": "النوع",
+        "date": "التاريخ",
+        "dateModified": "تاريخ التعديل",
+        "owner": "المالك",
+        "dateCreated": "تاريخ الإنشاء"
+    },
+    "fileList": {
+        "name": "الاسم",
+        "size": "الحجم",
+        "type": "النوع",
+        "selectAll": "تحديد جميع الملفات",
+        "select": "تحديد",
+        "folder": "مجلد",
+        "viewProperties": "عرض الخصائص",
+        "addToFavorites": "إضافة إلى المفضلة",
+        "removeFromFavorites": "إزالة من المفضلة",
+        "dropFilesHere": "اسحب الملفات هنا للرفع"
+    },
+    "searchFilters": {
+        "title": "فلاتر البحث",
+        "type": "النوع",
+        "dateModified": "تاريخ التعديل",
+        "owner": "المالك",
+        "ownerPlaceholder": "أنشأه...",
+        "fileType": "نوع الملف",
+        "metadata": "البيانات الوصفية",
+        "key": "المفتاح",
+        "value": "القيمة",
+        "addMetadataFilter": "إضافة فلتر البيانات الوصفية",
+        "applyFilters": "تطبيق الفلاتر"
+    },
+    "metadataPanel": {
+        "properties": "الخصائص",
+        "closePanel": "إغلاق اللوحة",
+        "loadingDocument": "جاري تحميل معلومات المستند...",
+        "loadingAudit": "جاري تحميل سجل التدقيق...",
+        "general": "عام",
+        "metadata": "البيانات الوصفية",
+        "audit": "التدقيق",
+        "name": "الاسم:",
+        "type": "النوع:",
+        "size": "الحجم:",
+        "sha256": "SHA256:",
+        "clickToCopy": "انقر للنسخ",
+        "copyToClipboard": "نسخ إلى الحافظة",
+        "savingChanges": "جاري حفظ التغييرات...",
+        "fixMetadataErrors": "يرجى إصلاح أخطاء البيانات الوصفية قبل الحفظ",
+        "unsavedChanges": "لديك تغييرات غير محفوظة",
+        "noAuditHistory": "لا يوجد سجل تدقيق متاح",
+        "unknownUser": "مستخدم غير معروف",
+        "editMetadata": "تحرير البيانات الوصفية",
+        "cancelEditing": "إلغاء التحرير",
+        "saveMetadata": "حفظ تغييرات البيانات الوصفية",
+        "saving": "جاري الحفظ..."
+    },
+    "dialogs": {
+        "createFolder": {
+            "title": "إنشاء مجلد جديد",
+            "subtitle": "أدخل اسمًا لمجلدك الجديد",
+            "folderName": "اسم المجلد",
+            "placeholder": "مثال: المستندات، المشاريع، الصور",
+            "createButton": "إنشاء المجلد",
+            "closeDialog": "إغلاق النافذة"
+        },
+        "rename": {
+            "titleFolder": "إعادة تسمية المجلد",
+            "titleFile": "إعادة تسمية الملف",
+            "subtitle": "أدخل اسمًا جديدًا لعنصرك",
+            "folderName": "اسم المجلد",
+            "fileName": "اسم الملف",
+            "placeholder": "أدخل الاسم الجديد",
+            "renameButton": "إعادة تسمية"
+        },
+        "upload": {
+            "title": "رفع الملفات",
+            "selectedFiles": "الملفات المحددة",
+            "total": "المجموع:",
+            "removeFile": "إزالة الملف",
+            "allowDuplicates": "السماح بأسماء الملفات المكررة",
+            "infoNote": "يمكنك إضافة البيانات الوصفية للملفات المرفوعة بعد الرفع باستخدام لوحة الخصائص",
+            "uploadCount": "رفع {{count}} {{type}}"
+        },
+        "folderTree": {
+            "noFoldersAvailable": "لا توجد مجلدات متاحة",
+            "selectPage": "اختر الصفحة"
+        },
+        "confirm": {
+            "defaultCancel": "إلغاء",
+            "defaultConfirm": "تأكيد"
+        }
+    },
+    "recycleBin": {
+        "title": "سلة المحذوفات",
+        "navigateBack": "العودة",
+        "restore": "استعادة",
+        "deleteForever": "حذف نهائي",
+        "emptyBin": "إفراغ السلة",
+        "restoreTooltip": "استعادة العناصر المحددة",
+        "deleteForeverTooltip": "حذف العناصر المحددة نهائياً",
+        "emptyBinTooltip": "إفراغ سلة المحذوفات بالكامل",
+        "loading": "جاري تحميل سلة المحذوفات...",
+        "emptyTitle": "سلة المحذوفات فارغة",
+        "emptyMessage": "ستظهر الملفات والمجلدات المحذوفة هنا",
+        "autoDeleteInfo": "يتم حذف العناصر تلقائياً بعد 30 يوماً",
+        "recycleBinActions": "إجراءات سلة المحذوفات"
+    },
+    "settings": {
+        "hello": "مرحباً {{name}}",
+        "managePreferences": "إدارة تفضيلاتك وإعدادات التطبيق",
+        "appearance": "المظهر",
+        "theme": "السمة",
+        "themeDescription": "اختر سمة لون لواجهة التطبيق."
+    },
+    "favorites": {
+        "title": "المفضلة",
+        "emptyTitle": "لا توجد مفضلات بعد",
+        "emptyMessage": "ستظهر العناصر التي تضعها في المفضلة هنا"
+    },
+    "dashboard": {
+        "title": "لوحة التحكم",
+        "welcome": "مرحباً",
+        "recentFiles": "الملفات الأخيرة",
+        "quickAccess": "الوصول السريع"
+    },
+    "bottomSheet": {
+        "organize": "تنظيم",
+        "moveTo": "نقل إلى...",
+        "copyTo": "نسخ إلى...",
+        "rename": "إعادة تسمية",
+        "oneItemOnly": "عنصر واحد فقط",
+        "shareAndDownload": "مشاركة وتنزيل",
+        "download": "تنزيل",
+        "dangerZone": "منطقة الخطر",
+        "delete": "حذف"
+    },
+    "errors": {
+        "loadFailed": "فشل تحميل البيانات",
+        "saveFailed": "فشل حفظ التغييرات",
+        "deleteFailed": "فشل حذف العنصر",
+        "uploadFailed": "فشل رفع الملف"
+    }
+}

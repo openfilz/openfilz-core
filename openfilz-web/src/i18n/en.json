@@ -1,0 +1,212 @@
+{
+    "common": {
+        "cancel": "Cancel",
+        "close": "Close",
+        "save": "Save",
+        "delete": "Delete",
+        "rename": "Rename",
+        "download": "Download",
+        "upload": "Upload",
+        "create": "Create",
+        "retry": "Retry",
+        "apply": "Apply",
+        "clear": "Clear",
+        "actions": "Actions",
+        "selected": "selected",
+        "yes": "Yes",
+        "no": "No",
+        "confirm": "Confirm",
+        "loading": "Loading...",
+        "error": "Error",
+        "success": "Success",
+        "folder": "Folder",
+        "file": "File"
+    },
+    "languages": {
+        "en": "English",
+        "fr": "Français",
+        "de": "Deutsch",
+        "ar": "العربية"
+    },
+    "sidebar": {
+        "dashboard": "Dashboard",
+        "myFolder": "My Folder",
+        "recycleBin": "Recycle Bin",
+        "favorites": "Favorites",
+        "settings": "Settings",
+        "logout": "Log Out",
+        "collapse": "Collapse",
+        "expandSidebar": "Expand sidebar"
+    },
+    "header": {
+        "searchPlaceholder": "Type anything to search",
+        "searchFilters": "Search filters",
+        "toggleMobileMenu": "Toggle mobile menu",
+        "activeFilters": "Active filters"
+    },
+    "toolbar": {
+        "upload": "Upload",
+        "newFolder": "New Folder",
+        "clearSelection": "Clear selection",
+        "rename": "Rename",
+        "download": "Download",
+        "move": "Move",
+        "copy": "Copy",
+        "delete": "Delete",
+        "gridView": "Grid view",
+        "listView": "List view",
+        "previousPage": "Previous page",
+        "nextPage": "Next page",
+        "itemsPerPage": "items per page",
+        "sortBy": "Sort By",
+        "ascending": "Ascending",
+        "descending": "Descending",
+        "moreOptions": "More options",
+        "openActionsMenu": "Open actions menu",
+        "closeActionsMenu": "Close actions menu"
+    },
+    "sortOptions": {
+        "name": "Name",
+        "size": "Size",
+        "type": "Type",
+        "date": "Date",
+        "dateModified": "Date Modified",
+        "owner": "Owner",
+        "dateCreated": "Date Created"
+    },
+    "fileList": {
+        "name": "Name",
+        "size": "Size",
+        "type": "Type",
+        "selectAll": "Select all files",
+        "select": "Select",
+        "folder": "Folder",
+        "viewProperties": "View Properties",
+        "addToFavorites": "Add to favorites",
+        "removeFromFavorites": "Remove from favorites",
+        "dropFilesHere": "Drop files here to upload"
+    },
+    "searchFilters": {
+        "title": "Search Filters",
+        "type": "Type",
+        "dateModified": "Date Modified",
+        "owner": "Owner",
+        "ownerPlaceholder": "Created by...",
+        "fileType": "File Type",
+        "metadata": "Metadata",
+        "key": "Key",
+        "value": "Value",
+        "addMetadataFilter": "Add Metadata Filter",
+        "applyFilters": "Apply Filters"
+    },
+    "metadataPanel": {
+        "properties": "Properties",
+        "closePanel": "Close panel",
+        "loadingDocument": "Loading document information...",
+        "loadingAudit": "Loading audit history...",
+        "general": "General",
+        "metadata": "Metadata",
+        "audit": "Audit",
+        "name": "Name:",
+        "type": "Type:",
+        "size": "Size:",
+        "sha256": "SHA256:",
+        "clickToCopy": "Click to copy",
+        "copyToClipboard": "Copy to clipboard",
+        "savingChanges": "Saving changes...",
+        "fixMetadataErrors": "Please fix metadata errors before saving",
+        "unsavedChanges": "You have unsaved changes",
+        "noAuditHistory": "No audit history available",
+        "unknownUser": "Unknown user",
+        "editMetadata": "Edit Metadata",
+        "cancelEditing": "Cancel editing",
+        "saveMetadata": "Save metadata changes",
+        "saving": "Saving..."
+    },
+    "dialogs": {
+        "createFolder": {
+            "title": "Create New Folder",
+            "subtitle": "Enter a name for your new folder",
+            "folderName": "Folder Name",
+            "placeholder": "e.g., Documents, Projects, Photos",
+            "createButton": "Create Folder",
+            "closeDialog": "Close dialog"
+        },
+        "rename": {
+            "titleFolder": "Rename Folder",
+            "titleFile": "Rename File",
+            "subtitle": "Enter a new name for your item",
+            "folderName": "Folder Name",
+            "fileName": "File Name",
+            "placeholder": "Enter new name",
+            "renameButton": "Rename"
+        },
+        "upload": {
+            "title": "Upload Files",
+            "selectedFiles": "Selected Files",
+            "total": "Total:",
+            "removeFile": "Remove file",
+            "allowDuplicates": "Allow duplicate file names",
+            "infoNote": "You can add metadata to uploaded files after upload using the properties panel",
+            "uploadCount": "Upload {{count}} {{type}}"
+        },
+        "folderTree": {
+            "noFoldersAvailable": "No folders available",
+            "selectPage": "Select page"
+        },
+        "confirm": {
+            "defaultCancel": "Cancel",
+            "defaultConfirm": "Confirm"
+        }
+    },
+    "recycleBin": {
+        "title": "Recycle Bin",
+        "navigateBack": "Navigate back",
+        "restore": "Restore",
+        "deleteForever": "Delete Forever",
+        "emptyBin": "Empty Bin",
+        "restoreTooltip": "Restore selected items",
+        "deleteForeverTooltip": "Permanently delete selected items",
+        "emptyBinTooltip": "Empty entire recycle bin",
+        "loading": "Loading recycle bin...",
+        "emptyTitle": "Recycle bin is empty",
+        "emptyMessage": "Deleted files and folders will appear here",
+        "autoDeleteInfo": "Items are automatically deleted after 30 days",
+        "recycleBinActions": "Recycle bin actions"
+    },
+    "settings": {
+        "hello": "Hello {{name}}",
+        "managePreferences": "Manage your preferences and application settings",
+        "appearance": "Appearance",
+        "theme": "Theme",
+        "themeDescription": "Choose a color theme for the application interface."
+    },
+    "favorites": {
+        "title": "Favorites",
+        "emptyTitle": "No favorites yet",
+        "emptyMessage": "Items you mark as favorites will appear here"
+    },
+    "dashboard": {
+        "title": "Dashboard",
+        "welcome": "Welcome",
+        "recentFiles": "Recent Files",
+        "quickAccess": "Quick Access"
+    },
+    "bottomSheet": {
+        "organize": "ORGANIZE",
+        "moveTo": "Move to...",
+        "copyTo": "Copy to...",
+        "rename": "Rename",
+        "oneItemOnly": "1 item only",
+        "shareAndDownload": "SHARE & DOWNLOAD",
+        "download": "Download",
+        "dangerZone": "DANGER ZONE",
+        "delete": "Delete"
+    },
+    "errors": {
+        "loadFailed": "Failed to load data",
+        "saveFailed": "Failed to save changes",
+        "deleteFailed": "Failed to delete item",
+        "uploadFailed": "Failed to upload file"
+    }
+}

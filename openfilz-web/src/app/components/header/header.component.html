@@ -1,9 +1,7 @@
 <div class="header">
-  <button class="mobile-menu-button"
-          (click)="onMobileMenuToggle()"
-          aria-label="Toggle mobile menu">
-    <mat-icon aria-hidden="true">menu</mat-icon>
-  </button>
+    <button class="mobile-menu-button" (click)="onMobileMenuToggle()" aria-label="Toggle mobile menu">
+        <mat-icon aria-hidden="true">menu</mat-icon>
+    </button>
 
     <div class="header-left">
         <div class="search-box">
@@ -12,19 +10,15 @@
                 <path d="m21 21-4.35-4.35"></path>
             </svg>
             <input type="text" placeholder="Type anything to search" [(ngModel)]="searchQuery" (input)="onSearchInput()"
-                (keyup.enter)="onSearch()"
-    [class.has-active-filters]="hasActiveFilters()">
+                (keyup.enter)="onSearch()" [class.has-active-filters]="hasActiveFilters()">
 
-            <button class="filter-button"
-                  [class.active]="showFilters || hasActiveFilters()"
-                  (click)="toggleFilters()"
-                  matTooltip="Search filters"
-                  aria-label="Toggle search filters">
-            <mat-icon aria-hidden="true">tune</mat-icon>
-            @if (hasActiveFilters()) {
-              <span class="filter-badge" aria-label="Active filters"></span>
-            }
-          </button>
+            <button class="filter-button" [class.active]="showFilters || hasActiveFilters()" (click)="toggleFilters()"
+                matTooltip="Search filters" aria-label="Toggle search filters">
+                <mat-icon aria-hidden="true">tune</mat-icon>
+                @if (hasActiveFilters()) {
+                <span class="filter-badge" aria-label="Active filters"></span>
+                }
+            </button>
 
             <!-- Suggestions Dropdown -->
             @if (suggestions.length > 0) {
@@ -50,6 +44,22 @@
         </div>
     </div>
     <div class="header-right">
+        <!-- Language Selector -->
+        <button mat-icon-button [matMenuTriggerFor]="languageMenu" class="language-selector"
+            aria-label="Select language" [matTooltip]="'Change language'">
+            <mat-icon>language</mat-icon>
+        </button>
+        <mat-menu #languageMenu="matMenu" class="language-menu">
+            @for (lang of availableLanguages; track lang.code) {
+            <button mat-menu-item (click)="switchLanguage(lang)" [class.active]="lang.code === currentLanguage.code">
+                <span class="lang-name">{{ lang.name }}</span>
+                @if (lang.code === currentLanguage.code) {
+                <mat-icon class="check-icon">check</mat-icon>
+                }
+            </button>
+            }
+        </mat-menu>
+
         <div class="avatar" (click)="navigateToSettings()" style="cursor: pointer;">{{ userInitials }}</div>
     </div>
 </div>

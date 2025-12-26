@@ -1,0 +1,212 @@
+{
+    "common": {
+        "cancel": "Annuler",
+        "close": "Fermer",
+        "save": "Enregistrer",
+        "delete": "Supprimer",
+        "rename": "Renommer",
+        "download": "Télécharger",
+        "upload": "Téléverser",
+        "create": "Créer",
+        "retry": "Réessayer",
+        "apply": "Appliquer",
+        "clear": "Effacer",
+        "actions": "Actions",
+        "selected": "sélectionné(s)",
+        "yes": "Oui",
+        "no": "Non",
+        "confirm": "Confirmer",
+        "loading": "Chargement...",
+        "error": "Erreur",
+        "success": "Succès",
+        "folder": "Dossier",
+        "file": "Fichier"
+    },
+    "languages": {
+        "en": "English",
+        "fr": "Français",
+        "de": "Deutsch",
+        "ar": "العربية"
+    },
+    "sidebar": {
+        "dashboard": "Tableau de bord",
+        "myFolder": "Mon dossier",
+        "recycleBin": "Corbeille",
+        "favorites": "Favoris",
+        "settings": "Paramètres",
+        "logout": "Déconnexion",
+        "collapse": "Réduire",
+        "expandSidebar": "Développer la barre latérale"
+    },
+    "header": {
+        "searchPlaceholder": "Tapez n'importe quoi pour rechercher",
+        "searchFilters": "Filtres de recherche",
+        "toggleMobileMenu": "Basculer le menu mobile",
+        "activeFilters": "Filtres actifs"
+    },
+    "toolbar": {
+        "upload": "Téléverser",
+        "newFolder": "Nouveau dossier",
+        "clearSelection": "Effacer la sélection",
+        "rename": "Renommer",
+        "download": "Télécharger",
+        "move": "Déplacer",
+        "copy": "Copier",
+        "delete": "Supprimer",
+        "gridView": "Vue grille",
+        "listView": "Vue liste",
+        "previousPage": "Page précédente",
+        "nextPage": "Page suivante",
+        "itemsPerPage": "éléments par page",
+        "sortBy": "Trier par",
+        "ascending": "Croissant",
+        "descending": "Décroissant",
+        "moreOptions": "Plus d'options",
+        "openActionsMenu": "Ouvrir le menu d'actions",
+        "closeActionsMenu": "Fermer le menu d'actions"
+    },
+    "sortOptions": {
+        "name": "Nom",
+        "size": "Taille",
+        "type": "Type",
+        "date": "Date",
+        "dateModified": "Date de modification",
+        "owner": "Propriétaire",
+        "dateCreated": "Date de création"
+    },
+    "fileList": {
+        "name": "Nom",
+        "size": "Taille",
+        "type": "Type",
+        "selectAll": "Sélectionner tous les fichiers",
+        "select": "Sélectionner",
+        "folder": "Dossier",
+        "viewProperties": "Voir les propriétés",
+        "addToFavorites": "Ajouter aux favoris",
+        "removeFromFavorites": "Retirer des favoris",
+        "dropFilesHere": "Déposez les fichiers ici pour téléverser"
+    },
+    "searchFilters": {
+        "title": "Filtres de recherche",
+        "type": "Type",
+        "dateModified": "Date de modification",
+        "owner": "Propriétaire",
+        "ownerPlaceholder": "Créé par...",
+        "fileType": "Type de fichier",
+        "metadata": "Métadonnées",
+        "key": "Clé",
+        "value": "Valeur",
+        "addMetadataFilter": "Ajouter un filtre de métadonnées",
+        "applyFilters": "Appliquer les filtres"
+    },
+    "metadataPanel": {
+        "properties": "Propriétés",
+        "closePanel": "Fermer le panneau",
+        "loadingDocument": "Chargement des informations du document...",
+        "loadingAudit": "Chargement de l'historique d'audit...",
+        "general": "Général",
+        "metadata": "Métadonnées",
+        "audit": "Audit",
+        "name": "Nom :",
+        "type": "Type :",
+        "size": "Taille :",
+        "sha256": "SHA256 :",
+        "clickToCopy": "Cliquez pour copier",
+        "copyToClipboard": "Copier dans le presse-papiers",
+        "savingChanges": "Enregistrement des modifications...",
+        "fixMetadataErrors": "Veuillez corriger les erreurs de métadonnées avant d'enregistrer",
+        "unsavedChanges": "Vous avez des modifications non enregistrées",
+        "noAuditHistory": "Aucun historique d'audit disponible",
+        "unknownUser": "Utilisateur inconnu",
+        "editMetadata": "Modifier les métadonnées",
+        "cancelEditing": "Annuler la modification",
+        "saveMetadata": "Enregistrer les modifications des métadonnées",
+        "saving": "Enregistrement..."
+    },
+    "dialogs": {
+        "createFolder": {
+            "title": "Créer un nouveau dossier",
+            "subtitle": "Entrez un nom pour votre nouveau dossier",
+            "folderName": "Nom du dossier",
+            "placeholder": "ex., Documents, Projets, Photos",
+            "createButton": "Créer le dossier",
+            "closeDialog": "Fermer la boîte de dialogue"
+        },
+        "rename": {
+            "titleFolder": "Renommer le dossier",
+            "titleFile": "Renommer le fichier",
+            "subtitle": "Entrez un nouveau nom pour votre élément",
+            "folderName": "Nom du dossier",
+            "fileName": "Nom du fichier",
+            "placeholder": "Entrez le nouveau nom",
+            "renameButton": "Renommer"
+        },
+        "upload": {
+            "title": "Téléverser des fichiers",
+            "selectedFiles": "Fichiers sélectionnés",
+            "total": "Total :",
+            "removeFile": "Supprimer le fichier",
+            "allowDuplicates": "Autoriser les noms de fichiers en double",
+            "infoNote": "Vous pouvez ajouter des métadonnées aux fichiers téléversés après le téléversement en utilisant le panneau de propriétés",
+            "uploadCount": "Téléverser {{count}} {{type}}"
+        },
+        "folderTree": {
+            "noFoldersAvailable": "Aucun dossier disponible",
+            "selectPage": "Sélectionner la page"
+        },
+        "confirm": {
+            "defaultCancel": "Annuler",
+            "defaultConfirm": "Confirmer"
+        }
+    },
+    "recycleBin": {
+        "title": "Corbeille",
+        "navigateBack": "Retour",
+        "restore": "Restaurer",
+        "deleteForever": "Supprimer définitivement",
+        "emptyBin": "Vider la corbeille",
+        "restoreTooltip": "Restaurer les éléments sélectionnés",
+        "deleteForeverTooltip": "Supprimer définitivement les éléments sélectionnés",
+        "emptyBinTooltip": "Vider toute la corbeille",
+        "loading": "Chargement de la corbeille...",
+        "emptyTitle": "La corbeille est vide",
+        "emptyMessage": "Les fichiers et dossiers supprimés apparaîtront ici",
+        "autoDeleteInfo": "Les éléments sont automatiquement supprimés après 30 jours",
+        "recycleBinActions": "Actions de la corbeille"
+    },
+    "settings": {
+        "hello": "Bonjour {{name}}",
+        "managePreferences": "Gérez vos préférences et les paramètres de l'application",
+        "appearance": "Apparence",
+        "theme": "Thème",
+        "themeDescription": "Choisissez un thème de couleur pour l'interface de l'application."
+    },
+    "favorites": {
+        "title": "Favoris",
+        "emptyTitle": "Pas encore de favoris",
+        "emptyMessage": "Les éléments que vous marquez comme favoris apparaîtront ici"
+    },
+    "dashboard": {
+        "title": "Tableau de bord",
+        "welcome": "Bienvenue",
+        "recentFiles": "Fichiers récents",
+        "quickAccess": "Accès rapide"
+    },
+    "bottomSheet": {
+        "organize": "ORGANISER",
+        "moveTo": "Déplacer vers...",
+        "copyTo": "Copier vers...",
+        "rename": "Renommer",
+        "oneItemOnly": "1 élément seulement",
+        "shareAndDownload": "PARTAGER ET TÉLÉCHARGER",
+        "download": "Télécharger",
+        "dangerZone": "ZONE DE DANGER",
+        "delete": "Supprimer"
+    },
+    "errors": {
+        "loadFailed": "Échec du chargement des données",
+        "saveFailed": "Échec de l'enregistrement des modifications",
+        "deleteFailed": "Échec de la suppression de l'élément",
+        "uploadFailed": "Échec du téléversement du fichier"
+    }
+}
