@@ -7,6 +7,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatIcon, MatIconModule } from "@angular/material/icon";
 import { MatButtonModule } from "@angular/material/button";
+import { TranslatePipe } from "@ngx-translate/core";
 
 import { FileGridComponent } from '../file-grid/file-grid.component';
 import { FileListComponent } from '../file-list/file-list.component';
@@ -108,8 +109,8 @@ import { AppConfig } from '../../config/app.config';
               <div class="empty-state">
                   <div class="empty-content">
                       <mat-icon class="empty-icon">folder_open</mat-icon>
-                      <h3>This folder is empty</h3>
-                      <p>Drop files here or create a new folder to get started</p>
+                      <h3>{{ 'fileExplorer.emptyTitle' | translate }}</h3>
+                      <p>{{ 'fileExplorer.emptyMessage' | translate }}</p>
                   </div>
               </div>
           }
@@ -187,7 +188,8 @@ import { AppConfig } from '../../config/app.config';
     MetadataPanelComponent,
     MatIcon,
     DragDropDirective,
-    DownloadProgressComponent
+    DownloadProgressComponent,
+    TranslatePipe
   ],
 })
 export class FileExplorerComponent extends FileOperationsComponent implements OnInit, OnDestroy {

@@ -39,12 +39,16 @@ export class HeaderComponent implements OnInit, OnDestroy {
 
   // Language selector
   availableLanguages = [
-    { code: 'en', name: 'English', flag: '🇬🇧' },
-    { code: 'fr', name: 'Français', flag: '🇫🇷' },
+    { code: 'ar', name: 'العربية', flag: '🇸🇦' },
     { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
-    { code: 'ar', name: 'العربية', flag: '🇸🇦' }
+    { code: 'en', name: 'English', flag: '🇬🇧' },
+    { code: 'es', name: 'Español', flag: '🇪🇸' },
+    { code: 'fr', name: 'Français', flag: '🇫🇷' },
+    { code: 'it', name: 'Italiano', flag: '🇮🇹' },
+    { code: 'nl', name: 'Nederlands', flag: '🇳🇱' },
+    { code: 'pt', name: 'Português', flag: '🇵🇹' }
   ];
-  currentLanguage = this.availableLanguages[0];
+  currentLanguage = this.availableLanguages.find(l => l.code === 'en') || this.availableLanguages[2];
 
   @Input() hasSelection: boolean = false;
   @Input() set userData(value: any) {
@@ -73,7 +77,8 @@ export class HeaderComponent implements OnInit, OnDestroy {
   private initializeLanguage(): void {
     const savedLang = localStorage.getItem('preferredLanguage');
     const browserLang = this.translate.getBrowserLang();
-    const defaultLang = savedLang || (browserLang && ['en', 'fr', 'de', 'ar'].includes(browserLang) ? browserLang : 'en');
+    const supportedLangs = ['en', 'fr', 'de', 'ar', 'es', 'pt', 'it', 'nl'];
+    const defaultLang = savedLang || (browserLang && supportedLangs.includes(browserLang) ? browserLang : 'en');
 
     this.currentLanguage = this.availableLanguages.find(l => l.code === defaultLang) || this.availableLanguages[0];
     this.translate.use(this.currentLanguage.code);

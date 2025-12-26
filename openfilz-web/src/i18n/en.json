@@ -30,7 +30,11 @@
         "en": "English",
         "fr": "Français",
         "de": "Deutsch",
-        "ar": "العربية"
+        "ar": "العربية",
+        "es": "Español",
+        "pt": "Português",
+        "it": "Italiano",
+        "nl": "Nederlands"
     },
     "sidebar": {
         "dashboard": "Dashboard",
@@ -121,6 +125,10 @@
         "removeFromFavoritesDetail": "Remove {{name}} from favorites",
         "dropFilesHere": "Drop files here to upload"
     },
+    "fileExplorer": {
+        "emptyTitle": "This folder is empty",
+        "emptyMessage": "Drop files here or create a new folder to get started"
+    },
     "searchFilters": {
         "title": "Search Filters",
         "type": "Type",
@@ -160,27 +168,46 @@
         "chooseFiles": "Choose Files"
     },
     "metadataPanel": {
-        "properties": "Properties",
-        "closePanel": "Close panel",
-        "loadingDocument": "Loading document information...",
-        "loadingAudit": "Loading audit history...",
+        "title": "Properties",
+        "description": "Document properties panel",
+        "closePanel": "Close properties panel",
+        "close": "Close",
+        "loading": "Loading document information...",
+        "errorLoading": "Failed to load document information",
+        "retry": "Retry",
         "general": "General",
+        "generalInfo": "General Information",
         "metadata": "Metadata",
         "audit": "Audit",
+        "auditHistory": "Audit History",
         "name": "Name:",
         "type": "Type:",
         "size": "Size:",
         "sha256": "SHA256:",
         "clickToCopy": "Click to copy",
         "copyToClipboard": "Copy to clipboard",
-        "saving": "Saving...",
-        "fixMetadataErrors": "Please fix metadata errors before saving",
+        "copySha256": "Copy SHA256 hash to clipboard",
+        "saving": "Saving changes...",
+        "fixErrors": "Please fix metadata errors before saving",
         "unsavedChanges": "You have unsaved changes",
-        "noAuditHistory": "No audit history available",
+        "loadingAudit": "Loading audit history...",
+        "errorAudit": "Failed to load audit history",
+        "noAudit": "No audit history available",
+        "auditLogs": "Audit log entries",
         "unknownUser": "Unknown user",
         "editMetadata": "Edit Metadata",
         "cancelEditing": "Cancel editing",
-        "saveMetadata": "Save metadata changes"
+        "saveMetadata": "Save metadata changes",
+        "savingDots": "Saving...",
+        "save": "Save",
+        "unsavedChangesTitle": "Unsaved Changes",
+        "unsavedChangesMessage": "You have unsaved changes. Are you sure you want to close?",
+        "unsavedChangesDetails": "Your changes will be lost if you close without saving.",
+        "discardChanges": "Discard changes",
+        "keepEditing": "Keep editing",
+        "hashCopied": "SHA256 hash copied to clipboard",
+        "copyFailed": "Failed to copy to clipboard",
+        "saveSuccess": "Metadata saved successfully"
     },
     "metadataEditor": {
         "title": "Metadata",

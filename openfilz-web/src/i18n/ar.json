@@ -30,7 +30,11 @@
         "en": "English",
         "fr": "Français",
         "de": "Deutsch",
-        "ar": "العربية"
+        "ar": "العربية",
+        "es": "Español",
+        "pt": "Português",
+        "it": "Italiano",
+        "nl": "Nederlands"
     },
     "sidebar": {
         "dashboard": "لوحة التحكم",
@@ -120,6 +124,10 @@
         "removeFromFavorites": "إزالة من المفضلة",
         "removeFromFavoritesDetail": "إزالة {{name}} من المفضلة",
         "dropFilesHere": "اسحب الملفات هنا للرفع"
+    },
+    "fileExplorer": {
+        "emptyTitle": "هذا المجلد فارغ",
+        "emptyMessage": "قم بسحب الملفات هنا أو إنشاء مجلد جديد للبدء"
     },
     "searchFilters": {
         "title": "فلاتر البحث",

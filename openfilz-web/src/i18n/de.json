@@ -30,7 +30,11 @@
         "en": "English",
         "fr": "Français",
         "de": "Deutsch",
-        "ar": "العربية"
+        "ar": "العربية",
+        "es": "Español",
+        "pt": "Português",
+        "it": "Italiano",
+        "nl": "Nederlands"
     },
     "sidebar": {
         "dashboard": "Dashboard",
@@ -120,6 +124,10 @@
         "removeFromFavorites": "Von Favoriten entfernen",
         "removeFromFavoritesDetail": "{{name}} von Favoriten entfernen",
         "dropFilesHere": "Dateien hier ablegen zum Hochladen"
+    },
+    "fileExplorer": {
+        "emptyTitle": "Dieser Ordner ist leer",
+        "emptyMessage": "Dateien hier ablegen oder einen neuen Ordner erstellen, um zu beginnen"
     },
     "searchFilters": {
         "title": "Suchfilter",

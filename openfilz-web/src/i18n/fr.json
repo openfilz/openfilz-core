@@ -30,7 +30,11 @@
         "en": "English",
         "fr": "Français",
         "de": "Deutsch",
-        "ar": "العربية"
+        "ar": "العربية",
+        "es": "Español",
+        "pt": "Português",
+        "it": "Italiano",
+        "nl": "Nederlands"
     },
     "sidebar": {
         "dashboard": "Tableau de bord",
@@ -120,6 +124,10 @@
         "removeFromFavorites": "Retirer des favoris",
         "removeFromFavoritesDetail": "Retirer {{name}} des favoris",
         "dropFilesHere": "Déposez les fichiers ici pour téléverser"
+    },
+    "fileExplorer": {
+        "emptyTitle": "Ce dossier est vide",
+        "emptyMessage": "Déposez des fichiers ici ou créez un nouveau dossier pour commencer"
     },
     "searchFilters": {
         "title": "Filtres de recherche",
