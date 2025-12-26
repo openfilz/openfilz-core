@@ -489,3 +489,19 @@ a,
     border: 2px solid currentColor;
   }
 }
+
+/* Global RTL Support for Material Form Fields */
+[dir="rtl"] .mat-mdc-form-field {
+  direction: rtl !important;
+}
+
+[dir="rtl"] .mat-mdc-form-field-input-control {
+  direction: ltr !important;
+  /* Keep filenames LTR */
+  text-align: left !important;
+}
+
+[dir="rtl"] .mat-mdc-form-field-icon-prefix {
+  margin-left: 8px !important;
+  margin-right: 0 !important;
+}

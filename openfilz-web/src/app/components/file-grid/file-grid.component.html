@@ -1,68 +1,55 @@
 <div class="file-grid-container">
-    <div class="file-grid" role="grid" aria-label="Files and folders">
+    <div class="file-grid" role="grid" [attr.aria-label]="'fileList.filesTable' | translate">
         @for(item of items; track item.id; let i = $index) {
-            <div
-                class="file-item"
-                role="gridcell"
-                [class.selected]="item.selected"
-                [class.focused]="isFocused(i)"
-                [attr.tabindex]="getTabIndex(i)"
-                [attr.data-file-id]="item.id"
-                [attr.aria-label]="item.type === 'FOLDER' ? 'Folder: ' + item.name : 'File: ' + item.name"
-                [attr.aria-selected]="item.selected"
-                (click)="onItemClick(item)"
-                (dblclick)="onItemDoubleClick(item)"
-                (contextmenu)="onContextMenu($event, item)">
+        <div class="file-item" role="gridcell" [class.selected]="item.selected" [class.focused]="isFocused(i)"
+            [attr.tabindex]="getTabIndex(i)" [attr.data-file-id]="item.id"
+            [attr.aria-label]="item.type === 'FOLDER' ? ('fileList.folderDetail' | translate:{name: item.name}) : ('fileList.fileDetail' | translate:{name: item.name})"
+            [attr.aria-selected]="item.selected" (click)="onItemClick(item)" (dblclick)="onItemDoubleClick(item)"
+            (contextmenu)="onContextMenu($event, item)">
 
-                <div class="file-header">
-                    <mat-checkbox
-                            [checked]="item.selected"
-                            [attr.aria-label]="'Select ' + item.name"
-                            (click)="$event.stopPropagation()"
-                            (change)="onSelectionChange(item, $event.checked)">
-                    </mat-checkbox>
-                    @if(showFavoriteButton) {
-                        <button
-                            mat-icon-button
-                            class="favorite-btn"
-                            (click)="onToggleFavorite($event, item)"
-                            [attr.aria-label]="item.favorite ? 'Remove ' + item.name + ' from favorites' : 'Add ' + item.name + ' to favorites'"
-                            [title]="item.favorite ? 'Remove from favorites' : 'Add to favorites'">
-                            <mat-icon [class.favorited]="item.favorite" aria-hidden="true">
-                                {{ item.favorite ? 'favorite' : 'favorite_border' }}
-                            </mat-icon>
-                        </button>
-                    }
+            <div class="file-header">
+                <mat-checkbox [checked]="item.selected"
+                    [attr.aria-label]="'fileList.selectItem' | translate:{name: item.name}"
+                    (click)="$event.stopPropagation()" (change)="onSelectionChange(item, $event.checked)">
+                </mat-checkbox>
+                @if(showFavoriteButton) {
+                <button mat-icon-button class="favorite-btn" (click)="onToggleFavorite($event, item)"
+                    [attr.aria-label]="item.favorite ? ('fileList.removeFromFavoritesDetail' | translate:{name: item.name}) : ('fileList.addToFavoritesDetail' | translate:{name: item.name})"
+                    [title]="item.favorite ? ('fileList.removeFromFavorites' | translate) : ('fileList.addToFavorites' | translate)">
+                    <mat-icon [class.favorited]="item.favorite" aria-hidden="true">
+                        {{ item.favorite ? 'favorite' : 'favorite_border' }}
+                    </mat-icon>
+                </button>
+                }
+            </div>
+
+            <div class="file-content">
+                <div class="file-icon" (click)="onIconClick($event, item)">
+                    <mat-icon [class]="'file-type-' + item.type.toLowerCase()" aria-hidden="true">
+                        {{ getFileIcon(item.name, item.type) }}
+                    </mat-icon>
                 </div>
 
-                <div class="file-content">
-                    <div class="file-icon" (click)="onIconClick($event, item)">
-                        <mat-icon [class]="'file-type-' + item.type.toLowerCase()" aria-hidden="true">
-                            {{ getFileIcon(item.name, item.type) }}
-                        </mat-icon>
-                    </div>
-
-                    <div class="file-name" [title]="item.name">
-                        {{ item.name }}
-                    </div>
-                </div>
-
-                <div class="file-actions">
-                    <button mat-icon-button
-                            (click)="onViewProperties(item); $event.stopPropagation()"
-                            matTooltip="View Properties"
-                            [attr.aria-label]="'View properties for ' + item.name">
-                        <mat-icon aria-hidden="true">info</mat-icon>
-                    </button>
+                <div class="file-name" [title]="item.name">
+                    {{ item.name }}
                 </div>
             </div>
+
+            <div class="file-actions">
+                <button mat-icon-button (click)="onViewProperties(item); $event.stopPropagation()"
+                    [matTooltip]="'fileList.viewProperties' | translate"
+                    [attr.aria-label]="'fileList.viewPropertiesForItem' | translate:{name: item.name}">
+                    <mat-icon aria-hidden="true">info</mat-icon>
+                </button>
+            </div>
+        </div>
         }
     </div>
     <div class="dropzone-overlay" [class.file-over]="fileOver">
         <div class="dropzone-message">
             <mat-icon>cloud_upload</mat-icon>
-            <p>Drop files here to upload</p>
+            <p>{{ 'fileList.dropFilesHere' | translate }}</p>
         </div>
     </div>
-    
+
 </div>

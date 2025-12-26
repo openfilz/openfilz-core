@@ -4,11 +4,11 @@
       <mat-icon>{{ getDialogIcon() }}</mat-icon>
     </div>
     <div class="header-text">
-      <h2 class="dialog-title">{{ data.title }}</h2>
-      <p class="dialog-subtitle">{{ getDialogSubtitle() }}</p>
+      <h2 class="dialog-title">{{ data.title | translate: data.titleParams }}</h2>
+      <p class="dialog-subtitle">{{ getDialogSubtitle() | translate }}</p>
     </div>
   </div>
-  <button mat-icon-button class="close-btn" (click)="onCancel()">
+  <button mat-icon-button class="close-btn" (click)="onCancel()" [attr.aria-label]="'common.close' | translate">
     <mat-icon>close</mat-icon>
   </button>
 </div>
@@ -18,35 +18,32 @@
     <div class="breadcrumb">
       <mat-icon class="breadcrumb-icon">home</mat-icon>
       @for (crumb of breadcrumbs; track $index; let last = $last) {
-        <span
-          class="breadcrumb-item"
-          [class.current]="last"
-          (click)="onBreadcrumbClick($index)">
-          {{ crumb.name }}
-        </span>
-        @if (!last) {
-          <span class="separator">/</span>
-        }
+      <span class="breadcrumb-item" [class.current]="last" (click)="onBreadcrumbClick($index)">
+        {{ crumb.name | translate }}
+      </span>
+      @if (!last) {
+      <span class="separator">/</span>
+      }
       }
     </div>
   </div>
 
   <div class="folder-grid-container" *ngIf="!loading">
     @if (folders.length === 0) {
-      <div class="empty-state">
-        <mat-icon class="empty-icon">folder_open</mat-icon>
-        <p>No folders available</p>
-      </div>
+    <div class="empty-state">
+      <mat-icon class="empty-icon">folder_open</mat-icon>
+      <p>{{ 'dialogs.folderTree.noFoldersAvailable' | translate }}</p>
+    </div>
     }
     @else {
-      <div class="folder-grid">
-        @for (folder of folders; track folder.id) {
-          <div class="folder-card" (dblclick)="onFolderDoubleClick(folder)">
-            <mat-icon class="folder-icon">folder</mat-icon>
-            <span class="folder-name">{{ folder.name }}</span>
-          </div>
-        }
+    <div class="folder-grid">
+      @for (folder of folders; track folder.id) {
+      <div class="folder-card" (dblclick)="onFolderDoubleClick(folder)">
+        <mat-icon class="folder-icon">folder</mat-icon>
+        <span class="folder-name">{{ folder.name }}</span>
       </div>
+      }
+    </div>
     }
   </div>
 
@@ -55,26 +52,22 @@
   </div>
 
   @if (totalItems > pageSize && !loading) {
-    <div class="pagination-container">
-      <mat-paginator
-        [length]="totalItems"
-        [pageSize]="pageSize"
-        [pageIndex]="pageIndex"
-        [pageSizeOptions]="pageSizeOptions"
-        (page)="onPageChange($event)"
-        aria-label="Select page">
-      </mat-paginator>
-    </div>
+  <div class="pagination-container">
+    <mat-paginator [length]="totalItems" [pageSize]="pageSize" [pageIndex]="pageIndex"
+      [pageSizeOptions]="pageSizeOptions" (page)="onPageChange($event)"
+      [attr.aria-label]="'dialogs.folderTree.selectPage' | translate">
+    </mat-paginator>
+  </div>
   }
 </mat-dialog-content>
 
 <mat-dialog-actions class="dialog-actions">
-  <button mat-stroked-button class="cancel-btn" (click)="onCancel()">
+  <button mat-stroked-button class="cancel-btn" (click)="onCancel()" [attr.aria-label]="'common.cancel' | translate">
     <mat-icon>close</mat-icon>
-    <span>Cancel</span>
+    <span>{{ 'common.cancel' | translate }}</span>
   </button>
   <button mat-raised-button color="primary" class="action-btn" (click)="onAction()">
     <mat-icon>{{ getActionIcon() }}</mat-icon>
-    <span>{{ getActionButtonText() }}</span>
+    <span>{{ getActionButtonText() | translate }}</span>
   </button>
 </mat-dialog-actions>

@@ -2,7 +2,7 @@
   <!-- Toolbar -->
   <mat-toolbar class="viewer-toolbar">
     <div class="toolbar-left">
-      <button mat-icon-button (click)="onClose()" matTooltip="Close">
+      <button mat-icon-button (click)="onClose()" [matTooltip]="'fileViewer.close' | translate">
         <mat-icon>close</mat-icon>
       </button>
       <span class="file-name">{{ data.fileName }}</span>
@@ -11,54 +11,57 @@
     <div class="toolbar-center">
       <!-- Page Navigation (PDF only) -->
       @if (showPageNavigation) {
-        <div class="page-navigation">
-          <button mat-icon-button (click)="previousPage()" [disabled]="currentPage === 1" matTooltip="Previous page">
-            <mat-icon>chevron_left</mat-icon>
-          </button>
-          <span class="page-info">Page {{ currentPage }} of {{ totalPages }}</span>
-          <button mat-icon-button (click)="nextPage()" [disabled]="currentPage === totalPages" matTooltip="Next page">
-            <mat-icon>chevron_right</mat-icon>
-          </button>
-        </div>
+      <div class="page-navigation">
+        <button mat-icon-button (click)="previousPage()" [disabled]="currentPage === 1"
+          [matTooltip]="'fileViewer.previousPage' | translate">
+          <mat-icon>chevron_left</mat-icon>
+        </button>
+        <span class="page-info">{{ 'fileViewer.pageInfo' | translate:{current: currentPage, total: totalPages} }}</span>
+        <button mat-icon-button (click)="nextPage()" [disabled]="currentPage === totalPages"
+          [matTooltip]="'fileViewer.nextPage' | translate">
+          <mat-icon>chevron_right</mat-icon>
+        </button>
+      </div>
       }
     </div>
 
     <div class="toolbar-right">
       <!-- Zoom Controls -->
       @if (showZoomControls) {
-        <div class="zoom-controls">
-          <button mat-icon-button (click)="zoomOut()" matTooltip="Zoom out">
-            <mat-icon>zoom_out</mat-icon>
-          </button>
-          <span class="zoom-level">{{ (currentZoom * 100) | number:'1.0-0' }}%</span>
-          <button mat-icon-button (click)="zoomIn()" matTooltip="Zoom in">
-            <mat-icon>zoom_in</mat-icon>
-          </button>
-          <button mat-icon-button (click)="resetZoom()" matTooltip="Reset zoom">
-            <mat-icon>zoom_out_map</mat-icon>
-          </button>
-        </div>
+      <div class="zoom-controls">
+        <button mat-icon-button (click)="zoomOut()" [matTooltip]="'fileViewer.zoomOut' | translate">
+          <mat-icon>zoom_out</mat-icon>
+        </button>
+        <span class="zoom-level">{{ (currentZoom * 100) | number:'1.0-0' }}%</span>
+        <button mat-icon-button (click)="zoomIn()" [matTooltip]="'fileViewer.zoomIn' | translate">
+          <mat-icon>zoom_in</mat-icon>
+        </button>
+        <button mat-icon-button (click)="resetZoom()" [matTooltip]="'fileViewer.resetZoom' | translate">
+          <mat-icon>zoom_out_map</mat-icon>
+        </button>
+      </div>
       }
 
       <!-- Rotate (Images and PDF) -->
       @if (viewerMode === 'pdf' || viewerMode === 'image') {
-        <button mat-icon-button (click)="rotate()" matTooltip="Rotate">
-          <mat-icon>rotate_right</mat-icon>
-        </button>
+      <button mat-icon-button (click)="rotate()" [matTooltip]="'fileViewer.rotate' | translate">
+        <mat-icon>rotate_right</mat-icon>
+      </button>
       }
 
       <!-- Download -->
-      <button mat-icon-button (click)="download()" matTooltip="Download">
+      <button mat-icon-button (click)="download()" [matTooltip]="'fileViewer.download' | translate">
         <mat-icon>download</mat-icon>
       </button>
 
       <!-- Print -->
-      <button mat-icon-button (click)="print()" matTooltip="Print">
+      <button mat-icon-button (click)="print()" [matTooltip]="'fileViewer.print' | translate">
         <mat-icon>print</mat-icon>
       </button>
 
       <!-- Fullscreen Toggle -->
-      <button mat-icon-button (click)="toggleFullscreen()" [matTooltip]="isFullscreen ? 'Exit fullscreen' : 'Fullscreen'">
+      <button mat-icon-button (click)="toggleFullscreen()"
+        [matTooltip]="(isFullscreen ? 'fileViewer.exitFullscreen' : 'fileViewer.fullscreen') | translate">
         <mat-icon>{{ isFullscreen ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
       </button>
     </div>
@@ -68,82 +71,76 @@
   <div class="viewer-content" [class.loading]="loading">
     <!-- Loading Spinner -->
     @if (loading) {
-      <div class="loading-container">
-        <mat-spinner diameter="60"></mat-spinner>
-        <p>Loading document...</p>
-      </div>
+    <div class="loading-container">
+      <mat-spinner diameter="60"></mat-spinner>
+      <p>{{ 'fileViewer.loading' | translate }}</p>
+    </div>
     }
 
     <!-- Error Message -->
     @if (error && !loading) {
-      <div class="error-container">
-        <mat-icon class="error-icon">error_outline</mat-icon>
-        <h3>{{ error }}</h3>
-        <p>Unable to preview this file.</p>
-        <button mat-raised-button color="primary" (click)="download()">
-          <mat-icon>download</mat-icon>
-          Download File
-        </button>
-      </div>
+    <div class="error-container">
+      <mat-icon class="error-icon">error_outline</mat-icon>
+      <h3>{{ error | translate }}</h3>
+      <p>{{ 'fileViewer.unsupportedMessage' | translate }}</p>
+      <button mat-raised-button color="primary" (click)="download()">
+        <mat-icon>download</mat-icon>
+        {{ 'fileViewer.downloadFile' | translate }}
+      </button>
+    </div>
     }
 
     <!-- PDF Viewer -->
     @if (viewerMode === 'pdf' && !loading && !error) {
-      <div class="pdf-viewer">
-        <div class="pdf-canvas-container">
-          <canvas #pdfCanvas></canvas>
-        </div>
+    <div class="pdf-viewer">
+      <div class="pdf-canvas-container">
+        <canvas #pdfCanvas></canvas>
       </div>
+    </div>
     }
 
     <!-- Image Viewer -->
     @if (viewerMode === 'image' && !loading && !error) {
-      <div class="image-viewer" #imageContainer>
-        <img [src]="imageSrc" [style.transform]="imageTransform" alt="{{ data.fileName }}" />
-      </div>
+    <div class="image-viewer" #imageContainer>
+      <img [src]="imageSrc" [style.transform]="imageTransform" alt="{{ data.fileName }}" />
+    </div>
     }
 
     <!-- Text Viewer -->
     @if (viewerMode === 'text' && !loading && !error) {
-      <div class="text-viewer">
-        <div class="code-container" [innerHTML]="highlightedContent"></div>
-      </div>
+    <div class="text-viewer">
+      <div class="code-container" [innerHTML]="highlightedContent"></div>
+    </div>
     }
 
     <!-- Office Document Viewer (fallback when OnlyOffice is disabled) -->
     @if (viewerMode === 'office' && !loading && !error) {
-      <div class="office-viewer">
-        <div class="office-content" [innerHTML]="officeContent"></div>
-      </div>
+    <div class="office-viewer">
+      <div class="office-content" [innerHTML]="officeContent"></div>
+    </div>
     }
 
     <!-- OnlyOffice Document Editor -->
     @if (viewerMode === 'onlyoffice') {
-      <div class="onlyoffice-viewer">
-        <app-onlyoffice-editor
-          [documentId]="data.documentId"
-          [canEdit]="true"
-          (editorReady)="onEditorReady()"
-          (documentSaved)="onDocumentSaved()"
-          (editorClosed)="onClose()"
-          (editorError)="onEditorError($event)"
-          style="height: 100%"
-        >
-        </app-onlyoffice-editor>
-      </div>
+    <div class="onlyoffice-viewer">
+      <app-onlyoffice-editor [documentId]="data.documentId" [canEdit]="true" (editorReady)="onEditorReady()"
+        (documentSaved)="onDocumentSaved()" (editorClosed)="onClose()" (editorError)="onEditorError($event)"
+        style="height: 100%">
+      </app-onlyoffice-editor>
+    </div>
     }
 
     <!-- Unsupported File Type -->
     @if (viewerMode === 'unsupported' && !loading && !error) {
-      <div class="unsupported-container">
-        <mat-icon class="unsupported-icon">insert_drive_file</mat-icon>
-        <h3>Preview not available</h3>
-        <p>This file type cannot be previewed in the browser.</p>
-        <button mat-raised-button color="primary" (click)="download()">
-          <mat-icon>download</mat-icon>
-          Download File
-        </button>
-      </div>
+    <div class="unsupported-container">
+      <mat-icon class="unsupported-icon">insert_drive_file</mat-icon>
+      <h3>{{ 'fileViewer.unsupportedTitle' | translate }}</h3>
+      <p>{{ 'fileViewer.unsupportedMessage' | translate }}</p>
+      <button mat-raised-button color="primary" (click)="download()">
+        <mat-icon>download</mat-icon>
+        {{ 'fileViewer.downloadFile' | translate }}
+      </button>
+    </div>
     }
   </div>
 </div>

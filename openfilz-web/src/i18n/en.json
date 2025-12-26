@@ -20,7 +20,11 @@
         "error": "Error",
         "success": "Success",
         "folder": "Folder",
-        "file": "File"
+        "file": "File",
+        "fileWithType": "{{type}} File",
+        "user": "Openfilz User",
+        "downloadProgress": "Downloading files...",
+        "downloadInProgress": "Download in progress..."
     },
     "languages": {
         "en": "English",
@@ -42,17 +46,35 @@
         "searchPlaceholder": "Type anything to search",
         "searchFilters": "Search filters",
         "toggleMobileMenu": "Toggle mobile menu",
-        "activeFilters": "Active filters"
+        "activeFilters": "Active filters",
+        "changeLanguage": "Change language",
+        "download": "Download",
+        "open": "Open"
+    },
+    "breadcrumb": {
+        "navigation": "Breadcrumb",
+        "navigateToHome": "Navigate to home",
+        "navigateToItem": "Navigate to {{name}}"
     },
     "toolbar": {
+        "of": "of",
+        "managementToolbar": "File management toolbar",
+        "selected": "{{count}} selected",
         "upload": "Upload",
+        "uploadFiles": "Upload files",
         "newFolder": "New Folder",
+        "createNewFolder": "Create new folder",
         "clearSelection": "Clear selection",
         "rename": "Rename",
+        "renameSelected": "Rename selected item",
         "download": "Download",
+        "downloadSelected": "Download selected items",
         "move": "Move",
+        "moveSelected": "Move selected items",
         "copy": "Copy",
+        "copySelected": "Copy selected items",
         "delete": "Delete",
+        "deleteSelected": "Delete selected items",
         "gridView": "Grid view",
         "listView": "List view",
         "previousPage": "Previous page",
@@ -62,6 +84,9 @@
         "ascending": "Ascending",
         "descending": "Descending",
         "moreOptions": "More options",
+        "actions": "Actions",
+        "actionsFor": "Actions for {{count}} items",
+        "quickActions": "Quick actions",
         "openActionsMenu": "Open actions menu",
         "closeActionsMenu": "Close actions menu"
     },
@@ -75,15 +100,23 @@
         "dateCreated": "Date Created"
     },
     "fileList": {
+        "filesTable": "Files and folders list",
         "name": "Name",
         "size": "Size",
         "type": "Type",
         "selectAll": "Select all files",
+        "selectItem": "Select {{name}}",
         "select": "Select",
         "folder": "Folder",
+        "folderDetail": "Folder: {{name}}",
+        "fileDetail": "File: {{name}}",
+        "favorite": "Favorite",
         "viewProperties": "View Properties",
+        "viewPropertiesForItem": "View properties for {{name}}",
         "addToFavorites": "Add to favorites",
+        "addToFavoritesDetail": "Add {{name}} to favorites",
         "removeFromFavorites": "Remove from favorites",
+        "removeFromFavoritesDetail": "Remove {{name}} from favorites",
         "dropFilesHere": "Drop files here to upload"
     },
     "searchFilters": {
@@ -97,7 +130,32 @@
         "key": "Key",
         "value": "Value",
         "addMetadataFilter": "Add Metadata Filter",
-        "applyFilters": "Apply Filters"
+        "applyFilters": "Apply Filters",
+        "clear": "Clear",
+        "remove": "Remove",
+        "documentTypes": {
+            "all": "All",
+            "folders": "Folders",
+            "files": "Files"
+        },
+        "dateOptions": {
+            "any": "Any time",
+            "today": "Today",
+            "last7": "Last 7 days",
+            "last30": "Last 30 days"
+        },
+        "fileTypeOptions": {
+            "any": "Any",
+            "pdfs": "PDFs",
+            "images": "Images",
+            "documents": "Documents",
+            "spreadsheets": "Spreadsheets"
+        }
+    },
+    "uploadZone": {
+        "dropFiles": "Drop files here to upload",
+        "orClick": "or click to select files",
+        "chooseFiles": "Choose Files"
     },
     "metadataPanel": {
         "properties": "Properties",
@@ -113,15 +171,35 @@
         "sha256": "SHA256:",
         "clickToCopy": "Click to copy",
         "copyToClipboard": "Copy to clipboard",
-        "savingChanges": "Saving changes...",
+        "saving": "Saving...",
         "fixMetadataErrors": "Please fix metadata errors before saving",
         "unsavedChanges": "You have unsaved changes",
         "noAuditHistory": "No audit history available",
         "unknownUser": "Unknown user",
         "editMetadata": "Edit Metadata",
         "cancelEditing": "Cancel editing",
-        "saveMetadata": "Save metadata changes",
-        "saving": "Saving..."
+        "saveMetadata": "Save metadata changes"
+    },
+    "metadataEditor": {
+        "title": "Metadata",
+        "clearAll": "Clear All",
+        "clearAllTooltip": "Clear all metadata entries",
+        "noMetadata": "No metadata available",
+        "keyLabel": "Key",
+        "valueLabel": "Value",
+        "keyPlaceholder": "e.g., author, department",
+        "valuePlaceholder": "e.g., John Doe",
+        "keyAriaLabel": "Metadata key",
+        "valueAriaLabel": "Metadata value",
+        "removeEntryTooltip": "Remove this entry",
+        "removeEntryAriaLabel": "Remove metadata entry",
+        "addEntryAriaLabel": "Add metadata entry",
+        "addEntry": "Add Metadata Entry",
+        "errors": {
+            "keyRequired": "Key is required",
+            "duplicateKey": "Duplicate key",
+            "invalidKeyFormat": "Key can only contain letters, numbers, underscore, and hyphen"
+        }
     },
     "dialogs": {
         "createFolder": {
@@ -151,8 +229,17 @@
             "uploadCount": "Upload {{count}} {{type}}"
         },
         "folderTree": {
+            "root": "Root",
             "noFoldersAvailable": "No folders available",
-            "selectPage": "Select page"
+            "selectPage": "Select page",
+            "moveSubtitle": "Select a destination folder to move the items to",
+            "copySubtitle": "Select a destination folder to copy the items to",
+            "moveToHere": "Move to here",
+            "copyToHere": "Copy to here",
+            "moveItem": "Move item",
+            "moveItems": "Move {{count}} items",
+            "copyItem": "Copy item",
+            "copyItems": "Copy {{count}} items"
         },
         "confirm": {
             "defaultCancel": "Cancel",
@@ -172,27 +259,47 @@
         "emptyTitle": "Recycle bin is empty",
         "emptyMessage": "Deleted files and folders will appear here",
         "autoDeleteInfo": "Items are automatically deleted after 30 days",
-        "recycleBinActions": "Recycle bin actions"
+        "recycleBinActions": "Recycle bin actions",
+        "closeActions": "Close actions menu",
+        "openActions": "Open actions menu",
+        "loadingError": "Failed to load recycle bin",
+        "renameNotAvailable": "Rename is not available in recycle bin",
+        "downloadFileOnly": "Download is only available for individual files",
+        "moveNotAvailable": "Move is not available in recycle bin. Use restore instead.",
+        "copyNotAvailable": "Copy is not available in recycle bin",
+        "selectToRestore": "Please select items to restore",
+        "restoreSuccess": "{{count}} item(s) restored successfully",
+        "restoreSuccessSingle": "\"{{name}}\" restored successfully",
+        "restoreError": "Failed to restore items",
+        "selectToDelete": "Please select items to permanently delete",
+        "deleteConfirmMessage": "Are you sure you want to permanently delete {{count}} item(s)?",
+        "deleteConfirmItem": "Are you sure you want to permanently delete \"{{name}}\"?",
+        "deleteDetails": "This action cannot be undone. These items will be permanently removed.",
+        "deleteSuccess": "{{count}} item(s) permanently deleted",
+        "deleteSuccessSingle": "\"{{name}}\" permanently deleted",
+        "deleteError": "Failed to permanently delete items",
+        "alreadyEmpty": "Recycle bin is already empty",
+        "emptyConfirmMessage": "Are you sure you want to permanently delete all {{count}} item(s) in the recycle bin?",
+        "emptyDetails": "This action cannot be undone. All items will be permanently removed.",
+        "emptySuccess": "Recycle bin emptied successfully",
+        "emptyError": "Failed to empty recycle bin",
+        "favoritesNotAvailable": "Favorites are not available for deleted items"
     },
     "settings": {
         "hello": "Hello {{name}}",
         "managePreferences": "Manage your preferences and application settings",
         "appearance": "Appearance",
         "theme": "Theme",
-        "themeDescription": "Choose a color theme for the application interface."
-    },
-    "favorites": {
-        "title": "Favorites",
-        "emptyTitle": "No favorites yet",
-        "emptyMessage": "Items you mark as favorites will appear here"
-    },
-    "dashboard": {
-        "title": "Dashboard",
-        "welcome": "Welcome",
-        "recentFiles": "Recent Files",
-        "quickAccess": "Quick Access"
+        "themeDescription": "Choose a color theme for the application interface.",
+        "themes": {
+            "light": "Light (Default)",
+            "dark": "Dark",
+            "ocean": "Ocean",
+            "forest": "Forest"
+        }
     },
     "bottomSheet": {
+        "actions": "Actions",
         "organize": "ORGANIZE",
         "moveTo": "Move to...",
         "copyTo": "Copy to...",
@@ -201,7 +308,133 @@
         "shareAndDownload": "SHARE & DOWNLOAD",
         "download": "Download",
         "dangerZone": "DANGER ZONE",
-        "delete": "Delete"
+        "delete": "Delete",
+        "item": "{{count}} item",
+        "items": "{{count}} items"
+    },
+    "audit": {
+        "actions": {
+            "COPY_FILE": "File Copied",
+            "COPY_FILE_CHILD": "Child File Copied",
+            "RENAME_FILE": "File Renamed",
+            "RENAME_FOLDER": "Folder Renamed",
+            "COPY_FOLDER": "Folder Copied",
+            "DELETE_FILE": "File Deleted",
+            "DELETE_FILE_CHILD": "Child File Deleted",
+            "DELETE_FOLDER": "Folder Deleted",
+            "CREATE_FOLDER": "Folder Created",
+            "MOVE_FILE": "File Moved",
+            "MOVE_FOLDER": "Folder Moved",
+            "UPLOAD_DOCUMENT": "Document Uploaded",
+            "REPLACE_DOCUMENT_CONTENT": "Content Replaced",
+            "REPLACE_DOCUMENT_METADATA": "Metadata Replaced",
+            "UPDATE_DOCUMENT_METADATA": "Metadata Updated",
+            "DOWNLOAD_DOCUMENT": "Document Downloaded",
+            "DELETE_DOCUMENT_METADATA": "Metadata Deleted",
+            "SHARE_DOCUMENTS": "Documents Shared",
+            "RESTORE_FILE": "File Restored",
+            "RESTORE_FOLDER": "Folder Restored",
+            "PERMANENT_DELETE_FILE": "File Permanently Deleted",
+            "PERMANENT_DELETE_FOLDER": "Folder Permanently Deleted",
+            "EMPTY_RECYCLE_BIN": "Recycle Bin Emptied"
+        },
+        "time": {
+            "justNow": "Just now",
+            "minAgo": "{{count}}m ago",
+            "minsAgo": "{{count}}m ago",
+            "hourAgo": "{{count}}h ago",
+            "hoursAgo": "{{count}}h ago",
+            "dayAgo": "{{count}}d ago",
+            "daysAgo": "{{count}}d ago"
+        }
+    },
+    "favorites": {
+        "title": "Favorites",
+        "loading": "Loading your favorites...",
+        "emptyTitle": "No favorites yet",
+        "emptyMessage": "Add files and folders to your favorites to see them here",
+        "unfavoriteSuccess": "\"{{name}}\" removed from favorites",
+        "unfavoriteError": "Failed to update favorite status",
+        "loadError": "Failed to load folder contents"
+    },
+    "dashboard": {
+        "title": "Dashboard",
+        "storage": "Storage",
+        "ofUsed": "of {{total}} used",
+        "used": "used",
+        "documents": "Documents",
+        "images": "Images",
+        "videos": "Videos",
+        "other": "Other",
+        "yourFiles": "Your Files",
+        "totalItems": "Total Items",
+        "folders": "Folders",
+        "files": "Files",
+        "recentActivity": "Recent Activity",
+        "loading": "Loading your dashboard...",
+        "loadingRecent": "Loading recent files...",
+        "noRecent": "No recent activity",
+        "retry": "Retry Loading",
+        "error": "Failed to load dashboard statistics",
+        "uploadInfo": "Please use the File Explorer to upload files"
+    },
+    "mimeTypes": {
+        "pdf": "PDF Document",
+        "word": "Word Document",
+        "wordLegacy": "Word Document (Legacy)",
+        "excel": "Excel Spreadsheet",
+        "excelLegacy": "Excel Spreadsheet (Legacy)",
+        "powerpoint": "PowerPoint Presentation",
+        "powerpointLegacy": "PowerPoint Presentation (Legacy)",
+        "text": "Text File",
+        "html": "HTML Document",
+        "css": "CSS Stylesheet",
+        "js": "JavaScript File",
+        "json": "JSON File",
+        "xml": "XML File",
+        "png": "PNG Image",
+        "jpg": "JPEG Image",
+        "gif": "GIF Image",
+        "webp": "WebP Image",
+        "svg": "SVG Image",
+        "bmp": "BMP Image",
+        "tiff": "TIFF Image",
+        "mp3": "MP3 Audio",
+        "wav": "WAV Audio",
+        "ogg": "OGG Audio",
+        "mp4": "MP4 Video",
+        "webm": "WebM Video",
+        "mov": "QuickTime Video",
+        "zip": "ZIP Archive",
+        "rar": "RAR Archive",
+        "7z": "7-Zip Archive",
+        "gz": "GZip Archive",
+        "tar": "TAR Archive",
+        "unknown": "Unknown",
+        "folder": "Folder",
+        "file": "File",
+        "imageType": "{{type}} Image",
+        "videoType": "{{type}} Video",
+        "audioType": "{{type}} Audio",
+        "fileType": "{{type}} File"
+    },
+    "fileViewer": {
+        "close": "Close",
+        "pageInfo": "Page {{current}} of {{total}}",
+        "previousPage": "Previous page",
+        "nextPage": "Next page",
+        "zoomOut": "Zoom out",
+        "zoomIn": "Zoom in",
+        "resetZoom": "Reset zoom",
+        "rotate": "Rotate",
+        "download": "Download",
+        "print": "Print",
+        "fullscreen": "Fullscreen",
+        "exitFullscreen": "Exit fullscreen",
+        "loading": "Loading document...",
+        "unsupportedTitle": "Preview not available",
+        "unsupportedMessage": "This file type cannot be previewed in the browser.",
+        "downloadFile": "Download File"
     },
     "errors": {
         "loadFailed": "Failed to load data",

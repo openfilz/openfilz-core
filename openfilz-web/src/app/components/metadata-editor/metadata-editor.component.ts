@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnInit, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, OnChanges, SimpleChanges, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
@@ -7,6 +7,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { TranslateService, TranslatePipe } from '@ngx-translate/core';
 
 export interface MetadataKeyValue {
   key: string;
@@ -27,7 +28,8 @@ export interface MetadataKeyValue {
     MatInputModule,
     MatButtonModule,
     MatIconModule,
-    MatTooltipModule
+    MatTooltipModule,
+    TranslatePipe
   ],
 })
 export class MetadataEditorComponent implements OnInit, OnChanges {
@@ -40,6 +42,7 @@ export class MetadataEditorComponent implements OnInit, OnChanges {
   metadataEntries: MetadataKeyValue[] = [];
   private isEditing = false;
   private initialMetadataJson = '';
+  private translate = inject(TranslateService);
 
   ngOnInit() {
     this.loadMetadata();
@@ -113,7 +116,7 @@ export class MetadataEditorComponent implements OnInit, OnChanges {
 
       // Validate key
       if (!entry.key) {
-        entry.error = 'Key is required';
+        entry.error = this.translate.instant('metadataEditor.errors.keyRequired');
         isValid = false;
         continue;
       }
@@ -123,14 +126,14 @@ export class MetadataEditorComponent implements OnInit, OnChanges {
         idx !== i && e.key && e.key.toLowerCase() === entry.key.toLowerCase()
       );
       if (duplicates.length > 0) {
-        entry.error = 'Duplicate key';
+        entry.error = this.translate.instant('metadataEditor.errors.duplicateKey');
         isValid = false;
         continue;
       }
 
       // Validate key format (alphanumeric, underscore, hyphen)
       if (!/^[a-zA-Z0-9_-]+$/.test(entry.key)) {
-        entry.error = 'Key can only contain letters, numbers, underscore, and hyphen';
+        entry.error = this.translate.instant('metadataEditor.errors.invalidKeyFormat');
         isValid = false;
         continue;
       }

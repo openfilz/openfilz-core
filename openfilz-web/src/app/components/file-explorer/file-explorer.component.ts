@@ -818,7 +818,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
     const dialogRef = this.dialog.open(FolderTreeDialogComponent, {
       width: '700px',
       data: {
-        title: 'Move item',
+        title: 'dialogs.folderTree.moveItem',
         actionType: 'move',
         currentFolderId: this.currentFolder?.id,
         excludeIds: [item.id]
@@ -836,7 +836,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
     const dialogRef = this.dialog.open(FolderTreeDialogComponent, {
       width: '700px',
       data: {
-        title: 'Copy item',
+        title: 'dialogs.folderTree.copyItem',
         actionType: 'copy',
         currentFolderId: this.currentFolder?.id,
         excludeIds: []
@@ -894,10 +894,12 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
   override onMoveSelected() {
     const selectedItems = this.selectedItems;
     if (selectedItems.length > 0) {
+      const isSingle = selectedItems.length === 1;
       const dialogRef = this.dialog.open(FolderTreeDialogComponent, {
         width: '700px',
         data: {
-          title: `Move ${selectedItems.length} item${selectedItems.length > 1 ? 's' : ''}`,
+          title: isSingle ? 'dialogs.folderTree.moveItem' : 'dialogs.folderTree.moveItems',
+          titleParams: isSingle ? undefined : { count: selectedItems.length },
           actionType: 'move',
           currentFolderId: this.currentFolder?.id,
           excludeIds: selectedItems.map(item => item.id)
@@ -915,10 +917,12 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
   override onCopySelected() {
     const selectedItems = this.selectedItems;
     if (selectedItems.length > 0) {
+      const isSingle = selectedItems.length === 1;
       const dialogRef = this.dialog.open(FolderTreeDialogComponent, {
         width: '700px',
         data: {
-          title: `Copy ${selectedItems.length} item${selectedItems.length > 1 ? 's' : ''}`,
+          title: isSingle ? 'dialogs.folderTree.copyItem' : 'dialogs.folderTree.copyItems',
+          titleParams: isSingle ? undefined : { count: selectedItems.length },
           actionType: 'copy',
           currentFolderId: this.currentFolder?.id,
           excludeIds: []

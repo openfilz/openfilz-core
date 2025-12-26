@@ -5,8 +5,9 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatTableModule } from '@angular/material/table';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { DragDropDirective } from '../../directives/drag-drop.directive';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { DocumentApiService } from '../../services/document-api.service';
 import { FileIconService } from '../../services/file-icon.service';
 import { DocumentType, ElementInfo, FileItem } from '../../models/document.models';
@@ -21,7 +22,7 @@ export interface RecentFile {
   name: string;
   type: string;
   size: number;
-  lastModified: string;
+  lastModified?: string;
   updatedAt: string;
   icon: string;
 }
@@ -43,7 +44,9 @@ export interface FileTypeDistribution {
     MatTableModule,
     MatPaginatorModule,
     MatProgressSpinnerModule,
-    DragDropDirective
+    MatSnackBarModule,
+    DragDropDirective,
+    TranslatePipe
   ],
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.css']
@@ -52,6 +55,7 @@ export class DashboardComponent implements OnInit {
   private documentApi = inject(DocumentApiService);
   private fileIconService = inject(FileIconService);
   private snackBar = inject(MatSnackBar);
+  private translate = inject(TranslateService);
 
   recentlyEditedFiles: RecentFile[] = [];
   allFiles: DashboardFileItem[] = [];
@@ -131,10 +135,10 @@ export class DashboardComponent implements OnInit {
         // Update file type distribution
         const totalFilesCount = stats.fileTypeCounts.reduce((sum, ft) => sum + (ft.count || 0), 0);
         this.fileTypeDistribution = stats.fileTypeCounts.map(ft => ({
-          type: this.capitalizeFirst(ft.type),
+          type: ft.type.toLowerCase(), // Keep lowercase for translation keys
           count: ft.count || 0,
           percentage: totalFilesCount > 0 ? Math.round(((ft.count || 0) / totalFilesCount) * 100) : 0,
-          color: this.getTypeColor(this.capitalizeFirst(ft.type))
+          color: this.getTypeColor(ft.type.toLowerCase())
         }));
 
         // Update file and folder counts
@@ -145,9 +149,9 @@ export class DashboardComponent implements OnInit {
       },
       error: (error) => {
         console.error('Error loading dashboard statistics:', error);
-        this.dashboardError = 'Failed to load dashboard statistics';
+        this.dashboardError = this.translate.instant('dashboard.error');
         this.isLoadingDashboard = false;
-        this.snackBar.open('Failed to load dashboard statistics', 'Close', { duration: 3000 });
+        this.snackBar.open(this.translate.instant('dashboard.error'), this.translate.instant('common.close'), { duration: 3000 });
       }
     });
 
@@ -165,7 +169,6 @@ export class DashboardComponent implements OnInit {
           name: file.name,
           type: this.getFileTypeCategory(file.contentType || ''),
           size: file.size || 0,
-          lastModified: this.formatRelativeTime(file.updatedAt || ''),
           updatedAt: file.updatedAt || '',
           icon: this.getIconForContentType(file.contentType || '')
         }));
@@ -174,7 +177,7 @@ export class DashboardComponent implements OnInit {
       error: (error) => {
         console.error('Error loading recently edited files:', error);
         this.isLoadingRecentFiles = false;
-        this.snackBar.open('Failed to load recent files', 'Close', { duration: 3000 });
+        this.snackBar.open(this.translate.instant('dashboard.loadingRecentError'), this.translate.instant('common.close'), { duration: 3000 });
       }
     });
   }
@@ -200,7 +203,7 @@ export class DashboardComponent implements OnInit {
     return 'description';
   }
 
-  private formatRelativeTime(dateString: string): string {
+  formatRelativeTime(dateString: string): string {
     if (!dateString) return 'Unknown';
 
     const now = new Date();
@@ -210,11 +213,13 @@ export class DashboardComponent implements OnInit {
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    if (diffMins < 1) return this.translate.instant('audit.time.justNow');
+    if (diffMins < 60) return this.translate.instant('audit.time.minAgo', { count: diffMins });
+    if (diffHours < 24) return this.translate.instant('audit.time.hourAgo', { count: diffHours });
+    if (diffDays < 7) return this.translate.instant('audit.time.dayAgo', { count: diffDays });
+
+    // Fallback to localized date
+    return date.toLocaleDateString(this.translate.currentLang || 'en-US', { month: 'short', day: 'numeric' });
   }
 
 
@@ -225,14 +230,16 @@ export class DashboardComponent implements OnInit {
 
   getTypeColor(type: string): string {
     const colorMap: { [key: string]: string } = {
-      'Documents': '#667eea',
-      'Images': '#f093fb',
-      'Videos': '#4facfe',
-      'Music': '#f5576c',
-      'Archives': '#00f2fe',
-      'Others': '#764ba2'
+      'documents': '#667eea',
+      'images': '#f093fb',
+      'videos': '#4facfe',
+      'music': '#f5576c',
+      'audio': '#f5576c', // Handle both music and audio
+      'archives': '#00f2fe',
+      'others': '#764ba2',
+      'other': '#764ba2'
     };
-    return colorMap[type] || '#999999';
+    return colorMap[type.toLowerCase()] || '#999999';
   }
 
   onPageChange(event: PageEvent) {
@@ -243,7 +250,7 @@ export class DashboardComponent implements OnInit {
 
   onFilesDropped(files: FileList) {
     // Dashboard no longer handles uploads - redirect to file explorer
-    this.snackBar.open('Please use the File Explorer to upload files', 'Close', { duration: 3000 });
+    this.snackBar.open(this.translate.instant('dashboard.uploadInfo'), this.translate.instant('common.close'), { duration: 3000 });
   }
 
   onFileOverChange(isOver: boolean) {
@@ -292,13 +299,13 @@ export class DashboardComponent implements OnInit {
   getFileCategory(fileType: string): string {
     switch (fileType) {
       case 'image':
-        return 'Image';
+        return this.translate.instant('dashboard.images');
       case 'document':
-        return 'Document';
+        return this.translate.instant('dashboard.documents');
       case 'archive':
-        return 'Archive';
+        return this.translate.instant('mimeTypes.zip');
       default:
-        return 'File';
+        return this.translate.instant('mimeTypes.file');
     }
   }
 

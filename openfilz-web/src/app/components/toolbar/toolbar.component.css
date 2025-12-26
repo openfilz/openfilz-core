@@ -335,7 +335,8 @@
 
 /* Floating Action Button (FAB) - Mobile Only */
 .fab-container {
-  display: none; /* Hidden by default, shown only on mobile */
+  display: none;
+  /* Hidden by default, shown only on mobile */
   position: fixed;
   bottom: 24px;
   right: 24px;
@@ -390,6 +391,7 @@
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -422,6 +424,7 @@
     opacity: 0;
     transform: scale(0.3) translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: scale(1) translateY(0);
@@ -459,6 +462,7 @@
     opacity: 0;
     transform: translateY(-50%) translateX(10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(-50%) translateX(0);
@@ -490,6 +494,7 @@
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -1106,6 +1111,7 @@
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -1131,6 +1137,7 @@
     transform: translateY(100%);
     opacity: 0;
   }
+
   to {
     transform: translateY(0);
     opacity: 1;
@@ -1248,6 +1255,7 @@
 
 /* Mobile-specific responsive adjustments */
 @media (max-width: 768px) {
+
   /* Hide desktop selection actions, show mobile version */
   .desktop-selection {
     display: none !important;
@@ -1260,6 +1268,7 @@
 }
 
 @media (max-width: 480px) {
+
   /* Maintain visual consistency with tighter spacing */
   .toolbar {
     padding: 6px 8px;

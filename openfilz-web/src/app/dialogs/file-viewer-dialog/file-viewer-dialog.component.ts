@@ -8,6 +8,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { DomSanitizer, SafeResourceUrl, SafeHtml } from '@angular/platform-browser';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 
 import { DocumentApiService } from '../../services/document-api.service';
 import { OnlyOfficeService } from '../../services/onlyoffice.service';
@@ -45,7 +46,8 @@ type ViewerMode = 'pdf' | 'image' | 'text' | 'office' | 'onlyoffice' | 'unsuppor
     MatProgressSpinnerModule,
     MatToolbarModule,
     MatTooltipModule,
-    OnlyOfficeEditorComponent
+    OnlyOfficeEditorComponent,
+    TranslatePipe
   ],
 })
 export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestroy {
@@ -87,6 +89,7 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
   private onlyOfficeService = inject(OnlyOfficeService);
   private snackBar = inject(MatSnackBar);
   private sanitizer = inject(DomSanitizer);
+  private translate = inject(TranslateService);
 
   constructor() {
     // Configure PDF.js worker
@@ -116,7 +119,7 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
 
     // Check if OnlyOffice is enabled and file is supported
     if (this.onlyOfficeService.isOnlyOfficeEnabled() &&
-        this.onlyOfficeService.isSupportedExtension(fileName)) {
+      this.onlyOfficeService.isSupportedExtension(fileName)) {
       this.viewerMode = 'onlyoffice';
       return;
     }
@@ -178,13 +181,13 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
             break;
           default:
             this.loading = false;
-            this.error = 'This file type is not supported for preview';
+            this.error = 'errors.unsupportedType';
         }
       },
       error: (err) => {
-        this.error = 'Failed to load document';
+        this.error = 'errors.loadFailed';
         this.loading = false;
-        this.snackBar.open(this.error, 'Close', { duration: 3000 });
+        this.snackBar.open(this.translate.instant(this.error), this.translate.instant('common.close'), { duration: 3000 });
       }
     });
   }
@@ -196,13 +199,13 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
 
   onDocumentSaved() {
     console.log('Document saved via OnlyOffice');
-    this.snackBar.open('Document saved', 'Close', { duration: 2000 });
+    this.snackBar.open(this.translate.instant('metadataPanel.saveSuccess'), this.translate.instant('common.close'), { duration: 2000 });
   }
 
   onEditorError(error: string) {
     console.error('OnlyOffice editor error:', error);
     this.error = error;
-    this.snackBar.open(error, 'Close', { duration: 5000 });
+    this.snackBar.open(error, this.translate.instant('common.close'), { duration: 5000 });
   }
 
   // ========== PDF Viewer ==========
@@ -218,9 +221,9 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
       // Render first page
       setTimeout(() => this.renderPdfPage(), 100);
     } catch (err) {
-      this.error = 'Failed to load PDF';
+      this.error = 'errors.pdfLoadFailed';
       this.loading = false;
-      this.snackBar.open(this.error, 'Close', { duration: 3000 });
+      this.snackBar.open(this.translate.instant(this.error), this.translate.instant('common.close'), { duration: 3000 });
     }
   }
 
@@ -336,9 +339,9 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
 
       this.loading = false;
     } catch (err) {
-      this.error = 'Failed to load text file';
+      this.error = 'errors.textLoadFailed';
       this.loading = false;
-      this.snackBar.open(this.error, 'Close', { duration: 3000 });
+      this.snackBar.open(this.translate.instant(this.error), this.translate.instant('common.close'), { duration: 3000 });
     }
   }
 
@@ -380,13 +383,13 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
       } else if (extension === 'xlsx') {
         await this.loadXlsx();
       } else {
-        this.error = 'Office document type not supported for preview';
+        this.error = 'errors.officeUnsupported';
         this.loading = false;
       }
     } catch (err) {
-      this.error = 'Failed to load office document';
+      this.error = 'errors.officeLoadFailed';
       this.loading = false;
-      this.snackBar.open(this.error, 'Close', { duration: 3000 });
+      this.snackBar.open(this.translate.instant(this.error), this.translate.instant('common.close'), { duration: 3000 });
     }
   }
 

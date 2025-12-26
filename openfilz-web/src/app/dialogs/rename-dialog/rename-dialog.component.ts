@@ -6,6 +6,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from "@angular/material/icon";
+import { TranslatePipe } from '@ngx-translate/core';
 
 export interface RenameDialogData {
   name: string;
@@ -24,7 +25,8 @@ export interface RenameDialogData {
     MatInputModule,
     MatButtonModule,
     FormsModule,
-    MatIconModule
+    MatIconModule,
+    TranslatePipe
   ],
 })
 export class RenameDialogComponent implements AfterViewInit {

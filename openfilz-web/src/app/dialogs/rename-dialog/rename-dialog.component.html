@@ -4,44 +4,38 @@
       <mat-icon aria-hidden="true">edit</mat-icon>
     </div>
     <div class="header-text">
-      <h2 class="dialog-title" id="dialog-title">Rename {{ data.type === 'FOLDER' ? 'Folder' : 'File' }}</h2>
-      <p class="dialog-subtitle" id="dialog-description">Enter a new name for your item</p>
+      <h2 class="dialog-title" id="dialog-title">{{ (data.type === 'FOLDER' ? 'dialogs.rename.titleFolder' :
+        'dialogs.rename.titleFile') | translate }}</h2>
+      <p class="dialog-subtitle" id="dialog-description">{{ 'dialogs.rename.subtitle' | translate }}</p>
     </div>
   </div>
-  <button mat-icon-button class="close-btn" (click)="onCancel()" aria-label="Close dialog">
+  <button mat-icon-button class="close-btn" (click)="onCancel()" [attr.aria-label]="'common.close' | translate">
     <mat-icon aria-hidden="true">close</mat-icon>
   </button>
 </div>
 
 <div mat-dialog-content class="dialog-content">
   <mat-form-field appearance="outline" class="folder-name-field">
-    <mat-label>{{ data.type === 'FOLDER' ? 'Folder' : 'File' }} Name</mat-label>
-    <input
-      matInput
-      [(ngModel)]="newName"
-      placeholder="Enter new name"
-      (keyup.enter)="onRename()"
-      autocomplete="off"
-      [attr.aria-label]="(data.type === 'FOLDER' ? 'Folder' : 'File') + ' name'"
-      aria-required="true"
-      #nameInput>
-    <mat-icon matPrefix class="input-icon" aria-hidden="true">{{ data.type === 'FOLDER' ? 'folder' : 'description' }}</mat-icon>
+    <mat-label>{{ (data.type === 'FOLDER' ? 'dialogs.rename.folderName' : 'dialogs.rename.fileName') | translate
+      }}</mat-label>
+    <input matInput [(ngModel)]="newName" [placeholder]="'dialogs.rename.placeholder' | translate"
+      (keyup.enter)="onRename()" autocomplete="off"
+      [attr.aria-label]="(data.type === 'FOLDER' ? 'dialogs.rename.folderName' : 'dialogs.rename.fileName') | translate"
+      aria-required="true" #nameInput>
+    <mat-icon matPrefix class="input-icon" aria-hidden="true">{{ data.type === 'FOLDER' ? 'folder' : 'description'
+      }}</mat-icon>
   </mat-form-field>
 </div>
 
 <div mat-dialog-actions class="dialog-actions">
-  <button mat-stroked-button class="cancel-btn" (click)="onCancel()" aria-label="Cancel">
+  <button mat-stroked-button class="cancel-btn" (click)="onCancel()" [attr.aria-label]="'common.cancel' | translate">
     <mat-icon aria-hidden="true">close</mat-icon>
-    <span>&nbsp;&nbsp;Cancel</span>
+    <span>&nbsp;&nbsp;{{ 'common.cancel' | translate }}</span>
   </button>
-  <button
-    mat-raised-button
-    color="primary"
-    class="create-btn"
-    [disabled]="!newName.trim() || newName.trim() === data.name"
-    (click)="onRename()"
-    aria-label="Rename item">
+  <button mat-raised-button color="primary" class="create-btn"
+    [disabled]="!newName.trim() || newName.trim() === data.name" (click)="onRename()"
+    [attr.aria-label]="'dialogs.rename.renameButton' | translate">
     <mat-icon aria-hidden="true">check</mat-icon>
-    <span>&nbsp;&nbsp;Rename</span>
+    <span>&nbsp;&nbsp;{{ 'dialogs.rename.renameButton' | translate }}</span>
   </button>
 </div>

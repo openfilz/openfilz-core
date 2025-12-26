@@ -19,6 +19,7 @@ import { ActivatedRoute, Router } from "@angular/router";
 import { SearchService } from "../../services/search.service";
 import { MatDialog } from "@angular/material/dialog";
 import { FileViewerDialogComponent } from '../../dialogs/file-viewer-dialog/file-viewer-dialog.component';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 
 import { UserPreferencesService } from '../../services/user-preferences.service';
 
@@ -35,7 +36,8 @@ import { UserPreferencesService } from '../../services/user-preferences.service'
     FileGridComponent,
     FileListComponent,
     ToolbarComponent,
-    MetadataPanelComponent
+    MetadataPanelComponent,
+    TranslatePipe
   ],
   templateUrl: './favorites.component.html',
   styleUrls: ['./favorites.component.css']
@@ -53,13 +55,14 @@ export class FavoritesComponent extends FileOperationsComponent implements OnIni
   private route = inject(ActivatedRoute);
   private searchService = inject(SearchService);
   private fileIconService = inject(FileIconService);
+  private translate = inject(TranslateService);
 
   constructor() {
     super();
   }
 
   override ngOnInit() {
-    this.searchService.filters$.subscribe(filters => {
+    this.searchService.filters$.subscribe((filters: SearchFilters | undefined) => {
       this.currentFilters = filters;
       this.loadFavorites();
     });
@@ -84,7 +87,7 @@ export class FavoritesComponent extends FileOperationsComponent implements OnIni
         this.populateFolderContents(listAndCount.listFolder);
       },
       error: (error) => {
-        this.snackBar.open('Failed to load folder contents', 'Close', { duration: 3000 });
+        this.snackBar.open(this.translate.instant('favorites.loadError'), this.translate.instant('common.close'), { duration: 3000 });
         this.loading = false;
       }
     });
@@ -106,12 +109,12 @@ export class FavoritesComponent extends FileOperationsComponent implements OnIni
         if (!isFavorited) {
           // Item was unfavorited, remove from list
           this.items = this.items.filter(i => i.id !== item.id);
-          this.snackBar.open(`"${item.name}" removed from favorites`, 'Close', { duration: 2000 });
+          this.snackBar.open(this.translate.instant('favorites.unfavoriteSuccess', { name: item.name }), this.translate.instant('common.close'), { duration: 2000 });
         }
       },
       error: (error) => {
         console.error('Error toggling favorite:', error);
-        this.snackBar.open('Failed to update favorite status', 'Close', { duration: 3000 });
+        this.snackBar.open(this.translate.instant('favorites.unfavoriteError'), this.translate.instant('common.close'), { duration: 3000 });
       }
     });
   }
