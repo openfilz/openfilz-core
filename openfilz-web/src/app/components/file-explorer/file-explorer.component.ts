@@ -17,6 +17,7 @@ import { RenameDialogComponent, RenameDialogData } from '../../dialogs/rename-di
 import { FolderTreeDialogComponent } from '../../dialogs/folder-tree-dialog/folder-tree-dialog.component';
 import { FileViewerDialogComponent } from '../../dialogs/file-viewer-dialog/file-viewer-dialog.component';
 import { KeyboardShortcutsDialogComponent } from '../../dialogs/keyboard-shortcuts-dialog/keyboard-shortcuts-dialog.component';
+import { ConfirmReplaceDialogComponent, ConfirmReplaceDialogData, ConfirmReplaceDialogResult } from '../../dialogs/confirm-replace-dialog/confirm-replace-dialog.component';
 import { FileOperationsComponent } from '../base/file-operations.component';
 
 import { DocumentApiService } from '../../services/document-api.service';
@@ -1180,6 +1181,13 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
       },
       error: (error) => {
         this.snackBar.dismiss();
+
+        // Check for 409 Conflict (duplicate file name)
+        if (error.status === 409 && isSingleFile && singleFileName) {
+          this.handleDuplicateFileUpload(fileArray[0], singleFileName);
+          return;
+        }
+
         const errorMessage = isSingleFile
           ? `Failed to upload ${singleFileName}`
           : `Failed to upload ${fileArray.length} files`;
@@ -1217,6 +1225,63 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
           // For multiple files, just reload the folder
           this.loadFolder(this.currentFolder);
         }
+      }
+    });
+  }
+
+  private handleDuplicateFileUpload(file: File, fileName: string) {
+    // Find the existing document with the same name in current folder
+    const existingItem = this.items.find(item => item.name === fileName && item.type === 'FILE');
+
+    if (!existingItem) {
+      // Conflict is with a deleted/inactive file - retry upload with allowDuplicateFileNames=true
+      this.snackBar.open(`Uploading ${fileName}...`, undefined, { duration: undefined });
+      this.documentApi.uploadMultipleDocuments(
+        [file],
+        this.currentFolder?.id,
+        true // allowDuplicateFileNames = true to bypass conflict with deleted file
+      ).subscribe({
+        next: () => {
+          this.snackBar.dismiss();
+          this.snackBar.open(`${fileName} uploaded successfully`, 'Close', { duration: 3000 });
+          this.reloadData();
+        },
+        error: () => {
+          this.snackBar.dismiss();
+          this.snackBar.open(`Failed to upload ${fileName}`, 'Close', { duration: 5000 });
+        }
+      });
+      return;
+    }
+
+    // Open confirmation dialog
+    const dialogData: ConfirmReplaceDialogData = {
+      fileName: fileName,
+      existingDocumentId: existingItem.id
+    };
+
+    const dialogRef = this.dialog.open(ConfirmReplaceDialogComponent, {
+      width: '450px',
+      data: dialogData,
+      disableClose: true
+    });
+
+    dialogRef.afterClosed().subscribe((result: ConfirmReplaceDialogResult | null) => {
+      if (result?.confirmed) {
+        // User confirmed - replace the document content
+        this.snackBar.open(`Replacing ${fileName}...`, undefined, { duration: undefined });
+
+        this.documentApi.replaceDocumentContent(result.existingDocumentId, file).subscribe({
+          next: () => {
+            this.snackBar.dismiss();
+            this.snackBar.open(`${fileName} replaced successfully`, 'Close', { duration: 3000 });
+            this.loadFolder(this.currentFolder);
+          },
+          error: (err) => {
+            this.snackBar.dismiss();
+            this.snackBar.open(`Failed to replace ${fileName}`, 'Close', { duration: 5000 });
+          }
+        });
       }
     });
   }

@@ -18,10 +18,10 @@ spring:
   graphql:
     graphiql:
       enabled: true
-logging:
-  level:
-    io.r2dbc.postgresql.QUERY: DEBUG # for queries
-    # org.springframework.security: TRACE
+# logging:
+  # level:
+    # io.r2dbc.postgresql.QUERY: DEBUG # for queries
+    # org.springframework: TRACE
     # io.r2dbc.postgresql.PARAM: DEBUG # for parameters
 
 openfilz:
@@ -42,6 +42,9 @@ openfilz:
       username: admin
       password: yourStrongPassword123!
   security:
-    no-auth: true
+    no-auth: false
     worm-mode: false
     cors-allowed-origins: http://localhost:4200, http://localhost:4900 # Comma-separated list of authorized origins
+
+onlyoffice:
+  enabled: true

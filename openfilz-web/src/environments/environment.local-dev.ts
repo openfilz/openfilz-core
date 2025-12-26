@@ -5,5 +5,8 @@ export const environment = {
         authority: 'http://localhost:8080/realms/your-realm',
         clientId: 'openfilz-web',
         enabled: true
+    },
+    onlyOffice: {
+        enabled: true
     }
 };

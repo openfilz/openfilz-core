@@ -21,7 +21,8 @@
       "Bash(node -e:*)",
       "Bash(nul)",
       "Bash(npm install:*)",
-      "Bash(powershell -Command:*)"
+      "Bash(powershell -Command:*)",
+      "Bash(mvn test:*)"
     ],
     "deny": [],
     "ask": []

@@ -96,7 +96,7 @@ public class MinioChecksumService implements ChecksumService {
      * Stream the response and calculate checksum reactively.
      */
     private Mono<String> streamAndCalculateChecksum(GetObjectResponse response) {
-        return Mono.fromCallable(() -> MessageDigest.getInstance("SHA-256"))
+        return Mono.fromCallable(() -> MessageDigest.getInstance(SHA_256))
                 .flatMap(digest ->
                         readInputStreamAsFlux(response, bufferSize)
                                 .doOnNext(buffer -> {
