@@ -429,6 +429,16 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
   download() {
     if (this.fileBlob) {
       saveAs(this.fileBlob, this.data.fileName);
+    } else {
+      // For OnlyOffice documents, download directly from the API
+      this.documentApi.downloadDocument(this.data.documentId).subscribe({
+        next: (blob) => saveAs(blob, this.data.fileName),
+        error: () => this.snackBar.open(
+          this.translate.instant('errors.downloadFailed'),
+          this.translate.instant('common.close'),
+          { duration: 3000 }
+        )
+      });
     }
   }
 
