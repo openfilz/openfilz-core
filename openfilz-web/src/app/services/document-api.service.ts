@@ -221,12 +221,11 @@ export class DocumentApiService {
       query: LIST_FOLDER_AND_COUNT_QUERY,
       variables: { request1, request2 }
     }).valueChanges.pipe(
-      map(result => {
-        return {
-          listFolder: result.data.listFolder,
-          count: result.data.count
-        };
-      })
+      filter(result => !result.loading),
+      map(result => ({
+        listFolder: result.data.listFolder,
+        count: result.data.count
+      }))
     );
 
   }
@@ -251,6 +250,7 @@ export class DocumentApiService {
       query: LIST_FOLDER_QUERY,
       variables: { request }
     }).valueChanges.pipe(
+      filter(result => !result.loading),
       map(result => result.data.listFolder)
     );
   }
@@ -278,12 +278,11 @@ export class DocumentApiService {
       query: LIST_FOLDER_AND_COUNT_QUERY,
       variables: { request1, request2 }
     }).valueChanges.pipe(
-      map(result => {
-        return {
-          listFolder: result.data.listFolder,
-          count: result.data.count
-        };
-      })
+      filter(result => !result.loading),
+      map(result => ({
+        listFolder: result.data.listFolder,
+        count: result.data.count
+      }))
     );
   }
 
@@ -308,12 +307,11 @@ export class DocumentApiService {
       query: LIST_FAVORITES_AND_COUNT_QUERY,
       variables: { request1, request2 }
     }).valueChanges.pipe(
-      map(result => {
-        return {
-          listFolder: result.data.listFavorites,
-          count: result.data.countFavorites
-        };
-      })
+      filter(result => !result.loading),
+      map(result => ({
+        listFolder: result.data.listFavorites,
+        count: result.data.countFavorites
+      }))
     );
   }
 
@@ -489,7 +487,8 @@ export class DocumentApiService {
       query: RECENT_FILES_QUERY,
       variables: { request }
     }).valueChanges.pipe(
-      map(result => result.data.listFolder)
+      filter(result => !result.loading),
+      map(result => result.data?.listFolder ?? [])
     );
   }
 
@@ -600,6 +599,7 @@ export class DocumentApiService {
       query: SEARCH_DOCUMENTS_QUERY,
       variables: { query, filters: filterInputs, sort, page, size }
     }).valueChanges.pipe(
+      filter(result => !result.loading),
       map(result => result.data.searchDocuments)
     );
   }

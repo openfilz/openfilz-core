@@ -1,11 +1,11 @@
 import { Component, inject, provideAppInitializer, provideZoneChangeDetection } from '@angular/core';
 import { bootstrapApplication } from '@angular/platform-browser';
 import { provideAnimations } from '@angular/platform-browser/animations';
-import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import { HttpHeaders, provideHttpClient, withInterceptors } from '@angular/common/http';
 import { MainComponent } from './app/main.component';
 import { provideApollo } from "apollo-angular";
 import { HttpLink } from "apollo-angular/http";
-import { setContext } from "@apollo/client/link/context";
+import { SetContextLink } from "@apollo/client/link/context";
 import { ApolloLink, InMemoryCache } from "@apollo/client/core";
 import { environment } from "./environments/environment";
 import { provideRouter } from '@angular/router';
@@ -57,16 +57,20 @@ bootstrapApplication(App, {
     ]),
     provideApollo(() => {
       const httpLink = inject(HttpLink);
+      const oidcSecurityService = inject(OidcSecurityService);
 
-      const basic = setContext((operation, context) => ({
-        headers: {
-          Accept: 'application/json; charset=UTF-8',
-        },
-      }));
+      const auth = new SetContextLink((_prevContext) => {
+        const token = oidcSecurityService.getAccessToken();
+        let headers = new HttpHeaders().set('Accept', 'application/json; charset=UTF-8');
+        if (environment.authentication.enabled && token) {
+          headers = headers.set('Authorization', `Bearer ${token}`);
+        }
+        return { headers };
+      });
 
       return {
-        link: ApolloLink.from([basic, httpLink.create({ uri: environment.graphQlURL })]),
-        cache: new InMemoryCache(),
+        link: ApolloLink.from([auth, httpLink.create({ uri: environment.graphQlURL })]),
+        cache: new InMemoryCache()
       };
     }),
     provideTranslateService({

@@ -546,6 +546,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
         }
       },
       error: (error) => {
+          console.log(error);
         this.snackBar.open('Failed to load folder contents', 'Close', { duration: 3000 });
         this.loading = false;
       }
@@ -589,6 +590,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
         this.populateFolderContents(listAndCount.listFolder);
       },
       error: (error) => {
+          console.log(error);
         this.snackBar.open('Failed to load folder contents', 'Close', { duration: 3000 });
         this.loading = false;
       }
@@ -602,6 +604,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
         this.populateFolderContents(response);
       },
       error: (error) => {
+          console.log(error);
         this.snackBar.open('Failed to load folder contents', 'Close', { duration: 3000 });
         this.loading = false;
       }
@@ -759,7 +762,8 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
           this.focusFileItem(folderId);
         }
       },
-      error: () => {
+      error: (error) => {
+          console.log(error);
         this.snackBar.open('Failed to load folder contents', 'Close', { duration: 3000 });
         this.loading = false;
       }

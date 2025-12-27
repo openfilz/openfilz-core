@@ -203,8 +203,10 @@
               <mat-spinner diameter="18" aria-hidden="true"></mat-spinner>
               <span>{{ 'metadataPanel.savingDots' | translate }}</span>
             } @else {
-              <mat-icon aria-hidden="true">save</mat-icon>
-              <span>{{ 'common.save' | translate }}</span>
+              <ng-container>
+                <mat-icon aria-hidden="true">save</mat-icon>
+                <span>{{ 'common.save' | translate }}</span>
+              </ng-container>
             }
           </button>
         }
