@@ -1,5 +1,5 @@
 import { Component, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -20,11 +20,10 @@ export interface ConfirmReplaceDialogResult {
   templateUrl: './confirm-replace-dialog.component.html',
   styleUrls: ['./confirm-replace-dialog.component.css'],
   imports: [
-    CommonModule,
     MatDialogModule,
     MatButtonModule,
     MatIconModule
-  ],
+],
 })
 export class ConfirmReplaceDialogComponent {
   readonly dialogRef = inject(MatDialogRef<ConfirmReplaceDialogComponent>);

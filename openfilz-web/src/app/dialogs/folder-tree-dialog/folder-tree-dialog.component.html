@@ -18,47 +18,51 @@
     <div class="breadcrumb">
       <mat-icon class="breadcrumb-icon">home</mat-icon>
       @for (crumb of breadcrumbs; track $index; let last = $last) {
-      <span class="breadcrumb-item" [class.current]="last" (click)="onBreadcrumbClick($index)">
-        {{ crumb.name | translate }}
-      </span>
-      @if (!last) {
-      <span class="separator">/</span>
-      }
+        <span class="breadcrumb-item" [class.current]="last" (click)="onBreadcrumbClick($index)">
+          {{ crumb.name | translate }}
+        </span>
+        @if (!last) {
+          <span class="separator">/</span>
+        }
       }
     </div>
   </div>
 
-  <div class="folder-grid-container" *ngIf="!loading">
-    @if (folders.length === 0) {
-    <div class="empty-state">
-      <mat-icon class="empty-icon">folder_open</mat-icon>
-      <p>{{ 'dialogs.folderTree.noFoldersAvailable' | translate }}</p>
-    </div>
-    }
-    @else {
-    <div class="folder-grid">
-      @for (folder of folders; track folder.id) {
-      <div class="folder-card" (dblclick)="onFolderDoubleClick(folder)">
-        <mat-icon class="folder-icon">folder</mat-icon>
-        <span class="folder-name">{{ folder.name }}</span>
+  @if (!loading) {
+    <div class="folder-grid-container">
+      @if (folders.length === 0) {
+        <div class="empty-state">
+          <mat-icon class="empty-icon">folder_open</mat-icon>
+          <p>{{ 'dialogs.folderTree.noFoldersAvailable' | translate }}</p>
+        </div>
+      }
+      @else {
+      <div class="folder-grid">
+        @for (folder of folders; track folder.id) {
+          <div class="folder-card" (dblclick)="onFolderDoubleClick(folder)">
+            <mat-icon class="folder-icon">folder</mat-icon>
+            <span class="folder-name">{{ folder.name }}</span>
+          </div>
+        }
       </div>
-      }
-    </div>
     }
   </div>
+}
 
-  <div class="loading-container" *ngIf="loading">
+@if (loading) {
+  <div class="loading-container">
     <mat-spinner diameter="40"></mat-spinner>
   </div>
+}
 
-  @if (totalItems > pageSize && !loading) {
+@if (totalItems > pageSize && !loading) {
   <div class="pagination-container">
     <mat-paginator [length]="totalItems" [pageSize]="pageSize" [pageIndex]="pageIndex"
       [pageSizeOptions]="pageSizeOptions" (page)="onPageChange($event)"
       [attr.aria-label]="'dialogs.folderTree.selectPage' | translate" [dir]="direction">
     </mat-paginator>
   </div>
-  }
+}
 </mat-dialog-content>
 
 <mat-dialog-actions class="dialog-actions">

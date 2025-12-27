@@ -1,5 +1,5 @@
 import { Component, OnInit, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -33,14 +33,13 @@ interface BreadcrumbItem {
   templateUrl: './folder-tree-dialog.component.html',
   styleUrls: ['./folder-tree-dialog.component.css'],
   imports: [
-    CommonModule,
     MatDialogModule,
     MatButtonModule,
     MatIconModule,
     MatProgressSpinnerModule,
     MatPaginatorModule,
     TranslatePipe
-  ]
+]
 })
 export class FolderTreeDialogComponent implements OnInit {
   folders: FolderItem[] = [];

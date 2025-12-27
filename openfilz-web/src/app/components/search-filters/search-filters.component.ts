@@ -1,5 +1,5 @@
 import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
@@ -10,7 +10,7 @@ import { DocumentType, SearchFilters } from '../../models/document.models';
 @Component({
   selector: 'app-search-filters',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatIconModule, MatButtonModule, MatTooltipModule, TranslatePipe],
+  imports: [FormsModule, MatIconModule, MatButtonModule, MatTooltipModule, TranslatePipe],
   templateUrl: './search-filters.component.html',
   styleUrls: ['./search-filters.component.css']
 })

@@ -1,5 +1,5 @@
 import { Component, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -19,11 +19,10 @@ interface ShortcutGroup {
   templateUrl: './keyboard-shortcuts-dialog.component.html',
   styleUrls: ['./keyboard-shortcuts-dialog.component.css'],
   imports: [
-    CommonModule,
     MatDialogModule,
     MatButtonModule,
     MatIconModule
-  ]
+]
 })
 export class KeyboardShortcutsDialogComponent {
   shortcutGroups: ShortcutGroup[] = [

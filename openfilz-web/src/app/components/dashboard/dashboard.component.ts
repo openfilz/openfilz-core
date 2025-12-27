@@ -1,5 +1,5 @@
 import { Component, ElementRef, OnInit, ViewChild, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTableModule } from '@angular/material/table';
@@ -38,7 +38,6 @@ export interface FileTypeDistribution {
   selector: 'app-dashboard',
   standalone: true,
   imports: [
-    CommonModule,
     MatIconModule,
     MatButtonModule,
     MatTableModule,
@@ -47,7 +46,7 @@ export interface FileTypeDistribution {
     MatSnackBarModule,
     DragDropDirective,
     TranslatePipe
-  ],
+],
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.css']
 })

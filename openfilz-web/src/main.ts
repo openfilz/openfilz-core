@@ -1,4 +1,4 @@
-import { Component, inject, provideAppInitializer } from '@angular/core';
+import { Component, inject, provideAppInitializer, provideZoneChangeDetection } from '@angular/core';
 import { bootstrapApplication } from '@angular/platform-browser';
 import { provideAnimations } from '@angular/platform-browser/animations';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
@@ -26,7 +26,7 @@ export class App { }
 
 bootstrapApplication(App, {
   providers: [
-    provideAnimations(),
+    provideZoneChangeDetection(),provideAnimations(),
     provideHttpClient(
       environment.authentication.enabled
         ? withInterceptors([authInterceptor()])

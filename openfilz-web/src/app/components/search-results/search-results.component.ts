@@ -1,6 +1,6 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { CommonModule } from '@angular/common';
+
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
@@ -23,7 +23,6 @@ import { UserPreferencesService } from '../../services/user-preferences.service'
   selector: 'app-search-results',
   standalone: true,
   imports: [
-    CommonModule,
     FileListComponent,
     FileGridComponent,
     ToolbarComponent,
@@ -32,7 +31,7 @@ import { UserPreferencesService } from '../../services/user-preferences.service'
     MatDialogModule,
     MatSnackBarModule,
     MatIconModule
-  ],
+],
   templateUrl: './search-results.component.html',
   styleUrls: ['./search-results.component.css']
 })

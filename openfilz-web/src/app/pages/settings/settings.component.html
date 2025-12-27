@@ -16,25 +16,28 @@
         <p class="setting-description">{{ 'settings.themeDescription' | translate }}</p>
 
         <div class="theme-grid">
-          <div *ngFor="let theme of availableThemes" class="theme-card"
-            [class.active]="currentTheme?.name === theme.name" (click)="onThemeChange(theme.name)">
-
-            <!-- Apply the theme class to this wrapper so CSS variables are scoped locally -->
-            <div class="theme-preview-wrapper" [ngClass]="theme.className">
-              <div class="theme-preview-content">
-                <div class="color-stripes">
-                  <div class="stripe" style="background-color: var(--primary)"></div>
-                  <div class="stripe" style="background-color: var(--secondary)"></div>
-                  <div class="stripe" style="background-color: var(--accent)"></div>
-                  <div class="stripe" style="background-color: var(--bg-secondary)"></div>
-                </div>
-                <div class="theme-info">
-                  <span class="theme-name">{{ 'settings.themes.' + theme.name | translate }}</span>
-                  <mat-icon *ngIf="currentTheme?.name === theme.name" class="check-icon">check_circle</mat-icon>
+          @for (theme of availableThemes; track theme) {
+            <div class="theme-card"
+              [class.active]="currentTheme?.name === theme.name" (click)="onThemeChange(theme.name)">
+              <!-- Apply the theme class to this wrapper so CSS variables are scoped locally -->
+              <div class="theme-preview-wrapper" [ngClass]="theme.className">
+                <div class="theme-preview-content">
+                  <div class="color-stripes">
+                    <div class="stripe" style="background-color: var(--primary)"></div>
+                    <div class="stripe" style="background-color: var(--secondary)"></div>
+                    <div class="stripe" style="background-color: var(--accent)"></div>
+                    <div class="stripe" style="background-color: var(--bg-secondary)"></div>
+                  </div>
+                  <div class="theme-info">
+                    <span class="theme-name">{{ 'settings.themes.' + theme.name | translate }}</span>
+                    @if (currentTheme?.name === theme.name) {
+                      <mat-icon class="check-icon">check_circle</mat-icon>
+                    }
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          }
         </div>
 
       </div>

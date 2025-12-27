@@ -13,7 +13,9 @@
 
 <mat-dialog-content class="dialog-content">
   <p class="message">{{ data.message | translate: data.messageParams }}</p>
-  <p *ngIf="data.details" class="details">{{ data.details | translate: data.messageParams }}</p>
+  @if (data.details) {
+    <p class="details">{{ data.details | translate: data.messageParams }}</p>
+  }
 </mat-dialog-content>
 
 <mat-dialog-actions class="dialog-actions">
