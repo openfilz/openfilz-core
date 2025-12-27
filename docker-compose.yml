@@ -150,6 +150,8 @@ services:
       ONLYOFFICE_URL: ${ONLYOFFICE_PUBLIC_URL:-http://localhost:8080}
     ports:
       - "${WEB_PORT:-4200}:8080"
+    volumes:
+      - ./ngx-env.js:/usr/share/nginx/html/ngx-env.js:ro
     networks:
       - openfilz-network
 
