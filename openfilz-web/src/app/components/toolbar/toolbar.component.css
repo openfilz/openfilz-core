@@ -9,6 +9,9 @@
   min-height: 72px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
   flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .toolbar-left {

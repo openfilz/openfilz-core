@@ -73,7 +73,8 @@ import { AppConfig } from '../../config/app.config';
         (pageSizeChange)="onPageSizeChange($event)"
         [sortBy]="sortBy"
         [sortOrder]="sortOrder"
-        (sortChange)="onSortChange($event)">
+        (sortChange)="onSortChange($event)"
+      >
 
         <!-- Breadcrumb projected into toolbar for mobile visibility -->
         <div toolbarBreadcrumb class="toolbar-breadcrumb-compact">
