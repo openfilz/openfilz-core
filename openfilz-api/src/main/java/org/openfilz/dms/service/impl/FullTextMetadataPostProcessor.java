@@ -5,7 +5,6 @@ import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.service.FullTextService;
 import org.openfilz.dms.service.MetadataPostProcessor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;

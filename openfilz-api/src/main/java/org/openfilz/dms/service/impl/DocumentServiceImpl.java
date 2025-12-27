@@ -23,6 +23,7 @@ import org.openfilz.dms.exception.OperationForbiddenException;
 import org.openfilz.dms.exception.StorageException;
 import org.openfilz.dms.repository.DocumentDAO;
 import org.openfilz.dms.service.*;
+import org.openfilz.dms.utils.ContentInfo;
 import org.openfilz.dms.utils.JsonUtils;
 import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.beans.factory.annotation.Value;
@@ -519,7 +520,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
 
 
     @Override
-    public Mono<Document> replaceDocumentContent(UUID documentId, FilePart newFilePart, Long contentLength) {
+    public Mono<Document> replaceDocumentContent(UUID documentId, FilePart newFilePart, ContentInfo contentInfo) {
         return documentDAO.findById(documentId, AccessType.RWD)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
                 .filter(doc -> doc.getType() == FILE) // Only files have content to replace
@@ -527,7 +528,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                 .flatMap(document -> {
                     // 1. Save new file content
                     String oldStoragePath = document.getStoragePath();
-                    return saveDocumentService.saveAndReplaceDocument(newFilePart, contentLength, document, oldStoragePath);
+                    return saveDocumentService.saveAndReplaceDocument(newFilePart, contentInfo, document, oldStoragePath);
                 });
     }
 
@@ -763,6 +764,16 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
     @Override
     public Mono<Long> countFolderElements(UUID folderId) {
         return documentDAO.countDocument(folderId);
+    }
+
+    @Override
+    public Flux<AncestorInfo> getDocumentAncestors(UUID documentId) {
+        return documentDAO.getAncestors(documentId);
+    }
+
+    @Override
+    public Mono<DocumentPosition> getDocumentPosition(UUID documentId, String sortBy, String sortOrder) {
+        return documentDAO.getDocumentPosition(documentId, sortBy, sortOrder);
     }
 
 }

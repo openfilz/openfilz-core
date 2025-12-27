@@ -1,55 +1,42 @@
 <div class="file-list-container">
-  <table mat-table [dataSource]="items"
-         matSort
-         matSortDisableClear
-         [matSortActive]="sortBy"
-         [matSortDirection]="sortOrder === 'ASC' ? 'asc' : 'desc'"
-         (matSortChange)="onSortChange($event)"
-         class="file-list-table"
-         role="table"
-         aria-label="Files and folders list">
-    
+  <table mat-table [dataSource]="items" matSort matSortDisableClear [matSortActive]="sortBy"
+    [matSortDirection]="sortOrder === 'ASC' ? 'asc' : 'desc'" (matSortChange)="onSortChange($event)"
+    class="file-list-table" role="table" [attr.aria-label]="'fileList.filesTable' | translate">
+
     <ng-container matColumnDef="select">
       <th mat-header-cell *matHeaderCellDef>
-        <mat-checkbox
-          [checked]="allSelected"
-          [indeterminate]="someSelected && !allSelected"
-          (change)="onSelectAll($event.checked)"
-          aria-label="Select all files">
+        <mat-checkbox [checked]="allSelected" [indeterminate]="someSelected && !allSelected"
+          (change)="onSelectAll($event.checked)" [attr.aria-label]="'fileList.selectAll' | translate">
         </mat-checkbox>
       </th>
       <td mat-cell *matCellDef="let item">
-        <mat-checkbox
-          [checked]="item.selected"
-          (change)="onSelectionChange(item, $event.checked)"
-          [attr.aria-label]="'Select ' + item.name">
+        <mat-checkbox [checked]="item.selected" (change)="onSelectionChange(item, $event.checked)"
+          [attr.aria-label]="'fileList.selectItem' | translate:{name: item.name}">
         </mat-checkbox>
       </td>
     </ng-container>
 
     @if(showFavoriteButton) {
-      <ng-container matColumnDef="favorite">
-        <th mat-header-cell *matHeaderCellDef aria-label="Favorite"></th>
-        <td mat-cell *matCellDef="let item">
-          <button
-            mat-icon-button
-            class="favorite-btn"
-            (click)="onToggleFavorite($event, item)"
-            [attr.aria-label]="item.favorite ? 'Remove ' + item.name + ' from favorites' : 'Add ' + item.name + ' to favorites'"
-            [title]="item.favorite ? 'Remove from favorites' : 'Add to favorites'">
-            <mat-icon [class.favorited]="item.favorite" aria-hidden="true">
-              {{ item.favorite ? 'favorite' : 'favorite_border' }}
-            </mat-icon>
-          </button>
-        </td>
-      </ng-container>
+    <ng-container matColumnDef="favorite">
+      <th mat-header-cell *matHeaderCellDef [attr.aria-label]="'fileList.favorite' | translate"></th>
+      <td mat-cell *matCellDef="let item">
+        <button mat-icon-button class="favorite-btn" (click)="onToggleFavorite($event, item)"
+          [attr.aria-label]="item.favorite ? ('fileList.removeFromFavoritesDetail' | translate:{name: item.name}) : ('fileList.addToFavoritesDetail' | translate:{name: item.name})"
+          [title]="item.favorite ? ('fileList.removeFromFavorites' | translate) : ('fileList.addToFavorites' | translate)">
+          <mat-icon [class.favorited]="item.favorite" aria-hidden="true">
+            {{ item.favorite ? 'favorite' : 'favorite_border' }}
+          </mat-icon>
+        </button>
+      </td>
+    </ng-container>
     }
 
     <ng-container matColumnDef="name">
-      <th mat-header-cell *matHeaderCellDef mat-sort-header="name">Name</th>
+      <th mat-header-cell *matHeaderCellDef mat-sort-header="name">{{ 'common.name' | translate }}</th>
       <td mat-cell *matCellDef="let item" class="file-name-cell">
         <div class="file-name-content" (click)="onItemClick(item)" (dblclick)="onItemDoubleClick(item)">
-          <mat-icon class="file-icon" [class]="'file-type-' + item.type.toLowerCase()" aria-hidden="true" (click)="onIconClick($event, item)">
+          <mat-icon class="file-icon" [class]="'file-type-' + item.type.toLowerCase()" aria-hidden="true"
+            (click)="onIconClick($event, item)">
             {{ getFileIcon(item.name, item.type) }}
           </mat-icon>
           <span class="file-name">{{ item.name }}</span>
@@ -58,50 +45,45 @@
     </ng-container>
 
     <ng-container matColumnDef="size">
-      <th mat-header-cell *matHeaderCellDef mat-sort-header="size">Size</th>
+      <th mat-header-cell *matHeaderCellDef mat-sort-header="size">{{ 'common.size' | translate }}</th>
       <td mat-cell *matCellDef="let item">
-          @if(item.type === 'FILE' && item.size) {
-              <span>{{ formatFileSize(item.size) }}</span>
-          }
-          @if(item.type === 'FOLDER') {
-              <span>—</span>
-          }
+        @if(item.type === 'FILE' && item.size) {
+        <span>{{ formatFileSize(item.size) }}</span>
+        }
+        @if(item.type === 'FOLDER') {
+        <span>—</span>
+        }
       </td>
     </ng-container>
 
     <ng-container matColumnDef="type">
-      <th mat-header-cell *matHeaderCellDef mat-sort-header="type">Type</th>
+      <th mat-header-cell *matHeaderCellDef mat-sort-header="type">{{ 'common.type' | translate }}</th>
       <td mat-cell *matCellDef="let item">
-        {{ item.type === 'FOLDER' ? 'Folder' : getFileTypeFromName(item.name) }}
+        {{ item.type === 'FOLDER' ? ('common.folder' | translate) : ('common.fileWithType' | translate:{type:
+        (getFileExtension(item.name) | uppercase)}) }}
       </td>
     </ng-container>
 
     <ng-container matColumnDef="actions">
-      <th mat-header-cell *matHeaderCellDef aria-label="Actions"></th>
+      <th mat-header-cell *matHeaderCellDef [attr.aria-label]="'common.actions' | translate"></th>
       <td mat-cell *matCellDef="let item" class="actions-cell">
-        <button mat-icon-button
-                (click)="onViewProperties(item)"
-                matTooltip="View Properties"
-                [attr.aria-label]="'View properties for ' + item.name">
+        <button mat-icon-button (click)="onViewProperties(item)" [matTooltip]="'fileList.viewProperties' | translate"
+          [attr.aria-label]="'fileList.viewPropertiesForItem' | translate:{name: item.name}">
           <mat-icon aria-hidden="true">info</mat-icon>
         </button>
       </td>
     </ng-container>
 
     <tr mat-header-row *matHeaderRowDef="displayedColumns" role="row"></tr>
-    <tr mat-row *matRowDef="let row; columns: displayedColumns; let i = index"
-        [class.selected]="row.selected"
-        [class.focused]="isFocused(i)"
-        [attr.tabindex]="getTabIndex(i)"
-        [attr.aria-label]="row.type === 'FOLDER' ? 'Folder: ' + row.name : 'File: ' + row.name"
-        [attr.aria-selected]="row.selected"
-        class="file-row"
-        role="row"></tr>
+    <tr mat-row *matRowDef="let row; columns: displayedColumns; let i = index" [class.selected]="row.selected"
+      [class.focused]="isFocused(i)" [attr.tabindex]="getTabIndex(i)" [attr.data-file-id]="row.id"
+      [attr.aria-label]="row.type === 'FOLDER' ? ('fileList.folderDetail' | translate:{name: row.name}) : ('fileList.fileDetail' | translate:{name: row.name})"
+      [attr.aria-selected]="row.selected" class="file-row" role="row"></tr>
   </table>
   <div class="dropzone-overlay" [class.file-over]="fileOver">
     <div class="dropzone-message">
       <mat-icon>cloud_upload</mat-icon>
-      <p>Drop files here to upload</p>
+      <p>{{ 'common.dropFilesHere' | translate }}</p>
     </div>
   </div>
 </div>

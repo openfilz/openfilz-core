@@ -1,5 +1,5 @@
 import { Component, OnInit, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
@@ -15,12 +15,13 @@ import { FileIconService } from '../../services/file-icon.service';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { BreadcrumbService } from '../../services/breadcrumb.service';
 import { AppConfig } from '../../config/app.config';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { ConfirmDialogComponent, ConfirmDialogData } from '../../dialogs/confirm-dialog/confirm-dialog.component';
 
 @Component({
   selector: 'app-recycle-bin',
   standalone: true,
   imports: [
-    CommonModule,
     MatButtonModule,
     MatIconModule,
     MatSnackBarModule,
@@ -29,8 +30,9 @@ import { AppConfig } from '../../config/app.config';
     MatTooltipModule,
     FileGridComponent,
     FileListComponent,
-    ToolbarComponent
-  ],
+    ToolbarComponent,
+    TranslatePipe
+],
   templateUrl: './recycle-bin.component.html',
   styleUrls: ['./recycle-bin.component.css']
 })
@@ -60,6 +62,7 @@ export class RecycleBinComponent implements OnInit {
   private snackBar = inject(MatSnackBar);
   private dialog = inject(MatDialog);
   private breadcrumbService = inject(BreadcrumbService);
+  private translate = inject(TranslateService);
 
   constructor() { }
 
@@ -122,7 +125,7 @@ export class RecycleBinComponent implements OnInit {
       },
       error: (error: any) => {
         console.error('Error loading recycle bin:', error);
-        this.snackBar.open('Failed to load recycle bin', 'Close', { duration: 3000 });
+        this.snackBar.open(this.translate.instant('recycleBin.loadingError'), this.translate.instant('common.close'), { duration: 3000 });
         this.loading = false;
       }
     });
@@ -150,7 +153,7 @@ export class RecycleBinComponent implements OnInit {
       },
       error: (error: any) => {
         console.error('Error loading folder:', error);
-        this.snackBar.open('Failed to load folder contents', 'Close', { duration: 3000 });
+        this.snackBar.open(this.translate.instant('errors.loadFailed'), this.translate.instant('common.close'), { duration: 3000 });
         this.loading = false;
       }
     });
@@ -244,7 +247,7 @@ export class RecycleBinComponent implements OnInit {
   }
 
   onRenameSelected() {
-    this.snackBar.open('Rename is not available in recycle bin', 'Close', { duration: 2000 });
+    this.snackBar.open(this.translate.instant('recycleBin.renameNotAvailable'), this.translate.instant('common.close'), { duration: 2000 });
   }
 
   onDownloadSelected() {
@@ -252,16 +255,16 @@ export class RecycleBinComponent implements OnInit {
     if (selectedItems.length === 1 && selectedItems[0].type === 'FILE') {
       this.onDownloadItem(selectedItems[0]);
     } else {
-      this.snackBar.open('Download is only available for individual files', 'Close', { duration: 2000 });
+      this.snackBar.open(this.translate.instant('recycleBin.downloadFileOnly'), this.translate.instant('common.close'), { duration: 2000 });
     }
   }
 
   onMoveSelected() {
-    this.snackBar.open('Move is not available in recycle bin. Use restore instead.', 'Close', { duration: 2000 });
+    this.snackBar.open(this.translate.instant('recycleBin.moveNotAvailable'), this.translate.instant('common.close'), { duration: 2000 });
   }
 
   onCopySelected() {
-    this.snackBar.open('Copy is not available in recycle bin', 'Close', { duration: 2000 });
+    this.snackBar.open(this.translate.instant('recycleBin.copyNotAvailable'), this.translate.instant('common.close'), { duration: 2000 });
   }
 
   onDeleteSelected() {
@@ -272,20 +275,20 @@ export class RecycleBinComponent implements OnInit {
   restoreSelected() {
     const selectedItems = this.selectedItems;
     if (selectedItems.length === 0) {
-      this.snackBar.open('Please select items to restore', 'Close', { duration: 2000 });
+      this.snackBar.open(this.translate.instant('recycleBin.selectToRestore'), this.translate.instant('common.close'), { duration: 2000 });
       return;
     }
 
     const documentIds = selectedItems.map(item => item.id);
     this.documentApi.restoreItems({ documentIds }).subscribe({
       next: () => {
-        this.snackBar.open(`${selectedItems.length} item(s) restored successfully`, 'Close', { duration: 3000 });
+        this.snackBar.open(this.translate.instant('recycleBin.restoreSuccess', { count: selectedItems.length }), this.translate.instant('common.close'), { duration: 3000 });
         this.items = this.items.filter(item => !item.selected);
         this.totalItems = this.items.length;
       },
       error: (error: any) => {
         console.error('Error restoring items:', error);
-        this.snackBar.open('Failed to restore items', 'Close', { duration: 3000 });
+        this.snackBar.open(this.translate.instant('recycleBin.restoreError'), this.translate.instant('common.close'), { duration: 3000 });
       }
     });
   }
@@ -294,65 +297,87 @@ export class RecycleBinComponent implements OnInit {
   permanentlyDeleteSelected() {
     const selectedItems = this.selectedItems;
     if (selectedItems.length === 0) {
-      this.snackBar.open('Please select items to permanently delete', 'Close', { duration: 2000 });
+      this.snackBar.open(this.translate.instant('recycleBin.selectToDelete'), this.translate.instant('common.close'), { duration: 2000 });
       return;
     }
 
-    // Confirm deletion
-    const confirmed = confirm(
-      `Are you sure you want to permanently delete ${selectedItems.length} item(s)? This action cannot be undone.`
-    );
+    const dialogData: ConfirmDialogData = {
+      title: 'recycleBin.deleteForever',
+      message: 'recycleBin.deleteConfirmMessage',
+      messageParams: { count: selectedItems.length },
+      details: 'recycleBin.deleteDetails',
+      type: 'danger',
+      confirmText: 'recycleBin.deleteForever',
+      cancelText: 'common.cancel',
+      icon: 'delete_forever'
+    };
+    const dialogRef = this.dialog.open(ConfirmDialogComponent, {
+      width: '450px',
+      data: dialogData
+    });
+    dialogRef.afterClosed().subscribe(confirmed => {
+      if (!confirmed) return;
 
-    if (!confirmed) return;
-
-    const documentIds = selectedItems.map(item => item.id);
-    this.documentApi.permanentlyDeleteItems({ documentIds }).subscribe({
-      next: () => {
-        this.snackBar.open(`${selectedItems.length} item(s) permanently deleted`, 'Close', { duration: 3000 });
-        this.items = this.items.filter(item => !item.selected);
-        this.totalItems = this.items.length;
-      },
-      error: (error: any) => {
-        console.error('Error permanently deleting items:', error);
-        this.snackBar.open('Failed to permanently delete items', 'Close', { duration: 3000 });
-      }
+      const documentIds = selectedItems.map(item => item.id);
+      this.documentApi.permanentlyDeleteItems({ documentIds }).subscribe({
+        next: () => {
+          this.snackBar.open(this.translate.instant('recycleBin.deleteSuccess', { count: selectedItems.length }), this.translate.instant('common.close'), { duration: 3000 });
+          this.items = this.items.filter(item => !item.selected);
+          this.totalItems = this.items.length;
+        },
+        error: (error: any) => {
+          console.error('Error permanently deleting items:', error);
+          this.snackBar.open(this.translate.instant('recycleBin.deleteError'), this.translate.instant('common.close'), { duration: 3000 });
+        }
+      });
     });
   }
 
   // Empty entire recycle bin
   emptyRecycleBin() {
     if (this.items.length === 0) {
-      this.snackBar.open('Recycle bin is already empty', 'Close', { duration: 2000 });
+      this.snackBar.open(this.translate.instant('recycleBin.alreadyEmpty'), this.translate.instant('common.close'), { duration: 2000 });
       return;
     }
 
-    // Confirm deletion
-    const confirmed = confirm(
-      `Are you sure you want to permanently delete all ${this.items.length} item(s) in the recycle bin? This action cannot be undone.`
-    );
+    const dialogData: ConfirmDialogData = {
+      title: 'recycleBin.emptyBin',
+      message: 'recycleBin.emptyConfirmMessage',
+      messageParams: { count: this.items.length },
+      details: 'recycleBin.emptyDetails',
+      type: 'danger',
+      confirmText: 'recycleBin.emptyBin',
+      cancelText: 'common.cancel',
+      icon: 'delete_sweep'
+    };
+    const dialogRef = this.dialog.open(ConfirmDialogComponent, {
+      width: '450px',
+      data: dialogData
+    });
+    dialogRef.afterClosed().subscribe(confirmed => {
+      if (!confirmed) return;
 
-    if (!confirmed) return;
-
-    this.documentApi.emptyRecycleBin().subscribe({
-      next: () => {
-        this.snackBar.open('Recycle bin emptied successfully', 'Close', { duration: 3000 });
-        this.items = [];
-        this.totalItems = 0;
-      },
-      error: (error: any) => {
-        console.error('Error emptying recycle bin:', error);
-        this.snackBar.open('Failed to empty recycle bin', 'Close', { duration: 3000 });
-      }
+      this.documentApi.emptyRecycleBin().subscribe({
+        next: () => {
+          this.snackBar.open(this.translate.instant('recycleBin.emptySuccess'), this.translate.instant('common.close'), { duration: 3000 });
+          this.items = [];
+          this.totalItems = 0;
+        },
+        error: (error: any) => {
+          console.error('Error emptying recycle bin:', error);
+          this.snackBar.open(this.translate.instant('recycleBin.emptyError'), this.translate.instant('common.close'), { duration: 3000 });
+        }
+      });
     });
   }
 
   // Event handlers for context menu actions (adapted for recycle bin)
   onToggleFavorite(item: FileItem) {
-    this.snackBar.open('Favorites are not available for deleted items', 'Close', { duration: 2000 });
+    this.snackBar.open(this.translate.instant('recycleBin.favoritesNotAvailable'), this.translate.instant('common.close'), { duration: 2000 });
   }
 
   onRenameItem(item: FileItem) {
-    this.snackBar.open('Rename is not available in recycle bin', 'Close', { duration: 2000 });
+    this.snackBar.open(this.translate.instant('recycleBin.renameNotAvailable'), this.translate.instant('common.close'), { duration: 2000 });
   }
 
   onDownloadItem(item: FileItem) {
@@ -367,41 +392,53 @@ export class RecycleBinComponent implements OnInit {
           a.click();
           document.body.removeChild(a);
           window.URL.revokeObjectURL(url);
-          this.snackBar.open('Download started', 'Close', { duration: 2000 });
+          this.snackBar.open(this.translate.instant('fileViewer.downloadStarted'), this.translate.instant('common.close'), { duration: 2000 });
         },
         error: (error: any) => {
           console.error('Error downloading file:', error);
-          this.snackBar.open('Failed to download file', 'Close', { duration: 3000 });
+          this.snackBar.open(this.translate.instant('errors.downloadFailed'), this.translate.instant('common.close'), { duration: 3000 });
         }
       });
     }
   }
 
   onMoveItem(item: FileItem) {
-    this.snackBar.open('Move is not available in recycle bin. Use restore instead.', 'Close', { duration: 2000 });
+    this.snackBar.open(this.translate.instant('recycleBin.moveNotAvailable'), this.translate.instant('common.close'), { duration: 2000 });
   }
 
   onCopyItem(item: FileItem) {
-    this.snackBar.open('Copy is not available in recycle bin', 'Close', { duration: 2000 });
+    this.snackBar.open(this.translate.instant('recycleBin.copyNotAvailable'), this.translate.instant('common.close'), { duration: 2000 });
   }
 
   onDeleteItem(item: FileItem) {
     // In recycle bin, "delete" means permanent delete
-    const confirmed = confirm(
-      `Are you sure you want to permanently delete "${item.name}"? This action cannot be undone.`
-    );
+    const dialogData: ConfirmDialogData = {
+      title: 'recycleBin.deleteForever',
+      message: 'recycleBin.deleteConfirmItem',
+      messageParams: { name: item.name },
+      details: 'recycleBin.deleteDetails',
+      type: 'danger',
+      confirmText: 'recycleBin.deleteForever',
+      cancelText: 'common.cancel',
+      icon: 'delete_forever'
+    };
+    const dialogRef = this.dialog.open(ConfirmDialogComponent, {
+      width: '450px',
+      data: dialogData
+    });
+    dialogRef.afterClosed().subscribe(confirmed => {
+      if (!confirmed) return;
 
-    if (!confirmed) return;
-
-    this.documentApi.permanentlyDeleteItems({ documentIds: [item.id] }).subscribe({
-      next: () => {
-        this.snackBar.open(`"${item.name}" permanently deleted`, 'Close', { duration: 3000 });
-        this.items = this.items.filter(i => i.id !== item.id);
-      },
-      error: (error: any) => {
-        console.error('Error permanently deleting item:', error);
-        this.snackBar.open('Failed to permanently delete item', 'Close', { duration: 3000 });
-      }
+      this.documentApi.permanentlyDeleteItems({ documentIds: [item.id] }).subscribe({
+        next: () => {
+          this.snackBar.open(this.translate.instant('recycleBin.deleteSuccessSingle', { name: item.name }), this.translate.instant('common.close'), { duration: 3000 });
+          this.items = this.items.filter(i => i.id !== item.id);
+        },
+        error: (error: any) => {
+          console.error('Error permanently deleting item:', error);
+          this.snackBar.open(this.translate.instant('recycleBin.deleteError'), this.translate.instant('common.close'), { duration: 3000 });
+        }
+      });
     });
   }
 
@@ -409,12 +446,12 @@ export class RecycleBinComponent implements OnInit {
   restoreItem(item: FileItem) {
     this.documentApi.restoreItems({ documentIds: [item.id] }).subscribe({
       next: () => {
-        this.snackBar.open(`"${item.name}" restored successfully`, 'Close', { duration: 2000 });
+        this.snackBar.open(this.translate.instant('recycleBin.restoreSuccessSingle', { name: item.name }), this.translate.instant('common.close'), { duration: 2000 });
         this.items = this.items.filter(i => i.id !== item.id);
       },
       error: (error: any) => {
         console.error('Error restoring item:', error);
-        this.snackBar.open('Failed to restore item', 'Close', { duration: 3000 });
+        this.snackBar.open(this.translate.instant('recycleBin.restoreError'), this.translate.instant('common.close'), { duration: 3000 });
       }
     });
   }

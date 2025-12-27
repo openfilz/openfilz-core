@@ -3,6 +3,7 @@ package org.openfilz.dms.service;
 import org.openfilz.dms.dto.request.*;
 import org.openfilz.dms.dto.response.*;
 import org.openfilz.dms.entity.Document;
+import org.openfilz.dms.utils.ContentInfo;
 import org.springframework.core.io.Resource;
 import org.springframework.http.codec.multipart.FilePart;
 import reactor.core.publisher.Flux;
@@ -36,7 +37,7 @@ public interface DocumentService {
     // Document (File/Folder) Operations
     Mono<UploadResponse> uploadDocument(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, Boolean allowDuplicateFileNames);
 
-    Mono<Document> replaceDocumentContent(UUID documentId, FilePart newFilePart, Long contentLength);
+    Mono<Document> replaceDocumentContent(UUID documentId, FilePart newFilePart, ContentInfo contentInfo);
 
     Mono<Document> replaceDocumentMetadata(UUID documentId, Map<String, Object> newMetadata);
 
@@ -59,4 +60,22 @@ public interface DocumentService {
     Flux<FolderElementInfo> listFolderInfo(UUID folderId, Boolean onlyFiles, Boolean onlyFolders);
 
     Mono<Long> countFolderElements(UUID folderId);
+
+    /**
+     * Get all ancestors (parent folders) of a document, ordered from root to immediate parent.
+     *
+     * @param documentId The UUID of the document.
+     * @return A Flux of AncestorInfo ordered from root to immediate parent.
+     */
+    Flux<AncestorInfo> getDocumentAncestors(UUID documentId);
+
+    /**
+     * Get the position of a document within its parent folder.
+     *
+     * @param documentId The UUID of the document.
+     * @param sortBy     The field to sort by.
+     * @param sortOrder  The sort order ("ASC" or "DESC").
+     * @return A Mono containing the document's position information.
+     */
+    Mono<DocumentPosition> getDocumentPosition(UUID documentId, String sortBy, String sortOrder);
 }

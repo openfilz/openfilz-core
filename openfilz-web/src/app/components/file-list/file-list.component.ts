@@ -8,7 +8,8 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSortModule, Sort } from '@angular/material/sort';
 import { FileItem } from '../../models/document.models';
 import { FileIconService } from '../../services/file-icon.service';
-import {TouchDetectionService} from '../../services/touch-detection.service';
+import { TouchDetectionService } from '../../services/touch-detection.service';
+import { TranslatePipe } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-file-list',
@@ -22,7 +23,8 @@ import {TouchDetectionService} from '../../services/touch-detection.service';
     MatIconModule,
     MatButtonModule,
     MatCheckboxModule,
-    MatTooltipModule
+    MatTooltipModule,
+    TranslatePipe
   ],
 })
 export class FileListComponent {
@@ -55,9 +57,9 @@ export class FileListComponent {
     return ['select', 'name', 'size', 'type', 'actions'];
   }
 
-  
-    private fileIconService = inject(FileIconService);
-    private touchDetectionService= inject(TouchDetectionService
+
+  private fileIconService = inject(FileIconService);
+  private touchDetectionService = inject(TouchDetectionService
   );
 
   constructor() { }
@@ -144,8 +146,12 @@ export class FileListComponent {
   }
 
   getFileTypeFromName(fileName: string): string {
-    const extension = fileName.split('.').pop()?.toUpperCase();
+    const extension = this.fileIconService.getFileExtension(fileName).toUpperCase();
     return extension ? `${extension} File` : 'File';
+  }
+
+  getFileExtension(fileName: string): string {
+    return this.fileIconService.getFileExtension(fileName);
   }
 
   onSortChange(sort: Sort) {

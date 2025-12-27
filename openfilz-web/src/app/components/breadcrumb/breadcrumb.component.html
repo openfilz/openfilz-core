@@ -1,21 +1,17 @@
-<nav class="breadcrumb" role="navigation" aria-label="Breadcrumb">
-  <button mat-icon-button (click)="onNavigateToHome()" aria-label="Navigate to home">
+<nav class="breadcrumb" role="navigation" [attr.aria-label]="'breadcrumb.navigation' | translate">
+  <button mat-icon-button (click)="onNavigateToHome()" [attr.aria-label]="'breadcrumb.navigateToHome' | translate">
     <mat-icon aria-hidden="true">home</mat-icon>
   </button>
 
-    @for(item of breadcrumbs; track item.id; let i = $index) {
-        <ng-container>
-            <mat-icon class="separator" aria-hidden="true">chevron_right</mat-icon>
-            <button
-                    mat-button
-                    class="breadcrumb-item"
-                    [class.current]="i === breadcrumbs.length - 1"
-                    [attr.aria-current]="i === breadcrumbs.length - 1 ? 'page' : null"
-                    [attr.aria-label]="'Navigate to ' + item.name"
-                    (click)="onNavigate(item)">
-                {{ item.name }}
-            </button>
-        </ng-container>
-    }
+  @for(item of breadcrumbs; track item.id; let i = $index) {
+  <ng-container>
+    <mat-icon class="separator rtl-flip" aria-hidden="true">chevron_right</mat-icon>
+    <button mat-button class="breadcrumb-item" [class.current]="i === breadcrumbs.length - 1"
+      [attr.aria-current]="i === breadcrumbs.length - 1 ? 'page' : null"
+      [attr.aria-label]="'breadcrumb.navigateToItem' | translate:{name: item.name}" (click)="onNavigate(item)">
+      {{ item.name }}
+    </button>
+  </ng-container>
+  }
 
 </nav>

@@ -14,11 +14,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.converter.CustomJsonPart;
 import org.openfilz.dms.dto.request.*;
-import org.openfilz.dms.dto.response.DocumentInfo;
-import org.openfilz.dms.dto.response.ElementInfo;
-import org.openfilz.dms.dto.response.UploadResponse;
+import org.openfilz.dms.dto.response.*;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.service.DocumentService;
+import org.openfilz.dms.service.OnlyOfficeJwtService;
+import org.openfilz.dms.utils.ContentInfo;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -51,6 +52,10 @@ public class DocumentController {
     private final DocumentService documentService;
 
     private final ObjectMapper objectMapper; // For parsing metadata string
+
+    // Optional: Only available when OnlyOffice is enabled
+    @Autowired(required = false)
+    private OnlyOfficeJwtService<? extends OnlyOfficeUserInfo> onlyOfficeJwtService;
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Upload a single document",
@@ -122,7 +127,7 @@ public class DocumentController {
             @PathVariable UUID documentId,
             @RequestPart("file") Mono<FilePart> newFilePartMono,
             @Parameter(hidden = true) @RequestHeader(name = "Content-Length", required = false) Long contentLength) {
-        return newFilePartMono.flatMap(filePart -> documentService.replaceDocumentContent(documentId, filePart, contentLength))
+        return newFilePartMono.flatMap(filePart -> documentService.replaceDocumentContent(documentId, filePart, new ContentInfo(contentLength, null)))
                 .map(doc -> new ElementInfo(doc.getId(), doc.getName(), doc.getType().name()))
                 .map(ResponseEntity::ok);
     }
@@ -168,10 +173,52 @@ public class DocumentController {
                 );
     }
 
+    /**
+     * Download endpoint for OnlyOffice DocumentServer.
+     * This endpoint uses a short-lived access token instead of OAuth2 authentication
+     * to allow OnlyOffice server to fetch documents.
+     */
+    @GetMapping("/{documentId}/onlyoffice-download")
+    @Operation(summary = "Download document for OnlyOffice",
+            description = "Internal endpoint for OnlyOffice DocumentServer to fetch document content. Uses token-based authentication.")
+    public Mono<ResponseEntity<Resource>> downloadForOnlyOffice(
+            @PathVariable UUID documentId,
+            @RequestParam("token") String accessToken) {
+
+        // Validate access token
+        if (onlyOfficeJwtService == null) {
+            log.warn("OnlyOffice download attempted but OnlyOffice is not enabled");
+            return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build());
+        }
+        Map<String, Object> claims = onlyOfficeJwtService.validateAndDecode(accessToken);
+        if(claims == null) {
+            return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
+        }
+        UUID tokenDocumentId = onlyOfficeJwtService.extractDocumentId(claims);
+        if (tokenDocumentId == null || !tokenDocumentId.equals(documentId)) {
+            log.warn("Invalid or mismatched OnlyOffice access token for document {}", documentId);
+            return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
+        }
+
+        return documentService.findDocumentToDownloadById(documentId)
+                .flatMap(docInfo -> documentService.downloadDocument(docInfo)
+                        .map(resource -> sendOnlyOfficeDownloadResponse(docInfo, resource))
+                )
+                .defaultIfEmpty(ResponseEntity.notFound().build());
+    }
+
     private ResponseEntity<Resource> sendDownloadResponse(Document document, Resource resource) {
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + document.getName() + (document.getType() == FILE ? "" : ZIP) + "\"")
                 .contentType(document.getType() == FILE && document.getContentType() != null ? MediaType.parseMediaType(document.getContentType()) : MediaType.APPLICATION_OCTET_STREAM)
+                .body(resource);
+    }
+
+    private ResponseEntity<Resource> sendOnlyOfficeDownloadResponse(Document document, Resource resource) {
+        // OnlyOffice expects inline content disposition for viewing/editing
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + document.getName() + "\"")
+                .contentType(document.getContentType() != null ? MediaType.parseMediaType(document.getContentType()) : MediaType.APPLICATION_OCTET_STREAM)
                 .body(resource);
     }
 
@@ -209,6 +256,22 @@ public class DocumentController {
             @PathVariable UUID documentId,
             @Parameter(description = "if false : only name, type and parentId are sent (when not null) - if true : metadata and size are added in the response") @RequestParam(required = false) Boolean withMetadata) {
         return documentService.getDocumentInfo(documentId, withMetadata)
+                .map(ResponseEntity::ok);
+    }
+
+    @GetMapping("/{documentId}/ancestors")
+    @Operation(summary = "Get document ancestors", description = "Retrieves all ancestor folders (parent path) of a document, ordered from root to immediate parent.")
+    public Flux<AncestorInfo> getDocumentAncestors(@PathVariable UUID documentId) {
+        return documentService.getDocumentAncestors(documentId);
+    }
+
+    @GetMapping("/{documentId}/position")
+    @Operation(summary = "Get document position in folder", description = "Retrieves the position of a document within its parent folder, useful for pagination.")
+    public Mono<ResponseEntity<DocumentPosition>> getDocumentPosition(
+            @PathVariable UUID documentId,
+            @Parameter(description = "Field to sort by (name, updated_at, created_at, size, type). Defaults to 'name'.") @RequestParam(defaultValue = "name") String sortBy,
+            @Parameter(description = "Sort order (ASC or DESC). Defaults to 'ASC'.") @RequestParam(defaultValue = "ASC") String sortOrder) {
+        return documentService.getDocumentPosition(documentId, sortBy, sortOrder)
                 .map(ResponseEntity::ok);
     }
 }

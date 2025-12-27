@@ -1,40 +1,43 @@
 <div class="settings-container">
   <div class="settings-header">
-    <h1>Hello {{ firstName }}</h1>
-    <p>Manage your preferences and application settings</p>
+    <h1>{{ 'settings.hello' | translate:{ name: firstName } }}</h1>
+    <p>{{ 'settings.managePreferences' | translate }}</p>
   </div>
 
   <div class="settings-section">
     <div class="section-title">
       <mat-icon>palette</mat-icon>
-      Appearance
+      {{ 'settings.appearance' | translate }}
     </div>
 
     <div class="section-content">
       <div class="setting-item full-width">
-        <label class="setting-label">Theme</label>
-        <p class="setting-description">Choose a color theme for the application interface.</p>
+        <label class="setting-label">{{ 'settings.theme' | translate }}</label>
+        <p class="setting-description">{{ 'settings.themeDescription' | translate }}</p>
 
         <div class="theme-grid">
-          <div *ngFor="let theme of availableThemes" class="theme-card"
-            [class.active]="currentTheme?.name === theme.name" (click)="onThemeChange(theme.name)">
-
-            <!-- Apply the theme class to this wrapper so CSS variables are scoped locally -->
-            <div class="theme-preview-wrapper" [ngClass]="theme.className">
-              <div class="theme-preview-content">
-                <div class="color-stripes">
-                  <div class="stripe" style="background-color: var(--primary)"></div>
-                  <div class="stripe" style="background-color: var(--secondary)"></div>
-                  <div class="stripe" style="background-color: var(--accent)"></div>
-                  <div class="stripe" style="background-color: var(--bg-secondary)"></div>
-                </div>
-                <div class="theme-info">
-                  <span class="theme-name">{{ theme.displayName }}</span>
-                  <mat-icon *ngIf="currentTheme?.name === theme.name" class="check-icon">check_circle</mat-icon>
+          @for (theme of availableThemes; track theme) {
+            <div class="theme-card"
+              [class.active]="currentTheme?.name === theme.name" (click)="onThemeChange(theme.name)">
+              <!-- Apply the theme class to this wrapper so CSS variables are scoped locally -->
+              <div class="theme-preview-wrapper" [ngClass]="theme.className">
+                <div class="theme-preview-content">
+                  <div class="color-stripes">
+                    <div class="stripe" style="background-color: var(--primary)"></div>
+                    <div class="stripe" style="background-color: var(--secondary)"></div>
+                    <div class="stripe" style="background-color: var(--accent)"></div>
+                    <div class="stripe" style="background-color: var(--bg-secondary)"></div>
+                  </div>
+                  <div class="theme-info">
+                    <span class="theme-name">{{ 'settings.themes.' + theme.name | translate }}</span>
+                    @if (currentTheme?.name === theme.name) {
+                      <mat-icon class="check-icon">check_circle</mat-icon>
+                    }
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          }
         </div>
 
       </div>

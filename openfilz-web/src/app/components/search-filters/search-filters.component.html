@@ -3,7 +3,7 @@
   <div class="filters-header">
     <h3>
       <mat-icon>tune</mat-icon>
-      Search Filters
+      {{ 'searchFilters.title' | translate }}
     </h3>
   </div>
 
@@ -11,60 +11,65 @@
   <div class="filters-content">
     <!-- Type Filter -->
     <div class="filter-section">
-      <label>Type</label>
+      <label>{{ 'common.type' | translate }}</label>
       <select [(ngModel)]="filters.type">
-        <option *ngFor="let type of documentTypes" [ngValue]="type.value">
-          {{ type.label }}
-        </option>
+        @for (type of documentTypes; track type) {
+          <option [ngValue]="type.value">
+            {{ type.labelKey | translate }}
+          </option>
+        }
       </select>
     </div>
 
     <!-- Date Modified Filter -->
     <div class="filter-section">
-      <label>Date Modified</label>
+      <label>{{ 'common.dateModified' | translate }}</label>
       <select [(ngModel)]="filters.dateModified">
-        <option *ngFor="let date of dateOptions" [value]="date.value">
-          {{ date.label }}
-        </option>
+        @for (date of dateOptions; track date) {
+          <option [value]="date.value">
+            {{ date.labelKey | translate }}
+          </option>
+        }
       </select>
     </div>
 
     <!-- Owner Filter -->
     <div class="filter-section">
-      <label>Owner</label>
-      <input
-        type="text"
-        [(ngModel)]="filters.owner"
-        placeholder="Created by..."
-      />
+      <label>{{ 'common.owner' | translate }}</label>
+      <input type="text" [(ngModel)]="filters.owner" [placeholder]="'searchFilters.ownerPlaceholder' | translate" />
     </div>
 
     <!-- File Type Filter (Conditional) -->
     @if (showFileTypeFilter) {
       <div class="filter-section">
-        <label>File Type</label>
+        <label>{{ 'searchFilters.fileType' | translate }}</label>
         <select [(ngModel)]="filters.fileType">
-          <option *ngFor="let ft of fileTypeOptions" [value]="ft.value">
-            {{ ft.label }}
-          </option>
+          @for (ft of fileTypeOptions; track ft) {
+            <option [value]="ft.value">
+              {{ ft.labelKey | translate }}
+            </option>
+          }
         </select>
       </div>
     }
 
     <!-- Metadata Filter -->
     <div class="filter-section">
-      <label>Metadata</label>
+      <label>{{ 'common.metadata' | translate }}</label>
       <div class="metadata-list">
-        <div *ngFor="let meta of metadataFilters; let i = index" class="metadata-item">
-          <input type="text" [(ngModel)]="meta.key" placeholder="Key" class="meta-input" />
-          <input type="text" [(ngModel)]="meta.value" placeholder="Value" class="meta-input" />
-          <button class="btn-remove" (click)="$event.stopPropagation(); removeMetadataFilter(i)" matTooltip="Remove">
-            <mat-icon>close</mat-icon>
-          </button>
-        </div>
+        @for (meta of metadataFilters; track meta; let i = $index) {
+          <div class="metadata-item">
+            <input type="text" [(ngModel)]="meta.key" [placeholder]="'common.key' | translate" class="meta-input" />
+            <input type="text" [(ngModel)]="meta.value" [placeholder]="'common.value' | translate" class="meta-input" />
+            <button class="btn-remove" (click)="$event.stopPropagation(); removeMetadataFilter(i)"
+              [matTooltip]="'searchFilters.remove' | translate">
+              <mat-icon>close</mat-icon>
+            </button>
+          </div>
+        }
         <button class="btn-add" (click)="addMetadataFilter()">
           <mat-icon>add</mat-icon>
-          Add Metadata Filter
+          {{ 'searchFilters.addMetadataFilter' | translate }}
         </button>
       </div>
     </div>
@@ -72,7 +77,7 @@
 
   <!-- Footer Actions -->
   <div class="filter-actions">
-    <button class="btn-clear" (click)="clearFilters()">Clear</button>
-    <button class="btn-apply" (click)="applyFilters()">Apply Filters</button>
+    <button class="btn-clear" (click)="clearFilters()">{{ 'common.clear' | translate }}</button>
+    <button class="btn-apply" (click)="applyFilters()">{{ 'searchFilters.applyFilters' | translate }}</button>
   </div>
 </div>

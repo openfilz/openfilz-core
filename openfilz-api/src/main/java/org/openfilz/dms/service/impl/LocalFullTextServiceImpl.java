@@ -12,10 +12,12 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import reactor.util.retry.Retry;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.UUID;
 
 @Slf4j
@@ -42,6 +44,11 @@ public class LocalFullTextServiceImpl implements FullTextService {
 
     private void indexFolder(Document document) {
         indexService.indexDocMetadataMono(document)
+                .retryWhen(Retry.backoff(3, Duration.ofMillis(100))
+                        .filter(this::isRetryableException)
+                        .doBeforeRetry(signal -> log.warn("Retrying indexFolder for document {}, attempt {}",
+                                document.getId(), signal.totalRetries() + 1)))
+                .doOnError(err -> log.error("indexFolder error for {} : {}", document.getId(), err.getMessage()))
                 .subscribeOn(Schedulers.boundedElastic())
                 .subscribe();
     }
@@ -61,11 +68,25 @@ public class LocalFullTextServiceImpl implements FullTextService {
                             log.error("Failed to clean up stable temp file [{}].", tempFile, e);
                         }
                     }))
+                    .retryWhen(Retry.backoff(3, Duration.ofMillis(100))
+                            .filter(this::isRetryableException)
+                            .doBeforeRetry(signal -> log.warn("Retrying indexFile for document {}, attempt {}",
+                                    document.getId(), signal.totalRetries() + 1)))
+                    .doOnError(err -> log.error("indexFile error for {} : {}", document.getId(), err.getMessage()))
                     .subscribeOn(Schedulers.boundedElastic())
                     .subscribe();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private boolean isRetryableException(Throwable throwable) {
+        // Retry on version conflict (409) and transient network errors
+        String message = throwable.getMessage();
+        if (message != null) {
+            return message.contains("409") || message.contains("version_conflict") || message.contains("Conflict");
+        }
+        return false;
     }
 
     @Override

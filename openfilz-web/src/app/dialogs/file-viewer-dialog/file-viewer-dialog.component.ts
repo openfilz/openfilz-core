@@ -1,5 +1,5 @@
 import { Component, inject, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { DecimalPipe } from '@angular/common';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -8,8 +8,12 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { DomSanitizer, SafeResourceUrl, SafeHtml } from '@angular/platform-browser';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 
 import { DocumentApiService } from '../../services/document-api.service';
+import { OnlyOfficeService } from '../../services/onlyoffice.service';
+import { RoleService } from '../../services/role.service';
+import { OnlyOfficeEditorComponent } from '../../components/onlyoffice-editor/onlyoffice-editor.component';
 import { saveAs } from 'file-saver';
 
 // PDF.js imports
@@ -28,7 +32,7 @@ export interface FileViewerDialogData {
   contentType: string;
 }
 
-type ViewerMode = 'pdf' | 'image' | 'text' | 'office' | 'unsupported';
+type ViewerMode = 'pdf' | 'image' | 'text' | 'office' | 'onlyoffice' | 'unsupported';
 
 @Component({
   selector: 'app-file-viewer-dialog',
@@ -36,13 +40,15 @@ type ViewerMode = 'pdf' | 'image' | 'text' | 'office' | 'unsupported';
   templateUrl: './file-viewer-dialog.component.html',
   styleUrls: ['./file-viewer-dialog.component.css'],
   imports: [
-    CommonModule,
+    DecimalPipe,
     MatDialogModule,
     MatButtonModule,
     MatIconModule,
     MatProgressSpinnerModule,
     MatToolbarModule,
-    MatTooltipModule
+    MatTooltipModule,
+    OnlyOfficeEditorComponent,
+    TranslatePipe
   ],
 })
 export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestroy {
@@ -51,6 +57,7 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
 
   loading: boolean = true;
   error?: string;
+  isFullscreen: boolean = false;
 
   viewerMode: ViewerMode = 'unsupported';
 
@@ -80,8 +87,11 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
   readonly dialogRef = inject(MatDialogRef<FileViewerDialogComponent>);
   readonly data = inject<FileViewerDialogData>(MAT_DIALOG_DATA);
   private documentApi = inject(DocumentApiService);
+  private onlyOfficeService = inject(OnlyOfficeService);
+  private roleService = inject(RoleService);
   private snackBar = inject(MatSnackBar);
   private sanitizer = inject(DomSanitizer);
+  private translate = inject(TranslateService);
 
   constructor() {
     // Configure PDF.js worker
@@ -89,7 +99,35 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
       `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs`;
   }
 
+  /**
+   * Determines if the user can edit documents in OnlyOffice.
+   * CONTRIBUTOR role = can edit
+   * READER role = view only
+   */
+  get canEditDocument(): boolean {
+    return this.roleService.hasRole('CONTRIBUTOR');
+  }
+
+  /**
+   * Checks if the user has permission to view files.
+   */
+  get canViewDocument(): boolean {
+    return this.roleService.hasRole('CONTRIBUTOR') || this.roleService.hasRole('READER');
+  }
+
   ngOnInit() {
+    // Check if user has permission to view files
+    if (!this.canViewDocument) {
+      this.error = 'errors.notAllowedToViewFiles';
+      this.loading = false;
+      this.snackBar.open(
+        this.translate.instant('errors.notAllowedToViewFiles'),
+        this.translate.instant('common.close'),
+        { duration: 5000 }
+      );
+      return;
+    }
+
     this.determineViewerMode();
     this.loadDocument();
   }
@@ -109,6 +147,13 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
     const contentType = this.data.contentType?.toLowerCase() || '';
     const fileName = this.data.fileName?.toLowerCase() || '';
 
+    // Check if OnlyOffice is enabled and file is supported
+    if (this.onlyOfficeService.isOnlyOfficeEnabled() &&
+      this.onlyOfficeService.isSupportedExtension(fileName)) {
+      this.viewerMode = 'onlyoffice';
+      return;
+    }
+
     // PDF
     if (contentType === 'application/pdf' || fileName.endsWith('.pdf')) {
       this.viewerMode = 'pdf';
@@ -125,7 +170,7 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
       /\.(txt|json|xml|html|css|js|ts|java|py|md|yml|yaml|sh|bat|log)$/i.test(fileName)) {
       this.viewerMode = 'text';
     }
-    // Office documents
+    // Office documents (fallback when OnlyOffice is disabled)
     else if (contentType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
       contentType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
       /\.(docx|xlsx)$/i.test(fileName)) {
@@ -137,6 +182,12 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
   }
 
   private loadDocument() {
+    // OnlyOffice handles its own loading
+    if (this.viewerMode === 'onlyoffice') {
+      this.loading = false;
+      return;
+    }
+
     this.loading = true;
     this.error = undefined;
 
@@ -160,15 +211,31 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
             break;
           default:
             this.loading = false;
-            this.error = 'This file type is not supported for preview';
+            this.error = 'errors.unsupportedType';
         }
       },
       error: (err) => {
-        this.error = 'Failed to load document';
+        this.error = 'errors.loadFailed';
         this.loading = false;
-        this.snackBar.open(this.error, 'Close', { duration: 3000 });
+        this.snackBar.open(this.translate.instant(this.error), this.translate.instant('common.close'), { duration: 3000 });
       }
     });
+  }
+
+  // ========== OnlyOffice Event Handlers ==========
+  onEditorReady() {
+    console.log('OnlyOffice editor is ready');
+  }
+
+  onDocumentSaved() {
+    console.log('Document saved via OnlyOffice');
+    this.snackBar.open(this.translate.instant('metadataPanel.saveSuccess'), this.translate.instant('common.close'), { duration: 2000 });
+  }
+
+  onEditorError(error: string) {
+    console.error('OnlyOffice editor error:', error);
+    this.error = error;
+    this.snackBar.open(error, this.translate.instant('common.close'), { duration: 5000 });
   }
 
   // ========== PDF Viewer ==========
@@ -184,9 +251,9 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
       // Render first page
       setTimeout(() => this.renderPdfPage(), 100);
     } catch (err) {
-      this.error = 'Failed to load PDF';
+      this.error = 'errors.pdfLoadFailed';
       this.loading = false;
-      this.snackBar.open(this.error, 'Close', { duration: 3000 });
+      this.snackBar.open(this.translate.instant(this.error), this.translate.instant('common.close'), { duration: 3000 });
     }
   }
 
@@ -302,9 +369,9 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
 
       this.loading = false;
     } catch (err) {
-      this.error = 'Failed to load text file';
+      this.error = 'errors.textLoadFailed';
       this.loading = false;
-      this.snackBar.open(this.error, 'Close', { duration: 3000 });
+      this.snackBar.open(this.translate.instant(this.error), this.translate.instant('common.close'), { duration: 3000 });
     }
   }
 
@@ -346,13 +413,13 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
       } else if (extension === 'xlsx') {
         await this.loadXlsx();
       } else {
-        this.error = 'Office document type not supported for preview';
+        this.error = 'errors.officeUnsupported';
         this.loading = false;
       }
     } catch (err) {
-      this.error = 'Failed to load office document';
+      this.error = 'errors.officeLoadFailed';
       this.loading = false;
-      this.snackBar.open(this.error, 'Close', { duration: 3000 });
+      this.snackBar.open(this.translate.instant(this.error), this.translate.instant('common.close'), { duration: 3000 });
     }
   }
 
@@ -392,11 +459,37 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
   download() {
     if (this.fileBlob) {
       saveAs(this.fileBlob, this.data.fileName);
+    } else {
+      // For OnlyOffice documents, download directly from the API
+      this.documentApi.downloadDocument(this.data.documentId).subscribe({
+        next: (blob) => saveAs(blob, this.data.fileName),
+        error: () => this.snackBar.open(
+          this.translate.instant('errors.downloadFailed'),
+          this.translate.instant('common.close'),
+          { duration: 3000 }
+        )
+      });
     }
   }
 
   print() {
     window.print();
+  }
+
+  toggleFullscreen() {
+    this.isFullscreen = !this.isFullscreen;
+    if (this.isFullscreen) {
+      this.dialogRef.updateSize('100vw', '100vh');
+      this.dialogRef.addPanelClass('fullscreen-dialog');
+    } else {
+      this.dialogRef.updateSize('95vw', '95vh');
+      this.dialogRef.removePanelClass('fullscreen-dialog');
+    }
+
+    // Re-render PDF if in PDF mode to adjust to new size
+    if (this.viewerMode === 'pdf') {
+      setTimeout(() => this.renderPdfPage(), 100);
+    }
   }
 
   onClose() {

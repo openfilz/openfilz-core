@@ -1,15 +1,16 @@
 import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { TranslatePipe } from '@ngx-translate/core';
 import { DocumentType, SearchFilters } from '../../models/document.models';
 
 @Component({
   selector: 'app-search-filters',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatIconModule, MatButtonModule, MatTooltipModule],
+  imports: [FormsModule, MatIconModule, MatButtonModule, MatTooltipModule, TranslatePipe],
   templateUrl: './search-filters.component.html',
   styleUrls: ['./search-filters.component.css']
 })
@@ -42,24 +43,24 @@ export class SearchFiltersComponent implements OnInit {
   }
 
   documentTypes = [
-    { label: 'All', value: undefined },
-    { label: 'Folders', value: DocumentType.FOLDER },
-    { label: 'Files', value: DocumentType.FILE }
+    { labelKey: 'searchFilters.documentTypes.all', value: undefined },
+    { labelKey: 'searchFilters.documentTypes.folders', value: DocumentType.FOLDER },
+    { labelKey: 'searchFilters.documentTypes.files', value: DocumentType.FILE }
   ];
 
   dateOptions = [
-    { label: 'Any time', value: 'any' },
-    { label: 'Today', value: 'today' },
-    { label: 'Last 7 days', value: 'last7' },
-    { label: 'Last 30 days', value: 'last30' }
+    { labelKey: 'searchFilters.dateOptions.any', value: 'any' },
+    { labelKey: 'searchFilters.dateOptions.today', value: 'today' },
+    { labelKey: 'searchFilters.dateOptions.last7', value: 'last7' },
+    { labelKey: 'searchFilters.dateOptions.last30', value: 'last30' }
   ];
 
   fileTypeOptions = [
-    { label: 'Any', value: 'any' },
-    { label: 'PDFs', value: 'application/pdf' },
-    { label: 'Images', value: 'image/' },
-    { label: 'Documents', value: 'application/msword' },
-    { label: 'Spreadsheets', value: 'application/vnd.ms-excel' }
+    { labelKey: 'searchFilters.fileTypeOptions.any', value: 'any' },
+    { labelKey: 'searchFilters.fileTypeOptions.pdfs', value: 'application/pdf' },
+    { labelKey: 'searchFilters.fileTypeOptions.images', value: 'image/' },
+    { labelKey: 'searchFilters.fileTypeOptions.documents', value: 'application/msword' },
+    { labelKey: 'searchFilters.fileTypeOptions.spreadsheets', value: 'application/vnd.ms-excel' }
   ];
 
   addMetadataFilter() {

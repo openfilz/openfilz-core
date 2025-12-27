@@ -1,0 +1,31 @@
+<div class="dialog-header">
+  <div class="header-content">
+    <div class="icon-wrapper">
+      <mat-icon>warning</mat-icon>
+    </div>
+    <div class="header-text">
+      <h2 class="dialog-title">File Already Exists</h2>
+      <p class="dialog-subtitle">A file with this name is already in this folder</p>
+    </div>
+  </div>
+</div>
+
+<mat-dialog-content class="dialog-content">
+  <p>
+    The file <strong>"{{ data.fileName }}"</strong> already exists in this folder.
+  </p>
+  <p>
+    Do you want to replace the existing file with the new one?
+  </p>
+</mat-dialog-content>
+
+<mat-dialog-actions class="dialog-actions">
+  <button mat-stroked-button class="cancel-btn" (click)="onCancel()">
+    <mat-icon>close</mat-icon>
+    Cancel
+  </button>
+  <button mat-flat-button class="replace-btn" (click)="onReplace()">
+    <mat-icon>swap_horiz</mat-icon>
+    Replace
+  </button>
+</mat-dialog-actions>

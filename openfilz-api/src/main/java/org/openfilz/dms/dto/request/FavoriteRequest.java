@@ -6,7 +6,6 @@ import org.openfilz.dms.enums.DocumentType;
 
 import java.time.OffsetDateTime;
 import java.util.Map;
-import java.util.UUID;
 
 public record FavoriteRequest(
     DocumentType type,

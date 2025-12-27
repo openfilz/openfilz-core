@@ -1,15 +1,17 @@
 import { Component, OnInit, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { TranslatePipe } from '@ngx-translate/core';
 
 import { DocumentApiService } from '../../services/document-api.service';
 
 export interface FolderTreeDialogData {
   title: string;
+  titleParams?: any;
   actionType: 'move' | 'copy';
   currentFolderId?: string;
   excludeIds?: string[];
@@ -31,17 +33,17 @@ interface BreadcrumbItem {
   templateUrl: './folder-tree-dialog.component.html',
   styleUrls: ['./folder-tree-dialog.component.css'],
   imports: [
-    CommonModule,
     MatDialogModule,
     MatButtonModule,
     MatIconModule,
     MatProgressSpinnerModule,
-    MatPaginatorModule
-  ]
+    MatPaginatorModule,
+    TranslatePipe
+]
 })
 export class FolderTreeDialogComponent implements OnInit {
   folders: FolderItem[] = [];
-  breadcrumbs: BreadcrumbItem[] = [{ name: 'Root' }];
+  breadcrumbs: BreadcrumbItem[] = [{ name: 'dialogs.folderTree.root' }];
   currentFolderId?: string;
   loading = true;
 
@@ -53,6 +55,10 @@ export class FolderTreeDialogComponent implements OnInit {
   private dialogRef = inject(MatDialogRef<FolderTreeDialogComponent>);
   readonly data = inject<FolderTreeDialogData>(MAT_DIALOG_DATA);
   private documentApi = inject(DocumentApiService);
+
+  get direction(): 'ltr' | 'rtl' {
+    return (document.documentElement.dir as 'ltr' | 'rtl') || 'ltr';
+  }
 
   constructor() { }
 
@@ -116,7 +122,7 @@ export class FolderTreeDialogComponent implements OnInit {
   }
 
   getActionButtonText(): string {
-    return this.data.actionType === 'move' ? 'Move to here' : 'Copy to here';
+    return this.data.actionType === 'move' ? 'dialogs.folderTree.moveToHere' : 'dialogs.folderTree.copyToHere';
   }
 
   getActionIcon(): string {
@@ -129,8 +135,8 @@ export class FolderTreeDialogComponent implements OnInit {
 
   getDialogSubtitle(): string {
     return this.data.actionType === 'move'
-      ? 'Select a destination folder to move the items to'
-      : 'Select a destination folder to copy the items to';
+      ? 'dialogs.folderTree.moveSubtitle'
+      : 'dialogs.folderTree.copySubtitle';
   }
 
   onAction() {

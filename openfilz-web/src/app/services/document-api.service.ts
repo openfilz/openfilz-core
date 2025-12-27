@@ -3,11 +3,13 @@ import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { filter, map, Observable } from 'rxjs';
 import { Apollo, gql } from 'apollo-angular';
 import {
+  AncestorInfo,
   CopyRequest,
   CreateFolderRequest,
   DashboardStatistics,
   DeleteRequest,
   DocumentInfo,
+  DocumentPosition,
   ElementInfo,
   AuditLog,
   FolderResponse,
@@ -219,12 +221,11 @@ export class DocumentApiService {
       query: LIST_FOLDER_AND_COUNT_QUERY,
       variables: { request1, request2 }
     }).valueChanges.pipe(
-      map(result => {
-        return {
-          listFolder: result.data.listFolder,
-          count: result.data.count
-        };
-      })
+      filter(result => !result.loading),
+      map(result => ({
+        listFolder: result.data.listFolder,
+        count: result.data.count
+      }))
     );
 
   }
@@ -249,6 +250,7 @@ export class DocumentApiService {
       query: LIST_FOLDER_QUERY,
       variables: { request }
     }).valueChanges.pipe(
+      filter(result => !result.loading),
       map(result => result.data.listFolder)
     );
   }
@@ -276,12 +278,11 @@ export class DocumentApiService {
       query: LIST_FOLDER_AND_COUNT_QUERY,
       variables: { request1, request2 }
     }).valueChanges.pipe(
-      map(result => {
-        return {
-          listFolder: result.data.listFolder,
-          count: result.data.count
-        };
-      })
+      filter(result => !result.loading),
+      map(result => ({
+        listFolder: result.data.listFolder,
+        count: result.data.count
+      }))
     );
   }
 
@@ -306,12 +307,11 @@ export class DocumentApiService {
       query: LIST_FAVORITES_AND_COUNT_QUERY,
       variables: { request1, request2 }
     }).valueChanges.pipe(
-      map(result => {
-        return {
-          listFolder: result.data.listFavorites,
-          count: result.data.countFavorites
-        };
-      })
+      filter(result => !result.loading),
+      map(result => ({
+        listFolder: result.data.listFavorites,
+        count: result.data.countFavorites
+      }))
     );
   }
 
@@ -414,7 +414,7 @@ export class DocumentApiService {
     });
   }
 
-  uploadMultipleDocuments(files: File[], parentFolderId?: string, allowDuplicateFileNames?: boolean, metadata?: { [key: string]: any }): Observable<UploadResponse> {
+  uploadMultipleDocuments(files: File[], parentFolderId?: string, allowDuplicateFileNames?: boolean, metadata?: { [key: string]: any }): Observable<UploadResponse[]> {
     const formData = new FormData();
     const parametersByFilename: MultipleUploadFileParameter[] = [];
     files.forEach(file => {
@@ -437,9 +437,18 @@ export class DocumentApiService {
       params = params.set('allowDuplicateFileNames', allowDuplicateFileNames.toString());
     }
 
-    return this.http.post<UploadResponse>(`${this.baseUrl}/documents/upload-multiple`, formData, {
+    return this.http.post<UploadResponse[]>(`${this.baseUrl}/documents/upload-multiple`, formData, {
       headers: this.getMultipartHeaders(),
       params
+    });
+  }
+
+  replaceDocumentContent(documentId: string, file: File): Observable<ElementInfo> {
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+
+    return this.http.put<ElementInfo>(`${this.baseUrl}/documents/${documentId}/replace-content`, formData, {
+      headers: this.getMultipartHeaders()
     });
   }
 
@@ -478,7 +487,8 @@ export class DocumentApiService {
       query: RECENT_FILES_QUERY,
       variables: { request }
     }).valueChanges.pipe(
-      map(result => result.data.listFolder)
+      filter(result => !result.loading),
+      map(result => result.data?.listFolder ?? [])
     );
   }
 
@@ -589,6 +599,7 @@ export class DocumentApiService {
       query: SEARCH_DOCUMENTS_QUERY,
       variables: { query, filters: filterInputs, sort, page, size }
     }).valueChanges.pipe(
+      filter(result => !result.loading),
       map(result => result.data.searchDocuments)
     );
   }
@@ -612,6 +623,27 @@ export class DocumentApiService {
       jsonMetadata[meta.key] = meta.value;
     });
     return jsonMetadata;
+  }
+
+  // Navigation operations for search suggestions
+  getDocumentAncestors(documentId: string): Observable<AncestorInfo[]> {
+    return this.http.get<AncestorInfo[]>(`${this.baseUrl}/documents/${documentId}/ancestors`, {
+      headers: this.getHeaders()
+    });
+  }
+
+  getDocumentPosition(
+    documentId: string,
+    sortBy: string = 'name',
+    sortOrder: 'ASC' | 'DESC' = 'ASC'
+  ): Observable<DocumentPosition> {
+    const params = new HttpParams()
+      .set('sortBy', sortBy)
+      .set('sortOrder', sortOrder);
+    return this.http.get<DocumentPosition>(`${this.baseUrl}/documents/${documentId}/position`, {
+      headers: this.getHeaders(),
+      params
+    });
   }
 
 }

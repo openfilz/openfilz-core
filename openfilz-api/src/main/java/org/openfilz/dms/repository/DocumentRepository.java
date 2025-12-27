@@ -14,10 +14,6 @@ public interface DocumentRepository extends ReactiveCrudRepository<Document, UUI
 
     Mono<Document> findByIdAndType(UUID id, DocumentType documentType);
 
-    Mono<Boolean> existsByNameAndParentIdIsNull(String name);
-
-    Mono<Boolean> existsByNameAndParentId(String name, UUID parentId);
-
     Mono<Long> countDocumentByParentIdIsNullAndActiveIsTrue();
 
     Mono<Long> countDocumentByParentIdEqualsAndActiveIsTrue(UUID parentId);
@@ -25,4 +21,8 @@ public interface DocumentRepository extends ReactiveCrudRepository<Document, UUI
     Mono<Boolean> existsByIdAndTypeAndActive(UUID id, DocumentType type, boolean active);
 
     Mono<Document> findByIdAndActive(UUID documentId, boolean active);
+
+    Mono<Boolean> existsByNameAndParentIdIsNullAndActiveIsTrue(String name);
+
+    Mono<Boolean> existsByNameAndParentIdAndActiveIsTrue(String name, UUID parentId);
 }

@@ -44,7 +44,9 @@
           (download)="onDownloadItem($event)"
           (move)="onMoveItem($event)"
           (copy)="onCopyItem($event)"
-          (delete)="onDeleteItem($event)">
+          (delete)="onDeleteItem($event)"
+          (toggleFavorite)="onToggleFavorite($event)"
+          (viewProperties)="onViewProperties($event)">
         </app-file-grid>
       }
       @if(viewMode === 'list' && items.length > 0) {
@@ -61,7 +63,9 @@
           (download)="onDownloadItem($event)"
           (move)="onMoveItem($event)"
           (copy)="onCopyItem($event)"
-          (delete)="onDeleteItem($event)">
+          (delete)="onDeleteItem($event)"
+          (toggleFavorite)="onToggleFavorite($event)"
+          (viewProperties)="onViewProperties($event)">
         </app-file-list>
       }
     } @else {
@@ -72,4 +76,12 @@
       </div>
     }
   </main>
+
+  <!-- Metadata Panel -->
+  <app-metadata-panel
+    [documentId]="selectedDocumentForMetadata"
+    [isOpen]="metadataPanelOpen"
+    (closePanel)="closeMetadataPanel()"
+    (metadataSaved)="onMetadataSaved()">
+  </app-metadata-panel>
 </div>

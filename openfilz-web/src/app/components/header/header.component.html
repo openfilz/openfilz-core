@@ -1,9 +1,8 @@
 <div class="header">
-  <button class="mobile-menu-button"
-          (click)="onMobileMenuToggle()"
-          aria-label="Toggle mobile menu">
-    <mat-icon aria-hidden="true">menu</mat-icon>
-  </button>
+    <button class="mobile-menu-button" (click)="onMobileMenuToggle()"
+        [attr.aria-label]="'header.toggleMobileMenu' | translate">
+        <mat-icon aria-hidden="true">menu</mat-icon>
+    </button>
 
     <div class="header-left">
         <div class="search-box">
@@ -11,32 +10,30 @@
                 <circle cx="11" cy="11" r="8"></circle>
                 <path d="m21 21-4.35-4.35"></path>
             </svg>
-            <input type="text" placeholder="Type anything to search" [(ngModel)]="searchQuery" (input)="onSearchInput()"
-                (keyup.enter)="onSearch()"
-    [class.has-active-filters]="hasActiveFilters()">
+            <input type="text" [placeholder]="'header.searchPlaceholder' | translate" [(ngModel)]="searchQuery"
+                (input)="onSearchInput()" (keyup.enter)="onSearch()" [class.has-active-filters]="hasActiveFilters()">
 
-            <button class="filter-button"
-                  [class.active]="showFilters || hasActiveFilters()"
-                  (click)="toggleFilters()"
-                  matTooltip="Search filters"
-                  aria-label="Toggle search filters">
-            <mat-icon aria-hidden="true">tune</mat-icon>
-            @if (hasActiveFilters()) {
-              <span class="filter-badge" aria-label="Active filters"></span>
-            }
-          </button>
+            <button class="filter-button" [class.active]="showFilters || hasActiveFilters()" (click)="toggleFilters()"
+                [matTooltip]="'header.searchFilters' | translate"
+                [attr.aria-label]="'header.searchFilters' | translate">
+                <mat-icon aria-hidden="true">tune</mat-icon>
+                @if (hasActiveFilters()) {
+                <span class="filter-badge" [attr.aria-label]="'header.activeFilters' | translate"></span>
+                }
+            </button>
 
             <!-- Suggestions Dropdown -->
             @if (suggestions.length > 0) {
             <ul class="suggestions-list">
                 @for (suggestion of suggestions; track $index) {
-                <li class="suggestion-info" (click)="selectSuggestion(suggestion.id)">
+                <li class="suggestion-info" (click)="selectSuggestion(suggestion)">
                     <i class="suggestion-icon" [ngClass]="getIconForExtension(suggestion.ext)"></i>
                     <span class="suggestion-text">{{ suggestion.s }}</span>
                     <div class="suggestion-actions">
-                        <i class="fa-solid fa-download" title="Download" (click)="onDownload(suggestion, $event)"></i>
-                        <i class="fa-solid fa-arrow-up-right-from-square" title="Open"
+                        <i class="fa-solid fa-eye" [title]="'common.view' | translate"
                             (click)="onOpen(suggestion, $event)"></i>
+                        <i class="fa-solid fa-download" [title]="'common.download' | translate"
+                            (click)="onDownload(suggestion, $event)"></i>
                     </div>
                 </li>
                 }
@@ -50,6 +47,22 @@
         </div>
     </div>
     <div class="header-right">
+        <!-- Language Selector -->
+        <button mat-icon-button [matMenuTriggerFor]="languageMenu" class="language-selector"
+            [attr.aria-label]="'header.changeLanguage' | translate" [matTooltip]="'header.changeLanguage' | translate">
+            <mat-icon>language</mat-icon>
+        </button>
+        <mat-menu #languageMenu="matMenu" class="language-menu">
+            @for (lang of availableLanguages; track lang.code) {
+            <button mat-menu-item (click)="switchLanguage(lang)" [class.active]="lang.code === currentLanguage.code">
+                <span class="lang-name">{{ lang.name }}</span>
+                @if (lang.code === currentLanguage.code) {
+                <mat-icon class="check-icon">check</mat-icon>
+                }
+            </button>
+            }
+        </mat-menu>
+
         <div class="avatar" (click)="navigateToSettings()" style="cursor: pointer;">{{ userInitials }}</div>
     </div>
 </div>

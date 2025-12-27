@@ -6,7 +6,9 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.dto.request.SearchByMetadataRequest;
+import org.openfilz.dms.dto.response.AncestorInfo;
 import org.openfilz.dms.dto.response.ChildElementInfo;
+import org.openfilz.dms.dto.response.DocumentPosition;
 import org.openfilz.dms.dto.response.FolderElementInfo;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.entity.SqlColumnMapping;
@@ -299,7 +301,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
 
     @Override
     public Mono<Boolean> existsByNameAndParentId(String name, UUID parentId) {
-        return parentId == null ? documentRepository.existsByNameAndParentIdIsNull(name) : documentRepository.existsByNameAndParentId(name, parentId);
+        return parentId == null ? documentRepository.existsByNameAndParentIdIsNullAndActiveIsTrue(name) : documentRepository.existsByNameAndParentIdAndActiveIsTrue(name, parentId);
     }
 
     @Override
@@ -335,5 +337,79 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
     @Override
     public Mono<Void> delete(Document document) {
         return documentRepository.delete(document);
+    }
+
+    @Override
+    public Flux<AncestorInfo> getAncestors(UUID documentId) {
+        String sql = """
+            WITH RECURSIVE ancestors AS (
+                SELECT id, name, type, parent_id, 1 as depth
+                FROM documents
+                WHERE id = (SELECT parent_id FROM documents WHERE id = :documentId AND active = true)
+                  AND active = true
+                UNION ALL
+                SELECT d.id, d.name, d.type, d.parent_id, a.depth + 1
+                FROM documents d
+                JOIN ancestors a ON d.id = a.parent_id
+                WHERE d.active = true
+            )
+            SELECT id, name, type FROM ancestors
+            ORDER BY depth DESC
+            """;
+        return databaseClient.sql(sql)
+                .bind("documentId", documentId)
+                .map(row -> new AncestorInfo(
+                        row.get(ID, UUID.class),
+                        row.get(NAME, String.class),
+                        row.get(TYPE, String.class)
+                ))
+                .all();
+    }
+
+    @Override
+    public Mono<DocumentPosition> getDocumentPosition(UUID documentId, String sortBy, String sortOrder) {
+        // Validate and sanitize sort parameters to prevent SQL injection
+        String safeSortBy = switch (sortBy != null ? sortBy.toLowerCase() : "name") {
+            case "name" -> "name";
+            case "updated_at", "updatedat" -> "updated_at";
+            case "created_at", "createdat" -> "created_at";
+            case "size" -> "size";
+            case "type" -> "type";
+            default -> "name";
+        };
+        String safeSortOrder = "DESC".equalsIgnoreCase(sortOrder) ? "DESC" : "ASC";
+
+        String sql = String.format("""
+            WITH target_doc AS (
+                SELECT id, parent_id FROM documents WHERE id = :documentId AND active = true
+            ),
+            folder_items AS (
+                SELECT
+                    id,
+                    ROW_NUMBER() OVER (
+                        ORDER BY
+                            CASE WHEN type = 'FOLDER' THEN 0 ELSE 1 END,
+                            %s %s
+                    ) - 1 as position
+                FROM documents
+                WHERE (parent_id = (SELECT parent_id FROM target_doc) OR (parent_id IS NULL AND (SELECT parent_id FROM target_doc) IS NULL))
+                  AND active = true
+            )
+            SELECT
+                :documentId as document_id,
+                (SELECT parent_id FROM target_doc) as parent_id,
+                (SELECT position FROM folder_items WHERE id = :documentId) as position,
+                (SELECT COUNT(*) FROM folder_items) as total_items
+            """, safeSortBy, safeSortOrder);
+
+        return databaseClient.sql(sql)
+                .bind("documentId", documentId)
+                .map(row -> new DocumentPosition(
+                        row.get("document_id", UUID.class),
+                        row.get("parent_id", UUID.class),
+                        row.get("position", Long.class),
+                        row.get("total_items", Long.class)
+                ))
+                .one();
     }
 }

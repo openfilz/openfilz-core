@@ -3,11 +3,12 @@ import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { ThemeService, Theme } from '../../services/theme.service';
 import { OidcSecurityService } from 'angular-auth-oidc-client';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [CommonModule, MatIconModule],
+  imports: [CommonModule, MatIconModule, TranslatePipe],
   templateUrl: './settings.component.html',
   styleUrls: ['./settings.component.css']
 })
@@ -18,6 +19,7 @@ export class SettingsComponent implements OnInit {
 
   private themeService = inject(ThemeService);
   private oidcSecurityService = inject(OidcSecurityService);
+  private translate = inject(TranslateService);
 
   constructor() { }
 
@@ -30,7 +32,9 @@ export class SettingsComponent implements OnInit {
     this.oidcSecurityService.userData$.subscribe((result: any) => {
       const userData = result.userData || result; // Handle both wrapper and direct object
       if (userData) {
-        this.firstName = userData.given_name || userData.name || 'Openfilz User';
+        this.firstName = userData.given_name || userData.name || this.translate.instant('common.user');
+      } else {
+        this.firstName = this.translate.instant('common.user');
       }
     });
   }

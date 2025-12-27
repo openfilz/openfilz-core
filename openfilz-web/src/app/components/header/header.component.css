@@ -11,11 +11,19 @@
     margin-bottom: 0;
     position: fixed;
     top: 0;
-    left: 240px; /* Sidebar width */
+    left: 240px;
+    /* Sidebar width */
     right: 0;
     transition: left 0.3s ease;
-    overflow: visible; /* Ensure suggestions are not clipped */
+    overflow: visible;
+    /* Ensure suggestions are not clipped */
     gap: 12px;
+}
+
+:host-context([dir="rtl"]) .header {
+    left: 0;
+    right: 240px;
+    transition: right 0.3s ease;
 }
 
 .mobile-menu-button {
@@ -53,7 +61,8 @@
     display: flex;
     align-items: center;
     gap: 16px;
-    flex: 1 1 auto; /* Allow to grow and shrink but with a base width */
+    flex: 1 1 auto;
+    /* Allow to grow and shrink but with a base width */
 }
 
 .search-box {
@@ -66,9 +75,12 @@
     display: flex;
     align-self: center;
     width: auto;
-    min-width: 200px; /* Ensure minimum width for visibility */
-    margin: 0 16px; /* Add some side margins */
-    overflow: visible; /* Ensure suggestions are not clipped */
+    min-width: 200px;
+    /* Ensure minimum width for visibility */
+    margin: 0 16px;
+    /* Add some side margins */
+    overflow: visible;
+    /* Ensure suggestions are not clipped */
     gap: 0px;
 }
 
@@ -168,13 +180,10 @@
     display: flex;
     align-items: center;
     cursor: pointer;
-    flex-grow: 1; /* Allow this section to take up available space */
-    min-width: 0; /* Important for flexbox to allow text to truncate */
-}
-
-.suggestion-info:hover {
-    /* You can add a subtle hover effect here if desired */
-    text-decoration: underline;
+    flex-grow: 1;
+    /* Allow this section to take up available space */
+    min-width: 0;
+    /* Important for flexbox to allow text to truncate */
 }
 
 .suggestions-list {
@@ -217,7 +226,8 @@
     align-items: center;
     cursor: pointer;
     /* REMOVED: flex-grow: 1; */
-    min-width: 0; /* Still good practice for text truncation */
+    min-width: 0;
+    /* Still good practice for text truncation */
 }
 
 .suggestion-info:hover .suggestion-text {
@@ -226,9 +236,9 @@
 
 .suggestion-icon {
     margin-right: 12px;
-  color: #5f6368;
-  display: flex;
-  justify-content: center;
+    color: #5f6368;
+    display: flex;
+    justify-content: center;
 }
 
 .suggestion-text {
@@ -241,8 +251,10 @@
 .suggestion-actions {
     display: flex;
     align-items: center;
-    padding-left: 15px; /* Keeps a safe distance from the text */
-    margin-left: auto;  /* THIS IS THE MAGIC KEY! Pushes this block to the far right. */
+    padding-left: 15px;
+    /* Keeps a safe distance from the text */
+    margin-left: auto;
+    /* THIS IS THE MAGIC KEY! Pushes this block to the far right. */
 }
 
 /* 4. Action icon styling remains the same */
@@ -252,6 +264,7 @@
     color: #555;
     transition: color 0.2s ease-in-out;
     padding: 5px;
+    text-decoration: none;
 }
 
 .suggestion-actions i:hover {
@@ -263,12 +276,29 @@
 }
 
 /* Bonus: Add some color to the icons! */
-.suggestion-icon.fa-folder { color: #f9ca24; }
-.suggestion-icon.fa-file-pdf { color: #e74c3c; }
-.suggestion-icon.fa-file-word { color: #2980b9; }
-.suggestion-icon.fa-file-excel { color: #27ae60; }
-.suggestion-icon.fa-file-image { color: #8e44ad; }
-.suggestion-icon.fa-file { color: #95a5a6; }
+.suggestion-icon.fa-folder {
+    color: #f9ca24;
+}
+
+.suggestion-icon.fa-file-pdf {
+    color: #e74c3c;
+}
+
+.suggestion-icon.fa-file-word {
+    color: #2980b9;
+}
+
+.suggestion-icon.fa-file-excel {
+    color: #27ae60;
+}
+
+.suggestion-icon.fa-file-image {
+    color: #8e44ad;
+}
+
+.suggestion-icon.fa-file {
+    color: #95a5a6;
+}
 
 
 
@@ -276,7 +306,8 @@
     display: flex;
     align-items: center;
     gap: 16px;
-    flex: 0 0 auto; /* Don't grow, fixed width */
+    flex: 0 0 auto;
+    /* Don't grow, fixed width */
 }
 
 .avatar {
@@ -435,8 +466,57 @@
 }
 
 app-search-filters {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 1002;
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 1002;
+}
+
+/* Language Selector Styles */
+.language-selector {
+    color: var(--text-secondary);
+    transition: all 200ms ease;
+}
+
+.language-selector:hover {
+    color: var(--primary);
+    background-color: var(--bg-tertiary);
+}
+
+.language-selector mat-icon {
+    font-size: 22px;
+    width: 22px;
+    height: 22px;
+}
+
+/* Language menu item styles */
+::ng-deep .language-menu.mat-mdc-menu-panel {
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-md);
+}
+
+::ng-deep .language-menu .mat-mdc-menu-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    min-width: 140px;
+}
+
+::ng-deep .language-menu .mat-mdc-menu-item .lang-name {
+    flex: 1;
+    font-size: 14px;
+}
+
+::ng-deep .language-menu .mat-mdc-menu-item .check-icon {
+    color: var(--primary);
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    margin-left: 8px;
+}
+
+::ng-deep .language-menu .mat-mdc-menu-item.active {
+    background-color: rgba(99, 102, 241, 0.08);
 }

@@ -1,12 +1,13 @@
 import { Component, ElementRef, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
-import { filter, Subscription, take } from 'rxjs';
+import { filter, forkJoin, Subscription, take } from 'rxjs';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatIcon, MatIconModule } from "@angular/material/icon";
 import { MatButtonModule } from "@angular/material/button";
+import { TranslatePipe } from "@ngx-translate/core";
 
 import { FileGridComponent } from '../file-grid/file-grid.component';
 import { FileListComponent } from '../file-list/file-list.component';
@@ -17,6 +18,7 @@ import { RenameDialogComponent, RenameDialogData } from '../../dialogs/rename-di
 import { FolderTreeDialogComponent } from '../../dialogs/folder-tree-dialog/folder-tree-dialog.component';
 import { FileViewerDialogComponent } from '../../dialogs/file-viewer-dialog/file-viewer-dialog.component';
 import { KeyboardShortcutsDialogComponent } from '../../dialogs/keyboard-shortcuts-dialog/keyboard-shortcuts-dialog.component';
+import { ConfirmReplaceDialogComponent, ConfirmReplaceDialogData, ConfirmReplaceDialogResult } from '../../dialogs/confirm-replace-dialog/confirm-replace-dialog.component';
 import { FileOperationsComponent } from '../base/file-operations.component';
 
 import { DocumentApiService } from '../../services/document-api.service';
@@ -27,7 +29,9 @@ import { UserPreferencesService } from '../../services/user-preferences.service'
 import { KeyboardShortcutsService } from '../../services/keyboard-shortcuts.service';
 
 import {
+  AncestorInfo,
   CreateFolderRequest,
+  DocumentPosition,
   ElementInfo,
   FileItem,
   ListFolderAndCountResponse,
@@ -69,7 +73,8 @@ import { AppConfig } from '../../config/app.config';
         (pageSizeChange)="onPageSizeChange($event)"
         [sortBy]="sortBy"
         [sortOrder]="sortOrder"
-        (sortChange)="onSortChange($event)">
+        (sortChange)="onSortChange($event)"
+      >
 
         <!-- Breadcrumb projected into toolbar for mobile visibility -->
         <div toolbarBreadcrumb class="toolbar-breadcrumb-compact">
@@ -105,8 +110,8 @@ import { AppConfig } from '../../config/app.config';
               <div class="empty-state">
                   <div class="empty-content">
                       <mat-icon class="empty-icon">folder_open</mat-icon>
-                      <h3>This folder is empty</h3>
-                      <p>Drop files here or create a new folder to get started</p>
+                      <h3>{{ 'fileExplorer.emptyTitle' | translate }}</h3>
+                      <p>{{ 'fileExplorer.emptyMessage' | translate }}</p>
                   </div>
               </div>
           }
@@ -172,7 +177,6 @@ import { AppConfig } from '../../config/app.config';
   styleUrls: ['./file-explorer.component.css'],
   standalone: true,
   imports: [
-    CommonModule,
     MatDialogModule,
     MatSnackBarModule,
     MatProgressSpinnerModule,
@@ -184,8 +188,9 @@ import { AppConfig } from '../../config/app.config';
     MetadataPanelComponent,
     MatIcon,
     DragDropDirective,
-    DownloadProgressComponent
-  ],
+    DownloadProgressComponent,
+    TranslatePipe
+],
 })
 export class FileExplorerComponent extends FileOperationsComponent implements OnInit, OnDestroy {
   showUploadZone = false;
@@ -200,6 +205,9 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
   // Click delay handling
   private clickTimeout: any = null;
   private readonly CLICK_DELAY = 250; // milliseconds
+
+  // Flag to skip navigation event when clearing query params
+  private skipNextNavigation = false;
 
   @ViewChild('fileInput') fileInput!: ElementRef;
 
@@ -218,7 +226,12 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
 
   private handleFolderIdChange(): void {
     const folderId = this.route.snapshot.queryParamMap.get('folderId');
-    if (folderId) {
+    const targetFileId = this.route.snapshot.queryParamMap.get('targetFileId');
+    const openViewer = this.route.snapshot.queryParamMap.get('openViewer') === 'true';
+
+    if (targetFileId) {
+      this.navigateToFile(targetFileId, openViewer);
+    } else if (folderId) {
       this.loadFolderById(folderId);
     } else {
       this.loadFolder();
@@ -368,6 +381,11 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
       // Filter for the NavigationEnd event
       filter(event => event instanceof NavigationEnd)
     ).subscribe(() => {
+      // Skip navigation if flag is set (when clearing query params)
+      if (this.skipNextNavigation) {
+        this.skipNextNavigation = false;
+        return;
+      }
       // Manually trigger the logic when navigation ends
       this.handleFolderIdChange();
     });
@@ -400,19 +418,36 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
 
   private loadFolderById(folderId: string) {
     this.loading = true;
-    this.documentApi.getDocumentInfo(folderId).subscribe({
-      next: (folderInfo) => {
-        const folderItem: FileItem = {
-          id: folderId,
-          name: folderInfo.name,
-          type: DocumentType.FOLDER,
-          size: folderInfo.size,
-          icon: this.fileIconService.getFileIcon(folderInfo.name, 'FOLDER'),
-          selected: false
-        };
-        this.breadcrumbTrail = [folderItem];
-        this.loadFolder(folderItem, true);
 
+    // Fetch folder info and ancestors in parallel
+    forkJoin({
+      folderInfo: this.documentApi.getDocumentInfo(folderId),
+      ancestors: this.documentApi.getDocumentAncestors(folderId)
+    }).subscribe({
+      next: ({ folderInfo, ancestors }) => {
+        // Build breadcrumb trail from ancestors + current folder
+        this.breadcrumbTrail = [
+          ...ancestors.map(ancestor => ({
+            id: ancestor.id,
+            name: ancestor.name,
+            type: DocumentType.FOLDER,
+            selected: false,
+            icon: this.fileIconService.getFileIcon(ancestor.name, 'FOLDER')
+          } as FileItem)),
+          {
+            id: folderId,
+            name: folderInfo.name,
+            type: DocumentType.FOLDER,
+            size: folderInfo.size,
+            icon: this.fileIconService.getFileIcon(folderInfo.name, 'FOLDER'),
+            selected: false
+          }
+        ];
+
+        this.loadFolder(this.breadcrumbTrail[this.breadcrumbTrail.length - 1], true);
+
+        // Set flag to skip next navigation event when clearing query params
+        this.skipNextNavigation = true;
         this.router.navigate([], {
           relativeTo: this.route,
           queryParams: { folderId: null },
@@ -426,6 +461,121 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
         this.loadFolder();
       }
     });
+  }
+
+  private navigateToFile(fileId: string, openViewer: boolean = false): void {
+    this.loading = true;
+
+    // Fetch file info, ancestors, and position in parallel
+    forkJoin({
+      documentInfo: this.documentApi.getDocumentInfo(fileId),
+      ancestors: this.documentApi.getDocumentAncestors(fileId),
+      position: this.documentApi.getDocumentPosition(fileId, this.sortBy, this.sortOrder)
+    }).subscribe({
+      next: ({ documentInfo, ancestors, position }) => {
+        // Build breadcrumb trail from ancestors (this is the path to the file's parent folder)
+        this.breadcrumbTrail = ancestors.map(ancestor => ({
+          id: ancestor.id,
+          name: ancestor.name,
+          type: DocumentType.FOLDER,
+          selected: false,
+          icon: this.fileIconService.getFileIcon(ancestor.name, 'FOLDER')
+        } as FileItem));
+
+        // Calculate target page (0-indexed)
+        const targetPage = Math.floor(position.position / this.pageSize);
+        this.pageIndex = targetPage;
+
+        // Set current folder to the file's parent
+        if (position.parentId) {
+          const parentFolder = this.breadcrumbTrail[this.breadcrumbTrail.length - 1];
+          this.currentFolder = parentFolder;
+        } else {
+          this.currentFolder = undefined;
+        }
+
+        // Update breadcrumbs
+        this.updateBreadcrumbs();
+
+        // Set total items
+        this.totalItems = position.totalItems;
+
+        // Load the correct page and focus on the file
+        this.loadItemsAndFocusFile(fileId, openViewer, documentInfo);
+
+        // Set flag to skip next navigation event when clearing query params
+        this.skipNextNavigation = true;
+        this.router.navigate([], {
+          relativeTo: this.route,
+          queryParams: { targetFileId: null, openViewer: null },
+          queryParamsHandling: 'merge',
+        });
+      },
+      error: (err) => {
+        this.snackBar.open('Could not navigate to the file.', 'Close', { duration: 3000 });
+        this.loading = false;
+        this.router.navigate(['/my-folder']);
+        this.loadFolder();
+      }
+    });
+  }
+
+  private loadItemsAndFocusFile(targetFileId: string, openViewer: boolean = false, documentInfo?: any): void {
+    this.documentApi.listFolder(
+      this.currentFolder?.id,
+      this.pageIndex + 1,
+      this.pageSize,
+      this.currentFilters,
+      this.sortBy,
+      this.sortOrder
+    ).subscribe({
+      next: (response: ElementInfo[]) => {
+        this.populateFolderContents(response);
+
+        // Find and focus the target file
+        const targetIndex = this.items.findIndex(item => item.id === targetFileId);
+        if (targetIndex !== -1) {
+          // Select the file
+          this.items[targetIndex].selected = true;
+
+          // Focus the file item (scroll into view)
+          this.focusFileItem(targetFileId);
+
+          // Open file viewer or metadata panel after a short delay
+          setTimeout(() => {
+            if (openViewer) {
+              // Open file viewer dialog
+              const item = this.items[targetIndex];
+              this.openFileViewer(item);
+            } else {
+              // Open metadata panel
+              this.openMetadataPanel(targetFileId);
+            }
+          }, 300);
+        }
+      },
+      error: (error) => {
+          console.log(error);
+        this.snackBar.open('Failed to load folder contents', 'Close', { duration: 3000 });
+        this.loading = false;
+      }
+    });
+  }
+
+  private focusFileItem(fileId: string): void {
+    // Use setTimeout to ensure DOM is rendered
+    setTimeout(() => {
+      const element = document.querySelector(`[data-file-id="${fileId}"]`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        element.classList.add('highlighted');
+
+        // Remove highlight after animation
+        setTimeout(() => {
+          element.classList.remove('highlighted');
+        }, 2000);
+      }
+    }, 100);
   }
 
   loadFolder(folder?: FileItem, fromBreadcrumb: boolean = false, appendBreadCrumb: boolean = false) {
@@ -449,6 +599,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
         this.populateFolderContents(listAndCount.listFolder);
       },
       error: (error) => {
+          console.log(error);
         this.snackBar.open('Failed to load folder contents', 'Close', { duration: 3000 });
         this.loading = false;
       }
@@ -462,6 +613,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
         this.populateFolderContents(response);
       },
       error: (error) => {
+          console.log(error);
         this.snackBar.open('Failed to load folder contents', 'Close', { duration: 3000 });
         this.loading = false;
       }
@@ -565,14 +717,64 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
           parentId: this.currentFolder?.id
         };
         this.documentApi.createFolder(request).subscribe({
-          next: () => {
+          next: (response) => {
             this.snackBar.open('Folder created successfully', 'Close', { duration: 3000 });
-            this.loadFolder(this.currentFolder);
+            this.navigateToNewFolder(response.id);
           },
           error: () => {
             this.snackBar.open('Failed to create folder', 'Close', { duration: 3000 });
           }
         });
+      }
+    });
+  }
+
+  private navigateToNewFolder(folderId: string): void {
+    this.loading = true;
+
+    // Get the position of the new folder based on current sorting
+    this.documentApi.getDocumentPosition(folderId, this.sortBy, this.sortOrder).subscribe({
+      next: (position) => {
+        // Calculate target page (0-indexed)
+        const targetPage = Math.floor(position.position / this.pageSize);
+        this.pageIndex = targetPage;
+
+        // Load items on the target page and focus the new folder
+        this.loadItemsAndFocusFolder(folderId);
+      },
+      error: () => {
+        // Fallback: just reload the current folder
+        this.loadFolder(this.currentFolder);
+      }
+    });
+  }
+
+  private loadItemsAndFocusFolder(folderId: string): void {
+    this.documentApi.listFolder(
+      this.currentFolder?.id,
+      this.pageIndex + 1,
+      this.pageSize,
+      this.currentFilters,
+      this.sortBy,
+      this.sortOrder
+    ).subscribe({
+      next: (response: ElementInfo[]) => {
+        this.populateFolderContents(response);
+
+        // Find and focus the target folder
+        const targetIndex = this.items.findIndex(item => item.id === folderId);
+        if (targetIndex !== -1) {
+          // Select the folder
+          this.items[targetIndex].selected = true;
+
+          // Focus the folder item (scroll into view)
+          this.focusFileItem(folderId);
+        }
+      },
+      error: (error) => {
+          console.log(error);
+        this.snackBar.open('Failed to load folder contents', 'Close', { duration: 3000 });
+        this.loading = false;
       }
     });
   }
@@ -630,7 +832,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
     const dialogRef = this.dialog.open(FolderTreeDialogComponent, {
       width: '700px',
       data: {
-        title: 'Move item',
+        title: 'dialogs.folderTree.moveItem',
         actionType: 'move',
         currentFolderId: this.currentFolder?.id,
         excludeIds: [item.id]
@@ -648,7 +850,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
     const dialogRef = this.dialog.open(FolderTreeDialogComponent, {
       width: '700px',
       data: {
-        title: 'Copy item',
+        title: 'dialogs.folderTree.copyItem',
         actionType: 'copy',
         currentFolderId: this.currentFolder?.id,
         excludeIds: []
@@ -706,10 +908,12 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
   override onMoveSelected() {
     const selectedItems = this.selectedItems;
     if (selectedItems.length > 0) {
+      const isSingle = selectedItems.length === 1;
       const dialogRef = this.dialog.open(FolderTreeDialogComponent, {
         width: '700px',
         data: {
-          title: `Move ${selectedItems.length} item${selectedItems.length > 1 ? 's' : ''}`,
+          title: isSingle ? 'dialogs.folderTree.moveItem' : 'dialogs.folderTree.moveItems',
+          titleParams: isSingle ? undefined : { count: selectedItems.length },
           actionType: 'move',
           currentFolderId: this.currentFolder?.id,
           excludeIds: selectedItems.map(item => item.id)
@@ -727,10 +931,12 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
   override onCopySelected() {
     const selectedItems = this.selectedItems;
     if (selectedItems.length > 0) {
+      const isSingle = selectedItems.length === 1;
       const dialogRef = this.dialog.open(FolderTreeDialogComponent, {
         width: '700px',
         data: {
-          title: `Copy ${selectedItems.length} item${selectedItems.length > 1 ? 's' : ''}`,
+          title: isSingle ? 'dialogs.folderTree.copyItem' : 'dialogs.folderTree.copyItems',
+          titleParams: isSingle ? undefined : { count: selectedItems.length },
           actionType: 'copy',
           currentFolderId: this.currentFolder?.id,
           excludeIds: []
@@ -987,18 +1193,6 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
       false // allowDuplicates = false by default
     ).subscribe({
       next: (response) => {
-        // Response contains info about uploaded files
-        this.snackBar.open('Upload successful', 'Close', { duration: 3000 });
-        this.reloadData();
-      },
-      error: (error) => {
-        this.snackBar.dismiss();
-        const errorMessage = isSingleFile
-          ? `Failed to upload ${singleFileName}`
-          : `Failed to upload ${fileArray.length} files`;
-        this.snackBar.open(errorMessage, 'Close', { duration: 5000 });
-      },
-      complete: () => {
         this.snackBar.dismiss();
 
         const successMessage = isSingleFile
@@ -1006,30 +1200,150 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
           : `${fileArray.length} files uploaded successfully`;
         this.snackBar.open(successMessage, 'Close', { duration: 3000 });
 
-        // Reload folder and open metadata panel for single file upload
-        if (isSingleFile && singleFileName) {
-          // Reload the folder first
-          this.documentApi.listFolder(this.currentFolder?.id, this.pageIndex + 1, this.pageSize).subscribe({
-            next: (response) => {
-              this.populateFolderContents(response);
+        // Navigate to the uploaded file
+        // For single file: focus and open metadata panel
+        // For multiple files: just navigate to the page of the last uploaded file
+        this.navigateToUploadedFile(response[response.length - 1].id, isSingleFile);
+      },
+      error: (error) => {
+        this.snackBar.dismiss();
 
-              // Find the uploaded file by name
-              const uploadedItem = this.items.find(item => item.name === singleFileName);
-              if (uploadedItem) {
-                // Open metadata panel after a short delay for smooth UX
-                setTimeout(() => {
-                  this.openMetadataPanel(uploadedItem.id);
-                }, 300);
-              }
-            },
-            error: () => {
-              this.loadFolder(this.currentFolder);
-            }
-          });
-        } else {
-          // For multiple files, just reload the folder
-          this.loadFolder(this.currentFolder);
+        // Check for 409 Conflict (duplicate file name)
+        if (error.status === 409 && isSingleFile && singleFileName) {
+          this.handleDuplicateFileUpload(fileArray[0], singleFileName);
+          return;
         }
+
+        const errorMessage = isSingleFile
+          ? `Failed to upload ${singleFileName}`
+          : `Failed to upload ${fileArray.length} files`;
+        this.snackBar.open(errorMessage, 'Close', { duration: 5000 });
+      }
+    });
+  }
+
+  /**
+   * Navigate to the page where the uploaded file is located.
+   * For single file upload: focus on the file and open metadata panel.
+   * For multiple files upload: just navigate to the page without focus/panel.
+   */
+  private navigateToUploadedFile(fileId: string, focusAndOpenPanel: boolean): void {
+    this.loading = true;
+
+    // Get the document position to find the correct page
+    this.documentApi.getDocumentPosition(fileId, this.sortBy, this.sortOrder).subscribe({
+      next: (position) => {
+        // Calculate target page (0-indexed)
+        const targetPage = Math.floor(position.position / this.pageSize);
+        this.pageIndex = targetPage;
+        this.totalItems = position.totalItems;
+
+        // Load the page and optionally focus the file
+        this.loadItemsAfterUpload(fileId, focusAndOpenPanel);
+      },
+      error: () => {
+        // Fallback: just reload the current folder
+        this.loadFolder(this.currentFolder);
+      }
+    });
+  }
+
+  /**
+   * Load items after upload and optionally focus on the uploaded file.
+   */
+  private loadItemsAfterUpload(targetFileId: string, focusAndOpenPanel: boolean): void {
+    this.documentApi.listFolder(
+      this.currentFolder?.id,
+      this.pageIndex + 1,
+      this.pageSize,
+      this.currentFilters,
+      this.sortBy,
+      this.sortOrder
+    ).subscribe({
+      next: (response: ElementInfo[]) => {
+        this.populateFolderContents(response);
+
+        if (focusAndOpenPanel) {
+          // Find and focus the target file (single file upload)
+          const targetIndex = this.items.findIndex(item => item.id === targetFileId);
+          if (targetIndex !== -1) {
+            // Select the file
+            this.items[targetIndex].selected = true;
+
+            // Focus the file item (scroll into view)
+            this.focusFileItem(targetFileId);
+
+            // Open metadata panel after a short delay
+            setTimeout(() => {
+              this.openMetadataPanel(targetFileId);
+            }, 300);
+          }
+        }
+        // For multiple files, just load the page without focus/panel
+      },
+      error: (error) => {
+        console.log(error);
+        this.snackBar.open('Failed to load folder contents', 'Close', { duration: 3000 });
+        this.loading = false;
+      }
+    });
+  }
+
+  private handleDuplicateFileUpload(file: File, fileName: string) {
+    // Find the existing document with the same name in current folder
+    const existingItem = this.items.find(item => item.name === fileName && item.type === 'FILE');
+
+    if (!existingItem) {
+      // Conflict is with a deleted/inactive file - retry upload with allowDuplicateFileNames=true
+      this.snackBar.open(`Uploading ${fileName}...`, undefined, { duration: undefined });
+      this.documentApi.uploadMultipleDocuments(
+        [file],
+        this.currentFolder?.id,
+        true // allowDuplicateFileNames = true to bypass conflict with deleted file
+      ).subscribe({
+        next: (response) => {
+          this.snackBar.dismiss();
+          this.snackBar.open(`${fileName} uploaded successfully`, 'Close', { duration: 3000 });
+          // Navigate to the uploaded file with focus and metadata panel
+          this.navigateToUploadedFile(response[response.length - 1].id, true);
+        },
+        error: () => {
+          this.snackBar.dismiss();
+          this.snackBar.open(`Failed to upload ${fileName}`, 'Close', { duration: 5000 });
+        }
+      });
+      return;
+    }
+
+    // Open confirmation dialog
+    const dialogData: ConfirmReplaceDialogData = {
+      fileName: fileName,
+      existingDocumentId: existingItem.id
+    };
+
+    const dialogRef = this.dialog.open(ConfirmReplaceDialogComponent, {
+      width: '450px',
+      data: dialogData,
+      disableClose: true
+    });
+
+    dialogRef.afterClosed().subscribe((result: ConfirmReplaceDialogResult | null) => {
+      if (result?.confirmed) {
+        // User confirmed - replace the document content
+        this.snackBar.open(`Replacing ${fileName}...`, undefined, { duration: undefined });
+
+        this.documentApi.replaceDocumentContent(result.existingDocumentId, file).subscribe({
+          next: () => {
+            this.snackBar.dismiss();
+            this.snackBar.open(`${fileName} replaced successfully`, 'Close', { duration: 3000 });
+            // Navigate to the replaced file with focus and metadata panel
+            this.navigateToUploadedFile(result.existingDocumentId, true);
+          },
+          error: (err) => {
+            this.snackBar.dismiss();
+            this.snackBar.open(`Failed to replace ${fileName}`, 'Close', { duration: 5000 });
+          }
+        });
       }
     });
   }

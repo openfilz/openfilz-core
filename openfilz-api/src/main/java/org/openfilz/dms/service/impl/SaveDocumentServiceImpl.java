@@ -1,6 +1,7 @@
 package org.openfilz.dms.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.r2dbc.postgresql.codec.Json;
 import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.dto.audit.ReplaceAudit;
 import org.openfilz.dms.dto.audit.UploadAudit;
@@ -12,6 +13,7 @@ import org.openfilz.dms.service.AuditService;
 import org.openfilz.dms.service.MetadataPostProcessor;
 import org.openfilz.dms.service.SaveDocumentService;
 import org.openfilz.dms.service.StorageService;
+import org.openfilz.dms.utils.ContentInfo;
 import org.openfilz.dms.utils.JsonUtils;
 import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -27,6 +29,7 @@ import java.util.function.Function;
 
 import static org.openfilz.dms.enums.AuditAction.REPLACE_DOCUMENT_CONTENT;
 import static org.openfilz.dms.enums.DocumentType.FILE;
+import static org.openfilz.dms.service.ChecksumService.HASH_SHA256_KEY;
 
 @Service
 @RequiredArgsConstructor
@@ -54,21 +57,21 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
         metadataPostProcessor.processDocument(document);
     }
 
-    protected Mono<Document> replaceFileContentAndSave(FilePart newFilePart, Long contentLength, Document document, String newStoragePath, String oldStoragePath) {
-        if(contentLength == null) {
+    protected Mono<Document> replaceFileContentAndSave(FilePart newFilePart, ContentInfo contentInfo, Document document, String newStoragePath, String oldStoragePath) {
+        if(contentInfo.length() == null) {
             return storageService.getFileLength(newStoragePath)
                     .flatMap(fileLength -> replaceDocumentInDB(newFilePart,
-                            newStoragePath, oldStoragePath, fileLength,document))
+                            newStoragePath, oldStoragePath, new ContentInfo(fileLength, contentInfo.checksum()), document))
                     .doOnSuccess(this::postProcessDocument);
         }
-        return replaceDocumentInDB(newFilePart, newStoragePath, oldStoragePath, contentLength,document)
+        return replaceDocumentInDB(newFilePart, newStoragePath, oldStoragePath, contentInfo, document)
                 .doOnSuccess(this::postProcessDocument);
     }
 
-    public Mono<Document> saveAndReplaceDocument(FilePart newFilePart, Long contentLength, Document document, String oldStoragePath) {
+    public Mono<Document> saveAndReplaceDocument(FilePart newFilePart, ContentInfo contentInfo, Document document, String oldStoragePath) {
         return storageService.saveFile(newFilePart)
                 .flatMap(newStoragePath ->
-                        replaceFileContentAndSave(newFilePart, contentLength,document, newStoragePath, oldStoragePath));
+                        replaceFileContentAndSave(newFilePart, contentInfo, document, newStoragePath, oldStoragePath));
     }
 
 
@@ -111,13 +114,13 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
 
 
 
-    protected Mono<Document> replaceDocumentInDB(FilePart newFilePart, String newStoragePath, String oldStoragePath, Long contentLength, Document document) {
+    protected Mono<Document> replaceDocumentInDB(FilePart newFilePart, String newStoragePath, String oldStoragePath, ContentInfo contentInfo, Document document) {
         return doSaveFile(username -> {
                     document.setStoragePath(newStoragePath);
                     document.setContentType(newFilePart.headers().getContentType() != null ? newFilePart.headers().getContentType().toString() : APPLICATION_OCTET_STREAM);
                     document.setUpdatedAt(OffsetDateTime.now());
                     document.setUpdatedBy(username);
-                    document.setSize(contentLength);
+                    document.setSize(contentInfo.length());
                     return documentDAO.update(document);
                 })
                 .flatMap(savedDoc -> {

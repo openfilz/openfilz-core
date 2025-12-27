@@ -5,5 +5,8 @@ export const environment = {
         authority: import.meta.env['NG_APP_AUTHENTICATION_AUTHORITY'],
         clientId: import.meta.env['NG_APP_AUTHENTICATION_CLIENT_ID'],
         enabled: import.meta.env['NG_APP_AUTHENTICATION_ENABLED'] === 'true'
+    },
+    onlyOffice: {
+        enabled: import.meta.env['NG_APP_ONLYOFFICE_ENABLED'] === 'true'
     }
 };

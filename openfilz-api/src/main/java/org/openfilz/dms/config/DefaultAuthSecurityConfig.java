@@ -2,7 +2,6 @@
 package org.openfilz.dms.config;
 
 import lombok.RequiredArgsConstructor;
-
 import org.openfilz.dms.security.SecurityService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -48,8 +47,16 @@ public class DefaultAuthSecurityConfig {
             "/swagger-ui/**",
             "/swagger-ui.html",
             "/webjars/swagger-ui/**",
-            // Actuator health
-            "/actuator/health/**"
+            // Actuator endpoints
+            "/actuator/**",
+            // GraphiQL
+            "/graphiql",
+            "/graphiql/**",
+            // OnlyOffice DocumentServer endpoints (handled by OnlyOfficeSecurityConfig)
+            // These are called by OnlyOffice server, not by authenticated users
+            "/api/v1/documents/*/onlyoffice-download",
+            "/api/v1/onlyoffice/callback/*"
+            // NOTE: /api/v1/onlyoffice/config/* uses OAuth2 (called by frontend)
     };
 
     @Bean

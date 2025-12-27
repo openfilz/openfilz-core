@@ -1,6 +1,6 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { CommonModule } from '@angular/common';
+
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
@@ -13,6 +13,7 @@ import { FileIconService } from '../../services/file-icon.service';
 import { FileListComponent } from '../file-list/file-list.component';
 import { FileGridComponent } from '../file-grid/file-grid.component';
 import { ToolbarComponent } from '../toolbar/toolbar.component';
+import { MetadataPanelComponent } from '../metadata-panel/metadata-panel.component';
 import { FileOperationsComponent } from '../base/file-operations.component';
 import { DocumentSearchInfo, DocumentType, FileItem } from '../../models/document.models';
 
@@ -22,20 +23,22 @@ import { UserPreferencesService } from '../../services/user-preferences.service'
   selector: 'app-search-results',
   standalone: true,
   imports: [
-    CommonModule,
     FileListComponent,
     FileGridComponent,
     ToolbarComponent,
+    MetadataPanelComponent,
     MatProgressSpinnerModule,
     MatDialogModule,
     MatSnackBarModule,
     MatIconModule
-  ],
+],
   templateUrl: './search-results.component.html',
   styleUrls: ['./search-results.component.css']
 })
 export class SearchResultsComponent extends FileOperationsComponent implements OnInit {
   searchQuery = '';
+  metadataPanelOpen: boolean = false;
+  selectedDocumentForMetadata?: string;
 
   private route = inject(ActivatedRoute);
   private searchService = inject(SearchService);
@@ -101,5 +104,36 @@ export class SearchResultsComponent extends FileOperationsComponent implements O
       icon: this.fileIconService.getFileIcon(doc.name, fileType),
       selected: false
     };
+  }
+
+  openMetadataPanel(documentId: string) {
+    this.selectedDocumentForMetadata = documentId;
+    this.metadataPanelOpen = true;
+  }
+
+  closeMetadataPanel() {
+    this.metadataPanelOpen = false;
+    this.selectedDocumentForMetadata = undefined;
+  }
+
+  onMetadataSaved() {
+    this.reloadData();
+  }
+
+  onViewProperties(item: FileItem) {
+    this.openMetadataPanel(item.id);
+  }
+
+  onToggleFavorite(item: FileItem) {
+    const action = item.favorite ? 'remove from' : 'add to';
+    this.documentApi.toggleFavorite(item.id).subscribe({
+      next: () => {
+        item.favorite = !item.favorite;
+        this.snackBar.open(`Successfully ${action === 'add to' ? 'added to' : 'removed from'} favorites`, 'Close', { duration: 3000 });
+      },
+      error: () => {
+        this.snackBar.open(`Failed to ${action} favorites`, 'Close', { duration: 3000 });
+      }
+    });
   }
 }

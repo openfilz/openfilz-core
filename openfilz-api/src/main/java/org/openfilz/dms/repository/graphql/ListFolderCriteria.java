@@ -8,7 +8,8 @@ import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Component;
 
 import static org.openfilz.dms.entity.SqlColumnMapping.*;
-import static org.openfilz.dms.utils.SqlUtils.*;
+import static org.openfilz.dms.utils.SqlUtils.AND;
+import static org.openfilz.dms.utils.SqlUtils.WHERE;
 
 @RequiredArgsConstructor
 @Component("defaultListFolderCriteria")

@@ -55,7 +55,7 @@ public class FileSystemChecksumService implements ChecksumService {
      * @return Mono containing the hex-encoded SHA-256 checksum
      */
     public Mono<String> calculateSha256Checksum(Path filePath) {
-        return Mono.fromCallable(() -> MessageDigest.getInstance("SHA-256"))
+        return Mono.fromCallable(() -> MessageDigest.getInstance(SHA_256))
                 .flatMap(digest ->
                         DataBufferUtils.read(
                                         filePath,

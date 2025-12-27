@@ -1,11 +1,12 @@
-import {Component, EventEmitter, Input, Output} from '@angular/core';
-import {CommonModule} from '@angular/common';
-import {MatButtonModule} from '@angular/material/button';
-import {MatIconModule} from '@angular/material/icon';
-import {MatMenuModule} from '@angular/material/menu';
-import {MatTooltipModule} from '@angular/material/tooltip';
-import {MatDividerModule} from '@angular/material/divider';
-import {AppConfig} from '../../config/app.config';
+import { Component, EventEmitter, Input, Output } from '@angular/core';
+
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatDividerModule } from '@angular/material/divider';
+import { AppConfig } from '../../config/app.config';
+import { TranslatePipe } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-toolbar',
@@ -13,13 +14,13 @@ import {AppConfig} from '../../config/app.config';
   templateUrl: './toolbar.component.html',
   styleUrls: ['./toolbar.component.css'],
   imports: [
-    CommonModule,
     MatButtonModule,
     MatIconModule,
     MatMenuModule,
     MatTooltipModule,
-    MatDividerModule
-  ],
+    MatDividerModule,
+    TranslatePipe
+],
 })
 export class ToolbarComponent {
   @Input() viewMode: 'grid' | 'list' = 'grid';
@@ -56,12 +57,12 @@ export class ToolbarComponent {
   @Input() sortOrder: 'ASC' | 'DESC' = 'ASC';
 
   sortOptions = [
-    { label: 'Name', value: 'name' },
-    { label: 'Date Modified', value: 'updatedAt' },
-    { label: 'Size', value: 'size' },
-    { label: 'Type', value: 'type' },
-    { label: 'Owner', value: 'createdBy' },
-    { label: 'Date Created', value: 'createdAt' }
+    { labelKey: 'common.name', value: 'name' },
+    { labelKey: 'common.dateModified', value: 'updatedAt' },
+    { labelKey: 'common.size', value: 'size' },
+    { labelKey: 'common.type', value: 'type' },
+    { labelKey: 'common.owner', value: 'createdBy' },
+    { labelKey: 'sortOptions.dateCreated', value: 'createdAt' }
   ];
 
   // Pagination outputs
@@ -186,9 +187,9 @@ export class ToolbarComponent {
     this.pageSizeChange.emit(newPageSize);
   }
 
-  getSortLabel(): string {
+  getSortLabelKey(): string {
     const option = this.sortOptions.find(opt => opt.value === this.sortBy);
-    return option ? option.label : 'Name';
+    return option ? option.labelKey : 'common.name';
   }
 
   // Bottom sheet methods for mobile selection actions
@@ -212,7 +213,7 @@ export class ToolbarComponent {
 
   onActionSelected(action: string): void {
     // Execute action based on type
-    switch(action) {
+    switch (action) {
       case 'move':
         this.onMoveSelected();
         break;

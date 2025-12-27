@@ -40,6 +40,14 @@ You are an expert in TypeScript, Angular, and scalable web application developme
 - Use native control flow (`@if`, `@for`, `@switch`) instead of `*ngIf`, `*ngFor`, `*ngSwitch`
 - Use the async pipe to handle observables
 
+## Translation
+
+- Never hardcode text strings in templates or components
+- Always use `@ngx-translate/core` for all user-facing content
+- Use the `translate` pipe in templates: `{{ 'section.key' | translate }}`
+- Use `TranslateService.get()` or `TranslateService.instant()` only when absolutely necessary in TypeScript code
+- Ensure all supported language files are updated when adding new translation keys
+
 ## Services
 
 - Design services around a single responsibility

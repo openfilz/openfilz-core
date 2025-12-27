@@ -18,7 +18,7 @@
   flex-grow: 1;
   margin-top: 64px;
   /* Header height only */
-   margin-left: 240px;
+  margin-left: 240px;
   /* Updated to match new sidebar width */
   margin-bottom: 0;
   display: flex;
@@ -33,6 +33,18 @@
 
 .sidebar-collapsed .main-content {
   margin-left: 60px;
+}
+
+/* RTL Support for Main Content */
+:host-context([dir="rtl"]) .main-content {
+  margin-left: 0;
+  margin-right: 240px;
+  transition: margin-right 0.3s ease;
+}
+
+:host-context([dir="rtl"]) .sidebar-collapsed .main-content {
+  margin-left: 0;
+  margin-right: 60px;
 }
 
 /* Dashboard view adjustments - no breadcrumb, no paginator */
@@ -99,6 +111,16 @@
   .sidebar-collapsed .main-content {
     margin-left: 60px;
   }
+
+  :host-context([dir="rtl"]) .main-content {
+    margin-left: 0;
+    margin-right: 200px;
+  }
+
+  :host-context([dir="rtl"]) .sidebar-collapsed .main-content {
+    margin-left: 0;
+    margin-right: 60px;
+  }
 }
 
 /* Mobile breakpoint (max-width: 768px) */
@@ -108,6 +130,10 @@
     margin-top: 60px;
     /* Compact header height */
     height: calc(100vh - 60px);
+  }
+
+  :host-context([dir="rtl"]) .main-content {
+    margin-right: 0;
   }
 
   .main-content:not(.dashboard-content) {

@@ -2,6 +2,7 @@ package org.openfilz.dms.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.r2dbc.postgresql.codec.Json;
+import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.dto.audit.UploadAudit;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.entity.Document;
@@ -11,6 +12,8 @@ import org.openfilz.dms.service.AuditService;
 import org.openfilz.dms.service.ChecksumService;
 import org.openfilz.dms.service.MetadataPostProcessor;
 import org.openfilz.dms.service.StorageService;
+import org.openfilz.dms.utils.ContentInfo;
+import org.openfilz.dms.utils.FileUtils;
 import org.openfilz.dms.utils.JsonUtils;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.codec.multipart.FilePart;
@@ -22,8 +25,10 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.openfilz.dms.enums.DocumentType.FILE;
+import static org.openfilz.dms.service.ChecksumService.HASH_SHA256_KEY;
 
 @Service
+@Slf4j
 @ConditionalOnProperty(name = "openfilz.calculate-checksum", havingValue = "true")
 public class ChecksumSaveDocumentServiceImpl extends SaveDocumentServiceImpl {
     private final ChecksumService checksumService;
@@ -46,13 +51,65 @@ public class ChecksumSaveDocumentServiceImpl extends SaveDocumentServiceImpl {
     }
 
     @Override
-    protected Mono<Document> replaceFileContentAndSave(FilePart newFilePart, Long contentLength, Document document, String newStoragePath, String oldStoragePath) {
+    protected Mono<Document> replaceFileContentAndSave(FilePart newFilePart, ContentInfo contentInfo, Document document, String newStoragePath, String oldStoragePath) {
         Json metadata = document.getMetadata();
+        if(contentInfo.checksum() != null) {
+            Map<String, Object> metadataMap = metadata != null ? jsonUtils.toMap(metadata) : null;
+            Map<String, Object> metadataWithChecksum = FileUtils.getMetadataWithChecksum(metadataMap, contentInfo.checksum());
+            document.setMetadata(jsonUtils.toJson(metadataWithChecksum));
+            return super.replaceFileContentAndSave(newFilePart, contentInfo, document, newStoragePath, oldStoragePath);
+        }
         return checksumService.calculateChecksum(newStoragePath, metadata != null ? jsonUtils.toMap(metadata) : null)
                 .flatMap(checksum -> {
                     document.setMetadata(jsonUtils.toJson(checksum.metadataWithChecksum()));
-                    return super.replaceFileContentAndSave(newFilePart, contentLength, document, newStoragePath, oldStoragePath);
+                    return super.replaceFileContentAndSave(newFilePart, contentInfo, document, newStoragePath, oldStoragePath);
                 });
+    }
+
+    @Override
+    public Mono<Document> saveAndReplaceDocument(FilePart newFilePart, ContentInfo contentInfo, Document document, String oldStoragePath) {
+        return storageService.saveFile(newFilePart)
+                .flatMap(newStoragePath -> checkNewFileIsDifferentFromExisting(newStoragePath, contentInfo,
+                        getChecksum(document), oldStoragePath)
+                        .flatMap(checksumInfo -> {
+                            if(!checksumInfo.isSame()) {
+                                log.debug("the new file is not the same as the existing one");
+                                return replaceFileContentAndSave(newFilePart, new ContentInfo(contentInfo.length(), checksumInfo.newValue()), document, newStoragePath, oldStoragePath);
+                            }
+                            log.debug("the new file is the same as the existing one");
+                            return storageService.deleteFile(newStoragePath).thenReturn(document);
+                        }));
+
+    }
+
+    private Mono<ChecksumInfo> checkNewFileIsDifferentFromExisting(String newStoragePath, ContentInfo contentInfo, String checksum, String oldStoragePath) {
+        log.debug("contentInfo.checksum() = {} - checksum = {}", contentInfo.checksum(), checksum);
+        if(contentInfo.checksum() != null && checksum != null) {
+            return Mono.just(new ChecksumInfo(contentInfo.checksum().equals(checksum), contentInfo.checksum()));
+        }
+        if(contentInfo.checksum() == null) {
+            return checksumService.calculateChecksum(newStoragePath, null)
+                    .flatMap(newChecksum -> {
+                       if(checksum != null) {
+                           return Mono.just(new ChecksumInfo(newChecksum.hash().equals(checksum), newChecksum.hash()));
+                       }
+                       return checksumService.calculateChecksum(oldStoragePath, null)
+                               .flatMap(oldChecksum -> Mono.just(new ChecksumInfo(newChecksum.hash().equals(oldChecksum.hash()),  newChecksum.hash())));
+                    });
+        }
+        return checksumService.calculateChecksum(oldStoragePath, null)
+                .flatMap(oldChecksum -> Mono.just(new ChecksumInfo(contentInfo.checksum().equals(oldChecksum.hash()), contentInfo.checksum())));
+    }
+
+    private record ChecksumInfo(boolean isSame, String newValue) {}
+
+    protected String getChecksum(Document document) {
+        Json metadata = document.getMetadata();
+        if(metadata != null) {
+            Object sha = jsonUtils.toMap(metadata).get(HASH_SHA256_KEY);
+            return sha != null ? sha.toString() : null;
+        };
+        return null;
     }
 
 }
