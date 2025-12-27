@@ -152,7 +152,8 @@ export class HeaderComponent implements OnInit, OnDestroy {
     this.suggestions = [];
     this.searchQuery = '';
 
-    const isFolder = suggestion.ext === null;
+    // ext is undefined/null for folders, string (possibly empty) for files
+    const isFolder = suggestion.ext == null;
 
     if (isFolder) {
       // Navigate to folder with folderId param
@@ -174,7 +175,7 @@ export class HeaderComponent implements OnInit, OnDestroy {
   }
 
   getIconForExtension(ext: string | undefined): string {
-    if (ext === null || ext === undefined) {
+    if (ext == null) {
       return 'fa-solid fa-folder'; // Folder icon
     }
 
@@ -235,11 +236,24 @@ export class HeaderComponent implements OnInit, OnDestroy {
   }
 
   protected onOpen(suggestion: Suggestion, event: MouseEvent) {
-    //console.log(`Opening document with ID: ${suggestion.id}`);
-    if (suggestion.id != null && suggestion.ext == null) {
-      this.router.navigate(['/my-folder'], { queryParams: { folderId: suggestion.id } });
-    }
+    event.stopPropagation();
+
+    // Clear suggestions and search query
     this.suggestions = [];
+    this.searchQuery = '';
+
+    // ext is undefined/null for folders, string (possibly empty) for files
+    const isFolder = suggestion.ext == null;
+
+    if (isFolder) {
+      // Open folder in file explorer (same as clicking folder icon/name)
+      this.router.navigate(['/my-folder'], { queryParams: { folderId: suggestion.id } });
+    } else {
+      // Navigate to file's parent folder, focus the file, and open file viewer
+      this.router.navigate(['/my-folder'], {
+        queryParams: { targetFileId: suggestion.id, openViewer: 'true' }
+      });
+    }
   }
 
   private calculateInitials(userData: any) {

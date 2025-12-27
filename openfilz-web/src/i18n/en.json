@@ -6,6 +6,7 @@
         "delete": "Delete",
         "rename": "Rename",
         "download": "Download",
+        "view": "View",
         "upload": "Upload",
         "create": "Create",
         "retry": "Retry",

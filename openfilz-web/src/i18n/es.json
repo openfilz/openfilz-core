@@ -6,6 +6,7 @@
         "delete": "Eliminar",
         "rename": "Renombrar",
         "download": "Descargar",
+        "view": "Ver",
         "upload": "Subir",
         "create": "Crear",
         "retry": "Reintentar",
@@ -434,6 +435,8 @@
         "loadFailed": "Error al cargar los datos",
         "saveFailed": "Error al guardar los cambios",
         "deleteFailed": "Error al eliminar el elemento",
-        "uploadFailed": "Error al subir el archivo"
+        "uploadFailed": "Error al subir el archivo",
+        "downloadFailed": "Error al descargar el archivo",
+        "notAllowedToViewFiles": "No tiene permiso para ver los archivos"
     }
 }

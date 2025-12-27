@@ -226,9 +226,10 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
   private handleFolderIdChange(): void {
     const folderId = this.route.snapshot.queryParamMap.get('folderId');
     const targetFileId = this.route.snapshot.queryParamMap.get('targetFileId');
+    const openViewer = this.route.snapshot.queryParamMap.get('openViewer') === 'true';
 
     if (targetFileId) {
-      this.navigateToFile(targetFileId);
+      this.navigateToFile(targetFileId, openViewer);
     } else if (folderId) {
       this.loadFolderById(folderId);
     } else {
@@ -461,7 +462,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
     });
   }
 
-  private navigateToFile(fileId: string): void {
+  private navigateToFile(fileId: string, openViewer: boolean = false): void {
     this.loading = true;
 
     // Fetch file info, ancestors, and position in parallel
@@ -499,13 +500,13 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
         this.totalItems = position.totalItems;
 
         // Load the correct page and focus on the file
-        this.loadItemsAndFocusFile(fileId);
+        this.loadItemsAndFocusFile(fileId, openViewer, documentInfo);
 
         // Set flag to skip next navigation event when clearing query params
         this.skipNextNavigation = true;
         this.router.navigate([], {
           relativeTo: this.route,
-          queryParams: { targetFileId: null },
+          queryParams: { targetFileId: null, openViewer: null },
           queryParamsHandling: 'merge',
         });
       },
@@ -518,7 +519,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
     });
   }
 
-  private loadItemsAndFocusFile(targetFileId: string): void {
+  private loadItemsAndFocusFile(targetFileId: string, openViewer: boolean = false, documentInfo?: any): void {
     this.documentApi.listFolder(
       this.currentFolder?.id,
       this.pageIndex + 1,
@@ -539,9 +540,16 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
           // Focus the file item (scroll into view)
           this.focusFileItem(targetFileId);
 
-          // Open metadata panel after a short delay
+          // Open file viewer or metadata panel after a short delay
           setTimeout(() => {
-            this.openMetadataPanel(targetFileId);
+            if (openViewer) {
+              // Open file viewer dialog
+              const item = this.items[targetIndex];
+              this.openFileViewer(item);
+            } else {
+              // Open metadata panel
+              this.openMetadataPanel(targetFileId);
+            }
           }, 300);
         }
       },

@@ -6,6 +6,7 @@
         "delete": "Elimina",
         "rename": "Rinomina",
         "download": "Scarica",
+        "view": "Visualizza",
         "upload": "Carica",
         "create": "Crea",
         "retry": "Riprova",
@@ -434,6 +435,8 @@
         "loadFailed": "Impossibile caricare i dati",
         "saveFailed": "Impossibile salvare le modifiche",
         "deleteFailed": "Impossibile eliminare l'elemento",
-        "uploadFailed": "Impossibile caricare il file"
+        "uploadFailed": "Impossibile caricare il file",
+        "downloadFailed": "Impossibile scaricare il file",
+        "notAllowedToViewFiles": "Non sei autorizzato a visualizzare i file"
     }
 }

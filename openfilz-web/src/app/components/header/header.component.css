@@ -186,11 +186,6 @@
     /* Important for flexbox to allow text to truncate */
 }
 
-.suggestion-info:hover {
-    /* You can add a subtle hover effect here if desired */
-    text-decoration: underline;
-}
-
 .suggestions-list {
     max-height: 442px;
     overflow-y: auto;
@@ -269,6 +264,7 @@
     color: #555;
     transition: color 0.2s ease-in-out;
     padding: 5px;
+    text-decoration: none;
 }
 
 .suggestion-actions i:hover {

@@ -33,7 +33,8 @@
         "metadata": "البيانات الوصفية",
         "key": "المفتاح",
         "value": "القيمة",
-        "dropFilesHere": "اسحب الملفات هنا للرفع"
+        "dropFilesHere": "اسحب الملفات هنا للرفع",
+        "view": "عرض"
     },
     "languages": {
         "en": "English",
@@ -434,6 +435,8 @@
         "loadFailed": "فشل تحميل البيانات",
         "saveFailed": "فشل حفظ التغييرات",
         "deleteFailed": "فشل حذف العنصر",
-        "uploadFailed": "فشل رفع الملف"
+        "uploadFailed": "فشل رفع الملف",
+        "downloadFailed": "فشل تنزيل الملف",
+        "notAllowedToViewFiles": "غير مصرح لك بعرض الملفات"
     }
 }

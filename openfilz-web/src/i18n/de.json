@@ -6,6 +6,7 @@
         "delete": "Löschen",
         "rename": "Umbenennen",
         "download": "Herunterladen",
+        "view": "Anzeigen",
         "upload": "Hochladen",
         "create": "Erstellen",
         "retry": "Wiederholen",
@@ -434,6 +435,8 @@
         "loadFailed": "Laden der Daten fehlgeschlagen",
         "saveFailed": "Speichern der Änderungen fehlgeschlagen",
         "deleteFailed": "Löschen des Elements fehlgeschlagen",
-        "uploadFailed": "Hochladen der Datei fehlgeschlagen"
+        "uploadFailed": "Hochladen der Datei fehlgeschlagen",
+        "downloadFailed": "Herunterladen der Datei fehlgeschlagen",
+        "notAllowedToViewFiles": "Sie sind nicht berechtigt, die Dateien anzuzeigen"
     }
 }
