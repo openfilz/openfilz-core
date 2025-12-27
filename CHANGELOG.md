@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[a9ef4086e565d77](https://github.com/openfilz/openfilz-core/commit/a9ef4086e565d77) maven-release-bot[bot] *2025-12-27 03:39:15*
+[949a8183db5033f](https://github.com/openfilz/openfilz-core/commit/949a8183db5033f) maven-release-bot[bot] *2025-12-27 15:13:23*
 
 
-## v1.0.28
+## v1.0.29
 ### No issue
 
-**[maven-release-plugin] prepare release v1.0.28**
+**[maven-release-plugin] prepare release v1.0.29**
 
 
-[9e5c4da289f5a11](https://github.com/openfilz/openfilz-core/commit/9e5c4da289f5a11) maven-release-bot[bot] *2025-12-27 03:39:13*
+[5c0d006252857cb](https://github.com/openfilz/openfilz-core/commit/5c0d006252857cb) maven-release-bot[bot] *2025-12-27 15:13:22*
 
-**Merge pull request #75 from openfilz/develop**
+**Merge pull request #77 from openfilz/develop**
 
- * Develop
+ * openfilz-web : Fix docker image
 
-[a6192b53107ee59](https://github.com/openfilz/openfilz-core/commit/a6192b53107ee59) Yann Demel *2025-12-27 03:37:56*
+[766eccb49b78e65](https://github.com/openfilz/openfilz-core/commit/766eccb49b78e65) Yann Demel *2025-12-27 15:12:12*
 
 
