@@ -1193,9 +1193,17 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
       false // allowDuplicates = false by default
     ).subscribe({
       next: (response) => {
-        // Response contains info about uploaded files
-        this.snackBar.open('Upload successful', 'Close', { duration: 3000 });
-        this.reloadData();
+        this.snackBar.dismiss();
+
+        const successMessage = isSingleFile
+          ? `${singleFileName} uploaded successfully`
+          : `${fileArray.length} files uploaded successfully`;
+        this.snackBar.open(successMessage, 'Close', { duration: 3000 });
+
+        // Navigate to the uploaded file
+        // For single file: focus and open metadata panel
+        // For multiple files: just navigate to the page of the last uploaded file
+        this.navigateToUploadedFile(response[response.length - 1].id, isSingleFile);
       },
       error: (error) => {
         this.snackBar.dismiss();
@@ -1210,39 +1218,73 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
           ? `Failed to upload ${singleFileName}`
           : `Failed to upload ${fileArray.length} files`;
         this.snackBar.open(errorMessage, 'Close', { duration: 5000 });
+      }
+    });
+  }
+
+  /**
+   * Navigate to the page where the uploaded file is located.
+   * For single file upload: focus on the file and open metadata panel.
+   * For multiple files upload: just navigate to the page without focus/panel.
+   */
+  private navigateToUploadedFile(fileId: string, focusAndOpenPanel: boolean): void {
+    this.loading = true;
+
+    // Get the document position to find the correct page
+    this.documentApi.getDocumentPosition(fileId, this.sortBy, this.sortOrder).subscribe({
+      next: (position) => {
+        // Calculate target page (0-indexed)
+        const targetPage = Math.floor(position.position / this.pageSize);
+        this.pageIndex = targetPage;
+        this.totalItems = position.totalItems;
+
+        // Load the page and optionally focus the file
+        this.loadItemsAfterUpload(fileId, focusAndOpenPanel);
       },
-      complete: () => {
-        this.snackBar.dismiss();
+      error: () => {
+        // Fallback: just reload the current folder
+        this.loadFolder(this.currentFolder);
+      }
+    });
+  }
 
-        const successMessage = isSingleFile
-          ? `${singleFileName} uploaded successfully`
-          : `${fileArray.length} files uploaded successfully`;
-        this.snackBar.open(successMessage, 'Close', { duration: 3000 });
+  /**
+   * Load items after upload and optionally focus on the uploaded file.
+   */
+  private loadItemsAfterUpload(targetFileId: string, focusAndOpenPanel: boolean): void {
+    this.documentApi.listFolder(
+      this.currentFolder?.id,
+      this.pageIndex + 1,
+      this.pageSize,
+      this.currentFilters,
+      this.sortBy,
+      this.sortOrder
+    ).subscribe({
+      next: (response: ElementInfo[]) => {
+        this.populateFolderContents(response);
 
-        // Reload folder and open metadata panel for single file upload
-        if (isSingleFile && singleFileName) {
-          // Reload the folder first
-          this.documentApi.listFolder(this.currentFolder?.id, this.pageIndex + 1, this.pageSize).subscribe({
-            next: (response) => {
-              this.populateFolderContents(response);
+        if (focusAndOpenPanel) {
+          // Find and focus the target file (single file upload)
+          const targetIndex = this.items.findIndex(item => item.id === targetFileId);
+          if (targetIndex !== -1) {
+            // Select the file
+            this.items[targetIndex].selected = true;
 
-              // Find the uploaded file by name
-              const uploadedItem = this.items.find(item => item.name === singleFileName);
-              if (uploadedItem) {
-                // Open metadata panel after a short delay for smooth UX
-                setTimeout(() => {
-                  this.openMetadataPanel(uploadedItem.id);
-                }, 300);
-              }
-            },
-            error: () => {
-              this.loadFolder(this.currentFolder);
-            }
-          });
-        } else {
-          // For multiple files, just reload the folder
-          this.loadFolder(this.currentFolder);
+            // Focus the file item (scroll into view)
+            this.focusFileItem(targetFileId);
+
+            // Open metadata panel after a short delay
+            setTimeout(() => {
+              this.openMetadataPanel(targetFileId);
+            }, 300);
+          }
         }
+        // For multiple files, just load the page without focus/panel
+      },
+      error: (error) => {
+        console.log(error);
+        this.snackBar.open('Failed to load folder contents', 'Close', { duration: 3000 });
+        this.loading = false;
       }
     });
   }
@@ -1259,10 +1301,11 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
         this.currentFolder?.id,
         true // allowDuplicateFileNames = true to bypass conflict with deleted file
       ).subscribe({
-        next: () => {
+        next: (response) => {
           this.snackBar.dismiss();
           this.snackBar.open(`${fileName} uploaded successfully`, 'Close', { duration: 3000 });
-          this.reloadData();
+          // Navigate to the uploaded file with focus and metadata panel
+          this.navigateToUploadedFile(response[response.length - 1].id, true);
         },
         error: () => {
           this.snackBar.dismiss();
@@ -1293,7 +1336,8 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
           next: () => {
             this.snackBar.dismiss();
             this.snackBar.open(`${fileName} replaced successfully`, 'Close', { duration: 3000 });
-            this.loadFolder(this.currentFolder);
+            // Navigate to the replaced file with focus and metadata panel
+            this.navigateToUploadedFile(result.existingDocumentId, true);
           },
           error: (err) => {
             this.snackBar.dismiss();

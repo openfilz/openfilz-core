@@ -414,7 +414,7 @@ export class DocumentApiService {
     });
   }
 
-  uploadMultipleDocuments(files: File[], parentFolderId?: string, allowDuplicateFileNames?: boolean, metadata?: { [key: string]: any }): Observable<UploadResponse> {
+  uploadMultipleDocuments(files: File[], parentFolderId?: string, allowDuplicateFileNames?: boolean, metadata?: { [key: string]: any }): Observable<UploadResponse[]> {
     const formData = new FormData();
     const parametersByFilename: MultipleUploadFileParameter[] = [];
     files.forEach(file => {
@@ -437,7 +437,7 @@ export class DocumentApiService {
       params = params.set('allowDuplicateFileNames', allowDuplicateFileNames.toString());
     }
 
-    return this.http.post<UploadResponse>(`${this.baseUrl}/documents/upload-multiple`, formData, {
+    return this.http.post<UploadResponse[]>(`${this.baseUrl}/documents/upload-multiple`, formData, {
       headers: this.getMultipartHeaders(),
       params
     });
