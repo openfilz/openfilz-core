@@ -434,6 +434,8 @@
         "loadFailed": "Failed to load data",
         "saveFailed": "Failed to save changes",
         "deleteFailed": "Failed to delete item",
-        "uploadFailed": "Failed to upload file"
+        "uploadFailed": "Failed to upload file",
+        "downloadFailed": "Failed to download file",
+        "notAllowedToViewFiles": "You are not allowed to view the files"
     }
 }

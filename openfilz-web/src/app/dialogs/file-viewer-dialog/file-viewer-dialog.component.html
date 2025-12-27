@@ -123,7 +123,7 @@
     <!-- OnlyOffice Document Editor -->
     @if (viewerMode === 'onlyoffice') {
     <div class="onlyoffice-viewer">
-      <app-onlyoffice-editor [documentId]="data.documentId" [canEdit]="true" (editorReady)="onEditorReady()"
+      <app-onlyoffice-editor [documentId]="data.documentId" [canEdit]="canEditDocument" (editorReady)="onEditorReady()"
         (documentSaved)="onDocumentSaved()" (editorClosed)="onClose()" (editorError)="onEditorError($event)"
         style="height: 100%">
       </app-onlyoffice-editor>

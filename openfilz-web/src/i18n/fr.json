@@ -434,6 +434,8 @@
         "loadFailed": "Échec du chargement des données",
         "saveFailed": "Échec de l'enregistrement des modifications",
         "deleteFailed": "Échec de la suppression de l'élément",
-        "uploadFailed": "Échec du téléversement du fichier"
+        "uploadFailed": "Échec du téléversement du fichier",
+        "downloadFailed": "Échec du téléchargement du fichier",
+        "notAllowedToViewFiles": "Vous n'êtes pas autorisé à visualiser les fichiers"
     }
 }

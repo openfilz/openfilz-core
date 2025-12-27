@@ -12,6 +12,7 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 
 import { DocumentApiService } from '../../services/document-api.service';
 import { OnlyOfficeService } from '../../services/onlyoffice.service';
+import { RoleService } from '../../services/role.service';
 import { OnlyOfficeEditorComponent } from '../../components/onlyoffice-editor/onlyoffice-editor.component';
 import { saveAs } from 'file-saver';
 
@@ -87,6 +88,7 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
   readonly data = inject<FileViewerDialogData>(MAT_DIALOG_DATA);
   private documentApi = inject(DocumentApiService);
   private onlyOfficeService = inject(OnlyOfficeService);
+  private roleService = inject(RoleService);
   private snackBar = inject(MatSnackBar);
   private sanitizer = inject(DomSanitizer);
   private translate = inject(TranslateService);
@@ -97,7 +99,35 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
       `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs`;
   }
 
+  /**
+   * Determines if the user can edit documents in OnlyOffice.
+   * CONTRIBUTOR role = can edit
+   * READER role = view only
+   */
+  get canEditDocument(): boolean {
+    return this.roleService.hasRole('CONTRIBUTOR');
+  }
+
+  /**
+   * Checks if the user has permission to view files.
+   */
+  get canViewDocument(): boolean {
+    return this.roleService.hasRole('CONTRIBUTOR') || this.roleService.hasRole('READER');
+  }
+
   ngOnInit() {
+    // Check if user has permission to view files
+    if (!this.canViewDocument) {
+      this.error = 'errors.notAllowedToViewFiles';
+      this.loading = false;
+      this.snackBar.open(
+        this.translate.instant('errors.notAllowedToViewFiles'),
+        this.translate.instant('common.close'),
+        { duration: 5000 }
+      );
+      return;
+    }
+
     this.determineViewerMode();
     this.loadDocument();
   }

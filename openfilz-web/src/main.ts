@@ -12,6 +12,7 @@ import { provideRouter } from '@angular/router';
 import { routes } from './app/app.routes';
 import { provideAuth, LogLevel, authInterceptor, OidcSecurityService } from 'angular-auth-oidc-client';
 import { MockAuthService } from './app/services/mock-auth.service';
+import { RoleService } from './app/services/role.service';
 import { provideTranslateService } from '@ngx-translate/core';
 import { provideTranslateHttpLoader } from '@ngx-translate/http-loader';
 import { providePaginatorIntl } from './app/i18n/paginator-intl';
@@ -48,9 +49,20 @@ bootstrapApplication(App, {
           secureRoutes: [environment.apiURL, environment.graphQlURL],
         },
       }),
-      provideAppInitializer(() => {
+      provideAppInitializer(async () => {
         const oidcSecurityService = inject(OidcSecurityService);
-        return oidcSecurityService.checkAuth();
+        const roleService = inject(RoleService);
+
+        const result = await oidcSecurityService.checkAuth().toPromise();
+
+        if (result?.isAuthenticated) {
+          const hasValidRoles = await roleService.initializeRoles();
+          if (!hasValidRoles) {
+            roleService.handleNoRoles();
+          }
+        }
+
+        return result;
       })
     ] : [
       { provide: OidcSecurityService, useClass: MockAuthService }
