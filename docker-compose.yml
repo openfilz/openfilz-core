@@ -83,12 +83,12 @@ services:
 
       # Storage configuration
       STORAGE_TYPE: ${STORAGE_TYPE:-local}
-      STORAGE_BASE_PATH: /var/data/openfilz
+      STORAGE_LOCAL_BASE_PATH: /var/data/openfilz
 
       # Security configuration
       # Set to 'false' and use --profile auth to enable Keycloak
-      OPENFILZ_SECURITY_NO_AUTH: ${OPENFILZ_SECURITY_NO_AUTH:-true}
-      KEYCLOAK_ISSUER_URI: ${KEYCLOAK_ISSUER_URI:-http://keycloak:8080/realms/openfilz}
+      OPENFILZ_SECURITY_NO_AUTH: ${OPENFILZ_SECURITY_NO_AUTH:-false}
+      KEYCLOAK_ISSUER_URI: ${KEYCLOAK_ISSUER_URI:-http://keycloak:8080/realms/your-realm}
 
       # OnlyOffice configuration
       # Set to 'true' and use --profile onlyoffice to enable OnlyOffice
@@ -134,20 +134,6 @@ services:
     restart: unless-stopped
     depends_on:
       - openfilz-api
-    environment:
-      # API URLs - adjust based on your deployment
-      API_URL: ${API_URL:-http://localhost:8081/api/v1}
-      GRAPHQL_URL: ${GRAPHQL_URL:-http://localhost:8081/graphql/v1}
-
-      # Keycloak configuration (used when auth is enabled)
-      AUTHENTICATION_ENABLED: ${AUTHENTICATION_ENABLED:-false}
-      KEYCLOAK_URL: ${KEYCLOAK_URL:-http://localhost:8180}
-      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-openfilz}
-      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-openfilz-web}
-
-      # OnlyOffice configuration (used when onlyoffice is enabled)
-      ONLYOFFICE_ENABLED: ${ONLYOFFICE_ENABLED:-false}
-      ONLYOFFICE_URL: ${ONLYOFFICE_PUBLIC_URL:-http://localhost:8080}
     ports:
       - "${WEB_PORT:-4200}:8080"
     volumes:
@@ -175,13 +161,15 @@ services:
       KC_HOSTNAME_PORT: ${KEYCLOAK_PORT:-8180}
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_BACKCHANNEL: "true"
     command:
       - start-dev
       - --import-realm
     volumes:
       - keycloak-data:/opt/keycloak/data
       # Mount realm configuration if available
-      # - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+      - ./openfilz-api/src/test/resources/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
     ports:
       - "${KEYCLOAK_PORT:-8180}:8080"
       - "${KEYCLOAK_MANAGEMENT_PORT:-9000}:9000"
