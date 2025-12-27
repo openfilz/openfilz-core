@@ -21,12 +21,14 @@
     (mobileMenuToggle)="toggleMobileMenu()">
   </app-header>
 
-  @if(currentRoute == 'my-folder' || currentRoute == 'recycle-bin') {
+  @if(currentRoute == 'my-folder') {
   <app-breadcrumb [breadcrumbs]="breadcrumbs" (navigate)="onNavigate($event)">
   </app-breadcrumb>
   }
 
-  <div class="main-content" [class.dashboard-content]="currentRoute !== 'my-folder' && currentRoute !== 'recycle-bin'"
+  <div class="main-content"
+    [class.dashboard-content]="currentRoute !== 'my-folder'"
+    [class.file-explorer-view]="currentRoute === 'my-folder' || currentRoute === 'recycle-bin' || currentRoute === 'search' || currentRoute === 'favorites'"
     [class.center-content]="isWipRoute">
     <router-outlet></router-outlet>
   </div>

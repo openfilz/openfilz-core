@@ -5,7 +5,6 @@
   flex-direction: column;
   background-color: var(--bg-secondary);
   overflow-y: auto;
-  padding-top: 16px;
 }
 
 /* Recycle Bin Actions in Toolbar */

@@ -76,7 +76,9 @@ export class MainComponent implements OnInit {
   }
 
   updateCurrentRoute() {
-    const path = this.router.url.split('/')[1]; // Get the first part of the URL after the slash
+    // Remove query params before extracting the route path
+    const urlWithoutParams = this.router.url.split('?')[0];
+    const path = urlWithoutParams.split('/')[1]; // Get the first part of the URL after the slash
     this.currentRoute = path || 'dashboard'; // Default to 'dashboard' if path is empty (root route)
     this.isWipRoute = ['recycle-bin', 'settings'].includes(this.currentRoute);
   }

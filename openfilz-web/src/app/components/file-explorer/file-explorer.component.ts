@@ -593,9 +593,21 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
   private focusFileItem(fileId: string): void {
     // Use setTimeout to ensure DOM is rendered
     setTimeout(() => {
-      const element = document.querySelector(`[data-file-id="${fileId}"]`);
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const element = document.querySelector(`[data-file-id="${fileId}"]`) as HTMLElement;
+      const scrollContainer = document.querySelector('.file-explorer-content') as HTMLElement;
+
+      if (element && scrollContainer) {
+        // Calculate scroll position to center the element within the container
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const elementRect = element.getBoundingClientRect();
+        const scrollTop = scrollContainer.scrollTop + (elementRect.top - containerRect.top) - (containerRect.height / 2) + (elementRect.height / 2);
+
+        // Scroll only the file-explorer-content container, not the entire page
+        scrollContainer.scrollTo({
+          top: Math.max(0, scrollTop),
+          behavior: 'smooth'
+        });
+
         element.classList.add('highlighted');
 
         // Remove highlight after animation
