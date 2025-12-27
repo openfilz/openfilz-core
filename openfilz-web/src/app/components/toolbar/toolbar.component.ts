@@ -1,5 +1,5 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -14,14 +14,13 @@ import { TranslatePipe } from '@ngx-translate/core';
   templateUrl: './toolbar.component.html',
   styleUrls: ['./toolbar.component.css'],
   imports: [
-    CommonModule,
     MatButtonModule,
     MatIconModule,
     MatMenuModule,
     MatTooltipModule,
     MatDividerModule,
     TranslatePipe
-  ],
+],
 })
 export class ToolbarComponent {
   @Input() viewMode: 'grid' | 'list' = 'grid';

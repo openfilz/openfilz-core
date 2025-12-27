@@ -1,5 +1,5 @@
 import { Component, EventEmitter, HostListener, Input, Output, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
@@ -16,14 +16,13 @@ import { TranslatePipe } from '@ngx-translate/core';
   templateUrl: './file-grid.component.html',
   styleUrls: ['./file-grid.component.css'],
   imports: [
-    CommonModule,
     MatCardModule,
     MatIconModule,
     MatButtonModule,
     MatCheckboxModule,
     MatTooltipModule,
     TranslatePipe
-  ],
+],
 })
 export class FileGridComponent {
   @Input() items: FileItem[] = [];

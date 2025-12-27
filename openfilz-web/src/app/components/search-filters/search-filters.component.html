@@ -13,9 +13,11 @@
     <div class="filter-section">
       <label>{{ 'common.type' | translate }}</label>
       <select [(ngModel)]="filters.type">
-        <option *ngFor="let type of documentTypes" [ngValue]="type.value">
-          {{ type.labelKey | translate }}
-        </option>
+        @for (type of documentTypes; track type) {
+          <option [ngValue]="type.value">
+            {{ type.labelKey | translate }}
+          </option>
+        }
       </select>
     </div>
 
@@ -23,9 +25,11 @@
     <div class="filter-section">
       <label>{{ 'common.dateModified' | translate }}</label>
       <select [(ngModel)]="filters.dateModified">
-        <option *ngFor="let date of dateOptions" [value]="date.value">
-          {{ date.labelKey | translate }}
-        </option>
+        @for (date of dateOptions; track date) {
+          <option [value]="date.value">
+            {{ date.labelKey | translate }}
+          </option>
+        }
       </select>
     </div>
 
@@ -37,28 +41,32 @@
 
     <!-- File Type Filter (Conditional) -->
     @if (showFileTypeFilter) {
-    <div class="filter-section">
-      <label>{{ 'searchFilters.fileType' | translate }}</label>
-      <select [(ngModel)]="filters.fileType">
-        <option *ngFor="let ft of fileTypeOptions" [value]="ft.value">
-          {{ ft.labelKey | translate }}
-        </option>
-      </select>
-    </div>
+      <div class="filter-section">
+        <label>{{ 'searchFilters.fileType' | translate }}</label>
+        <select [(ngModel)]="filters.fileType">
+          @for (ft of fileTypeOptions; track ft) {
+            <option [value]="ft.value">
+              {{ ft.labelKey | translate }}
+            </option>
+          }
+        </select>
+      </div>
     }
 
     <!-- Metadata Filter -->
     <div class="filter-section">
       <label>{{ 'common.metadata' | translate }}</label>
       <div class="metadata-list">
-        <div *ngFor="let meta of metadataFilters; let i = index" class="metadata-item">
-          <input type="text" [(ngModel)]="meta.key" [placeholder]="'common.key' | translate" class="meta-input" />
-          <input type="text" [(ngModel)]="meta.value" [placeholder]="'common.value' | translate" class="meta-input" />
-          <button class="btn-remove" (click)="$event.stopPropagation(); removeMetadataFilter(i)"
-            [matTooltip]="'searchFilters.remove' | translate">
-            <mat-icon>close</mat-icon>
-          </button>
-        </div>
+        @for (meta of metadataFilters; track meta; let i = $index) {
+          <div class="metadata-item">
+            <input type="text" [(ngModel)]="meta.key" [placeholder]="'common.key' | translate" class="meta-input" />
+            <input type="text" [(ngModel)]="meta.value" [placeholder]="'common.value' | translate" class="meta-input" />
+            <button class="btn-remove" (click)="$event.stopPropagation(); removeMetadataFilter(i)"
+              [matTooltip]="'searchFilters.remove' | translate">
+              <mat-icon>close</mat-icon>
+            </button>
+          </div>
+        }
         <button class="btn-add" (click)="addMetadataFilter()">
           <mat-icon>add</mat-icon>
           {{ 'searchFilters.addMetadataFilter' | translate }}

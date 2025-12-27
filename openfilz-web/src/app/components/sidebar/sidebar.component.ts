@@ -1,5 +1,5 @@
 import { Component, EventEmitter, Output, OnInit, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
@@ -14,13 +14,12 @@ import { TranslatePipe } from '@ngx-translate/core';
   templateUrl: './sidebar.component.html',
   styleUrls: ['./sidebar.component.css'],
   imports: [
-    CommonModule,
     MatButtonModule,
     MatIconModule,
     MatListModule,
     MatTooltipModule,
     TranslatePipe
-  ],
+],
 })
 export class SidebarComponent implements OnInit {
   isCollapsed = false;

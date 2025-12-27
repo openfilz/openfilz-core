@@ -1,5 +1,5 @@
 import { AfterViewInit, Component, ElementRef, ViewChild, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -19,7 +19,6 @@ export interface RenameDialogData {
   templateUrl: './rename-dialog.component.html',
   styleUrls: ['./rename-dialog.component.css'],
   imports: [
-    CommonModule,
     MatDialogModule,
     MatFormFieldModule,
     MatInputModule,
@@ -27,7 +26,7 @@ export interface RenameDialogData {
     FormsModule,
     MatIconModule,
     TranslatePipe
-  ],
+],
 })
 export class RenameDialogComponent implements AfterViewInit {
   newName: string;

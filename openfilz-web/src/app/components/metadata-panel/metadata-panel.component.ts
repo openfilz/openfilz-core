@@ -1,5 +1,5 @@
 import { Component, Input, Output, EventEmitter, OnInit, OnChanges, ViewChild, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -23,7 +23,6 @@ import { FileIconService } from '../../services/file-icon.service';
   templateUrl: './metadata-panel.component.html',
   styleUrls: ['./metadata-panel.component.css'],
   imports: [
-    CommonModule,
     MatButtonModule,
     MatIconModule,
     MatProgressSpinnerModule,
@@ -33,7 +32,7 @@ import { FileIconService } from '../../services/file-icon.service';
     MatTabsModule,
     MetadataEditorComponent,
     TranslatePipe
-  ],
+],
   animations: [
     trigger('slideInOut', [
       state('in', style({

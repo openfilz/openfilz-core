@@ -1,5 +1,5 @@
 import { AfterViewInit, Component, ElementRef, ViewChild, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -14,7 +14,6 @@ import { TranslatePipe } from '@ngx-translate/core';
   templateUrl: './create-folder-dialog.component.html',
   styleUrls: ['./create-folder-dialog.component.css'],
   imports: [
-    CommonModule,
     MatDialogModule,
     MatFormFieldModule,
     MatInputModule,
@@ -22,7 +21,7 @@ import { TranslatePipe } from '@ngx-translate/core';
     MatIconModule,
     FormsModule,
     TranslatePipe
-  ],
+],
 })
 export class CreateFolderDialogComponent implements AfterViewInit {
   folderName = '';

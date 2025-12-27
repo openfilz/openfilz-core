@@ -1,5 +1,5 @@
 import { Component, ElementRef, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
 import { filter, forkJoin, Subscription, take } from 'rxjs';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
@@ -176,7 +176,6 @@ import { AppConfig } from '../../config/app.config';
   styleUrls: ['./file-explorer.component.css'],
   standalone: true,
   imports: [
-    CommonModule,
     MatDialogModule,
     MatSnackBarModule,
     MatProgressSpinnerModule,
@@ -190,7 +189,7 @@ import { AppConfig } from '../../config/app.config';
     DragDropDirective,
     DownloadProgressComponent,
     TranslatePipe
-  ],
+],
 })
 export class FileExplorerComponent extends FileOperationsComponent implements OnInit, OnDestroy {
   showUploadZone = false;
@@ -547,6 +546,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
         }
       },
       error: (error) => {
+          console.log(error);
         this.snackBar.open('Failed to load folder contents', 'Close', { duration: 3000 });
         this.loading = false;
       }
@@ -590,6 +590,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
         this.populateFolderContents(listAndCount.listFolder);
       },
       error: (error) => {
+          console.log(error);
         this.snackBar.open('Failed to load folder contents', 'Close', { duration: 3000 });
         this.loading = false;
       }
@@ -603,6 +604,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
         this.populateFolderContents(response);
       },
       error: (error) => {
+          console.log(error);
         this.snackBar.open('Failed to load folder contents', 'Close', { duration: 3000 });
         this.loading = false;
       }
@@ -760,7 +762,8 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
           this.focusFileItem(folderId);
         }
       },
-      error: () => {
+      error: (error) => {
+          console.log(error);
         this.snackBar.open('Failed to load folder contents', 'Close', { duration: 3000 });
         this.loading = false;
       }

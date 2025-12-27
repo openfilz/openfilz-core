@@ -1,5 +1,5 @@
 import { Component, Input, Output, EventEmitter, OnInit, OnChanges, SimpleChanges, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -21,7 +21,6 @@ export interface MetadataKeyValue {
   templateUrl: './metadata-editor.component.html',
   styleUrls: ['./metadata-editor.component.css'],
   imports: [
-    CommonModule,
     FormsModule,
     MatCardModule,
     MatFormFieldModule,
@@ -30,7 +29,7 @@ export interface MetadataKeyValue {
     MatIconModule,
     MatTooltipModule,
     TranslatePipe
-  ],
+],
 })
 export class MetadataEditorComponent implements OnInit, OnChanges {
   @Input() metadata: { [key: string]: any } = {};
