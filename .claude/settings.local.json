@@ -23,7 +23,10 @@
       "Bash(npm install:*)",
       "Bash(powershell -Command:*)",
       "Bash(mvn test:*)",
-      "Bash(mvn test-compile:*)"
+      "Bash(mvn test-compile:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker exec:*)"
     ],
     "deny": [],
     "ask": []
