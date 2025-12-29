@@ -5,23 +5,32 @@
             [attr.tabindex]="getTabIndex(i)" [attr.data-file-id]="item.id"
             [attr.aria-label]="item.type === 'FOLDER' ? ('fileList.folderDetail' | translate:{name: item.name}) : ('fileList.fileDetail' | translate:{name: item.name})"
             [attr.aria-selected]="item.selected" (click)="onItemClick(item)" (dblclick)="onItemDoubleClick(item)"
-            (contextmenu)="onContextMenu($event, item)">
+            (contextmenu)="onContextMenu($event, item)"
+            [appFileDraggable]="item" [allItems]="items" dragHandleSelector=".file-item"
+            [appFolderDropZone]="item.type === 'FOLDER' ? item : null"
+            [currentFolderId]="currentFolderId"
+            (itemsDropped)="onItemsDropped($event)">
 
-            <div class="file-header">
+            <!-- Selection checkbox - top left corner overlay -->
+            <div class="select-overlay" [class.visible]="item.selected"
+                (click)="$event.stopPropagation()">
                 <mat-checkbox [checked]="item.selected"
                     [attr.aria-label]="'fileList.selectItem' | translate:{name: item.name}"
-                    (click)="$event.stopPropagation()" (change)="onSelectionChange(item, $event.checked)">
+                    (change)="onSelectionChange(item, $event.checked)">
                 </mat-checkbox>
-                @if(showFavoriteButton) {
-                <button mat-icon-button class="favorite-btn" (click)="onToggleFavorite($event, item)"
-                    [attr.aria-label]="item.favorite ? ('fileList.removeFromFavoritesDetail' | translate:{name: item.name}) : ('fileList.addToFavoritesDetail' | translate:{name: item.name})"
-                    [title]="item.favorite ? ('fileList.removeFromFavorites' | translate) : ('fileList.addToFavorites' | translate)">
-                    <mat-icon [class.favorited]="item.favorite" aria-hidden="true">
-                        {{ item.favorite ? 'favorite' : 'favorite_border' }}
-                    </mat-icon>
-                </button>
-                }
             </div>
+
+            <!-- Favorite button - top right corner overlay -->
+            @if(showFavoriteButton) {
+            <button mat-icon-button class="favorite-overlay" [class.visible]="item.favorite"
+                (click)="onToggleFavorite($event, item)"
+                [attr.aria-label]="item.favorite ? ('fileList.removeFromFavoritesDetail' | translate:{name: item.name}) : ('fileList.addToFavoritesDetail' | translate:{name: item.name})"
+                [title]="item.favorite ? ('fileList.removeFromFavorites' | translate) : ('fileList.addToFavorites' | translate)">
+                <mat-icon [class.favorited]="item.favorite" aria-hidden="true">
+                    {{ item.favorite ? 'favorite' : 'favorite_border' }}
+                </mat-icon>
+            </button>
+            }
 
             <div class="file-content">
                 <div class="file-icon" (click)="onIconClick($event, item)">

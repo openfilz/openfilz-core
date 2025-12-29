@@ -405,3 +405,39 @@ th.mat-header-cell {
     gap: 4px;
   }
 }
+
+/* Drag column styling */
+.drag-column {
+  width: 40px;
+  padding: 8px !important;
+}
+
+.drag-column .drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.file-row:hover .drag-handle {
+  opacity: 0.5;
+}
+
+.drag-column .drag-handle:hover {
+  opacity: 1 !important;
+}
+
+.drag-column .drag-handle:active {
+  cursor: grabbing;
+}
+
+.drag-column .drag-handle mat-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  color: var(--text-secondary);
+}

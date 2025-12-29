@@ -9,6 +9,9 @@ import { FileItem } from '../../models/document.models';
 import { FileIconService } from '../../services/file-icon.service';
 import { TouchDetectionService } from '../../services/touch-detection.service';
 import { TranslatePipe } from '@ngx-translate/core';
+import { FileDraggableDirective } from '../../directives/file-draggable.directive';
+import { FolderDropZoneDirective } from '../../directives/folder-drop-zone.directive';
+import { DropEvent } from '../../services/drag-drop.service';
 
 @Component({
   selector: 'app-file-grid',
@@ -21,13 +24,16 @@ import { TranslatePipe } from '@ngx-translate/core';
     MatButtonModule,
     MatCheckboxModule,
     MatTooltipModule,
-    TranslatePipe
+    TranslatePipe,
+    FileDraggableDirective,
+    FolderDropZoneDirective
 ],
 })
 export class FileGridComponent {
   @Input() items: FileItem[] = [];
   @Input() fileOver: boolean = false;
   @Input() showFavoriteButton: boolean = true; // Control favorite button visibility
+  @Input() currentFolderId: string | null = null; // Current folder for drop zone validation
 
   @Output() itemClick = new EventEmitter<FileItem>();
   @Output() itemDoubleClick = new EventEmitter<FileItem>();
@@ -39,6 +45,7 @@ export class FileGridComponent {
   @Output() delete = new EventEmitter<FileItem>();
   @Output() toggleFavorite = new EventEmitter<FileItem>();
   @Output() viewProperties = new EventEmitter<FileItem>();
+  @Output() itemsDroppedOnFolder = new EventEmitter<DropEvent>();
 
   // Keyboard navigation
   focusedIndex = 0;
@@ -114,6 +121,10 @@ export class FileGridComponent {
 
   onViewProperties(item: FileItem) {
     this.viewProperties.emit(item);
+  }
+
+  onItemsDropped(event: DropEvent) {
+    this.itemsDroppedOnFolder.emit(event);
   }
 
   getFileIcon(fileName: string, type: 'FILE' | 'FOLDER'): string {
