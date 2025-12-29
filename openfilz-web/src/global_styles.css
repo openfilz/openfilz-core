@@ -543,3 +543,81 @@ a,
   margin-left: 8px !important;
   margin-right: 0 !important;
 }
+
+/* ==================================
+   DRAG AND DROP STYLES
+   ================================== */
+
+/* Drag handle cursor */
+.drag-handle {
+  cursor: grab;
+  opacity: 0.5;
+  transition: opacity 150ms ease;
+}
+
+.drag-handle:hover {
+  opacity: 1;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Item being dragged */
+.is-dragging {
+  opacity: 0.4;
+  outline: 2px dashed var(--primary);
+  outline-offset: 2px;
+}
+
+/* Drop zone states */
+.drop-zone-active {
+  position: relative;
+}
+
+.drop-zone-valid {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  background-color: rgba(99, 102, 241, 0.05);
+  transition: all 150ms ease;
+}
+
+.drop-zone-hover {
+  outline: 3px solid var(--primary);
+  background-color: rgba(99, 102, 241, 0.15) !important;
+  transform: scale(1.02);
+  transition: all 150ms ease;
+}
+
+.drop-zone-invalid {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Drag preview badge (used by setDragImage) */
+.drag-preview {
+  position: fixed;
+  z-index: 10000;
+  pointer-events: none;
+  padding: 8px 16px;
+  background: var(--bg-primary);
+  border: 2px solid var(--primary);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* Dark theme adjustments for drag-drop */
+.theme-dark .drop-zone-valid {
+  background-color: rgba(129, 140, 248, 0.1);
+}
+
+.theme-dark .drop-zone-hover {
+  background-color: rgba(129, 140, 248, 0.2) !important;
+}

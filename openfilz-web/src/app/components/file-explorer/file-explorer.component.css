@@ -191,3 +191,17 @@
     background-color: rgba(99, 102, 241, 0.25);
   }
 }
+
+/* Breadcrumb bar for drag-drop navigation */
+.breadcrumb-bar {
+  padding: 0 24px;
+  background-color: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .breadcrumb-bar {
+    padding: 0 16px;
+  }
+}

@@ -46,6 +46,8 @@ import {
 import { DragDropDirective } from "../../directives/drag-drop.directive";
 import { DownloadProgressComponent } from "../download-progress/download-progress.component";
 import { AppConfig } from '../../config/app.config';
+import { DropEvent } from '../../services/drag-drop.service';
+import { BreadcrumbComponent } from '../breadcrumb/breadcrumb.component';
 
 @Component({
   selector: 'app-file-explorer',
@@ -97,6 +99,16 @@ import { AppConfig } from '../../config/app.config';
         </div>
       </app-toolbar>
 
+      <!-- Breadcrumb with drop zones for drag-and-drop navigation -->
+      <div class="breadcrumb-bar">
+        <app-breadcrumb
+          [breadcrumbs]="breadcrumbTrail"
+          [currentFolderId]="currentFolder?.id ?? null"
+          (navigate)="onBreadcrumbNavigate($event)"
+          (itemsDropped)="onDragDropMove($event)">
+        </app-breadcrumb>
+      </div>
+
       <div class="file-explorer-content" appDragDrop
            (filesDropped)="onFilesDropped($event)"
            (fileOverChange)="onFileOverChange($event)"
@@ -119,6 +131,7 @@ import { AppConfig } from '../../config/app.config';
               <app-file-grid
                       [items]="items"
                       [fileOver]="fileOver"
+                      [currentFolderId]="currentFolder?.id ?? null"
                       (itemClick)="onItemClick($event)"
                       (itemDoubleClick)="onItemDoubleClick($event)"
                       (selectionChange)="onSelectionChange($event)"
@@ -128,13 +141,15 @@ import { AppConfig } from '../../config/app.config';
                       (copy)="onCopyItem($event)"
                       (delete)="onDeleteItem($event)"
                       (toggleFavorite)="onToggleFavorite($event)"
-                      (viewProperties)="onViewProperties($event)">
+                      (viewProperties)="onViewProperties($event)"
+                      (itemsDroppedOnFolder)="onDragDropMove($event)">
               </app-file-grid>
           }
           @if(viewMode === 'list' && items.length > 0) {
               <app-file-list
                       [items]="items"
                       [fileOver]="fileOver"
+                      [currentFolderId]="currentFolder?.id ?? null"
                       (itemClick)="onItemClick($event)"
                       (itemDoubleClick)="onItemDoubleClick($event)"
                       (selectionChange)="onSelectionChange($event)"
@@ -149,7 +164,8 @@ import { AppConfig } from '../../config/app.config';
                       (viewProperties)="onViewProperties($event)"
                       [sortBy]="sortBy"
                       [sortOrder]="sortOrder"
-                      (sortChange)="onSortChange($event)">
+                      (sortChange)="onSortChange($event)"
+                      (itemsDroppedOnFolder)="onDragDropMove($event)">
               </app-file-list>
           }
       }
@@ -189,7 +205,8 @@ import { AppConfig } from '../../config/app.config';
     MatIcon,
     DragDropDirective,
     DownloadProgressComponent,
-    TranslatePipe
+    TranslatePipe,
+    BreadcrumbComponent
 ],
 })
 export class FileExplorerComponent extends FileOperationsComponent implements OnInit, OnDestroy {
@@ -698,6 +715,20 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
     this.location.back();
   }
 
+  onBreadcrumbNavigate(item: ElementInfo) {
+    // Navigate to folder from breadcrumb click
+    if (item.id === '0') {
+      // Root folder
+      this.navigateToHome();
+    } else {
+      // Find the index in breadcrumb trail and navigate
+      const index = this.breadcrumbTrail.findIndex(b => b.id === item.id);
+      if (index >= 0) {
+        this.breadcrumbTrail = this.breadcrumbTrail.slice(0, index + 1);
+        this.loadFolder(this.breadcrumbTrail[index], true, false, true);
+      }
+    }
+  }
 
   onFileOverChange(isOver: boolean) {
     this.fileOver = isOver;
@@ -1131,6 +1162,24 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
         }
       }
     });
+  }
+
+  onDragDropMove(event: DropEvent): void {
+    const { items, targetFolderId } = event;
+
+    if (items.length === 0) {
+      return;
+    }
+
+    // Prevent moving to same location
+    const currentFolderId = this.currentFolder?.id ?? null;
+    if (targetFolderId === currentFolderId) {
+      this.snackBar.open('Items are already in this folder', 'Close', { duration: 3000 });
+      return;
+    }
+
+    // Use existing bulk move logic
+    this.performBulkMoveInternal(items, targetFolderId);
   }
 
   private performBulkCopyInternal(itemsToCopy: FileItem[], targetFolderId: string | null): void {
