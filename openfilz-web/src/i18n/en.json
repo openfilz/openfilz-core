@@ -1,5 +1,6 @@
 {
     "common": {
+        "ok": "OK",
         "cancel": "Cancel",
         "close": "Close",
         "save": "Save",
@@ -248,7 +249,19 @@
             "copyItem": "Copy item",
             "copyItems": "Copy {{count}} items"
         },
-        "confirm": {}
+        "confirm": {},
+        "partialUpload": {
+            "title": "Partial Upload Result",
+            "successCount": "{{count}} file(s) uploaded successfully",
+            "errorCount": "{{count}} file(s) failed to upload",
+            "errorDetails": "Error Details",
+            "errorTypes": {
+                "documentNotFound": "Folder not found",
+                "duplicateName": "Duplicate file name",
+                "operationForbidden": "Operation forbidden",
+                "unknown": "Unknown error"
+            }
+        }
     },
     "recycleBin": {
         "title": "Recycle Bin",

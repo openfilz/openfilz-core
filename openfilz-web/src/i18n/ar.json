@@ -1,5 +1,6 @@
 {
     "common": {
+        "ok": "موافق",
         "cancel": "إلغاء",
         "close": "إغلاق",
         "save": "حفظ",
@@ -248,7 +249,19 @@
             "copyItem": "نسخ العنصر",
             "copyItems": "نسخ {{count}} عناصر"
         },
-        "confirm": {}
+        "confirm": {},
+        "partialUpload": {
+            "title": "نتيجة الرفع الجزئي",
+            "successCount": "تم رفع {{count}} ملف(ات) بنجاح",
+            "errorCount": "فشل رفع {{count}} ملف(ات)",
+            "errorDetails": "تفاصيل الخطأ",
+            "errorTypes": {
+                "documentNotFound": "المجلد غير موجود",
+                "duplicateName": "اسم ملف مكرر",
+                "operationForbidden": "العملية محظورة",
+                "unknown": "خطأ غير معروف"
+            }
+        }
     },
     "recycleBin": {
         "title": "سلة المحذوفات",

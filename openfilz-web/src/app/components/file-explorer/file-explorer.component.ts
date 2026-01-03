@@ -19,6 +19,7 @@ import { FolderTreeDialogComponent } from '../../dialogs/folder-tree-dialog/fold
 import { FileViewerDialogComponent } from '../../dialogs/file-viewer-dialog/file-viewer-dialog.component';
 import { KeyboardShortcutsDialogComponent } from '../../dialogs/keyboard-shortcuts-dialog/keyboard-shortcuts-dialog.component';
 import { ConfirmReplaceDialogComponent, ConfirmReplaceDialogData, ConfirmReplaceDialogResult } from '../../dialogs/confirm-replace-dialog/confirm-replace-dialog.component';
+import { PartialUploadResultDialogComponent, PartialUploadResultDialogData } from '../../dialogs/partial-upload-result-dialog/partial-upload-result-dialog.component';
 import { FileOperationsComponent } from '../base/file-operations.component';
 
 import { DocumentApiService } from '../../services/document-api.service';
@@ -1287,9 +1288,31 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
       this.currentFolder?.id,
       false // allowDuplicates = false by default
     ).subscribe({
-      next: (response) => {
+      next: (httpResponse) => {
         this.snackBar.dismiss();
+        const response = httpResponse.body || [];
+        const status = httpResponse.status;
 
+        // HTTP 207 Multi-Status: Partial success
+        if (status === 207) {
+          const result = this.documentApi.parseUploadResult(response);
+
+          // Find the last successful upload for navigation after dialog closes
+          const successfulUploads = response.filter(r => !r.errorType && r.id);
+          const lastSuccessId = successfulUploads.length > 0 ? successfulUploads[successfulUploads.length - 1].id! : null;
+
+          // Show dialog and navigate/reload after it closes
+          this.showPartialUploadResultDialog(result).afterClosed().subscribe(() => {
+            if (lastSuccessId) {
+              this.navigateToUploadedFile(lastSuccessId, false);
+            } else {
+              this.loadFolder(this.currentFolder);
+            }
+          });
+          return;
+        }
+
+        // HTTP 200: All successful
         const successMessage = isSingleFile
           ? `${singleFileName} uploaded successfully`
           : `${fileArray.length} files uploaded successfully`;
@@ -1298,7 +1321,9 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
         // Navigate to the uploaded file
         // For single file: focus and open metadata panel
         // For multiple files: just navigate to the page of the last uploaded file
-        this.navigateToUploadedFile(response[response.length - 1].id, isSingleFile);
+        if (response.length > 0 && response[response.length - 1].id) {
+          this.navigateToUploadedFile(response[response.length - 1].id!, isSingleFile);
+        }
       },
       error: (error) => {
         this.snackBar.dismiss();
@@ -1309,11 +1334,33 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
           return;
         }
 
+        // HTTP 404, 409, 403, 500 with body: All uploads failed
+        if (error.error && Array.isArray(error.error)) {
+          const result = this.documentApi.parseUploadResult(error.error);
+          this.showPartialUploadResultDialog(result).afterClosed().subscribe(() => {
+            this.loadFolder(this.currentFolder);
+          });
+          return;
+        }
+
         const errorMessage = isSingleFile
           ? `Failed to upload ${singleFileName}`
           : `Failed to upload ${fileArray.length} files`;
         this.snackBar.open(errorMessage, 'Close', { duration: 5000 });
       }
+    });
+  }
+
+  private showPartialUploadResultDialog(result: import('../../models/document.models').PartialUploadResult) {
+    const dialogData: PartialUploadResultDialogData = {
+      result
+    };
+
+    return this.dialog.open(PartialUploadResultDialogComponent, {
+      width: '550px',
+      maxWidth: '95vw',
+      data: dialogData,
+      autoFocus: false
     });
   }
 
@@ -1396,11 +1443,14 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
         this.currentFolder?.id,
         true // allowDuplicateFileNames = true to bypass conflict with deleted file
       ).subscribe({
-        next: (response) => {
+        next: (httpResponse) => {
           this.snackBar.dismiss();
+          const response = httpResponse.body || [];
           this.snackBar.open(`${fileName} uploaded successfully`, 'Close', { duration: 3000 });
           // Navigate to the uploaded file with focus and metadata panel
-          this.navigateToUploadedFile(response[response.length - 1].id, true);
+          if (response.length > 0 && response[response.length - 1].id) {
+            this.navigateToUploadedFile(response[response.length - 1].id!, true);
+          }
         },
         error: () => {
           this.snackBar.dismiss();

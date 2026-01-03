@@ -38,6 +38,7 @@ import java.util.stream.Collectors;
 
 import static org.openfilz.dms.controller.rest.ApiDescription.ALLOW_DUPLICATE_FILE_NAME_PARAM_DESCRIPTION;
 import static org.openfilz.dms.enums.DocumentType.FILE;
+import static org.openfilz.dms.exception.OpenFilzException.*;
 
 @Slf4j
 @RestController
@@ -74,8 +75,10 @@ public class DocumentController {
 
     @PostMapping(value = "/upload-multiple", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Upload multiple documents",
-            description = "Uploads multiple files, optionally with metadata and a parent folder ID.")
-    public Flux<UploadResponse> uploadDocument(
+            description = "Uploads multiple files, optionally with metadata and a parent folder ID. " +
+                    "Returns HTTP 200 if all uploads succeed, HTTP 207 (Multi-Status) if some succeed and some fail, " +
+                    "or an appropriate error status (404, 409, 403, 500) if all uploads fail.")
+    public Mono<ResponseEntity<List<UploadResponse>>> uploadDocument(
             @RequestPart("file") Flux<FilePart> filePartFlux,
             @CustomJsonPart(value = "parametersByFilename")
             @Parameter(
@@ -90,20 +93,83 @@ public class DocumentController {
 
         return filePartFlux.flatMapSequential(filePart -> {
                     MultipleUploadFileParameterAttributes fileParameters = parametersByFilenameMap.get(filePart.filename());
+                    String filename = filePart.filename();
 
-                    if(fileParameters == null) {
-                        log.debug("Processing file: {}", filePart.filename());
-                        return documentService.uploadDocument(filePart,  null, null, null, allowDuplicateFileNames);
+                    Mono<UploadResponse> uploadMono;
+                    if (fileParameters == null) {
+                        log.debug("Processing file: {}", filename);
+                        uploadMono = documentService.uploadDocument(filePart, null, null, null, allowDuplicateFileNames);
+                    } else {
+                        log.debug("Processing file: {}, parentId: {}, metadata: {}",
+                                filename,
+                                fileParameters.parentFolderId(),
+                                fileParameters.metadata());
+                        uploadMono = documentService.uploadDocument(filePart, null, fileParameters.parentFolderId(), fileParameters.metadata(), allowDuplicateFileNames);
                     }
-                    log.debug("Processing file: {}, parentId: {}, metadata: {}",
-                            filePart.filename(),
-                            fileParameters.parentFolderId(),
-                            fileParameters.metadata());
 
-                    return documentService.uploadDocument(filePart,  null, fileParameters.parentFolderId(), fileParameters.metadata(), allowDuplicateFileNames);
+                    // Handle errors gracefully - convert exceptions to error responses
+                    return uploadMono.onErrorResume(error -> {
+                        log.warn("Error uploading file '{}': {}", filename, error.getMessage());
+                        return Mono.just(UploadResponse.fromError(filename, error));
+                    });
                 })
-                .doOnComplete(() -> log.info("Finished processing all files for /upload-multiple"))
-                .doOnError(error -> log.error("Error during /upload-multiple processing stream: {}", error.getMessage(), error));
+                .collectList()
+                .map(this::buildMultipleUploadResponse)
+                .doOnSuccess(response -> log.info("Finished processing all files for /upload-multiple with status: {}", response.getStatusCode()));
+    }
+
+    /**
+     * Builds the ResponseEntity for multiple uploads based on the results.
+     * - HTTP 200: All uploads succeeded
+     * - HTTP 207: Partial success (some succeeded, some failed)
+     * - HTTP 404/409/403/500: All uploads failed (status based on error types)
+     */
+    private ResponseEntity<List<UploadResponse>> buildMultipleUploadResponse(List<UploadResponse> responses) {
+        if (responses.isEmpty()) {
+            return ResponseEntity.ok(responses);
+        }
+
+        long successCount = responses.stream().filter(r -> !r.isError()).count();
+        long errorCount = responses.stream().filter(UploadResponse::isError).count();
+
+        // All succeeded
+        if (errorCount == 0) {
+            return ResponseEntity.ok(responses);
+        }
+
+        // Partial success - use HTTP 207 Multi-Status
+        if (successCount > 0) {
+            return ResponseEntity.status(HttpStatus.MULTI_STATUS).body(responses);
+        }
+
+        // All failed - determine status based on error types
+        return ResponseEntity.status(determineAllErrorsHttpStatus(responses)).body(responses);
+    }
+
+    /**
+     * Determines the HTTP status when all uploads have failed.
+     * If all errors have the same type, return the corresponding HTTP status.
+     * Otherwise, return HTTP 500.
+     */
+    private HttpStatus determineAllErrorsHttpStatus(List<UploadResponse> responses) {
+        List<String> errorTypes = responses.stream()
+                .map(UploadResponse::errorType)
+                .distinct()
+                .toList();
+
+        // If all errors have the same type, map to specific HTTP status
+        if (errorTypes.size() == 1) {
+            String errorType = errorTypes.getFirst();
+            return switch (errorType) {
+                case DOCUMENT_NOT_FOUND -> HttpStatus.NOT_FOUND;
+                case DUPLICATE_NAME -> HttpStatus.CONFLICT;
+                case OPERATION_FORBIDDEN -> HttpStatus.FORBIDDEN;
+                default -> HttpStatus.INTERNAL_SERVER_ERROR;
+            };
+        }
+
+        // Mixed error types - return 500
+        return HttpStatus.INTERNAL_SERVER_ERROR;
     }
 
     private Map<String, Object> parseMetadata(String metadataJson) {

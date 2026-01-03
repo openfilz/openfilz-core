@@ -1,5 +1,6 @@
 {
     "common": {
+        "ok": "OK",
         "cancel": "Cancelar",
         "close": "Fechar",
         "save": "Salvar",
@@ -248,7 +249,19 @@
             "copyItem": "Copiar item",
             "copyItems": "Copiar {{count}} itens"
         },
-        "confirm": {}
+        "confirm": {},
+        "partialUpload": {
+            "title": "Resultado do upload parcial",
+            "successCount": "{{count}} arquivo(s) enviado(s) com sucesso",
+            "errorCount": "{{count}} arquivo(s) não puderam ser enviados",
+            "errorDetails": "Detalhes do erro",
+            "errorTypes": {
+                "documentNotFound": "Pasta não encontrada",
+                "duplicateName": "Nome de arquivo duplicado",
+                "operationForbidden": "Operação proibida",
+                "unknown": "Erro desconhecido"
+            }
+        }
     },
     "recycleBin": {
         "title": "Lixeira",

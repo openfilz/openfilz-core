@@ -1,5 +1,6 @@
 {
     "common": {
+        "ok": "OK",
         "cancel": "Annulla",
         "close": "Chiudi",
         "save": "Salva",
@@ -248,7 +249,19 @@
             "copyItem": "Copia elemento",
             "copyItems": "Copia {{count}} elementi"
         },
-        "confirm": {}
+        "confirm": {},
+        "partialUpload": {
+            "title": "Risultato caricamento parziale",
+            "successCount": "{{count}} file caricato/i con successo",
+            "errorCount": "{{count}} file non caricato/i",
+            "errorDetails": "Dettagli errore",
+            "errorTypes": {
+                "documentNotFound": "Cartella non trovata",
+                "duplicateName": "Nome file duplicato",
+                "operationForbidden": "Operazione non consentita",
+                "unknown": "Errore sconosciuto"
+            }
+        }
     },
     "recycleBin": {
         "title": "Cestino",

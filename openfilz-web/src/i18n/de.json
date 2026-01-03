@@ -1,5 +1,6 @@
 {
     "common": {
+        "ok": "OK",
         "cancel": "Abbrechen",
         "close": "Schließen",
         "save": "Speichern",
@@ -248,7 +249,19 @@
             "copyItem": "Element kopieren",
             "copyItems": "{{count}} Elemente kopieren"
         },
-        "confirm": {}
+        "confirm": {},
+        "partialUpload": {
+            "title": "Teilergebnis des Uploads",
+            "successCount": "{{count}} Datei(en) erfolgreich hochgeladen",
+            "errorCount": "{{count}} Datei(en) konnten nicht hochgeladen werden",
+            "errorDetails": "Fehlerdetails",
+            "errorTypes": {
+                "documentNotFound": "Ordner nicht gefunden",
+                "duplicateName": "Doppelter Dateiname",
+                "operationForbidden": "Vorgang nicht erlaubt",
+                "unknown": "Unbekannter Fehler"
+            }
+        }
     },
     "recycleBin": {
         "title": "Papierkorb",
