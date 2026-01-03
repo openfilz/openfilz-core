@@ -27,13 +27,6 @@ public class OnlyOfficeProperties {
     private DocumentServer documentServer = new DocumentServer();
 
     /**
-     * Base URL that OnlyOffice DocumentServer uses to reach OpenFilz API.
-     * Use host.docker.internal when OnlyOffice runs in Docker and OpenFilz runs on host.
-     * Example: http://host.docker.internal:8081
-     */
-    private String apiBaseUrl = "http://host.docker.internal:8081";
-
-    /**
      * JWT configuration for OnlyOffice authentication.
      */
     private Jwt jwt = new Jwt();

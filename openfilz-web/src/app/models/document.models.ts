@@ -12,6 +12,7 @@ export interface ElementInfo {
   type: DocumentType;
   contentType?: string;
   favorite?: boolean;
+  thumbnailUrl?: string;
 }
 
 export interface ListFolderAndCountResponse {

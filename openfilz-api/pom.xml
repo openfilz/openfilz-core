@@ -185,6 +185,13 @@
             <artifactId>httpclient5</artifactId>
         </dependency>
 
+        <!-- Apache PDFBox for PDF thumbnail generation -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.3</version>
+        </dependency>
+
         <!-- JWT Library for OnlyOffice tokens -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

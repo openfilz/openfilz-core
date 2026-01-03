@@ -13,6 +13,7 @@ import org.openfilz.dms.service.AuditService;
 import org.openfilz.dms.service.MetadataPostProcessor;
 import org.openfilz.dms.service.SaveDocumentService;
 import org.openfilz.dms.service.StorageService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.openfilz.dms.utils.ContentInfo;
 import org.openfilz.dms.utils.JsonUtils;
 import org.openfilz.dms.utils.UserInfoService;
@@ -44,6 +45,9 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
     protected final MetadataPostProcessor metadataPostProcessor;
     protected final TransactionalOperator tx;
 
+    @Autowired(required = false)
+    protected ThumbnailPostProcessor thumbnailPostProcessor;
+
 
    public Mono<UploadResponse> doSaveFile(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, Mono<String> storagePathMono) {
         return storagePathMono.flatMap(storagePath -> saveDocumentInDatabase(filePart, contentLength, parentFolderId, metadata, originalFilename, storagePath))
@@ -55,6 +59,9 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
 
     protected void postProcessDocument(Document document) {
         metadataPostProcessor.processDocument(document);
+        if (thumbnailPostProcessor != null) {
+            thumbnailPostProcessor.processDocument(document);
+        }
     }
 
     protected Mono<Document> replaceFileContentAndSave(FilePart newFilePart, ContentInfo contentInfo, Document document, String newStoragePath, String oldStoragePath) {
