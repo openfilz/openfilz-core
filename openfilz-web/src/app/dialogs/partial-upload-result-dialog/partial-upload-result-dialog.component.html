@@ -1,0 +1,65 @@
+<div class="dialog-header warning">
+  <div class="header-content">
+    <div class="icon-wrapper warning">
+      <mat-icon>warning</mat-icon>
+    </div>
+    <div class="header-text">
+      <h2 class="dialog-title">{{ 'dialogs.partialUpload.title' | translate }}</h2>
+    </div>
+  </div>
+</div>
+
+<mat-dialog-content class="dialog-content">
+  <!-- Success summary -->
+  <div class="success-summary">
+    <mat-icon class="success-icon">check_circle</mat-icon>
+    <span>{{ 'dialogs.partialUpload.successCount' | translate: { count: successCount } }}</span>
+  </div>
+
+  <!-- Error summary -->
+  <div class="error-summary">
+    <mat-icon class="error-icon">error</mat-icon>
+    <span>{{ 'dialogs.partialUpload.errorCount' | translate: { count: errorCount } }}</span>
+  </div>
+
+  <!-- Error groups -->
+  <div class="error-groups">
+    <h4 class="error-groups-title">{{ 'dialogs.partialUpload.errorDetails' | translate }}</h4>
+
+    @for (group of errorGroups; track group.errorType) {
+      <div class="error-group">
+        <div class="error-group-header" (click)="toggleErrorDetails(group.errorType)">
+          <div class="error-type-info">
+            <mat-icon class="error-type-icon">{{ getErrorTypeIcon(group.errorType) }}</mat-icon>
+            <span class="error-type-label">{{ getErrorTypeLabel(group.errorType) | translate }}</span>
+            <span class="error-count-badge">({{ group.count }})</span>
+          </div>
+          <button mat-icon-button class="expand-button" [class.expanded]="isExpanded(group.errorType)">
+            <mat-icon>{{ isExpanded(group.errorType) ? 'expand_less' : 'expand_more' }}</mat-icon>
+          </button>
+        </div>
+
+        @if (isExpanded(group.errorType)) {
+          <div class="error-details">
+            @for (error of group.errors; track error.name) {
+              <div class="error-item">
+                <mat-icon class="file-icon">insert_drive_file</mat-icon>
+                <div class="error-item-content">
+                  <span class="file-name">{{ error.name }}</span>
+                  <span class="error-message">{{ error.errorMessage }}</span>
+                </div>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    }
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions class="dialog-actions">
+  <button mat-flat-button class="close-btn" (click)="onClose()">
+    <mat-icon>check</mat-icon>
+    {{ 'common.ok' | translate }}
+  </button>
+</mat-dialog-actions>
