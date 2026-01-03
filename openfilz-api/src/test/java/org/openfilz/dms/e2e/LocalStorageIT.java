@@ -2168,4 +2168,353 @@ public class LocalStorageIT extends TestContainersBaseConfig {
         }
         log.debug("File {} unzipped in {}", zipFile.getFilename(), targetFolder);
     }
+
+    // ==================== Upload Multiple - HTTP Status Tests ====================
+
+    /**
+     * Tests that upload-multiple returns HTTP 200 when all files are uploaded successfully.
+     */
+    @Test
+    void whenUploadMultiple_allSuccess_thenHttp200() {
+        MultipartBodyBuilder builder = new MultipartBodyBuilder();
+        builder.part("file", new ClassPathResource("test_file_1.sql"));
+        builder.part("file", new ClassPathResource("test.txt"));
+
+        List<UploadResponse> responses = getWebTestClient().post()
+                .uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/upload-multiple")
+                        .queryParam("allowDuplicateFileNames", true)
+                        .build())
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(BodyInserters.fromMultipartData(builder.build()))
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(new ParameterizedTypeReference<List<UploadResponse>>() {})
+                .returnResult().getResponseBody();
+
+        Assertions.assertNotNull(responses);
+        Assertions.assertEquals(2, responses.size());
+        // All responses should be successful (no errors)
+        responses.forEach(response -> {
+            Assertions.assertNotNull(response.id());
+            Assertions.assertNull(response.errorType());
+            Assertions.assertNull(response.errorMessage());
+        });
+    }
+
+    /**
+     * Tests that upload-multiple returns HTTP 207 (Multi-Status) when some files succeed and some fail.
+     * Scenario: One file uploads to a valid location, another to a non-existent parent folder.
+     */
+    @Test
+    void whenUploadMultiple_partialSuccess_thenHttp207() {
+        // Create a valid folder for one file
+        CreateFolderRequest createFolderRequest = new CreateFolderRequest("test-folder-207-" + UUID.randomUUID(), null);
+        FolderResponse validFolder = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/folders")
+                .body(BodyInserters.fromValue(createFolderRequest))
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(FolderResponse.class)
+                .returnResult().getResponseBody();
+
+        // Non-existent folder ID
+        UUID nonExistentFolderId = UUID.randomUUID();
+
+        MultipartBodyBuilder builder = new MultipartBodyBuilder();
+        builder.part("file", new ClassPathResource("test_file_1.sql"));
+        builder.part("file", new ClassPathResource("test.txt"));
+
+        // First file goes to valid folder, second file goes to non-existent folder
+        MultipleUploadFileParameter param1 = new MultipleUploadFileParameter("test_file_1.sql",
+                new MultipleUploadFileParameterAttributes(validFolder.id(), null));
+        MultipleUploadFileParameter param2 = new MultipleUploadFileParameter("test.txt",
+                new MultipleUploadFileParameterAttributes(nonExistentFolderId, null));
+        builder.part("parametersByFilename", List.of(param1, param2));
+
+        List<UploadResponse> responses = getWebTestClient().post()
+                .uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/upload-multiple")
+                        .queryParam("allowDuplicateFileNames", true)
+                        .build())
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(BodyInserters.fromMultipartData(builder.build()))
+                .exchange()
+                .expectStatus().isEqualTo(HttpStatus.MULTI_STATUS)
+                .expectBody(new ParameterizedTypeReference<List<UploadResponse>>() {})
+                .returnResult().getResponseBody();
+
+        Assertions.assertNotNull(responses);
+        Assertions.assertEquals(2, responses.size());
+
+        // Find success and error responses
+        UploadResponse successResponse = responses.stream()
+                .filter(r -> r.errorType() == null)
+                .findFirst().orElse(null);
+        UploadResponse errorResponse = responses.stream()
+                .filter(r -> r.errorType() != null)
+                .findFirst().orElse(null);
+
+        Assertions.assertNotNull(successResponse, "Should have one successful upload");
+        Assertions.assertNotNull(successResponse.id());
+        Assertions.assertEquals("test_file_1.sql", successResponse.name());
+
+        Assertions.assertNotNull(errorResponse, "Should have one failed upload");
+        Assertions.assertNull(errorResponse.id());
+        Assertions.assertEquals("test.txt", errorResponse.name());
+        Assertions.assertEquals("DocumentNotFound", errorResponse.errorType());
+        Assertions.assertNotNull(errorResponse.errorMessage());
+    }
+
+    /**
+     * Tests that upload-multiple returns HTTP 404 when all files fail with DocumentNotFound error.
+     * Scenario: All files are uploaded to non-existent parent folders.
+     */
+    @Test
+    void whenUploadMultiple_allDocumentNotFound_thenHttp404() {
+        UUID nonExistentFolder1 = UUID.randomUUID();
+        UUID nonExistentFolder2 = UUID.randomUUID();
+
+        MultipartBodyBuilder builder = new MultipartBodyBuilder();
+        builder.part("file", new ClassPathResource("test_file_1.sql"));
+        builder.part("file", new ClassPathResource("test.txt"));
+
+        MultipleUploadFileParameter param1 = new MultipleUploadFileParameter("test_file_1.sql",
+                new MultipleUploadFileParameterAttributes(nonExistentFolder1, null));
+        MultipleUploadFileParameter param2 = new MultipleUploadFileParameter("test.txt",
+                new MultipleUploadFileParameterAttributes(nonExistentFolder2, null));
+        builder.part("parametersByFilename", List.of(param1, param2));
+
+        List<UploadResponse> responses = getWebTestClient().post()
+                .uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/upload-multiple")
+                        .queryParam("allowDuplicateFileNames", true)
+                        .build())
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(BodyInserters.fromMultipartData(builder.build()))
+                .exchange()
+                .expectStatus().isNotFound()
+                .expectBody(new ParameterizedTypeReference<List<UploadResponse>>() {})
+                .returnResult().getResponseBody();
+
+        Assertions.assertNotNull(responses);
+        Assertions.assertEquals(2, responses.size());
+
+        // All responses should have DocumentNotFound error
+        responses.forEach(response -> {
+            Assertions.assertNull(response.id());
+            Assertions.assertEquals("DocumentNotFound", response.errorType());
+            Assertions.assertNotNull(response.errorMessage());
+        });
+    }
+
+    /**
+     * Tests that upload-multiple returns HTTP 409 when all files fail with DuplicateName error.
+     * Scenario: Upload files with same names to same folder without allowDuplicateFileNames.
+     */
+    @Test
+    void whenUploadMultiple_allDuplicateName_thenHttp409() {
+        // Create a folder
+        CreateFolderRequest createFolderRequest = new CreateFolderRequest("test-folder-409-" + UUID.randomUUID(), null);
+        FolderResponse folder = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/folders")
+                .body(BodyInserters.fromValue(createFolderRequest))
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(FolderResponse.class)
+                .returnResult().getResponseBody();
+
+        // First, upload files to the folder successfully
+        MultipartBodyBuilder builderFirst = new MultipartBodyBuilder();
+        builderFirst.part("file", new ClassPathResource("test_file_1.sql"));
+        builderFirst.part("file", new ClassPathResource("test.txt"));
+
+        MultipleUploadFileParameter paramFirst1 = new MultipleUploadFileParameter("test_file_1.sql",
+                new MultipleUploadFileParameterAttributes(folder.id(), null));
+        MultipleUploadFileParameter paramFirst2 = new MultipleUploadFileParameter("test.txt",
+                new MultipleUploadFileParameterAttributes(folder.id(), null));
+        builderFirst.part("parametersByFilename", List.of(paramFirst1, paramFirst2));
+
+        getWebTestClient().post()
+                .uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/upload-multiple")
+                        .queryParam("allowDuplicateFileNames", false)
+                        .build())
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(BodyInserters.fromMultipartData(builderFirst.build()))
+                .exchange()
+                .expectStatus().isOk();
+
+        // Now try to upload the same files again WITHOUT allowDuplicateFileNames
+        MultipartBodyBuilder builderSecond = new MultipartBodyBuilder();
+        builderSecond.part("file", new ClassPathResource("test_file_1.sql"));
+        builderSecond.part("file", new ClassPathResource("test.txt"));
+
+        MultipleUploadFileParameter paramSecond1 = new MultipleUploadFileParameter("test_file_1.sql",
+                new MultipleUploadFileParameterAttributes(folder.id(), null));
+        MultipleUploadFileParameter paramSecond2 = new MultipleUploadFileParameter("test.txt",
+                new MultipleUploadFileParameterAttributes(folder.id(), null));
+        builderSecond.part("parametersByFilename", List.of(paramSecond1, paramSecond2));
+
+        List<UploadResponse> responses = getWebTestClient().post()
+                .uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/upload-multiple")
+                        .queryParam("allowDuplicateFileNames", false)
+                        .build())
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(BodyInserters.fromMultipartData(builderSecond.build()))
+                .exchange()
+                .expectStatus().isEqualTo(HttpStatus.CONFLICT)
+                .expectBody(new ParameterizedTypeReference<List<UploadResponse>>() {})
+                .returnResult().getResponseBody();
+
+        Assertions.assertNotNull(responses);
+        Assertions.assertEquals(2, responses.size());
+
+        // All responses should have DuplicateName error
+        responses.forEach(response -> {
+            Assertions.assertNull(response.id());
+            Assertions.assertEquals("DuplicateName", response.errorType());
+            Assertions.assertNotNull(response.errorMessage());
+        });
+    }
+
+    /**
+     * Tests that upload-multiple returns HTTP 500 when all files fail with mixed error types.
+     * Scenario: One file fails with DocumentNotFound, another fails with DuplicateName.
+     */
+    @Test
+    void whenUploadMultiple_allErrorsMixed_thenHttp500() {
+        // Create a folder and upload a file to it
+        CreateFolderRequest createFolderRequest = new CreateFolderRequest("test-folder-500-" + UUID.randomUUID(), null);
+        FolderResponse folder = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/folders")
+                .body(BodyInserters.fromValue(createFolderRequest))
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(FolderResponse.class)
+                .returnResult().getResponseBody();
+
+        // Upload test_file_1.sql to the folder first
+        MultipartBodyBuilder builderFirst = new MultipartBodyBuilder();
+        builderFirst.part("file", new ClassPathResource("test_file_1.sql"));
+        builderFirst.part("parentFolderId", folder.id().toString());
+
+        getWebTestClient().post()
+                .uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/upload")
+                        .queryParam("allowDuplicateFileNames", false)
+                        .build())
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(BodyInserters.fromMultipartData(builderFirst.build()))
+                .exchange()
+                .expectStatus().isCreated();
+
+        // Non-existent folder ID
+        UUID nonExistentFolderId = UUID.randomUUID();
+
+        // Now upload multiple files:
+        // - test_file_1.sql to existing folder (will fail with DuplicateName)
+        // - test.txt to non-existent folder (will fail with DocumentNotFound)
+        MultipartBodyBuilder builder = new MultipartBodyBuilder();
+        builder.part("file", new ClassPathResource("test_file_1.sql"));
+        builder.part("file", new ClassPathResource("test.txt"));
+
+        MultipleUploadFileParameter param1 = new MultipleUploadFileParameter("test_file_1.sql",
+                new MultipleUploadFileParameterAttributes(folder.id(), null));
+        MultipleUploadFileParameter param2 = new MultipleUploadFileParameter("test.txt",
+                new MultipleUploadFileParameterAttributes(nonExistentFolderId, null));
+        builder.part("parametersByFilename", List.of(param1, param2));
+
+        List<UploadResponse> responses = getWebTestClient().post()
+                .uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/upload-multiple")
+                        .queryParam("allowDuplicateFileNames", false)
+                        .build())
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(BodyInserters.fromMultipartData(builder.build()))
+                .exchange()
+                .expectStatus().isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR)
+                .expectBody(new ParameterizedTypeReference<List<UploadResponse>>() {})
+                .returnResult().getResponseBody();
+
+        Assertions.assertNotNull(responses);
+        Assertions.assertEquals(2, responses.size());
+
+        // All responses should be errors
+        responses.forEach(response -> {
+            Assertions.assertNull(response.id());
+            Assertions.assertNotNull(response.errorType());
+            Assertions.assertNotNull(response.errorMessage());
+        });
+
+        // Verify we have mixed error types
+        List<String> errorTypes = responses.stream()
+                .map(UploadResponse::errorType)
+                .distinct()
+                .toList();
+        Assertions.assertEquals(2, errorTypes.size(), "Should have two different error types");
+        Assertions.assertTrue(errorTypes.contains("DuplicateName"));
+        Assertions.assertTrue(errorTypes.contains("DocumentNotFound"));
+    }
+
+    /**
+     * Tests that upload-multiple returns HTTP 207 when one file succeeds and another fails with DuplicateName.
+     * This is another partial success scenario to verify HTTP 207 is returned correctly.
+     */
+    @Test
+    void whenUploadMultiple_partialSuccessWithDuplicate_thenHttp207() {
+        // Create a folder
+        CreateFolderRequest createFolderRequest = new CreateFolderRequest("test-folder-207-dup-" + UUID.randomUUID(), null);
+        FolderResponse folder = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/folders")
+                .body(BodyInserters.fromValue(createFolderRequest))
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(FolderResponse.class)
+                .returnResult().getResponseBody();
+
+        // Upload test_file_1.sql to the folder first
+        MultipartBodyBuilder builderFirst = new MultipartBodyBuilder();
+        builderFirst.part("file", new ClassPathResource("test_file_1.sql"));
+        builderFirst.part("parentFolderId", folder.id().toString());
+
+        getWebTestClient().post()
+                .uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/upload")
+                        .queryParam("allowDuplicateFileNames", false)
+                        .build())
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(BodyInserters.fromMultipartData(builderFirst.build()))
+                .exchange()
+                .expectStatus().isCreated();
+
+        // Now upload multiple files:
+        // - test_file_1.sql to same folder (will fail with DuplicateName)
+        // - test.txt to same folder (will succeed)
+        MultipartBodyBuilder builder = new MultipartBodyBuilder();
+        builder.part("file", new ClassPathResource("test_file_1.sql"));
+        builder.part("file", new ClassPathResource("test.txt"));
+
+        MultipleUploadFileParameter param1 = new MultipleUploadFileParameter("test_file_1.sql",
+                new MultipleUploadFileParameterAttributes(folder.id(), null));
+        MultipleUploadFileParameter param2 = new MultipleUploadFileParameter("test.txt",
+                new MultipleUploadFileParameterAttributes(folder.id(), null));
+        builder.part("parametersByFilename", List.of(param1, param2));
+
+        List<UploadResponse> responses = getWebTestClient().post()
+                .uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/upload-multiple")
+                        .queryParam("allowDuplicateFileNames", false)
+                        .build())
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(BodyInserters.fromMultipartData(builder.build()))
+                .exchange()
+                .expectStatus().isEqualTo(HttpStatus.MULTI_STATUS)
+                .expectBody(new ParameterizedTypeReference<List<UploadResponse>>() {})
+                .returnResult().getResponseBody();
+
+        Assertions.assertNotNull(responses);
+        Assertions.assertEquals(2, responses.size());
+
+        // One should succeed, one should fail
+        long successCount = responses.stream().filter(r -> r.errorType() == null).count();
+        long errorCount = responses.stream().filter(r -> r.errorType() != null).count();
+        Assertions.assertEquals(1, successCount, "Should have one successful upload");
+        Assertions.assertEquals(1, errorCount, "Should have one failed upload");
+
+        // Verify the error is DuplicateName
+        UploadResponse errorResponse = responses.stream()
+                .filter(r -> r.errorType() != null)
+                .findFirst().orElse(null);
+        Assertions.assertNotNull(errorResponse);
+        Assertions.assertEquals("DuplicateName", errorResponse.errorType());
+    }
 }

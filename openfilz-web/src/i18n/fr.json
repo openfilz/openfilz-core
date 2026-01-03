@@ -1,5 +1,6 @@
 {
     "common": {
+        "ok": "OK",
         "cancel": "Annuler",
         "close": "Fermer",
         "save": "Enregistrer",
@@ -248,7 +249,19 @@
             "copyItem": "Copier l'élément",
             "copyItems": "Copier {{count}} éléments"
         },
-        "confirm": {}
+        "confirm": {},
+        "partialUpload": {
+            "title": "Résultat du téléversement partiel",
+            "successCount": "{{count}} fichier(s) téléversé(s) avec succès",
+            "errorCount": "{{count}} fichier(s) n'ont pas pu être téléversés",
+            "errorDetails": "Détails des erreurs",
+            "errorTypes": {
+                "documentNotFound": "Dossier introuvable",
+                "duplicateName": "Nom de fichier en double",
+                "operationForbidden": "Opération interdite",
+                "unknown": "Erreur inconnue"
+            }
+        }
     },
     "recycleBin": {
         "title": "Corbeille",
