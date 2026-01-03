@@ -1,5 +1,6 @@
 {
     "common": {
+        "ok": "OK",
         "cancel": "Annuleren",
         "close": "Sluiten",
         "save": "Opslaan",
@@ -248,7 +249,19 @@
             "copyItem": "Item kopiëren",
             "copyItems": "{{count}} items kopiëren"
         },
-        "confirm": {}
+        "confirm": {},
+        "partialUpload": {
+            "title": "Gedeeltelijk uploadresultaat",
+            "successCount": "{{count}} bestand(en) succesvol geüpload",
+            "errorCount": "{{count}} bestand(en) konden niet worden geüpload",
+            "errorDetails": "Foutdetails",
+            "errorTypes": {
+                "documentNotFound": "Map niet gevonden",
+                "duplicateName": "Dubbele bestandsnaam",
+                "operationForbidden": "Bewerking niet toegestaan",
+                "unknown": "Onbekende fout"
+            }
+        }
     },
     "recycleBin": {
         "title": "Prullenbak",

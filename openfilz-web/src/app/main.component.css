@@ -55,16 +55,22 @@
   margin-bottom: 0;
   height: calc(100vh - 64px);
   /* Full height minus header only */
-  overflow-y: visible;
-  /* Let the main .main-content handle scrolling */
+  overflow-y: auto;
+  /* Dashboard and other views scroll normally */
 }
 
-/* For non-dashboard content, breadcrumb is visible, so adjust accordingly */
+/* For my-folder view - has breadcrumb, adjust margin accordingly */
 .main-content:not(.dashboard-content) {
   margin-top: 92px;
   /* Header height (64px) + breadcrumb height (28px) */
   height: calc(100vh - 92px);
   /* Include breadcrumb in calculation */
+}
+
+/* File explorer views (my-folder, recycle-bin, search, favorites) need overflow hidden
+   so the internal file-explorer-content handles scrolling and toolbar stays sticky */
+.main-content.file-explorer-view {
+  overflow-y: hidden;
 }
 
 /* Removed centering for WIP routes - they should display full width */

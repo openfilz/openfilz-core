@@ -66,10 +66,25 @@ export interface DeleteRequest {
 }
 
 export interface UploadResponse {
-  id: string;
+  id: string | null;
   name: string;
-  contentType: string;
-  size: number;
+  contentType: string | null;
+  size: number | null;
+  errorType?: string | null;
+  errorMessage?: string | null;
+}
+
+export interface UploadErrorGroup {
+  errorType: string;
+  count: number;
+  errors: UploadResponse[];
+}
+
+export interface PartialUploadResult {
+  successCount: number;
+  errorCount: number;
+  errorGroups: UploadErrorGroup[];
+  responses: UploadResponse[];
 }
 
 export interface SearchByMetadataRequest {

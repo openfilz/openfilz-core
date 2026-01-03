@@ -1,7 +1,7 @@
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
-
-import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
-import { filter, forkJoin, Subscription, take } from 'rxjs';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
+import { Location } from '@angular/common';
+import { ActivatedRoute, Router } from '@angular/router';
+import { forkJoin, Subscription } from 'rxjs';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -19,6 +19,7 @@ import { FolderTreeDialogComponent } from '../../dialogs/folder-tree-dialog/fold
 import { FileViewerDialogComponent } from '../../dialogs/file-viewer-dialog/file-viewer-dialog.component';
 import { KeyboardShortcutsDialogComponent } from '../../dialogs/keyboard-shortcuts-dialog/keyboard-shortcuts-dialog.component';
 import { ConfirmReplaceDialogComponent, ConfirmReplaceDialogData, ConfirmReplaceDialogResult } from '../../dialogs/confirm-replace-dialog/confirm-replace-dialog.component';
+import { PartialUploadResultDialogComponent, PartialUploadResultDialogData } from '../../dialogs/partial-upload-result-dialog/partial-upload-result-dialog.component';
 import { FileOperationsComponent } from '../base/file-operations.component';
 
 import { DocumentApiService } from '../../services/document-api.service';
@@ -46,6 +47,8 @@ import {
 import { DragDropDirective } from "../../directives/drag-drop.directive";
 import { DownloadProgressComponent } from "../download-progress/download-progress.component";
 import { AppConfig } from '../../config/app.config';
+import { DropEvent } from '../../services/drag-drop.service';
+import { BreadcrumbComponent } from '../breadcrumb/breadcrumb.component';
 
 @Component({
   selector: 'app-file-explorer',
@@ -97,6 +100,16 @@ import { AppConfig } from '../../config/app.config';
         </div>
       </app-toolbar>
 
+      <!-- Breadcrumb with drop zones for drag-and-drop navigation -->
+      <div class="breadcrumb-bar">
+        <app-breadcrumb
+          [breadcrumbs]="breadcrumbTrail"
+          [currentFolderId]="currentFolder?.id ?? null"
+          (navigate)="onBreadcrumbNavigate($event)"
+          (itemsDropped)="onDragDropMove($event)">
+        </app-breadcrumb>
+      </div>
+
       <div class="file-explorer-content" appDragDrop
            (filesDropped)="onFilesDropped($event)"
            (fileOverChange)="onFileOverChange($event)"
@@ -119,6 +132,7 @@ import { AppConfig } from '../../config/app.config';
               <app-file-grid
                       [items]="items"
                       [fileOver]="fileOver"
+                      [currentFolderId]="currentFolder?.id ?? null"
                       (itemClick)="onItemClick($event)"
                       (itemDoubleClick)="onItemDoubleClick($event)"
                       (selectionChange)="onSelectionChange($event)"
@@ -128,13 +142,15 @@ import { AppConfig } from '../../config/app.config';
                       (copy)="onCopyItem($event)"
                       (delete)="onDeleteItem($event)"
                       (toggleFavorite)="onToggleFavorite($event)"
-                      (viewProperties)="onViewProperties($event)">
+                      (viewProperties)="onViewProperties($event)"
+                      (itemsDroppedOnFolder)="onDragDropMove($event)">
               </app-file-grid>
           }
           @if(viewMode === 'list' && items.length > 0) {
               <app-file-list
                       [items]="items"
                       [fileOver]="fileOver"
+                      [currentFolderId]="currentFolder?.id ?? null"
                       (itemClick)="onItemClick($event)"
                       (itemDoubleClick)="onItemDoubleClick($event)"
                       (selectionChange)="onSelectionChange($event)"
@@ -149,7 +165,8 @@ import { AppConfig } from '../../config/app.config';
                       (viewProperties)="onViewProperties($event)"
                       [sortBy]="sortBy"
                       [sortOrder]="sortOrder"
-                      (sortChange)="onSortChange($event)">
+                      (sortChange)="onSortChange($event)"
+                      (itemsDroppedOnFolder)="onDragDropMove($event)">
               </app-file-list>
           }
       }
@@ -189,7 +206,8 @@ import { AppConfig } from '../../config/app.config';
     MatIcon,
     DragDropDirective,
     DownloadProgressComponent,
-    TranslatePipe
+    TranslatePipe,
+    BreadcrumbComponent
 ],
 })
 export class FileExplorerComponent extends FileOperationsComponent implements OnInit, OnDestroy {
@@ -206,12 +224,12 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
   private clickTimeout: any = null;
   private readonly CLICK_DELAY = 250; // milliseconds
 
-  // Flag to skip navigation event when clearing query params
-  private skipNextNavigation = false;
+  // Flag to track if navigation is triggered by URL change (browser back/forward)
+  private isNavigatingFromUrl = false;
+  private queryParamsSubscription?: Subscription;
 
   @ViewChild('fileInput') fileInput!: ElementRef;
 
-  private routerEventsSubscription!: Subscription;
   private shortcutsSubscription?: Subscription;
 
   private fileIconService = inject(FileIconService);
@@ -219,31 +237,41 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
   private route = inject(ActivatedRoute);
   private searchService = inject(SearchService);
   private keyboardShortcuts = inject(KeyboardShortcutsService);
+  private location = inject(Location);
 
   constructor() {
     super();
   }
 
-  private handleFolderIdChange(): void {
-    const folderId = this.route.snapshot.queryParamMap.get('folderId');
-    const targetFileId = this.route.snapshot.queryParamMap.get('targetFileId');
-    const openViewer = this.route.snapshot.queryParamMap.get('openViewer') === 'true';
-
-    if (targetFileId) {
-      this.navigateToFile(targetFileId, openViewer);
-    } else if (folderId) {
-      this.loadFolderById(folderId);
-    } else {
-      this.loadFolder();
-    }
+  /**
+   * Updates the URL with the current folder ID.
+   * This enables browser back/forward navigation.
+   */
+  private updateUrlWithFolder(folderId?: string): void {
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { folderId: folderId || null },
+      queryParamsHandling: 'merge',
+      replaceUrl: false  // Creates a new history entry
+    });
   }
 
   ngOnDestroy(): void {
-    if (this.routerEventsSubscription) {
-      this.routerEventsSubscription.unsubscribe();
+    if (this.queryParamsSubscription) {
+      this.queryParamsSubscription.unsubscribe();
     }
     if (this.shortcutsSubscription) {
       this.shortcutsSubscription.unsubscribe();
+    }
+  }
+
+  @HostListener('window:popstate', ['$event'])
+  onBrowserBack(event: PopStateEvent): void {
+    // If metadata panel is open when browser back is clicked, close it and stay on current page
+    if (this.metadataPanelOpen) {
+      this.closeMetadataPanel();
+      // Go forward to cancel the back navigation (stay on current page)
+      history.go(1);
     }
   }
 
@@ -373,32 +401,55 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
   override ngOnInit() {
     super.ngOnInit();
 
-    // Initial load
-    //this.handleFolderIdChange();
+    // Subscribe to query params for browser back/forward navigation
+    this.queryParamsSubscription = this.route.queryParams.subscribe(params => {
+      const folderId = params['folderId'];
+      const targetFileId = params['targetFileId'];
+      const openViewer = params['openViewer'] === 'true';
 
-    // Listen for subsequent navigation events to the same route
-    this.routerEventsSubscription = this.router.events.pipe(
-      // Filter for the NavigationEnd event
-      filter(event => event instanceof NavigationEnd)
-    ).subscribe(() => {
-      // Skip navigation if flag is set (when clearing query params)
-      if (this.skipNextNavigation) {
-        this.skipNextNavigation = false;
+      // Handle targetFileId navigation (from search results, etc.)
+      if (targetFileId) {
+        this.navigateToFile(targetFileId, openViewer);
         return;
       }
-      // Manually trigger the logic when navigation ends
-      this.handleFolderIdChange();
+
+      // Skip if this navigation was triggered by us updating the URL
+      if (this.isNavigatingFromUrl) {
+        this.isNavigatingFromUrl = false;
+        return;
+      }
+
+      // Check if folderId changed (browser back/forward)
+      const currentFolderId = this.currentFolder?.id;
+      if (folderId !== currentFolderId) {
+        if (folderId) {
+          // Navigate to specific folder
+          this.loadFolderById(folderId);
+        } else if (currentFolderId) {
+          // Going back to root
+          this.breadcrumbTrail = [];
+          this.loadFolder(undefined, true, false, false);
+        } else {
+          // Initial load at root
+          this.loadFolder(undefined, true, false, false);
+        }
+      }
     });
 
     this.breadcrumbService.navigation$.subscribe(folder => {
+      // Close metadata panel if open when navigating via breadcrumb
+      if (this.metadataPanelOpen) {
+        this.closeMetadataPanel();
+      }
+
       if (folder === null) {
         this.breadcrumbTrail = [];
-        this.loadFolder(undefined, true);
+        this.loadFolder(undefined, true, false, true);
       } else {
         const index = this.breadcrumbTrail.findIndex(f => f.id === folder.id);
         if (index !== -1) {
           this.breadcrumbTrail = this.breadcrumbTrail.slice(0, index + 1);
-          this.loadFolder(this.breadcrumbTrail[index], true);
+          this.loadFolder(this.breadcrumbTrail[index], true, false, true);
         }
       }
     });
@@ -444,21 +495,14 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
           }
         ];
 
-        this.loadFolder(this.breadcrumbTrail[this.breadcrumbTrail.length - 1], true);
-
-        // Set flag to skip next navigation event when clearing query params
-        this.skipNextNavigation = true;
-        this.router.navigate([], {
-          relativeTo: this.route,
-          queryParams: { folderId: null },
-          queryParamsHandling: 'merge',
-        });
+        // Load folder without updating history (URL already has the folderId)
+        this.loadFolder(this.breadcrumbTrail[this.breadcrumbTrail.length - 1], true, false, false);
       },
       error: (err) => {
         this.snackBar.open('Could not load the specified folder.', 'Close', { duration: 3000 });
         this.loading = false;
         this.router.navigate(['/my-folder']);
-        this.loadFolder();
+        this.loadFolder(undefined, false, false, false);
       }
     });
   }
@@ -503,19 +547,21 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
         // Load the correct page and focus on the file
         this.loadItemsAndFocusFile(fileId, openViewer, documentInfo);
 
-        // Set flag to skip next navigation event when clearing query params
-        this.skipNextNavigation = true;
+        // Update URL to show the parent folder (clear targetFileId, keep folderId for back navigation)
+        // Use replaceUrl to replace the targetFileId entry in history, so back button returns to origin
+        this.isNavigatingFromUrl = true;
         this.router.navigate([], {
           relativeTo: this.route,
-          queryParams: { targetFileId: null, openViewer: null },
+          queryParams: { folderId: this.currentFolder?.id || null, targetFileId: null, openViewer: null },
           queryParamsHandling: 'merge',
+          replaceUrl: true
         });
       },
       error: (err) => {
         this.snackBar.open('Could not navigate to the file.', 'Close', { duration: 3000 });
         this.loading = false;
         this.router.navigate(['/my-folder']);
-        this.loadFolder();
+        this.loadFolder(undefined, false, false, false);
       }
     });
   }
@@ -565,9 +611,21 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
   private focusFileItem(fileId: string): void {
     // Use setTimeout to ensure DOM is rendered
     setTimeout(() => {
-      const element = document.querySelector(`[data-file-id="${fileId}"]`);
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const element = document.querySelector(`[data-file-id="${fileId}"]`) as HTMLElement;
+      const scrollContainer = document.querySelector('.file-explorer-content') as HTMLElement;
+
+      if (element && scrollContainer) {
+        // Calculate scroll position to center the element within the container
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const elementRect = element.getBoundingClientRect();
+        const scrollTop = scrollContainer.scrollTop + (elementRect.top - containerRect.top) - (containerRect.height / 2) + (elementRect.height / 2);
+
+        // Scroll only the file-explorer-content container, not the entire page
+        scrollContainer.scrollTo({
+          top: Math.max(0, scrollTop),
+          behavior: 'smooth'
+        });
+
         element.classList.add('highlighted');
 
         // Remove highlight after animation
@@ -578,7 +636,7 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
     }, 100);
   }
 
-  loadFolder(folder?: FileItem, fromBreadcrumb: boolean = false, appendBreadCrumb: boolean = false) {
+  loadFolder(folder?: FileItem, fromBreadcrumb: boolean = false, appendBreadCrumb: boolean = false, updateHistory: boolean = true) {
     this.loading = true;
     this.currentFolder = folder;
 
@@ -590,6 +648,12 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
       } else {
         this.breadcrumbTrail = [];
       }
+    }
+
+    // Update URL for browser history (enables back/forward navigation)
+    if (updateHistory) {
+      this.isNavigatingFromUrl = true;
+      this.updateUrlWithFolder(folder?.id);
     }
 
     this.documentApi.listFolderAndCount(this.currentFolder?.id, 1, this.pageSize, this.currentFilters, this.sortBy, this.sortOrder).subscribe({
@@ -641,17 +705,31 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
   }
 
   navigateBack() {
-    if (this.breadcrumbTrail.length > 1) {
-      // Navigate to parent folder (second to last in trail)
-      this.breadcrumbTrail.pop(); // Remove current folder
-      const parentFolder = this.breadcrumbTrail[this.breadcrumbTrail.length - 1];
-      this.loadFolder(parentFolder, true);
-    } else if (this.breadcrumbTrail.length === 1) {
-      // Navigate to root
-      this.navigateToHome();
+    console.log('navigateBack() called, metadataPanelOpen:', this.metadataPanelOpen);
+    // If metadata panel is open, close it first
+    if (this.metadataPanelOpen) {
+      this.closeMetadataPanel();
+      return;
     }
+    // Use browser history to go back to the previous location
+    // This correctly handles navigation from search results
+    this.location.back();
   }
 
+  onBreadcrumbNavigate(item: ElementInfo) {
+    // Navigate to folder from breadcrumb click
+    if (item.id === '0') {
+      // Root folder
+      this.navigateToHome();
+    } else {
+      // Find the index in breadcrumb trail and navigate
+      const index = this.breadcrumbTrail.findIndex(b => b.id === item.id);
+      if (index >= 0) {
+        this.breadcrumbTrail = this.breadcrumbTrail.slice(0, index + 1);
+        this.loadFolder(this.breadcrumbTrail[index], true, false, true);
+      }
+    }
+  }
 
   onFileOverChange(isOver: boolean) {
     this.fileOver = isOver;
@@ -1087,6 +1165,24 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
     });
   }
 
+  onDragDropMove(event: DropEvent): void {
+    const { items, targetFolderId } = event;
+
+    if (items.length === 0) {
+      return;
+    }
+
+    // Prevent moving to same location
+    const currentFolderId = this.currentFolder?.id ?? null;
+    if (targetFolderId === currentFolderId) {
+      this.snackBar.open('Items are already in this folder', 'Close', { duration: 3000 });
+      return;
+    }
+
+    // Use existing bulk move logic
+    this.performBulkMoveInternal(items, targetFolderId);
+  }
+
   private performBulkCopyInternal(itemsToCopy: FileItem[], targetFolderId: string | null): void {
     const folders = itemsToCopy.filter(item => item.type === 'FOLDER');
     const files = itemsToCopy.filter(item => item.type === 'FILE');
@@ -1192,9 +1288,31 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
       this.currentFolder?.id,
       false // allowDuplicates = false by default
     ).subscribe({
-      next: (response) => {
+      next: (httpResponse) => {
         this.snackBar.dismiss();
+        const response = httpResponse.body || [];
+        const status = httpResponse.status;
 
+        // HTTP 207 Multi-Status: Partial success
+        if (status === 207) {
+          const result = this.documentApi.parseUploadResult(response);
+
+          // Find the last successful upload for navigation after dialog closes
+          const successfulUploads = response.filter(r => !r.errorType && r.id);
+          const lastSuccessId = successfulUploads.length > 0 ? successfulUploads[successfulUploads.length - 1].id! : null;
+
+          // Show dialog and navigate/reload after it closes
+          this.showPartialUploadResultDialog(result).afterClosed().subscribe(() => {
+            if (lastSuccessId) {
+              this.navigateToUploadedFile(lastSuccessId, false);
+            } else {
+              this.loadFolder(this.currentFolder);
+            }
+          });
+          return;
+        }
+
+        // HTTP 200: All successful
         const successMessage = isSingleFile
           ? `${singleFileName} uploaded successfully`
           : `${fileArray.length} files uploaded successfully`;
@@ -1203,7 +1321,9 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
         // Navigate to the uploaded file
         // For single file: focus and open metadata panel
         // For multiple files: just navigate to the page of the last uploaded file
-        this.navigateToUploadedFile(response[response.length - 1].id, isSingleFile);
+        if (response.length > 0 && response[response.length - 1].id) {
+          this.navigateToUploadedFile(response[response.length - 1].id!, isSingleFile);
+        }
       },
       error: (error) => {
         this.snackBar.dismiss();
@@ -1214,11 +1334,33 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
           return;
         }
 
+        // HTTP 404, 409, 403, 500 with body: All uploads failed
+        if (error.error && Array.isArray(error.error)) {
+          const result = this.documentApi.parseUploadResult(error.error);
+          this.showPartialUploadResultDialog(result).afterClosed().subscribe(() => {
+            this.loadFolder(this.currentFolder);
+          });
+          return;
+        }
+
         const errorMessage = isSingleFile
           ? `Failed to upload ${singleFileName}`
           : `Failed to upload ${fileArray.length} files`;
         this.snackBar.open(errorMessage, 'Close', { duration: 5000 });
       }
+    });
+  }
+
+  private showPartialUploadResultDialog(result: import('../../models/document.models').PartialUploadResult) {
+    const dialogData: PartialUploadResultDialogData = {
+      result
+    };
+
+    return this.dialog.open(PartialUploadResultDialogComponent, {
+      width: '550px',
+      maxWidth: '95vw',
+      data: dialogData,
+      autoFocus: false
     });
   }
 
@@ -1301,11 +1443,14 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
         this.currentFolder?.id,
         true // allowDuplicateFileNames = true to bypass conflict with deleted file
       ).subscribe({
-        next: (response) => {
+        next: (httpResponse) => {
           this.snackBar.dismiss();
+          const response = httpResponse.body || [];
           this.snackBar.open(`${fileName} uploaded successfully`, 'Close', { duration: 3000 });
           // Navigate to the uploaded file with focus and metadata panel
-          this.navigateToUploadedFile(response[response.length - 1].id, true);
+          if (response.length > 0 && response[response.length - 1].id) {
+            this.navigateToUploadedFile(response[response.length - 1].id!, true);
+          }
         },
         error: () => {
           this.snackBar.dismiss();

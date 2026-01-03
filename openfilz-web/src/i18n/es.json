@@ -1,5 +1,6 @@
 {
     "common": {
+        "ok": "OK",
         "cancel": "Cancelar",
         "close": "Cerrar",
         "save": "Guardar",
@@ -248,7 +249,19 @@
             "copyItem": "Copiar elemento",
             "copyItems": "Copiar {{count}} elementos"
         },
-        "confirm": {}
+        "confirm": {},
+        "partialUpload": {
+            "title": "Resultado de subida parcial",
+            "successCount": "{{count}} archivo(s) subido(s) con éxito",
+            "errorCount": "{{count}} archivo(s) no se pudieron subir",
+            "errorDetails": "Detalles del error",
+            "errorTypes": {
+                "documentNotFound": "Carpeta no encontrada",
+                "duplicateName": "Nombre de archivo duplicado",
+                "operationForbidden": "Operación prohibida",
+                "unknown": "Error desconocido"
+            }
+        }
     },
     "recycleBin": {
         "title": "Papelera",

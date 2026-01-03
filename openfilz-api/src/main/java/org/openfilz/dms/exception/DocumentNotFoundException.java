@@ -5,7 +5,7 @@ import org.openfilz.dms.enums.DocumentType;
 
 import java.util.UUID;
 
-public class DocumentNotFoundException extends RuntimeException {
+public class DocumentNotFoundException extends AbstractOpenFilzException {
 
     private static final String DOCUMENT_NOT_FOUND = "Document not found : ";
     private static final String FILE_NOT_FOUND = "File not found : ";
@@ -21,5 +21,10 @@ public class DocumentNotFoundException extends RuntimeException {
 
     public DocumentNotFoundException(String message) {
         super(message);
+    }
+
+    @Override
+    public String getError() {
+        return OpenFilzException.DOCUMENT_NOT_FOUND;
     }
 }

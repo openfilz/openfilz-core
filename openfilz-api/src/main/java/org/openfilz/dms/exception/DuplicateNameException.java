@@ -5,9 +5,14 @@ import org.openfilz.dms.enums.DocumentType;
 
 import static org.openfilz.dms.enums.DocumentType.FILE;
 
-public class DuplicateNameException extends RuntimeException {
+public class DuplicateNameException extends AbstractOpenFilzException {
     public DuplicateNameException(String message) {
         super(message);
+    }
+
+    @Override
+    public String getError() {
+        return OpenFilzException.DUPLICATE_NAME;
     }
 
     public DuplicateNameException(@NotNull DocumentType documentType, String documentName) {

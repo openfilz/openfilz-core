@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpHeaders, HttpParams, HttpResponse } from '@angular/common/http';
 import { filter, map, Observable } from 'rxjs';
 import { Apollo, gql } from 'apollo-angular';
 import {
@@ -23,7 +23,9 @@ import {
   ListFolderRequest,
   FilterInput,
   SearchFilters,
-  DocumentType
+  DocumentType,
+  PartialUploadResult,
+  UploadErrorGroup
 } from '../models/document.models';
 import { environment } from '../../environments/environment';
 
@@ -414,7 +416,7 @@ export class DocumentApiService {
     });
   }
 
-  uploadMultipleDocuments(files: File[], parentFolderId?: string, allowDuplicateFileNames?: boolean, metadata?: { [key: string]: any }): Observable<UploadResponse[]> {
+  uploadMultipleDocuments(files: File[], parentFolderId?: string, allowDuplicateFileNames?: boolean, metadata?: { [key: string]: any }): Observable<HttpResponse<UploadResponse[]>> {
     const formData = new FormData();
     const parametersByFilename: MultipleUploadFileParameter[] = [];
     files.forEach(file => {
@@ -439,8 +441,43 @@ export class DocumentApiService {
 
     return this.http.post<UploadResponse[]>(`${this.baseUrl}/documents/upload-multiple`, formData, {
       headers: this.getMultipartHeaders(),
-      params
+      params,
+      observe: 'response'
     });
+  }
+
+  /**
+   * Parses upload responses into a PartialUploadResult object.
+   * Useful for handling HTTP 207 Multi-Status responses.
+   */
+  parseUploadResult(responses: UploadResponse[]): PartialUploadResult {
+    const successResponses = responses.filter(r => !r.errorType);
+    const errorResponses = responses.filter(r => !!r.errorType);
+
+    // Group errors by errorType and sort by count (descending)
+    const errorMap = new Map<string, UploadResponse[]>();
+    errorResponses.forEach(r => {
+      const type = r.errorType || 'Unknown';
+      if (!errorMap.has(type)) {
+        errorMap.set(type, []);
+      }
+      errorMap.get(type)!.push(r);
+    });
+
+    const errorGroups: UploadErrorGroup[] = Array.from(errorMap.entries())
+      .map(([errorType, errors]) => ({
+        errorType,
+        count: errors.length,
+        errors
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    return {
+      successCount: successResponses.length,
+      errorCount: errorResponses.length,
+      errorGroups,
+      responses
+    };
   }
 
   replaceDocumentContent(documentId: string, file: File): Observable<ElementInfo> {
