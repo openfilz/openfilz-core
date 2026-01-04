@@ -311,12 +311,12 @@ public class ThumbnailProperties {
         /**
          * Thumbnail width in pixels.
          */
-        private int width = 256;
+        private int width = 160;
 
         /**
          * Thumbnail height in pixels.
          */
-        private int height = 256;
+        private int height = 160;
     }
 
     /**

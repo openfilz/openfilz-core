@@ -3,6 +3,8 @@ package org.openfilz.dms.service;
 import org.openfilz.dms.entity.Document;
 import reactor.core.publisher.Mono;
 
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 import java.util.UUID;
 
 /**
@@ -53,11 +55,7 @@ public interface ThumbnailService {
      */
     boolean isSupported(String contentType);
 
-    /**
-     * Checks if a thumbnail exists for a document.
-     *
-     * @param documentId the document ID
-     * @return Mono containing true if thumbnail exists
-     */
-    Mono<Boolean> thumbnailExists(UUID documentId);
+    UUID validateToken(String token);
+
+    String sign(String tokenPayload);
 }

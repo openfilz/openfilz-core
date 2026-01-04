@@ -14,10 +14,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
 import java.util.UUID;
@@ -30,7 +27,7 @@ import static org.openfilz.dms.config.RestApiVersion.ENDPOINT_THUMBNAILS;
  * <p>
  * Provides two endpoints:
  * - GET /api/v1/thumbnails/{documentId} - Serves thumbnail to frontend (OAuth2 protected)
- * - GET /api/v1/thumbnails/source/{documentId} - Serves original document to ImgProxy (mTLS protected)
+ * - GET /api/v1/thumbnails/source/{documentToken} - Serves original document to ImgProxy (Self generated token protected)
  */
 @Slf4j
 @RestController
@@ -67,24 +64,28 @@ public class ThumbnailController {
 
     /**
      * Serves the original document to ImgProxy for thumbnail generation.
-     * This endpoint is protected by mTLS - only ImgProxy with valid client certificate can access it.
+     * This endpoint is secured by the documentToken sent
      *
-     * @param documentId the document ID
+     * @param documentToken the document token
      * @return the document content
      */
-    @GetMapping("/source/{documentId}")
+    @GetMapping("/source/{documentToken}")
     @Operation(summary = "Get document source for thumbnail generation",
             description = "Internal endpoint for ImgProxy to fetch document content. Protected by mTLS.")
-    public Mono<ResponseEntity<Resource>> getDocumentSource(@PathVariable UUID documentId) {
-        return documentService.findDocumentToDownloadById(documentId)
-                .flatMap(document -> documentService.downloadDocument(document)
-                        .map(resource -> ResponseEntity.ok()
-                                .header(HttpHeaders.CONTENT_TYPE,
-                                        document.getContentType() != null
-                                                ? document.getContentType()
-                                                : MediaType.APPLICATION_OCTET_STREAM_VALUE)
-                                .header(HttpHeaders.CONTENT_DISPOSITION,
-                                        "inline; filename=\"" + document.getName() + "\"")
-                                .body(resource)));
+    public Mono<ResponseEntity<Resource>> getDocumentSource(@PathVariable String documentToken) {
+        UUID documentId = thumbnailService.validateToken(documentToken);
+        if(documentId != null) {
+            return documentService.findDocumentToDownloadById(documentId)
+                    .flatMap(document -> documentService.downloadDocument(document)
+                            .map(resource -> ResponseEntity.ok()
+                                    .header(HttpHeaders.CONTENT_TYPE,
+                                            document.getContentType() != null
+                                                    ? document.getContentType()
+                                                    : MediaType.APPLICATION_OCTET_STREAM_VALUE)
+                                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                                            "inline; filename=\"" + document.getName() + "\"")
+                                    .body(resource)));
+        }
+        return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
     }
 }

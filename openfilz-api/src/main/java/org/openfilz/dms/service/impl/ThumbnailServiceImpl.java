@@ -12,6 +12,7 @@ import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.service.StorageService;
 import org.openfilz.dms.service.ThumbnailService;
 import org.openfilz.dms.service.ThumbnailStorageService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpEntity;
@@ -27,6 +28,8 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.retry.Retry;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
@@ -36,8 +39,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.security.InvalidKeyException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 
@@ -81,6 +89,13 @@ import static org.openfilz.dms.config.RestApiVersion.ENDPOINT_THUMBNAILS;
 @ConditionalOnProperty(name = "openfilz.thumbnail.active", havingValue = "true")
 public class ThumbnailServiceImpl implements ThumbnailService {
 
+    public static final String WEBP_FORMAT = "webp";
+
+    private static final String HMAC_ALGO = "HmacSHA256";
+
+    @Value("${openfilz.thumbnail.imgproxy.secret:my-secret-to-protect-source-files}")
+    private String imgProxySecret;
+
     private final CommonProperties commonProperties;
     private final ThumbnailStorageService thumbnailStorage;
     private final ThumbnailProperties thumbnailProperties;
@@ -123,32 +138,36 @@ public class ThumbnailServiceImpl implements ThumbnailService {
         }
 
         Mono<byte[]> thumbnailBytes;
-
+        final String extension;
         if (thumbnailProperties.shouldUseImgProxy(document.getContentType())) {
             // Images: use ImgProxy
+            extension = WEBP_FORMAT;
             log.debug("Using ImgProxy for document: {} (type: {})", document.getId(), document.getContentType());
             thumbnailBytes = buildImgProxyPath(document)
                 .flatMap(this::fetchThumbnailFromImgProxy);
-        } else if (thumbnailProperties.shouldUsePdfBox(document.getContentType())) {
-            // PDFs: use PDFBox directly
-            log.debug("Using PDFBox for document: {} (type: {})", document.getId(), document.getContentType());
-            thumbnailBytes = renderPdfThumbnailFromStorage(document.getStoragePath());
-        } else if (thumbnailProperties.shouldUseGotenberg(document.getContentType())) {
-            // Office documents: use Gotenberg + PDFBox
-            log.debug("Using Gotenberg for document: {} (type: {})", document.getId(), document.getContentType());
-            thumbnailBytes = convertToPdfWithGotenbergStreaming(document.getStoragePath(), document.getName())
-                .flatMap(this::renderPdfThumbnail);
-        } else if (thumbnailProperties.shouldUseTextRenderer(document.getContentType())) {
-            // Text files: use Java 2D text rendering
-            log.debug("Using text renderer for document: {} (type: {})", document.getId(), document.getContentType());
-            thumbnailBytes = renderTextThumbnailFromStorage(document.getStoragePath());
         } else {
-            log.debug("No thumbnail handler for content type: {}", document.getContentType());
-            return Mono.empty();
+            extension = null;
+            if (thumbnailProperties.shouldUsePdfBox(document.getContentType())) {
+                // PDFs: use PDFBox directly
+                log.debug("Using PDFBox for document: {} (type: {})", document.getId(), document.getContentType());
+                thumbnailBytes = renderPdfThumbnailFromStorage(document.getStoragePath());
+            } else if (thumbnailProperties.shouldUseGotenberg(document.getContentType())) {
+                // Office documents: use Gotenberg + PDFBox
+                log.debug("Using Gotenberg for document: {} (type: {})", document.getId(), document.getContentType());
+                thumbnailBytes = convertToPdfWithGotenbergStreaming(document.getStoragePath(), document.getName())
+                        .flatMap(this::renderPdfThumbnail);
+            } else if (thumbnailProperties.shouldUseTextRenderer(document.getContentType())) {
+                // Text files: use Java 2D text rendering
+                log.debug("Using text renderer for document: {} (type: {})", document.getId(), document.getContentType());
+                thumbnailBytes = renderTextThumbnailFromStorage(document.getStoragePath());
+            } else {
+                log.debug("No thumbnail handler for content type: {}", document.getContentType());
+                return Mono.empty();
+            }
         }
 
         return thumbnailBytes
-            .flatMap(bytes -> thumbnailStorage.saveThumbnail(document.getId(), bytes))
+            .flatMap(bytes -> thumbnailStorage.saveThumbnail(document.getId(), bytes, extension))
             .doOnSuccess(v -> log.info("Thumbnail generated successfully for document: {}", document.getId()))
             .doOnError(e -> log.error("Failed to generate thumbnail for document: {}", document.getId(), e))
             .onErrorResume(e -> {
@@ -439,43 +458,34 @@ public class ThumbnailServiceImpl implements ThumbnailService {
     private Mono<String> buildImgProxyPath(Document document) {
         return Mono.fromCallable(() -> {
             String sourceUrl = buildDocumentSourceUrl(document.getId());
-            String contentType = document.getContentType();
 
             // Build processing options
             StringBuilder path = new StringBuilder();
 
             // Resize option
-            path.append("/rs:fit:")
+            path.append("/w:")
                 .append(thumbnailProperties.getDimensions().getWidth())
-                .append(":")
+                .append("/h:")
                 .append(thumbnailProperties.getDimensions().getHeight());
 
             // Plain URL mode with extension hint
-            path.append("/plain/").append(sourceUrl);
-
-            // Add extension hint for type detection
-            String extension = getExtensionFromContentType(contentType);
-            if (extension != null) {
-                path.append("@").append(extension);
-            }
+            path.append("/plain/").append(sourceUrl).append("@webp");
 
             return path.toString();
         });
     }
 
-    /**
-     * Gets file extension from content type for ImgProxy type detection.
-     */
-    private String getExtensionFromContentType(String contentType) {
-        if (contentType == null) return null;
-        String ct = contentType.toLowerCase();
-        if (ct.contains("jpeg") || ct.contains("jpg")) return "jpg";
-        if (ct.contains("png")) return "png";
-        if (ct.contains("gif")) return "gif";
-        if (ct.contains("webp")) return "webp";
-        if (ct.contains("bmp")) return "bmp";
-        if (ct.contains("tiff")) return "tiff";
-        return null;
+    private String generateToken(UUID documentId) {
+        long timestamp = Instant.now().getEpochSecond();
+
+        String payload = documentId + ":" + timestamp;
+
+        String signature = sign(payload);
+
+        return Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(payload.getBytes(StandardCharsets.UTF_8))
+                + "."
+                + signature;
     }
 
     /**
@@ -485,7 +495,7 @@ public class ThumbnailServiceImpl implements ThumbnailService {
     private String buildDocumentSourceUrl(UUID documentId) {
         return UriComponentsBuilder.fromUriString(commonProperties.getApiInternalBaseUrl())
             .path(API_PREFIX + ENDPOINT_THUMBNAILS + "/source/")
-            .path(documentId.toString())
+            .path(generateToken(documentId))
             .build()
             .toUriString();
     }
@@ -528,8 +538,48 @@ public class ThumbnailServiceImpl implements ThumbnailService {
     }
 
     @Override
-    public Mono<Boolean> thumbnailExists(UUID documentId) {
-        return thumbnailStorage.thumbnailExists(documentId);
+    public UUID validateToken(String token) {
+        String[] parts = token.split("\\.");
+        if (parts.length != 2) {
+            return null;
+        }
+
+        String payload = new String(Base64.getUrlDecoder().decode(parts[0]), StandardCharsets.UTF_8);
+
+        String receivedSignature = parts[1];
+        String expectedSignature = sign(payload);
+
+        // signature invalide
+        if (!MessageDigest.isEqual(
+                receivedSignature.getBytes(),
+                expectedSignature.getBytes())) {
+            return null;
+        }
+
+        // extraction du timestamp
+        String[] payloadParts = payload.split(":");
+        long timestamp = Long.parseLong(payloadParts[1]);
+
+        // anti-replay (ex: 5 minutes)
+        if (Instant.now().getEpochSecond() - timestamp > 300) {
+            return null;
+        }
+
+        return UUID.fromString(payloadParts[0]);
+    }
+
+    @Override
+    public String sign(String tokenPayload) {
+        try {
+            Mac mac = Mac.getInstance(HMAC_ALGO);
+            SecretKeySpec key = new SecretKeySpec(imgProxySecret.getBytes(), HMAC_ALGO);
+            mac.init(key);
+
+            byte[] raw = mac.doFinal(tokenPayload.getBytes(StandardCharsets.UTF_8));
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
+        } catch (NoSuchAlgorithmException | InvalidKeyException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**

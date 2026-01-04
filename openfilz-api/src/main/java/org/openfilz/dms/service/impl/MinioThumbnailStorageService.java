@@ -34,8 +34,8 @@ import java.util.UUID;
 public class MinioThumbnailStorageService implements ThumbnailStorageService {
 
     private static final String THUMBNAIL_PREFIX = "thumbnails/";
-    private static final String THUMBNAIL_EXTENSION = ".png";
     private static final String CONTENT_TYPE = "image/png";
+    private static final String IMAGE = "image/";
 
     private final ThumbnailProperties thumbnailProperties;
     private final String mainBucketName;
@@ -102,7 +102,7 @@ public class MinioThumbnailStorageService implements ThumbnailStorageService {
     }
 
     @Override
-    public Mono<Void> saveThumbnail(UUID documentId, byte[] thumbnailBytes) {
+    public Mono<Void> saveThumbnail(UUID documentId, byte[] thumbnailBytes, String format) {
         return Mono.fromRunnable(() -> {
             try {
                 String objectName = getThumbnailObjectName(documentId);
@@ -113,7 +113,7 @@ public class MinioThumbnailStorageService implements ThumbnailStorageService {
                                 .bucket(bucketName)
                                 .object(objectName)
                                 .stream(inputStream, thumbnailBytes.length, -1)
-                                .contentType(CONTENT_TYPE)
+                                .contentType(format == null ? CONTENT_TYPE : IMAGE + format)
                                 .build()
                 );
                 log.debug("Thumbnail saved for document: {}", documentId);
@@ -229,6 +229,6 @@ public class MinioThumbnailStorageService implements ThumbnailStorageService {
     }
 
     private String getThumbnailObjectName(UUID documentId) {
-        return THUMBNAIL_PREFIX + documentId.toString() + THUMBNAIL_EXTENSION;
+        return THUMBNAIL_PREFIX + documentId.toString();
     }
 }

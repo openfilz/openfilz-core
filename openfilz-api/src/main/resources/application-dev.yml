@@ -19,9 +19,9 @@ spring:
     graphiql:
       enabled: true
 
-logging:
-  level:
-    org.springframework.security: TRACE
+#logging:
+#  level:
+    # org.springframework.security: TRACE
     # io.r2dbc.postgresql.QUERY: DEBUG # for queries
     # org.springframework: TRACE
     # io.r2dbc.postgresql.PARAM: DEBUG # for parameters

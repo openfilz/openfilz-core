@@ -31,7 +31,6 @@ import java.util.UUID;
 )
 public class FileSystemThumbnailStorageService implements ThumbnailStorageService {
 
-    private static final String THUMBNAIL_EXTENSION = ".png";
     private static final String THUMBNAILS_FOLDER = "thumbnails";
 
     private final Path thumbnailsPath;
@@ -66,7 +65,7 @@ public class FileSystemThumbnailStorageService implements ThumbnailStorageServic
     }
 
     @Override
-    public Mono<Void> saveThumbnail(UUID documentId, byte[] thumbnailBytes) {
+    public Mono<Void> saveThumbnail(UUID documentId, byte[] thumbnailBytes, String format) {
         return Mono.fromRunnable(() -> {
             try {
                 Path file = getThumbnailPath(documentId);
@@ -134,6 +133,6 @@ public class FileSystemThumbnailStorageService implements ThumbnailStorageServic
      * Thumbnail filename is {documentId}.png
      */
     private Path getThumbnailPath(UUID documentId) {
-        return thumbnailsPath.resolve(documentId.toString() + THUMBNAIL_EXTENSION);
+        return thumbnailsPath.resolve(documentId.toString());
     }
 }

@@ -111,15 +111,11 @@ openfilz:
   thumbnail:
     active: false  # Feature toggle - set to true to enable thumbnail generation
     imgproxy:
+      secret: openfilz-secret-to-secure-access-to-the-source-files-when-download-from-imgproxy-2025 # secreyt used to generate a signed token used in the callback URL by ImgProxy to download source files
       url: ${IMGPROXY_URL:http://localhost:8082}  # ImgProxy service URL (for images)
     gotenberg:
       url: ${GOTENBERG_URL:http://localhost:8083}  # Gotenberg service URL (for PDFs and Office docs)
       timeout-seconds: 60  # Timeout for document conversion
-    mtls-access:
-      enabled: false  # Enable mTLS authentication for ImgProxy
-      truststore-path: /certs/truststore.p12
-      truststore-password: changeit
-      allowed-dn-pattern: "CN=imgproxy.*"
     storage:
       use-main-storage: true  # Use same storage as documents (storage.type)
       type: local  # Override storage type for thumbnails (local or minio)
@@ -128,8 +124,8 @@ openfilz:
       minio:
         bucket-name: ${THUMBNAIL_BUCKET_NAME:dms-thumbnails}
     dimensions:
-      width: 256
-      height: 256
+      width: 100
+      height: 100
     supported-content-types:
       # Images (processed by ImgProxy)
       - image/jpeg

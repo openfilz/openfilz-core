@@ -15,10 +15,11 @@ public interface ThumbnailStorageService {
      * Filename is the document UUID with .png extension.
      *
      * @param documentId the document ID
-     * @param thumbnailBytes the thumbnail image bytes (PNG format)
+     * @param thumbnailBytes the thumbnail image bytes
+     * @param format the thumbnail image format : if null then png is used by default
      * @return Mono that completes when save is done
      */
-    Mono<Void> saveThumbnail(UUID documentId, byte[] thumbnailBytes);
+    Mono<Void> saveThumbnail(UUID documentId, byte[] thumbnailBytes, String format);
 
     /**
      * Loads thumbnail bytes for a document.

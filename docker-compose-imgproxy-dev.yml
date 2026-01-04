@@ -39,7 +39,7 @@ services:
       IMGPROXY_SVG_FIX_UNSUPPORTED: "true"
 
       # Output format
-      IMGPROXY_PREFERRED_FORMATS: "png"
+      IMGPROXY_PREFERRED_FORMATS: "webp"
 
       # Skip unsupported formats instead of erroring
       IMGPROXY_SKIP_UNSUPPORTED_FORMATS: "true"
