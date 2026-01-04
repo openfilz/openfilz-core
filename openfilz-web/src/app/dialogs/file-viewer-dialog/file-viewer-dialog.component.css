@@ -97,7 +97,8 @@
 
 /* Error State */
 .error-container,
-.unsupported-container {
+.unsupported-container,
+.file-too-large-container {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -107,7 +108,8 @@
 }
 
 .error-icon,
-.unsupported-icon {
+.unsupported-icon,
+.warning-icon {
   font-size: 64px;
   width: 64px;
   height: 64px;
@@ -118,8 +120,13 @@
   color: #9e9e9e;
 }
 
+.warning-icon {
+  color: #ff9800;
+}
+
 .error-container h3,
-.unsupported-container h3 {
+.unsupported-container h3,
+.file-too-large-container h3 {
   margin: 0;
   font-size: 24px;
   font-weight: 500;
@@ -127,10 +134,12 @@
 }
 
 .error-container p,
-.unsupported-container p {
+.unsupported-container p,
+.file-too-large-container p {
   margin: 0;
   color: #666;
   font-size: 14px;
+  max-width: 400px;
 }
 
 /* PDF Viewer */

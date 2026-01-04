@@ -776,7 +776,8 @@ export class FileExplorerComponent extends FileOperationsComponent implements On
       data: {
         documentId: item.id,
         fileName: item.name,
-        contentType: item.contentType || ''
+        contentType: item.contentType || '',
+        fileSize: item.size
       }
     });
   }
