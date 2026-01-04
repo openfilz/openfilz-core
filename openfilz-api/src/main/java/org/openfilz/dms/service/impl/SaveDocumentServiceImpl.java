@@ -1,7 +1,6 @@
 package org.openfilz.dms.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.r2dbc.postgresql.codec.Json;
 import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.dto.audit.ReplaceAudit;
 import org.openfilz.dms.dto.audit.UploadAudit;
@@ -30,7 +29,6 @@ import java.util.function.Function;
 
 import static org.openfilz.dms.enums.AuditAction.REPLACE_DOCUMENT_CONTENT;
 import static org.openfilz.dms.enums.DocumentType.FILE;
-import static org.openfilz.dms.service.ChecksumService.HASH_SHA256_KEY;
 
 @Service
 @RequiredArgsConstructor
@@ -45,9 +43,6 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
     protected final MetadataPostProcessor metadataPostProcessor;
     protected final TransactionalOperator tx;
 
-    @Autowired(required = false)
-    protected ThumbnailPostProcessor thumbnailPostProcessor;
-
 
    public Mono<UploadResponse> doSaveFile(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, Mono<String> storagePathMono) {
         return storagePathMono.flatMap(storagePath -> saveDocumentInDatabase(filePart, contentLength, parentFolderId, metadata, originalFilename, storagePath))
@@ -59,9 +54,6 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
 
     protected void postProcessDocument(Document document) {
         metadataPostProcessor.processDocument(document);
-        if (thumbnailPostProcessor != null) {
-            thumbnailPostProcessor.processDocument(document);
-        }
     }
 
     protected Mono<Document> replaceFileContentAndSave(FilePart newFilePart, ContentInfo contentInfo, Document document, String newStoragePath, String oldStoragePath) {

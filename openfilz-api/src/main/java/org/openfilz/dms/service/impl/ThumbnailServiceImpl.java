@@ -3,6 +3,7 @@ package org.openfilz.dms.service.impl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.io.RandomAccessReadBuffer;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.openfilz.dms.config.CommonProperties;
@@ -12,9 +13,13 @@ import org.openfilz.dms.service.StorageService;
 import org.openfilz.dms.service.ThumbnailService;
 import org.openfilz.dms.service.ThumbnailStorageService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpEntity;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.stereotype.Service;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -27,6 +32,7 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.time.Duration;
 import java.util.UUID;
 
@@ -45,14 +51,14 @@ import static org.openfilz.dms.config.RestApiVersion.ENDPOINT_THUMBNAILS;
  * 4. Store thumbnail via ThumbnailStorageService
  * <p>
  * Flow for PDFs:
- * 1. Load PDF from storage
+ * 1. Stream PDF from storage directly to PDFBox
  * 2. Use PDFBox to render first page as image
  * 3. Resize to thumbnail dimensions
  * 4. Store thumbnail via ThumbnailStorageService
  * <p>
  * Flow for Office documents:
- * 1. Load document from storage
- * 2. Send to Gotenberg LibreOffice to convert to PDF
+ * 1. Stream document from storage directly to Gotenberg (no byte array in memory)
+ * 2. Gotenberg converts to PDF using LibreOffice
  * 3. Use PDFBox to render first page as image
  * 4. Resize to thumbnail dimensions
  * 5. Store thumbnail via ThumbnailStorageService
@@ -91,7 +97,7 @@ public class ThumbnailServiceImpl implements ThumbnailService {
         if (gotenbergClient == null) {
             gotenbergClient = webClientBuilder
                 .baseUrl(thumbnailProperties.getGotenberg().getUrl())
-                .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(50 * 1024 * 1024)) // 50MB
+                .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(50 * 1024 * 1024)) // 50MB for PDF response
                 .build();
         }
         return gotenbergClient;
@@ -135,78 +141,103 @@ public class ThumbnailServiceImpl implements ThumbnailService {
 
     /**
      * Generates thumbnail for PDF or Office documents.
-     * - PDFs: Direct rendering with PDFBox
-     * - Office docs: Convert to PDF with Gotenberg, then render with PDFBox
+     * - PDFs: Stream directly to PDFBox for rendering
+     * - Office docs: Stream to Gotenberg for PDF conversion, then render with PDFBox
      */
     private Mono<byte[]> generateThumbnailWithGotenberg(Document document) {
         String contentType = document.getContentType().toLowerCase();
 
         if (contentType.contains("pdf")) {
-            // PDF: Load and render directly with PDFBox
-            return loadDocumentBytes(document.getStoragePath())
-                .flatMap(this::renderPdfThumbnail);
+            // PDF: Stream directly to PDFBox (no intermediate byte array for the source)
+            return renderPdfThumbnailFromStorage(document.getStoragePath());
         } else {
-            // Office document: Convert to PDF with Gotenberg, then render with PDFBox
-            return loadDocumentBytes(document.getStoragePath())
-                .flatMap(docBytes -> convertToPdfWithGotenberg(docBytes, document.getName()))
+            // Office document: Stream Resource to Gotenberg, then render resulting PDF
+            return convertToPdfWithGotenbergStreaming(document.getStoragePath(), document.getName())
                 .flatMap(this::renderPdfThumbnail);
         }
     }
 
     /**
-     * Loads document bytes from storage.
+     * Renders PDF thumbnail by streaming directly from storage to PDFBox.
+     * Avoids loading the entire PDF into a byte array first.
      */
-    private Mono<byte[]> loadDocumentBytes(String storagePath) {
+    private Mono<byte[]> renderPdfThumbnailFromStorage(String storagePath) {
         return storageService.loadFile(storagePath)
-            .flatMap(resource -> {
-                if (resource instanceof org.springframework.core.io.buffer.DataBufferFactory) {
-                    // Handle reactive resources
-                    return Mono.error(new UnsupportedOperationException("Reactive resource not directly supported"));
-                }
-                // For standard resources, read content
-                return Mono.fromCallable(() -> {
-                    try (var inputStream = resource.getInputStream()) {
-                        return inputStream.readAllBytes();
+            .flatMap(resource -> Mono.fromCallable(() -> {
+                log.debug("Rendering PDF thumbnail with PDFBox from storage: {}", storagePath);
+
+                try (InputStream inputStream = resource.getInputStream();
+                     RandomAccessReadBuffer readBuffer = new RandomAccessReadBuffer(inputStream);
+                     PDDocument pdfDocument = Loader.loadPDF(readBuffer)) {
+
+                    if (pdfDocument.getNumberOfPages() == 0) {
+                        throw new IOException("PDF has no pages");
                     }
-                }).subscribeOn(Schedulers.boundedElastic());
-            });
+
+                    PDFRenderer renderer = new PDFRenderer(pdfDocument);
+                    // Render at 72 DPI for reasonable quality/speed trade-off
+                    BufferedImage pageImage = renderer.renderImageWithDPI(0, 72);
+
+                    // Resize to thumbnail dimensions while maintaining aspect ratio
+                    BufferedImage thumbnail = resizeImage(pageImage,
+                        thumbnailProperties.getDimensions().getWidth(),
+                        thumbnailProperties.getDimensions().getHeight());
+
+                    // Convert to PNG bytes
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    ImageIO.write(thumbnail, "PNG", baos);
+
+                    log.debug("PDF thumbnail rendered, size: {} bytes", baos.size());
+                    return baos.toByteArray();
+                }
+            }).subscribeOn(Schedulers.boundedElastic()));
     }
 
     /**
      * Converts Office document to PDF using Gotenberg's LibreOffice endpoint.
+     * Streams the Resource directly to Gotenberg without loading entire file into memory.
+     *
+     * @param storagePath Path to the document in storage
+     * @param filename    Original filename (needed by Gotenberg for format detection)
+     * @return Mono containing the converted PDF bytes
      */
-    private Mono<byte[]> convertToPdfWithGotenberg(byte[] docBytes, String filename) {
-        log.debug("Converting document to PDF with Gotenberg: {} ({} bytes)", filename, docBytes.length);
+    private Mono<byte[]> convertToPdfWithGotenbergStreaming(String storagePath, String filename) {
+        return storageService.loadFile(storagePath)
+            .flatMap(resource -> {
+                log.debug("Streaming document to Gotenberg for PDF conversion: {}", filename);
 
-        MultipartBodyBuilder builder = new MultipartBodyBuilder();
-        builder.part("files", new org.springframework.core.io.ByteArrayResource(docBytes) {
-            @Override
-            public String getFilename() {
-                return filename;
-            }
-        }).contentType(MediaType.APPLICATION_OCTET_STREAM);
+                // Create a Resource wrapper that provides the correct filename
+                // Gotenberg needs the filename to detect the document type
+                Resource namedResource = new NamedInputStreamResource(resource, filename);
 
-        // Request only first page for thumbnail
-        builder.part("nativePageRanges", "1");
+                // Build multipart body with the Resource (will be streamed, not loaded into memory)
+                MultipartBodyBuilder builder = new MultipartBodyBuilder();
+                builder.part("files", namedResource)
+                    .contentType(MediaType.APPLICATION_OCTET_STREAM);
 
-        return getGotenbergClient()
-            .post()
-            .uri("/forms/libreoffice/convert")
-            .contentType(MediaType.MULTIPART_FORM_DATA)
-            .body(BodyInserters.fromMultipartData(builder.build()))
-            .retrieve()
-            .bodyToMono(byte[].class)
-            .timeout(Duration.ofSeconds(thumbnailProperties.getGotenberg().getTimeoutSeconds()))
-            .retryWhen(Retry.backoff(2, Duration.ofSeconds(2))
-                .maxBackoff(Duration.ofSeconds(10))
-                .doBeforeRetry(signal ->
-                    log.warn("Retrying Gotenberg request, attempt {}", signal.totalRetries() + 1)))
-            .doOnSuccess(pdf -> log.debug("Gotenberg conversion complete, PDF size: {} bytes", pdf.length))
-            .doOnError(e -> log.error("Gotenberg conversion failed: {}", e.getMessage()));
+                // Request only first page for thumbnail
+                builder.part("nativePageRanges", "1");
+
+                return getGotenbergClient()
+                    .post()
+                    .uri("/forms/libreoffice/convert")
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .body(BodyInserters.fromMultipartData(builder.build()))
+                    .retrieve()
+                    .bodyToMono(byte[].class)
+                    .timeout(Duration.ofSeconds(thumbnailProperties.getGotenberg().getTimeoutSeconds()))
+                    .retryWhen(Retry.backoff(2, Duration.ofSeconds(2))
+                        .maxBackoff(Duration.ofSeconds(10))
+                        .doBeforeRetry(signal ->
+                            log.warn("Retrying Gotenberg request, attempt {}", signal.totalRetries() + 1)))
+                    .doOnSuccess(pdf -> log.debug("Gotenberg conversion complete, PDF size: {} bytes", pdf.length))
+                    .doOnError(e -> log.error("Gotenberg conversion failed: {}", e.getMessage()));
+            });
     }
 
     /**
      * Renders the first page of a PDF as a PNG thumbnail using PDFBox.
+     * Used for PDF bytes received from Gotenberg conversion.
      */
     private Mono<byte[]> renderPdfThumbnail(byte[] pdfBytes) {
         return Mono.fromCallable(() -> {
@@ -372,5 +403,69 @@ public class ThumbnailServiceImpl implements ThumbnailService {
     @Override
     public Mono<Boolean> thumbnailExists(UUID documentId) {
         return thumbnailStorage.thumbnailExists(documentId);
+    }
+
+    /**
+     * A Resource wrapper that delegates to another Resource but provides a custom filename.
+     * This is needed for Gotenberg to correctly detect the document type from the filename.
+     */
+    private static class NamedInputStreamResource implements Resource {
+        private final Resource delegate;
+        private final String filename;
+
+        NamedInputStreamResource(Resource delegate, String filename) {
+            this.delegate = delegate;
+            this.filename = filename;
+        }
+
+        @Override
+        public String getFilename() {
+            return filename;
+        }
+
+        @Override
+        public InputStream getInputStream() throws IOException {
+            return delegate.getInputStream();
+        }
+
+        @Override
+        public boolean exists() {
+            return delegate.exists();
+        }
+
+        @Override
+        public java.net.URL getURL() throws IOException {
+            return delegate.getURL();
+        }
+
+        @Override
+        public java.net.URI getURI() throws IOException {
+            return delegate.getURI();
+        }
+
+        @Override
+        public java.io.File getFile() throws IOException {
+            return delegate.getFile();
+        }
+
+        @Override
+        public long contentLength() throws IOException {
+            return delegate.contentLength();
+        }
+
+        @Override
+        public long lastModified() throws IOException {
+            return delegate.lastModified();
+        }
+
+        @Override
+        public Resource createRelative(String relativePath) throws IOException {
+            return delegate.createRelative(relativePath);
+        }
+
+        @Override
+        public String getDescription() {
+            return "Named resource [" + filename + "] wrapping " + delegate.getDescription();
+        }
     }
 }
