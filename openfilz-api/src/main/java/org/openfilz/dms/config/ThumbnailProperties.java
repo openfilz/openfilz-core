@@ -58,7 +58,8 @@ public class ThumbnailProperties {
 
     /**
      * Content types supported for thumbnail generation.
-     * Images are processed by ImgProxy, PDFs and Office documents by Gotenberg.
+     * Images are processed by ImgProxy, PDFs and Office documents by Gotenberg,
+     * Text files are rendered directly in Java.
      */
     private List<String> supportedContentTypes = List.of(
             // Images (ImgProxy)
@@ -68,7 +69,7 @@ public class ThumbnailProperties {
             "image/webp",
             "image/bmp",
             "image/tiff",
-            // PDF (Gotenberg)
+            // PDF (PDFBox)
             "application/pdf",
             // Microsoft Office (Gotenberg)
             "application/msword",
@@ -80,14 +81,52 @@ public class ThumbnailProperties {
             // OpenDocument (Gotenberg)
             "application/vnd.oasis.opendocument.text",
             "application/vnd.oasis.opendocument.spreadsheet",
-            "application/vnd.oasis.opendocument.presentation"
+            "application/vnd.oasis.opendocument.presentation",
+            // Text files (Java 2D renderer) - all text/* types are supported
+            "text/plain",
+            "text/markdown",
+            "text/x-markdown",
+            "text/html",
+            "text/css",
+            "text/csv",
+            "text/xml",
+            "text/x-java-source",
+            "text/x-java",
+            "text/x-python",
+            "text/x-c",
+            "text/x-c++",
+            "text/x-csharp",
+            "text/x-go",
+            "text/x-rust",
+            "text/x-kotlin",
+            "text/x-scala",
+            "text/x-groovy",
+            "text/x-ruby",
+            "text/x-perl",
+            "text/x-php",
+            "text/x-shellscript",
+            "text/x-sh",
+            "text/x-sql",
+            "text/x-yaml",
+            "text/yaml",
+            // Application types that are actually text (Java 2D renderer)
+            "application/json",
+            "application/javascript",
+            "application/x-javascript",
+            "application/typescript",
+            "application/xml",
+            "application/x-yaml",
+            "application/x-sh",
+            "application/x-shellscript",
+            "application/sql",
+            "application/x-sql",
+            "application/graphql"
     );
 
     /**
-     * Content types that should use Gotenberg (PDFs and Office documents).
+     * Content types that should use Gotenberg (Office documents only, not PDF).
      */
     private static final Set<String> GOTENBERG_CONTENT_TYPES = Set.of(
-            "application/pdf",
             "application/msword",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             "application/vnd.ms-excel",
@@ -97,6 +136,28 @@ public class ThumbnailProperties {
             "application/vnd.oasis.opendocument.text",
             "application/vnd.oasis.opendocument.spreadsheet",
             "application/vnd.oasis.opendocument.presentation"
+    );
+
+    /**
+     * Content types that are text-based and should use Java 2D text rendering.
+     * This includes both text/* types and application types that are actually text.
+     */
+    private static final Set<String> TEXT_CONTENT_TYPE_PREFIXES = Set.of(
+            "text/"
+    );
+
+    private static final Set<String> TEXT_APPLICATION_TYPES = Set.of(
+            "application/json",
+            "application/javascript",
+            "application/x-javascript",
+            "application/typescript",
+            "application/xml",
+            "application/x-yaml",
+            "application/x-sh",
+            "application/x-shellscript",
+            "application/sql",
+            "application/x-sql",
+            "application/graphql"
     );
 
     /**
@@ -286,7 +347,42 @@ public class ThumbnailProperties {
      * Check if a content type should use ImgProxy (images).
      */
     public boolean shouldUseImgProxy(String contentType) {
-        return isContentTypeSupported(contentType) && !shouldUseGotenberg(contentType);
+        return isContentTypeSupported(contentType)
+                && !shouldUseGotenberg(contentType)
+                && !shouldUsePdfBox(contentType)
+                && !shouldUseTextRenderer(contentType);
+    }
+
+    /**
+     * Check if a content type should use PDFBox directly (PDF files).
+     */
+    public boolean shouldUsePdfBox(String contentType) {
+        if (contentType == null) {
+            return false;
+        }
+        return contentType.toLowerCase().contains("pdf");
+    }
+
+    /**
+     * Check if a content type should use Java 2D text rendering.
+     * This includes all text/* types and certain application/* types that are text-based.
+     */
+    public boolean shouldUseTextRenderer(String contentType) {
+        if (contentType == null) {
+            return false;
+        }
+        String ct = contentType.toLowerCase();
+
+        // Check if it starts with text/
+        for (String prefix : TEXT_CONTENT_TYPE_PREFIXES) {
+            if (ct.startsWith(prefix)) {
+                return true;
+            }
+        }
+
+        // Check if it's a known text-based application type
+        return TEXT_APPLICATION_TYPES.stream()
+                .anyMatch(textType -> ct.startsWith(textType.toLowerCase()));
     }
 
     /**

@@ -30,10 +30,15 @@ import reactor.util.retry.Retry;
 import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 import static org.openfilz.dms.config.RestApiVersion.API_PREFIX;
@@ -42,7 +47,9 @@ import static org.openfilz.dms.config.RestApiVersion.ENDPOINT_THUMBNAILS;
 /**
  * Implementation of ThumbnailService that uses:
  * - ImgProxy for image thumbnails (JPEG, PNG, GIF, WebP, etc.)
- * - Gotenberg + PDFBox for PDF and Office document thumbnails
+ * - PDFBox for PDF thumbnails
+ * - Gotenberg + PDFBox for Office document thumbnails
+ * - Java 2D for text file thumbnails (markdown, code, config files, etc.)
  * <p>
  * Flow for images:
  * 1. Build ImgProxy URL with source document URL
@@ -62,6 +69,11 @@ import static org.openfilz.dms.config.RestApiVersion.ENDPOINT_THUMBNAILS;
  * 3. Use PDFBox to render first page as image
  * 4. Resize to thumbnail dimensions
  * 5. Store thumbnail via ThumbnailStorageService
+ * <p>
+ * Flow for text files:
+ * 1. Read first N lines from storage (streaming, memory-efficient)
+ * 2. Render text to BufferedImage using Java 2D with monospace font
+ * 3. Store thumbnail via ThumbnailStorageService
  */
 @Slf4j
 @Service
@@ -117,10 +129,19 @@ public class ThumbnailServiceImpl implements ThumbnailService {
             log.debug("Using ImgProxy for document: {} (type: {})", document.getId(), document.getContentType());
             thumbnailBytes = buildImgProxyPath(document)
                 .flatMap(this::fetchThumbnailFromImgProxy);
+        } else if (thumbnailProperties.shouldUsePdfBox(document.getContentType())) {
+            // PDFs: use PDFBox directly
+            log.debug("Using PDFBox for document: {} (type: {})", document.getId(), document.getContentType());
+            thumbnailBytes = renderPdfThumbnailFromStorage(document.getStoragePath());
         } else if (thumbnailProperties.shouldUseGotenberg(document.getContentType())) {
-            // PDFs and Office documents: use Gotenberg + PDFBox
-            log.debug("Using Gotenberg/PDFBox for document: {} (type: {})", document.getId(), document.getContentType());
-            thumbnailBytes = generateThumbnailWithGotenberg(document);
+            // Office documents: use Gotenberg + PDFBox
+            log.debug("Using Gotenberg for document: {} (type: {})", document.getId(), document.getContentType());
+            thumbnailBytes = convertToPdfWithGotenbergStreaming(document.getStoragePath(), document.getName())
+                .flatMap(this::renderPdfThumbnail);
+        } else if (thumbnailProperties.shouldUseTextRenderer(document.getContentType())) {
+            // Text files: use Java 2D text rendering
+            log.debug("Using text renderer for document: {} (type: {})", document.getId(), document.getContentType());
+            thumbnailBytes = renderTextThumbnailFromStorage(document.getStoragePath());
         } else {
             log.debug("No thumbnail handler for content type: {}", document.getContentType());
             return Mono.empty();
@@ -137,24 +158,6 @@ public class ThumbnailServiceImpl implements ThumbnailService {
                 return Mono.empty();
             })
             .subscribeOn(Schedulers.boundedElastic());
-    }
-
-    /**
-     * Generates thumbnail for PDF or Office documents.
-     * - PDFs: Stream directly to PDFBox for rendering
-     * - Office docs: Stream to Gotenberg for PDF conversion, then render with PDFBox
-     */
-    private Mono<byte[]> generateThumbnailWithGotenberg(Document document) {
-        String contentType = document.getContentType().toLowerCase();
-
-        if (contentType.contains("pdf")) {
-            // PDF: Stream directly to PDFBox (no intermediate byte array for the source)
-            return renderPdfThumbnailFromStorage(document.getStoragePath());
-        } else {
-            // Office document: Stream Resource to Gotenberg, then render resulting PDF
-            return convertToPdfWithGotenbergStreaming(document.getStoragePath(), document.getName())
-                .flatMap(this::renderPdfThumbnail);
-        }
     }
 
     /**
@@ -265,6 +268,130 @@ public class ThumbnailServiceImpl implements ThumbnailService {
                 return baos.toByteArray();
             }
         }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    // ========================================================================
+    // Text File Thumbnail Generation
+    // ========================================================================
+
+    /**
+     * Maximum number of lines to read from a text file for thumbnail generation.
+     */
+    private static final int MAX_LINES_FOR_THUMBNAIL = 30;
+
+    /**
+     * Maximum characters per line to display in thumbnail.
+     */
+    private static final int MAX_CHARS_PER_LINE = 60;
+
+    /**
+     * Renders a text file thumbnail by reading the first N lines and rendering them
+     * as an image using Java 2D. This is very efficient as it only reads a small
+     * portion of the file and doesn't require any external services.
+     */
+    private Mono<byte[]> renderTextThumbnailFromStorage(String storagePath) {
+        return storageService.loadFile(storagePath)
+            .flatMap(resource -> Mono.fromCallable(() -> {
+                log.debug("Rendering text thumbnail from storage: {}", storagePath);
+
+                // Read first N lines from the file
+                List<String> lines = readFirstLines(resource, MAX_LINES_FOR_THUMBNAIL);
+
+                // Render lines to image
+                BufferedImage thumbnail = renderTextToImage(lines,
+                    thumbnailProperties.getDimensions().getWidth(),
+                    thumbnailProperties.getDimensions().getHeight());
+
+                // Convert to PNG bytes
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                ImageIO.write(thumbnail, "PNG", baos);
+
+                log.debug("Text thumbnail rendered, size: {} bytes", baos.size());
+                return baos.toByteArray();
+            }).subscribeOn(Schedulers.boundedElastic()));
+    }
+
+    /**
+     * Reads the first N lines from a resource. Stops early if the file has fewer lines.
+     * This is memory-efficient as it doesn't load the entire file.
+     */
+    private List<String> readFirstLines(org.springframework.core.io.Resource resource, int maxLines) throws IOException {
+        List<String> lines = new ArrayList<>(maxLines);
+
+        try (InputStream is = resource.getInputStream();
+             BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
+
+            String line;
+            while (lines.size() < maxLines && (line = reader.readLine()) != null) {
+                // Truncate long lines and replace tabs with spaces
+                line = line.replace("\t", "    ");
+                if (line.length() > MAX_CHARS_PER_LINE) {
+                    line = line.substring(0, MAX_CHARS_PER_LINE - 3) + "...";
+                }
+                lines.add(line);
+            }
+        }
+
+        return lines;
+    }
+
+    /**
+     * Renders text lines to a BufferedImage with a code-editor-like appearance.
+     * Uses a monospace font on a light background with subtle styling.
+     */
+    private BufferedImage renderTextToImage(List<String> lines, int width, int height) {
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2d = image.createGraphics();
+
+        // Enable anti-aliasing for smooth text
+        g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+
+        // Background - light gray like a code editor
+        Color bgColor = new Color(250, 250, 250);
+        g2d.setColor(bgColor);
+        g2d.fillRect(0, 0, width, height);
+
+        // Draw a subtle border
+        g2d.setColor(new Color(220, 220, 220));
+        g2d.drawRect(0, 0, width - 1, height - 1);
+
+        // Calculate font size based on thumbnail dimensions
+        // Smaller thumbnails need smaller fonts
+        int fontSize = Math.max(8, Math.min(11, height / 20));
+        Font monoFont = new Font(Font.MONOSPACED, Font.PLAIN, fontSize);
+        g2d.setFont(monoFont);
+
+        FontMetrics fm = g2d.getFontMetrics();
+        int lineHeight = fm.getHeight();
+        int padding = 6;
+        int y = padding + fm.getAscent();
+
+        // Text color - dark gray
+        Color textColor = new Color(60, 60, 60);
+        g2d.setColor(textColor);
+
+        // Draw each line
+        for (String line : lines) {
+            if (y + lineHeight > height - padding) {
+                // No more space, stop drawing
+                break;
+            }
+            g2d.drawString(line, padding, y);
+            y += lineHeight;
+        }
+
+        // If there are more lines than we can display, show an indicator
+        if (!lines.isEmpty() && y + lineHeight <= height - padding) {
+            // Check if we might have more content (we read MAX_LINES)
+            if (lines.size() >= MAX_LINES_FOR_THUMBNAIL) {
+                g2d.setColor(new Color(150, 150, 150));
+                g2d.drawString("...", padding, y);
+            }
+        }
+
+        g2d.dispose();
+        return image;
     }
 
     /**

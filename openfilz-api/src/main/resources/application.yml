@@ -151,6 +151,18 @@ openfilz:
       - application/vnd.oasis.opendocument.text
       - application/vnd.oasis.opendocument.spreadsheet
       - application/vnd.oasis.opendocument.presentation
+      # Text files (rendered by Java 2D) - all text/* types are auto-detected
+      - text/plain
+      - text/markdown
+      - text/html
+      - text/css
+      - text/csv
+      - text/xml
+      # Code files (rendered by Java 2D)
+      - application/json
+      - application/javascript
+      - application/xml
+      - application/x-yaml
 
 # OnlyOffice DocumentServer Integration
 onlyoffice:
