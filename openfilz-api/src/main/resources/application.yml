@@ -70,7 +70,7 @@ logging:
     # org.springframework.security: TRACE
 
 server:
-  port: 8081
+  port: ${SERVER_PORT:8081}
 
 # Buffer size for PipedInputStreams
 piped:
@@ -116,10 +116,18 @@ openfilz:
       url: ${GOTENBERG_URL:http://localhost:8083}  # Gotenberg service URL (for PDFs and Office docs)
       timeout-seconds: 60  # Timeout for document conversion
     mtls-access:
-      enabled: false  # Enable mTLS authentication for ImgProxy
-      truststore-path: /certs/truststore.p12
-      truststore-password: changeit
-      allowed-dn-pattern: "CN=imgproxy.*"
+      # Enable mTLS authentication for ImgProxy accessing /api/v1/thumbnails/source/*
+      # When enabled:
+      #   1. A secondary HTTPS server starts on openfilz.mtls.port (default 8443)
+      #   2. ImgProxy must present a valid client certificate
+      #   3. The main HTTP server continues on server.port (default 8081) for frontend
+      enabled: ${OPENFILZ_THUMBNAIL_MTLS_ACCESS_ENABLED:false}
+      # Path to truststore containing the CA certificate that signed ImgProxy's client cert
+      truststore-path: ${OPENFILZ_THUMBNAIL_MTLS_ACCESS_TRUSTSTORE_PATH:/certs/truststore.p12}
+      truststore-password: ${OPENFILZ_THUMBNAIL_MTLS_ACCESS_TRUSTSTORE_PASSWORD:changeit}
+      # Regex pattern to match the client certificate's subject DN
+      # The default pattern matches certificates with CN starting with "imgproxy"
+      allowed-dn-pattern: ${OPENFILZ_THUMBNAIL_MTLS_ACCESS_ALLOWED_DN_PATTERN:CN=imgproxy.*}
     storage:
       use-main-storage: true  # Use same storage as documents (storage.type)
       type: local  # Override storage type for thumbnails (local or minio)
@@ -163,6 +171,19 @@ openfilz:
       - application/javascript
       - application/xml
       - application/x-yaml
+  # mTLS server configuration (when thumbnail.mtls-access.enabled=true)
+  # A separate HTTPS server is started for ImgProxy, keeping main HTTP server unchanged
+  mtls:
+    port: ${OPENFILZ_MTLS_PORT:8443}
+    keystore:
+      path: ${OPENFILZ_MTLS_KEYSTORE_PATH:}
+      password: ${OPENFILZ_MTLS_KEYSTORE_PASSWORD:}
+      type: ${OPENFILZ_MTLS_KEYSTORE_TYPE:PKCS12}
+    truststore:
+      path: ${OPENFILZ_MTLS_TRUSTSTORE_PATH:}
+      password: ${OPENFILZ_MTLS_TRUSTSTORE_PASSWORD:}
+      type: ${OPENFILZ_MTLS_TRUSTSTORE_TYPE:PKCS12}
+    client-auth: ${OPENFILZ_MTLS_CLIENT_AUTH:want}
 
 # OnlyOffice DocumentServer Integration
 onlyoffice:

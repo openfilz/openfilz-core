@@ -26,7 +26,10 @@
       "Bash(mvn test-compile:*)",
       "Bash(docker ps:*)",
       "Bash(docker logs:*)",
-      "Bash(docker exec:*)"
+      "Bash(docker exec:*)",
+      "Bash(openssl x509:*)",
+      "WebSearch",
+      "WebFetch(domain:docs.imgproxy.net)"
     ],
     "deny": [],
     "ask": []

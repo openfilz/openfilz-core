@@ -1,0 +1,162 @@
+# =============================================================================
+# Thumbnail Services with mTLS for Local Development
+# =============================================================================
+#
+# Use this file when developing locally with:
+#   - openfilz-api running in your IDE (port 8443 with SSL)
+#   - openfilz-web running with npm (port 4200)
+#   - PostgreSQL managed separately by the developer
+#
+# Services:
+#   - ImgProxy (port 8082): Image thumbnails with mTLS client certificate
+#   - Gotenberg (port 8083): PDF and Office document thumbnails
+#
+# Prerequisites:
+#   1. Generate certificates first:
+#      cd certs && ./generate-mtls-certs.sh   (Linux/Mac)
+#      cd certs && generate-mtls-certs.bat    (Windows)
+#
+#   2. Configure openfilz-api (IDE) with SSL enabled - see below
+#
+# Start services:
+#   docker-compose -f docker-compose-imgproxy-mtls-dev.yml up -d
+#
+# Stop services:
+#   docker-compose -f docker-compose-imgproxy-mtls-dev.yml down
+#
+# View logs:
+#   docker-compose -f docker-compose-imgproxy-mtls-dev.yml logs -f
+#
+# =============================================================================
+# openfilz-api IDE Configuration
+# =============================================================================
+# Add these environment variables when running from IDE:
+#
+#   # Enable thumbnails and mTLS
+#   OPENFILZ_THUMBNAIL_ACTIVE=true
+#   OPENFILZ_THUMBNAIL_MTLS_ACCESS_ENABLED=true
+#
+#   # mTLS server configuration (starts HTTPS on port 8443)
+#   OPENFILZ_MTLS_PORT=8443
+#   OPENFILZ_MTLS_KEYSTORE_PATH=./certs/server/server.p12
+#   OPENFILZ_MTLS_KEYSTORE_PASSWORD=serverpass
+#   OPENFILZ_MTLS_TRUSTSTORE_PATH=./certs/truststore/truststore.p12
+#   OPENFILZ_MTLS_TRUSTSTORE_PASSWORD=changeit
+#   OPENFILZ_MTLS_CLIENT_AUTH=want
+#
+#   # URLs
+#   OPENFILZ_INTERNAL_API_BASE_URL=https://host.docker.internal:8443
+#   IMGPROXY_URL=http://localhost:8082
+#   GOTENBERG_URL=http://localhost:8083
+#
+# With this configuration, openfilz-api runs on BOTH ports:
+#   - HTTP  on port 8081 (for browser/frontend - no certificate issues)
+#   - HTTPS on port 8443 (for ImgProxy mTLS)
+#
+# Your frontend continues using http://localhost:8081
+# ImgProxy uses https://host.docker.internal:8443 with client certificate
+#
+# =============================================================================
+
+services:
+  # =============================================================================
+  # ImgProxy with mTLS - For image thumbnails (JPEG, PNG, GIF, WebP, etc.)
+  # =============================================================================
+  imgproxy:
+    image: darthsim/imgproxy:latest
+    container_name: openfilz-imgproxy-mtls-dev
+    restart: unless-stopped
+    volumes:
+      # Mount CA certificate to system trust store for server certificate validation
+      # ImgProxy uses the system certificate store for HTTPS connections
+      - ./certs/ca/ca.crt:/usr/local/share/ca-certificates/openfilz-ca.crt:ro
+    # Add CA certificate to system trust store on startup
+    # The entrypoint runs update-ca-certificates before starting imgproxy
+    entrypoint: ["/bin/sh", "-c", "update-ca-certificates 2>/dev/null; exec /usr/local/bin/imgproxy"]
+    environment:
+      # Server configuration
+      IMGPROXY_BIND: ":8080"
+
+      # ===========================================
+      # Image Processing Configuration
+      # ===========================================
+      # PDF support - generate thumbnails from first page
+      IMGPROXY_ENABLE_PDF_PAGES: "true"
+      IMGPROXY_PDF_PAGES: "true"
+
+      # SVG support
+      IMGPROXY_ENABLE_SVG_SANITIZATION: "false"
+      IMGPROXY_SVG_FIX_UNSUPPORTED: "true"
+
+      # Output format
+      IMGPROXY_PREFERRED_FORMATS: "png"
+
+      # Skip unsupported formats instead of erroring
+      IMGPROXY_SKIP_UNSUPPORTED_FORMATS: "true"
+
+      # ===========================================
+      # Network/Security Configuration
+      # ===========================================
+      # Allow connections to host machine (where API runs in IDE)
+      IMGPROXY_ALLOW_LOOPBACK_SOURCE_ADDRESSES: "true"
+      IMGPROXY_ALLOW_PRIVATE_SOURCE_ADDRESSES: "true"
+      # Disable insecure URLs since we're using mTLS
+      IMGPROXY_ALLOW_INSECURE_SOURCE_URL: "false"
+
+      # CORS
+      IMGPROXY_ALLOW_ORIGIN: "*"
+
+      # ===========================================
+      # Resource Limits
+      # ===========================================
+      # Memory limits
+      IMGPROXY_MAX_SRC_RESOLUTION: "50"
+      IMGPROXY_MAX_SRC_FILE_SIZE: "52428800"  # 50MB
+
+      # Concurrency
+      IMGPROXY_CONCURRENCY: "10"
+      IMGPROXY_MAX_CLIENTS: "200"
+
+      # ===========================================
+      # Logging
+      # ===========================================
+      # Set to "debug" for troubleshooting mTLS issues
+      IMGPROXY_LOG_LEVEL: "info"
+    ports:
+      - "8082:8080"
+    # Allow container to reach host machine (where your API runs)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  # =============================================================================
+  # Gotenberg - For PDF and Office document thumbnails
+  # Supports: PDF, DOCX, XLSX, PPTX, ODT, ODS, ODP, and more
+  # Note: Gotenberg doesn't need mTLS as it's called by openfilz-api, not vice versa
+  # =============================================================================
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: openfilz-gotenberg-dev
+    restart: unless-stopped
+    command:
+      - "gotenberg"
+      - "--api-timeout=60s"
+      - "--libreoffice-restart-after=100"
+      - "--libreoffice-auto-start=true"
+      - "--log-level=info"
+    ports:
+      - "8083:3000"
+    # Allow container to reach host machine (where your API runs)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

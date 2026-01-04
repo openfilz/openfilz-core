@@ -1,0 +1,13 @@
+[req]
+default_bits = 4096
+prompt = no
+default_md = sha256
+distinguished_name = dn
+
+[dn]
+C = FR
+ST = IDF
+L = Paris
+O = OpenFilz
+OU = ImgProxy
+CN = imgproxy-client
