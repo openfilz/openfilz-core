@@ -26,7 +26,16 @@
       "Bash(mvn test-compile:*)",
       "Bash(docker ps:*)",
       "Bash(docker logs:*)",
-      "Bash(docker exec:*)"
+      "Bash(docker exec:*)",
+      "Bash(del \"C:\\\\projects\\\\openfilz-core\\\\docker-compose.yml\")",
+      "Bash(del \"C:\\\\projects\\\\openfilz-core\\\\ngx-env.js\")",
+      "Bash(bash:*)",
+      "Bash(tee:*)",
+      "Bash(echo:*)",
+      "Bash(docker-compose:*)",
+      "Bash(docker restart:*)",
+      "WebSearch",
+      "WebFetch(domain:docs.dokploy.com)"
     ],
     "deny": [],
     "ask": []

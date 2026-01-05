@@ -1,0 +1,212 @@
+# OpenFilz - Dokploy Compose Configuration
+#
+# This compose file is optimized for Dokploy deployment with:
+# - Local storage for documents
+# - Keycloak authentication
+# - OnlyOffice document visualization
+#
+# Requirements:
+# 1. Set environment variables in Dokploy's Environment tab
+# 2. Configure domains in Dokploy for each service that needs external access
+# 3. Ensure DNS A records point to your Dokploy server
+#
+# Documentation: https://docs.dokploy.com/docs/core/docker-compose
+
+volumes:
+  postgres-data:
+  keycloak-data:
+  openfilz-storage:
+  onlyoffice-data:
+  onlyoffice-logs:
+
+networks:
+  dokploy-network:
+    external: true
+
+services:
+  # =============================================================================
+  # PostgreSQL Database
+  # =============================================================================
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:16}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-dms_db}
+      POSTGRES_USER: ${DB_USER:-dms_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-dms_password}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - dokploy-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-dms_user} -d ${DB_NAME:-dms_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =============================================================================
+  # Keycloak Authentication Server
+  # =============================================================================
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    restart: unless-stopped
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-dms_db}
+      KC_DB_USERNAME: ${DB_USER:-dms_user}
+      KC_DB_PASSWORD: ${DB_PASSWORD:-dms_password}
+      # Hostname configuration - set to your Keycloak domain
+      KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:-keycloak.yourdomain.com}
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+    command:
+      - start
+      - --import-realm
+    volumes:
+      - keycloak-data:/opt/keycloak/data
+      # Realm import file - upload realm-export.json via Dokploy File Mounts
+      - ../files/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    networks:
+      - dokploy-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080;echo -e 'GET /health/ready HTTP/1.1\\r\\nhost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3;if [ $? -eq 0 ]; then echo 'Healthcheck Successful';exit 0;else echo 'Healthcheck Failed';exit 1;fi;"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.openfilz-keycloak.rule=Host(`${KEYCLOAK_HOSTNAME:-keycloak.yourdomain.com}`)"
+      - "traefik.http.routers.openfilz-keycloak.entrypoints=websecure"
+      - "traefik.http.routers.openfilz-keycloak.tls.certResolver=letsencrypt"
+      - "traefik.http.services.openfilz-keycloak.loadbalancer.server.port=8080"
+
+  # =============================================================================
+  # OnlyOffice Document Server
+  # =============================================================================
+  onlyoffice:
+    image: onlyoffice/documentserver:latest
+    restart: unless-stopped
+    environment:
+      JWT_ENABLED: "true"
+      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-change-this-secret-in-production}
+      JWT_HEADER: Authorization
+      ALLOW_META_IP_ADDRESS: "true"
+      ALLOW_PRIVATE_IP_ADDRESS: "true"
+    volumes:
+      - onlyoffice-data:/var/www/onlyoffice/Data
+      - onlyoffice-logs:/var/log/onlyoffice
+    networks:
+      - dokploy-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.openfilz-onlyoffice.rule=Host(`${ONLYOFFICE_HOSTNAME:-onlyoffice.yourdomain.com}`)"
+      - "traefik.http.routers.openfilz-onlyoffice.entrypoints=websecure"
+      - "traefik.http.routers.openfilz-onlyoffice.tls.certResolver=letsencrypt"
+      - "traefik.http.services.openfilz-onlyoffice.loadbalancer.server.port=80"
+
+  # =============================================================================
+  # OpenFilz API (Backend)
+  # =============================================================================
+  openfilz-api:
+    image: ${OPENFILZ_API_IMAGE:-ghcr.io/openfilz/openfilz-api:latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    environment:
+      # Database configuration
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-dms_db}
+      DB_USER: ${DB_USER:-dms_user}
+      DB_PASSWORD: ${DB_PASSWORD:-dms_password}
+
+      # Storage configuration (local)
+      STORAGE_TYPE: ${STORAGE_TYPE:-local}
+      STORAGE_LOCAL_BASE_PATH: /var/data/openfilz
+
+      # Security configuration - authentication enabled
+      OPENFILZ_SECURITY_NO_AUTH: "false"
+
+      # Keycloak realm URL (internal Docker network)
+      KEYCLOAK_REALM_URL: ${KEYCLOAK_REALM_URL:-http://keycloak:8080/realms/openfilz}
+
+      # CORS configuration - add your domains
+      OPENFILZ_SECURITY_CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://app.yourdomain.com,https://onlyoffice.yourdomain.com}
+
+      # API URL for Swagger/OpenAPI (public URL)
+      API_ROOT_URL: https://${API_HOSTNAME:-api.yourdomain.com}/
+
+      # Server configuration
+      SERVER_PORT: 8081
+
+      # Java options
+      JAVA_OPTS: ${JAVA_OPTS:--Xmx512m -Xms256m}
+
+      # Flyway configuration
+      SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"
+      SPRING_FLYWAY_BASELINE_VERSION: "0"
+
+      # OnlyOffice configuration
+      ONLYOFFICE_ENABLED: "true"
+      ONLYOFFICE_URL: ${ONLYOFFICE_URL:-http://onlyoffice}
+      ONLYOFFICE_API_BASE_URL: ${ONLYOFFICE_API_BASE_URL:-http://openfilz-api:8081}
+      ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-change-this-secret-in-production}
+    volumes:
+      - openfilz-storage:/var/data/openfilz
+    networks:
+      - dokploy-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.openfilz-api.rule=Host(`${API_HOSTNAME:-api.yourdomain.com}`)"
+      - "traefik.http.routers.openfilz-api.entrypoints=websecure"
+      - "traefik.http.routers.openfilz-api.tls.certResolver=letsencrypt"
+      - "traefik.http.services.openfilz-api.loadbalancer.server.port=8081"
+
+  # =============================================================================
+  # OpenFilz Web (Frontend)
+  # =============================================================================
+  openfilz-web:
+    image: ${OPENFILZ_WEB_IMAGE:-ghcr.io/openfilz/openfilz-web:latest}
+    restart: unless-stopped
+    depends_on:
+      - openfilz-api
+    environment:
+      # These environment variables are used by the container to generate ngx-env.js
+      NG_APP_API_URL: https://${API_HOSTNAME:-api.yourdomain.com}/api/v1
+      NG_APP_GRAPHQL_URL: https://${API_HOSTNAME:-api.yourdomain.com}/graphql/v1
+      NG_APP_AUTHENTICATION_ENABLED: "true"
+      NG_APP_AUTHENTICATION_AUTHORITY: https://${KEYCLOAK_HOSTNAME:-keycloak.yourdomain.com}/realms/openfilz
+      NG_APP_AUTHENTICATION_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-openfilz-web}
+      NG_APP_ONLYOFFICE_ENABLED: "true"
+      NG_APP_ONLYOFFICE_URL: https://${ONLYOFFICE_HOSTNAME:-onlyoffice.yourdomain.com}
+    networks:
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.openfilz-web.rule=Host(`${WEB_HOSTNAME:-app.yourdomain.com}`)"
+      - "traefik.http.routers.openfilz-web.entrypoints=websecure"
+      - "traefik.http.routers.openfilz-web.tls.certResolver=letsencrypt"
+      - "traefik.http.services.openfilz-web.loadbalancer.server.port=8080"

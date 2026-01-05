@@ -18,14 +18,21 @@ import java.util.List;
 @Configuration
 public class OpenApiConfig {
 
-    @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}")
-    private String keycloakIssuerUri; // e.g., http://localhost:8080/realms/test-realm
+    private static final String JWK_SUFFIX = "/protocol/openid-connect/certs";
+
+    @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}")
+    private String jwkSetUri; // e.g., http://localhost:8180/realms/openfilz/protocol/openid-connect/certs
 
     @Bean
     public OpenAPI customOpenAPI(@Value("${openapi.service.title}") String serviceTitle,
                                  @Value("${openapi.service.version}") String serviceVersion,
                                  @Value("${openapi.service.url}") String url) {
         final String securitySchemeName = "keycloak_auth"; // Can be any name
+
+        // Extract realm URL from jwk-set-uri by removing the /protocol/openid-connect/certs suffix
+        String keycloakIssuerUri = jwkSetUri.endsWith(JWK_SUFFIX)
+                ? jwkSetUri.substring(0, jwkSetUri.length() - JWK_SUFFIX.length())
+                : jwkSetUri;
 
         // Construct the OpenID Connect URL from the issuer URI
         // Usually it's issuerUri + "/.well-known/openid-configuration"
