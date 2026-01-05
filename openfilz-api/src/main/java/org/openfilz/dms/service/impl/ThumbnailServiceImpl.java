@@ -14,7 +14,10 @@ import org.openfilz.dms.service.ThumbnailService;
 import org.openfilz.dms.service.ThumbnailStorageService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
+import org.springframework.core.io.buffer.DataBufferUtils;
+import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
@@ -228,32 +231,42 @@ public class ThumbnailServiceImpl implements ThumbnailService {
             .flatMap(resource -> {
                 log.debug("Streaming document to Gotenberg for PDF conversion: {}", filename);
 
-                // Create a Resource wrapper that provides the correct filename
-                // Gotenberg needs the filename to detect the document type
-                Resource namedResource = new NamedInputStreamResource(resource, filename);
+                // Buffer the resource content to a byte array to support retries
+                // and avoid InputStreamResource read-once limitation (especially with MinIO)
+                return DataBufferUtils.join(DataBufferUtils.read(resource, new DefaultDataBufferFactory(), 8192))
+                    .map(dataBuffer -> {
+                        byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                        dataBuffer.read(bytes);
+                        DataBufferUtils.release(dataBuffer);
+                        return bytes;
+                    })
+                    .flatMap(documentBytes -> {
+                        // Create a ByteArrayResource with the correct filename for Gotenberg
+                        Resource namedResource = new NamedByteArrayResource(documentBytes, filename);
 
-                // Build multipart body with the Resource (will be streamed, not loaded into memory)
-                MultipartBodyBuilder builder = new MultipartBodyBuilder();
-                builder.part("files", namedResource)
-                    .contentType(MediaType.APPLICATION_OCTET_STREAM);
+                        // Build multipart body with the buffered resource
+                        MultipartBodyBuilder builder = new MultipartBodyBuilder();
+                        builder.part("files", namedResource)
+                            .contentType(MediaType.APPLICATION_OCTET_STREAM);
 
-                // Request only first page for thumbnail
-                builder.part("nativePageRanges", "1");
+                        // Request only first page for thumbnail
+                        builder.part("nativePageRanges", "1");
 
-                return getGotenbergClient()
-                    .post()
-                    .uri("/forms/libreoffice/convert")
-                    .contentType(MediaType.MULTIPART_FORM_DATA)
-                    .body(BodyInserters.fromMultipartData(builder.build()))
-                    .retrieve()
-                    .bodyToMono(byte[].class)
-                    .timeout(Duration.ofSeconds(thumbnailProperties.getGotenberg().getTimeoutSeconds()))
-                    .retryWhen(Retry.backoff(2, Duration.ofSeconds(2))
-                        .maxBackoff(Duration.ofSeconds(10))
-                        .doBeforeRetry(signal ->
-                            log.warn("Retrying Gotenberg request, attempt {}", signal.totalRetries() + 1)))
-                    .doOnSuccess(pdf -> log.debug("Gotenberg conversion complete, PDF size: {} bytes", pdf.length))
-                    .doOnError(e -> log.error("Gotenberg conversion failed: {}", e.getMessage()));
+                        return getGotenbergClient()
+                            .post()
+                            .uri("/forms/libreoffice/convert")
+                            .contentType(MediaType.MULTIPART_FORM_DATA)
+                            .body(BodyInserters.fromMultipartData(builder.build()))
+                            .retrieve()
+                            .bodyToMono(byte[].class)
+                            .timeout(Duration.ofSeconds(thumbnailProperties.getGotenberg().getTimeoutSeconds()))
+                            .retryWhen(Retry.backoff(2, Duration.ofSeconds(2))
+                                .maxBackoff(Duration.ofSeconds(10))
+                                .doBeforeRetry(signal ->
+                                    log.warn("Retrying Gotenberg request, attempt {}", signal.totalRetries() + 1)))
+                            .doOnSuccess(pdf -> log.debug("Gotenberg conversion complete, PDF size: {} bytes", pdf.length))
+                            .doOnError(e -> log.error("Gotenberg conversion failed: {}", e.getMessage()));
+                    });
             });
     }
 
@@ -583,15 +596,15 @@ public class ThumbnailServiceImpl implements ThumbnailService {
     }
 
     /**
-     * A Resource wrapper that delegates to another Resource but provides a custom filename.
+     * A ByteArrayResource that provides a custom filename.
      * This is needed for Gotenberg to correctly detect the document type from the filename.
+     * Unlike InputStreamResource, this can be read multiple times (for retries).
      */
-    private static class NamedInputStreamResource implements Resource {
-        private final Resource delegate;
+    private static class NamedByteArrayResource extends ByteArrayResource {
         private final String filename;
 
-        NamedInputStreamResource(Resource delegate, String filename) {
-            this.delegate = delegate;
+        NamedByteArrayResource(byte[] byteArray, String filename) {
+            super(byteArray);
             this.filename = filename;
         }
 
@@ -601,48 +614,8 @@ public class ThumbnailServiceImpl implements ThumbnailService {
         }
 
         @Override
-        public InputStream getInputStream() throws IOException {
-            return delegate.getInputStream();
-        }
-
-        @Override
-        public boolean exists() {
-            return delegate.exists();
-        }
-
-        @Override
-        public java.net.URL getURL() throws IOException {
-            return delegate.getURL();
-        }
-
-        @Override
-        public java.net.URI getURI() throws IOException {
-            return delegate.getURI();
-        }
-
-        @Override
-        public java.io.File getFile() throws IOException {
-            return delegate.getFile();
-        }
-
-        @Override
-        public long contentLength() throws IOException {
-            return delegate.contentLength();
-        }
-
-        @Override
-        public long lastModified() throws IOException {
-            return delegate.lastModified();
-        }
-
-        @Override
-        public Resource createRelative(String relativePath) throws IOException {
-            return delegate.createRelative(relativePath);
-        }
-
-        @Override
         public String getDescription() {
-            return "Named resource [" + filename + "] wrapping " + delegate.getDescription();
+            return "Named byte array resource [" + filename + "]";
         }
     }
 }

@@ -69,7 +69,7 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
     private static OpenSearchAsyncClient openSearchAsyncClient;
 
     @Container
-    static OpenSearchContainer<?> openSearch = new OpenSearchContainer<>(DockerImageName.parse("opensearchproject/opensearch:latest"));
+    static OpenSearchContainer<?> openSearch = new OpenSearchContainer<>(DockerImageName.parse("opensearchproject/opensearch:3"));
 
     public FullTextOpenSearchIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
         super(webTestClient, customJackson2JsonEncoder);
@@ -136,7 +136,7 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
 
         MultipartBodyBuilder builder = newFileBuilder(f0);
         builder.part("metadata", Map.of("owner", "OpenFilz"));
-        UploadResponse r0 = getUploadResponse(builder);
+        UploadResponse r0 = getUploadResponse(builder, true);
 
         waitFor(3000);
 
@@ -286,7 +286,7 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
     void uploadPdfAndSearchText() throws IOException, ExecutionException, InterruptedException {
         MultipartBodyBuilder builder = newFileBuilder("pdf-example.pdf");
 
-        UploadResponse response = getUploadResponse(builder);
+        UploadResponse response = getUploadResponse(builder, true);
 
         SearchRequest searchRequest = new SearchRequest.Builder()
                 .index(IndexNameProvider.DEFAULT_INDEX_NAME)
@@ -294,6 +294,7 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
                         .field("content")
                         .query(fv -> fv.stringValue("systèmes d'exploitations")).build()))
                 .build();
+        // PDF parsing with Tika happens asynchronously and can take longer
         waitFor(3000);
         Assertions.assertEquals(1, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
 

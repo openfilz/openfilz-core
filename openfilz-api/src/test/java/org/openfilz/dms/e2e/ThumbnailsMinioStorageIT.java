@@ -2,6 +2,7 @@ package org.openfilz.dms.e2e;
 
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.codec.json.Jackson2JsonEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -71,5 +72,10 @@ public class ThumbnailsMinioStorageIT extends ThumbnailsBaseIT {
 
         log.info("Configured MinIO storage for documents at: {}", minio.getS3URL());
         log.info("Document bucket: dms-documents, Thumbnail bucket: dms-thumbnails");
+    }
+
+    @Test
+    void shouldGenerateThumbnailForDocxDocument() throws InterruptedException{
+        super.shouldGenerateThumbnailForDocxDocument();
     }
 }

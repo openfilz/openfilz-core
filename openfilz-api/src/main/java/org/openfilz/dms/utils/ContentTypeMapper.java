@@ -83,9 +83,9 @@ public class ContentTypeMapper {
      */
     public static String getContentType(String extension) {
         if (extension == null || extension.isBlank()) {
-            return MediaType.APPLICATION_OCTET_STREAM_VALUE;
+            return null;
         }
         String normalizedExtension = extension.toLowerCase().trim();
-        return EXTENSION_TO_CONTENT_TYPE.getOrDefault(normalizedExtension, MediaType.APPLICATION_OCTET_STREAM_VALUE);
+        return EXTENSION_TO_CONTENT_TYPE.get(normalizedExtension);
     }
 }

@@ -2,6 +2,7 @@ package org.openfilz.dms.e2e;
 
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.codec.json.Jackson2JsonEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -80,5 +81,10 @@ public class ThumbnailsLocalStorageIT extends ThumbnailsBaseIT {
         registry.add("openfilz.thumbnail.dimensions.height", () -> "160");
 
         log.info("Configured FileSystem storage for thumbnails at: {}", thumbnailStoragePath);
+    }
+
+    @Test
+    void shouldGenerateThumbnailForDocxDocument() throws InterruptedException{
+        super.shouldGenerateThumbnailForDocxDocument();
     }
 }

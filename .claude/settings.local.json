@@ -27,7 +27,8 @@
       "Bash(docker ps:*)",
       "Bash(docker logs:*)",
       "Bash(docker exec:*)",
-      "Bash(node create-office-files.js:*)"
+      "Bash(node create-office-files.js:*)",
+      "Bash(mvn dependency:tree:*)"
     ],
     "deny": [],
     "ask": []
