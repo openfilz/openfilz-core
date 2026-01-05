@@ -67,8 +67,8 @@ public class ThumbnailsMinioStorageIT extends ThumbnailsBaseIT {
         registry.add("openfilz.thumbnail.storage.minio.bucket-name", () -> "dms-thumbnails");
 
         // Configure thumbnail dimensions
-        registry.add("openfilz.thumbnail.dimensions.width", () -> "160");
-        registry.add("openfilz.thumbnail.dimensions.height", () -> "160");
+        registry.add("openfilz.thumbnail.dimensions.width", () -> "100");
+        registry.add("openfilz.thumbnail.dimensions.height", () -> "100");
 
         // Enable soft-delete and recycle bin for copy/delete tests
         registry.add("openfilz.soft-delete.active", () -> "true");

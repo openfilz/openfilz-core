@@ -77,8 +77,8 @@ public class ThumbnailsLocalStorageIT extends ThumbnailsBaseIT {
         registry.add("openfilz.thumbnail.storage.local.base-path", thumbnailStoragePath::toString);
 
         // Configure thumbnail dimensions
-        registry.add("openfilz.thumbnail.dimensions.width", () -> "160");
-        registry.add("openfilz.thumbnail.dimensions.height", () -> "160");
+        registry.add("openfilz.thumbnail.dimensions.width", () -> "100");
+        registry.add("openfilz.thumbnail.dimensions.height", () -> "100");
 
         // Enable soft-delete and recycle bin for copy/delete tests
         registry.add("openfilz.soft-delete.active", () -> "true");
