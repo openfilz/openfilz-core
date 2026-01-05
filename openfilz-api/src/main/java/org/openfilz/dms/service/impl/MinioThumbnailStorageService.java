@@ -18,7 +18,7 @@ import java.util.UUID;
 
 /**
  * MinIO/S3 implementation of ThumbnailStorageService.
- * Stores thumbnails in a MinIO bucket as PNG files.
+ * Stores thumbnails in a MinIO bucket
  * <p>
  * Activated when:
  * - Thumbnail feature is active AND
@@ -27,9 +27,9 @@ import java.util.UUID;
 @Slf4j
 @Service
 @ConditionalOnExpression(
-    "${openfilz.thumbnail.active:false} and " +
-    "((${openfilz.thumbnail.storage.use-main-storage:true} and '${storage.type:local}' == 'minio') or " +
-    "(!${openfilz.thumbnail.storage.use-main-storage:true} and '${openfilz.thumbnail.storage.type:local}' == 'minio'))"
+        "${openfilz.thumbnail.active:false} and " +
+                "((${openfilz.thumbnail.storage.use-main-storage:true} and '${storage.type:local}' == 'minio') or " +
+                "(!${openfilz.thumbnail.storage.use-main-storage:true} and '${openfilz.thumbnail.storage.type:local}' == 'minio'))"
 )
 public class MinioThumbnailStorageService implements ThumbnailStorageService {
 
@@ -172,32 +172,30 @@ public class MinioThumbnailStorageService implements ThumbnailStorageService {
 
     @Override
     public Mono<Void> copyThumbnail(UUID sourceId, UUID targetId) {
-        return Mono.fromRunnable(() -> {
-            try {
-                String sourceObject = getThumbnailObjectName(sourceId);
-                String targetObject = getThumbnailObjectName(targetId);
+        return Mono.fromCallable(() -> {
+                    String sourceObject = getThumbnailObjectName(sourceId);
+                    String targetObject = getThumbnailObjectName(targetId);
 
-                // Check if source exists
-                if (!thumbnailExistsSync(sourceId)) {
-                    log.debug("Source thumbnail not found for copy: {}", sourceId);
-                    return;
-                }
+                    if (!thumbnailExistsSync(sourceId)) {
+                        log.debug("Source thumbnail not found for copy: {}", sourceId);
+                        return null;
+                    }
 
-                minioClient.copyObject(
-                        CopyObjectArgs.builder()
-                                .bucket(bucketName)
-                                .object(targetObject)
-                                .source(CopySource.builder()
-                                        .bucket(bucketName)
-                                        .object(sourceObject)
-                                        .build())
-                                .build()
-                );
-                log.debug("Thumbnail copied from {} to {}", sourceId, targetId);
-            } catch (Exception e) {
-                log.warn("Failed to copy thumbnail from {} to {}", sourceId, targetId, e);
-            }
-        }).subscribeOn(Schedulers.boundedElastic()).then();
+                    return minioClient.copyObject(
+                            CopyObjectArgs.builder()
+                                    .bucket(bucketName)
+                                    .object(targetObject)
+                                    .source(CopySource.builder()
+                                            .bucket(bucketName)
+                                            .object(sourceObject)
+                                            .build())
+                                    .build()
+                    );
+                })
+                .subscribeOn(Schedulers.boundedElastic())
+                .doOnSuccess(r -> log.debug("Thumbnail copied from {} to {}", sourceId, targetId))
+                .then();
+
     }
 
     @Override

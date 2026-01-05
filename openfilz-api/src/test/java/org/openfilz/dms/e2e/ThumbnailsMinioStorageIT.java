@@ -70,12 +70,16 @@ public class ThumbnailsMinioStorageIT extends ThumbnailsBaseIT {
         registry.add("openfilz.thumbnail.dimensions.width", () -> "160");
         registry.add("openfilz.thumbnail.dimensions.height", () -> "160");
 
+        // Enable soft-delete and recycle bin for copy/delete tests
+        registry.add("openfilz.soft-delete.active", () -> "true");
+        registry.add("openfilz.soft-delete.recycle-bin.enabled", () -> "true");
+
         log.info("Configured MinIO storage for documents at: {}", minio.getS3URL());
         log.info("Document bucket: dms-documents, Thumbnail bucket: dms-thumbnails");
     }
 
     @Test
-    void shouldGenerateThumbnailForDocxDocument() throws InterruptedException{
-        super.shouldGenerateThumbnailForDocxDocument();
+    void shouldCopyAndDeleteThumbnailForJpegImage() throws InterruptedException{
+        super.shouldCopyAndDeleteThumbnailForJpegImage();
     }
 }

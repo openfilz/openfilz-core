@@ -19,11 +19,19 @@ import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.utility.DockerImageName;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
+
+import org.openfilz.dms.dto.request.CopyRequest;
+import org.openfilz.dms.dto.request.DeleteRequest;
+import org.openfilz.dms.dto.response.CopyResponse;
 
 /**
  * Base integration test class for Thumbnail feature.
@@ -165,7 +173,19 @@ public abstract class ThumbnailsBaseIT extends TestContainersBaseConfig {
             // Check if thumbnail is ready
             var result = response.returnResult(byte[].class);
             if (result.getStatus().is2xxSuccessful()) {
-                byte[] thumbnailBytes = result.getResponseBody().blockFirst();
+                byte[] thumbnailBytes =
+                        response.returnResult(byte[].class)
+                                .getResponseBody()
+                                .reduce(new ByteArrayOutputStream(), (out, chunk) -> {
+                                    try {
+                                        out.write(chunk);
+                                        return out;
+                                    } catch (IOException e) {
+                                        throw new UncheckedIOException(e);
+                                    }
+                                })
+                                .map(ByteArrayOutputStream::toByteArray)
+                                .block();
                 if (thumbnailBytes != null && thumbnailBytes.length > 0) {
                     log.info("Thumbnail ready for document {} after {}ms",
                             documentId, System.currentTimeMillis() - startTime);
@@ -502,5 +522,766 @@ public abstract class ThumbnailsBaseIT extends TestContainersBaseConfig {
                 .expectStatus().isNotFound();
 
         log.info("Correctly returned 404 for non-existent document: {}", nonExistentId);
+    }
+
+    // ==========================================
+    // Helper Methods for Copy/Delete Tests
+    // ==========================================
+
+    /**
+     * Copies a file to the root folder and returns the copy response.
+     */
+    protected CopyResponse copyFile(UUID documentId) {
+        CopyRequest request = new CopyRequest(List.of(documentId), null, true);
+
+        List<CopyResponse> responses = webTestClient.post()
+                .uri(RestApiVersion.API_PREFIX + "/files/copy")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(request)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBodyList(CopyResponse.class)
+                .returnResult()
+                .getResponseBody();
+
+        assertNotNull(responses, "Copy response should not be null");
+        assertFalse(responses.isEmpty(), "Copy response should not be empty");
+        return responses.getFirst();
+    }
+
+    /**
+     * Soft-deletes a file (moves to recycle bin).
+     * Requires openfilz.soft-delete.active=true
+     */
+    protected void softDeleteFile(UUID documentId) {
+        DeleteRequest request = new DeleteRequest(List.of(documentId));
+
+        webTestClient.delete()
+                .uri(uriBuilder -> uriBuilder
+                        .path(RestApiVersion.API_PREFIX + "/files")
+                        .build())
+                .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
+                .exchange()
+                .expectStatus().isNoContent();
+
+        log.info("Soft-deleted file: {}", documentId);
+    }
+
+    /**
+     * Soft-deletes files using the FileController DELETE endpoint.
+     * This method sends a DELETE request with a JSON body.
+     */
+    protected void softDeleteFiles(List<UUID> documentIds) {
+        DeleteRequest request = new DeleteRequest(documentIds);
+
+        webTestClient.method(org.springframework.http.HttpMethod.DELETE)
+                .uri(RestApiVersion.API_PREFIX + "/files")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(request)
+                .exchange()
+                .expectStatus().isNoContent();
+
+        log.info("Soft-deleted files: {}", documentIds);
+    }
+
+    /**
+     * Empties the recycle bin (permanently deletes all items).
+     * Requires openfilz.soft-delete.active=true
+     */
+    protected void emptyRecycleBin() {
+        webTestClient.delete()
+                .uri(RestApiVersion.API_PREFIX + "/recycle-bin/empty")
+                .exchange()
+                .expectStatus().isNoContent();
+
+        log.info("Emptied recycle bin");
+    }
+
+    /**
+     * Checks if a thumbnail exists for a document (returns immediately, no waiting).
+     */
+    protected boolean thumbnailExists(UUID documentId) {
+        var result = webTestClient.get()
+                .uri(RestApiVersion.API_PREFIX + "/thumbnails/img/{documentId}", documentId)
+                .exchange()
+                .returnResult(byte[].class);
+
+        return result.getStatus().is2xxSuccessful();
+    }
+
+    /**
+     * Gets thumbnail bytes if they exist, returns null otherwise.
+     */
+    protected byte[] getThumbnailIfExists(UUID documentId) {
+        var result = webTestClient.get()
+                .uri(RestApiVersion.API_PREFIX + "/thumbnails/img/{documentId}", documentId)
+                .exchange()
+                .returnResult(byte[].class);
+
+        if (result.getStatus().is2xxSuccessful()) {
+            return result.getResponseBody().blockFirst();
+        }
+        return null;
+    }
+
+    /**
+     * Asserts that thumbnail does NOT exist (404).
+     */
+    protected void assertThumbnailNotFound(UUID documentId) {
+        webTestClient.get()
+                .uri(RestApiVersion.API_PREFIX + "/thumbnails/img/{documentId}", documentId)
+                .exchange()
+                .expectStatus().isNotFound();
+    }
+
+    /**
+     * Waits a short time for async operations to complete.
+     */
+    protected void waitForAsyncOperation(long millis) throws InterruptedException {
+        TimeUnit.MILLISECONDS.sleep(millis);
+    }
+
+    // ==========================================
+    // Copy and Delete Thumbnail Tests - PNG (ImgProxy)
+    // ==========================================
+
+    @Test
+    @DisplayName("Copy/Delete: PNG image - should copy thumbnail, preserve on soft-delete, remove on permanent delete")
+    void shouldCopyAndDeleteThumbnailForPngImage() throws InterruptedException {
+        // 1. Upload PNG image
+        UploadResponse uploadResponse = uploadFile("test-image.png");
+        assertNotNull(uploadResponse, "Upload response should not be null");
+        UUID originalId = uploadResponse.id();
+        log.info("Uploaded PNG image with ID: {}", originalId);
+
+        // 2. Wait for thumbnail generation
+        byte[] originalThumbnail = waitForThumbnail(originalId);
+        assertValidImageThumbnail(originalThumbnail);
+        log.info("Original PNG thumbnail size: {} bytes", originalThumbnail.length);
+
+        // 3. Copy the file
+        CopyResponse copyResponse = copyFile(originalId);
+        UUID copyId = copyResponse.copyId();
+        log.info("Copied PNG image to ID: {}", copyId);
+
+        // 4. Wait for thumbnail to be copied (async operation)
+        byte[] copiedThumbnail = waitForThumbnail(copyId);
+        assertValidImageThumbnail(copiedThumbnail);
+        log.info("Copied PNG thumbnail size: {} bytes", copiedThumbnail.length);
+
+        // 5. Compare both thumbnails - they should be equal
+        assertArrayEquals(originalThumbnail, copiedThumbnail,
+                "Original and copied thumbnails should be identical");
+        log.info("PNG thumbnails are identical");
+
+        // 6. Soft-delete the original file
+        softDeleteFiles(List.of(originalId));
+        waitForAsyncOperation(500);
+
+        // 7. Verify original thumbnail still exists (soft-delete doesn't delete thumbnails)
+        byte[] thumbnailAfterSoftDelete = getThumbnailIfExists(originalId);
+        assertNotNull(thumbnailAfterSoftDelete, "Thumbnail should still exist after soft-delete");
+        assertArrayEquals(originalThumbnail, thumbnailAfterSoftDelete,
+                "Thumbnail should be unchanged after soft-delete");
+        log.info("PNG thumbnail preserved after soft-delete");
+
+        // 8. Empty the recycle bin (permanent delete)
+        emptyRecycleBin();
+        waitForAsyncOperation(1000);
+
+        // 9. Verify original thumbnail has been deleted
+        assertThumbnailNotFound(originalId);
+        log.info("PNG thumbnail deleted after permanent delete");
+
+        // 10. Verify copied thumbnail still exists
+        byte[] copiedThumbnailAfterDelete = getThumbnailIfExists(copyId);
+        assertNotNull(copiedThumbnailAfterDelete, "Copied thumbnail should still exist");
+        log.info("Copied PNG thumbnail still exists after original deleted");
+    }
+
+    // ==========================================
+    // Copy and Delete Thumbnail Tests - JPEG (ImgProxy)
+    // ==========================================
+
+    @Test
+    @DisplayName("Copy/Delete: JPEG image - should copy thumbnail, preserve on soft-delete, remove on permanent delete")
+    void shouldCopyAndDeleteThumbnailForJpegImage() throws InterruptedException {
+        // 1. Upload JPEG image
+        UploadResponse uploadResponse = uploadFile("test-image.jpg");
+        assertNotNull(uploadResponse, "Upload response should not be null");
+        UUID originalId = uploadResponse.id();
+        log.info("Uploaded JPEG image with ID: {}", originalId);
+
+        // 2. Wait for thumbnail generation
+        byte[] originalThumbnail = waitForThumbnail(originalId);
+        assertValidImageThumbnail(originalThumbnail);
+        log.info("Original JPEG thumbnail size: {} bytes", originalThumbnail.length);
+
+        // 3. Copy the file
+        CopyResponse copyResponse = copyFile(originalId);
+        UUID copyId = copyResponse.copyId();
+        log.info("Copied JPEG image to ID: {}", copyId);
+
+        // 4. Wait for thumbnail to be copied
+        byte[] copiedThumbnail = waitForThumbnail(copyId);
+        assertValidImageThumbnail(copiedThumbnail);
+        log.info("Copied JPEG thumbnail size: {} bytes", copiedThumbnail.length);
+
+        // 5. Compare both thumbnails
+        assertArrayEquals(originalThumbnail, copiedThumbnail,
+                "Original and copied JPEG thumbnails should be identical");
+        log.info("JPEG thumbnails are identical");
+
+        // 6. Soft-delete the original file
+        softDeleteFiles(List.of(originalId));
+        waitForAsyncOperation(500);
+
+        // 7. Verify original thumbnail still exists after soft-delete
+        byte[] thumbnailAfterSoftDelete = getThumbnailIfExists(originalId);
+        assertNotNull(thumbnailAfterSoftDelete, "JPEG thumbnail should still exist after soft-delete");
+        log.info("JPEG thumbnail preserved after soft-delete");
+
+        // 8. Empty the recycle bin
+        emptyRecycleBin();
+        waitForAsyncOperation(1000);
+
+        // 9. Verify original thumbnail has been deleted
+        assertThumbnailNotFound(originalId);
+        log.info("JPEG thumbnail deleted after permanent delete");
+
+        // 10. Verify copied thumbnail still exists
+        assertNotNull(getThumbnailIfExists(copyId), "Copied JPEG thumbnail should still exist");
+    }
+
+    // ==========================================
+    // Copy and Delete Thumbnail Tests - PDF (PDFBox)
+    // ==========================================
+
+    @Test
+    @DisplayName("Copy/Delete: PDF document - should copy thumbnail, preserve on soft-delete, remove on permanent delete")
+    void shouldCopyAndDeleteThumbnailForPdfDocument() throws InterruptedException {
+        // 1. Upload PDF document
+        UploadResponse uploadResponse = uploadFile("pdf-example.pdf");
+        assertNotNull(uploadResponse, "Upload response should not be null");
+        UUID originalId = uploadResponse.id();
+        log.info("Uploaded PDF document with ID: {}", originalId);
+
+        // 2. Wait for thumbnail generation
+        byte[] originalThumbnail = waitForThumbnail(originalId);
+        assertValidPngThumbnail(originalThumbnail);
+        log.info("Original PDF thumbnail size: {} bytes", originalThumbnail.length);
+
+        // 3. Copy the file
+        CopyResponse copyResponse = copyFile(originalId);
+        UUID copyId = copyResponse.copyId();
+        log.info("Copied PDF document to ID: {}", copyId);
+
+        // 4. Wait for thumbnail to be copied
+        byte[] copiedThumbnail = waitForThumbnail(copyId);
+        assertValidPngThumbnail(copiedThumbnail);
+        log.info("Copied PDF thumbnail size: {} bytes", copiedThumbnail.length);
+
+        // 5. Compare both thumbnails
+        assertArrayEquals(originalThumbnail, copiedThumbnail,
+                "Original and copied PDF thumbnails should be identical");
+        log.info("PDF thumbnails are identical");
+
+        // 6. Soft-delete the original file
+        softDeleteFiles(List.of(originalId));
+        waitForAsyncOperation(500);
+
+        // 7. Verify original thumbnail still exists after soft-delete
+        byte[] thumbnailAfterSoftDelete = getThumbnailIfExists(originalId);
+        assertNotNull(thumbnailAfterSoftDelete, "PDF thumbnail should still exist after soft-delete");
+        log.info("PDF thumbnail preserved after soft-delete");
+
+        // 8. Empty the recycle bin
+        emptyRecycleBin();
+        waitForAsyncOperation(1000);
+
+        // 9. Verify original thumbnail has been deleted
+        assertThumbnailNotFound(originalId);
+        log.info("PDF thumbnail deleted after permanent delete");
+
+        // 10. Verify copied thumbnail still exists
+        assertNotNull(getThumbnailIfExists(copyId), "Copied PDF thumbnail should still exist");
+    }
+
+    // ==========================================
+    // Copy and Delete Thumbnail Tests - DOCX (Gotenberg + PDFBox)
+    // ==========================================
+
+    @Test
+    @DisplayName("Copy/Delete: DOCX document - should copy thumbnail, preserve on soft-delete, remove on permanent delete")
+    void shouldCopyAndDeleteThumbnailForDocxDocument() throws InterruptedException {
+        // 1. Upload DOCX document
+        UploadResponse uploadResponse = uploadFile("test-document.docx");
+        assertNotNull(uploadResponse, "Upload response should not be null");
+        UUID originalId = uploadResponse.id();
+        log.info("Uploaded DOCX document with ID: {}", originalId);
+
+        // 2. Wait for thumbnail generation (Gotenberg conversion may take longer)
+        byte[] originalThumbnail = waitForThumbnail(originalId);
+        assertValidPngThumbnail(originalThumbnail);
+        log.info("Original DOCX thumbnail size: {} bytes", originalThumbnail.length);
+
+        // 3. Copy the file
+        CopyResponse copyResponse = copyFile(originalId);
+        UUID copyId = copyResponse.copyId();
+        log.info("Copied DOCX document to ID: {}", copyId);
+
+        // 4. Wait for thumbnail to be copied
+        byte[] copiedThumbnail = waitForThumbnail(copyId);
+        assertValidPngThumbnail(copiedThumbnail);
+        log.info("Copied DOCX thumbnail size: {} bytes", copiedThumbnail.length);
+
+        // 5. Compare both thumbnails
+        assertArrayEquals(originalThumbnail, copiedThumbnail,
+                "Original and copied DOCX thumbnails should be identical");
+        log.info("DOCX thumbnails are identical");
+
+        // 6. Soft-delete the original file
+        softDeleteFiles(List.of(originalId));
+        waitForAsyncOperation(500);
+
+        // 7. Verify original thumbnail still exists after soft-delete
+        byte[] thumbnailAfterSoftDelete = getThumbnailIfExists(originalId);
+        assertNotNull(thumbnailAfterSoftDelete, "DOCX thumbnail should still exist after soft-delete");
+        log.info("DOCX thumbnail preserved after soft-delete");
+
+        // 8. Empty the recycle bin
+        emptyRecycleBin();
+        waitForAsyncOperation(1000);
+
+        // 9. Verify original thumbnail has been deleted
+        assertThumbnailNotFound(originalId);
+        log.info("DOCX thumbnail deleted after permanent delete");
+
+        // 10. Verify copied thumbnail still exists
+        assertNotNull(getThumbnailIfExists(copyId), "Copied DOCX thumbnail should still exist");
+    }
+
+    // ==========================================
+    // Copy and Delete Thumbnail Tests - XLSX (Gotenberg + PDFBox)
+    // ==========================================
+
+    @Test
+    @DisplayName("Copy/Delete: XLSX spreadsheet - should copy thumbnail, preserve on soft-delete, remove on permanent delete")
+    void shouldCopyAndDeleteThumbnailForXlsxDocument() throws InterruptedException {
+        // 1. Upload XLSX spreadsheet
+        UploadResponse uploadResponse = uploadFile("test-spreadsheet.xlsx");
+        assertNotNull(uploadResponse, "Upload response should not be null");
+        UUID originalId = uploadResponse.id();
+        log.info("Uploaded XLSX spreadsheet with ID: {}", originalId);
+
+        // 2. Wait for thumbnail generation
+        byte[] originalThumbnail = waitForThumbnail(originalId);
+        assertValidPngThumbnail(originalThumbnail);
+        log.info("Original XLSX thumbnail size: {} bytes", originalThumbnail.length);
+
+        // 3. Copy the file
+        CopyResponse copyResponse = copyFile(originalId);
+        UUID copyId = copyResponse.copyId();
+        log.info("Copied XLSX spreadsheet to ID: {}", copyId);
+
+        // 4. Wait for thumbnail to be copied
+        byte[] copiedThumbnail = waitForThumbnail(copyId);
+        assertValidPngThumbnail(copiedThumbnail);
+        log.info("Copied XLSX thumbnail size: {} bytes", copiedThumbnail.length);
+
+        // 5. Compare both thumbnails
+        assertArrayEquals(originalThumbnail, copiedThumbnail,
+                "Original and copied XLSX thumbnails should be identical");
+        log.info("XLSX thumbnails are identical");
+
+        // 6. Soft-delete the original file
+        softDeleteFiles(List.of(originalId));
+        waitForAsyncOperation(500);
+
+        // 7. Verify original thumbnail still exists after soft-delete
+        assertNotNull(getThumbnailIfExists(originalId), "XLSX thumbnail should still exist after soft-delete");
+        log.info("XLSX thumbnail preserved after soft-delete");
+
+        // 8. Empty the recycle bin
+        emptyRecycleBin();
+        waitForAsyncOperation(1000);
+
+        // 9. Verify original thumbnail has been deleted
+        assertThumbnailNotFound(originalId);
+        log.info("XLSX thumbnail deleted after permanent delete");
+
+        // 10. Verify copied thumbnail still exists
+        assertNotNull(getThumbnailIfExists(copyId), "Copied XLSX thumbnail should still exist");
+    }
+
+    // ==========================================
+    // Copy and Delete Thumbnail Tests - PPTX (Gotenberg + PDFBox)
+    // ==========================================
+
+    @Test
+    @DisplayName("Copy/Delete: PPTX presentation - should copy thumbnail, preserve on soft-delete, remove on permanent delete")
+    void shouldCopyAndDeleteThumbnailForPptxDocument() throws InterruptedException {
+        // 1. Upload PPTX presentation
+        UploadResponse uploadResponse = uploadFile("test-presentation.pptx");
+        assertNotNull(uploadResponse, "Upload response should not be null");
+        UUID originalId = uploadResponse.id();
+        log.info("Uploaded PPTX presentation with ID: {}", originalId);
+
+        // 2. Wait for thumbnail generation
+        byte[] originalThumbnail = waitForThumbnail(originalId);
+        assertValidPngThumbnail(originalThumbnail);
+        log.info("Original PPTX thumbnail size: {} bytes", originalThumbnail.length);
+
+        // 3. Copy the file
+        CopyResponse copyResponse = copyFile(originalId);
+        UUID copyId = copyResponse.copyId();
+        log.info("Copied PPTX presentation to ID: {}", copyId);
+
+        // 4. Wait for thumbnail to be copied
+        byte[] copiedThumbnail = waitForThumbnail(copyId);
+        assertValidPngThumbnail(copiedThumbnail);
+        log.info("Copied PPTX thumbnail size: {} bytes", copiedThumbnail.length);
+
+        // 5. Compare both thumbnails
+        assertArrayEquals(originalThumbnail, copiedThumbnail,
+                "Original and copied PPTX thumbnails should be identical");
+        log.info("PPTX thumbnails are identical");
+
+        // 6. Soft-delete the original file
+        softDeleteFiles(List.of(originalId));
+        waitForAsyncOperation(500);
+
+        // 7. Verify original thumbnail still exists after soft-delete
+        assertNotNull(getThumbnailIfExists(originalId), "PPTX thumbnail should still exist after soft-delete");
+        log.info("PPTX thumbnail preserved after soft-delete");
+
+        // 8. Empty the recycle bin
+        emptyRecycleBin();
+        waitForAsyncOperation(1000);
+
+        // 9. Verify original thumbnail has been deleted
+        assertThumbnailNotFound(originalId);
+        log.info("PPTX thumbnail deleted after permanent delete");
+
+        // 10. Verify copied thumbnail still exists
+        assertNotNull(getThumbnailIfExists(copyId), "Copied PPTX thumbnail should still exist");
+    }
+
+    // ==========================================
+    // Copy and Delete Thumbnail Tests - Text files (Java 2D)
+    // ==========================================
+
+    @Test
+    @DisplayName("Copy/Delete: TXT file - should copy thumbnail, preserve on soft-delete, remove on permanent delete")
+    void shouldCopyAndDeleteThumbnailForTxtFile() throws InterruptedException {
+        // 1. Upload TXT file
+        UploadResponse uploadResponse = uploadFile("test.txt");
+        assertNotNull(uploadResponse, "Upload response should not be null");
+        UUID originalId = uploadResponse.id();
+        log.info("Uploaded TXT file with ID: {}", originalId);
+
+        // 2. Wait for thumbnail generation
+        byte[] originalThumbnail = waitForThumbnail(originalId);
+        assertValidPngThumbnail(originalThumbnail);
+        log.info("Original TXT thumbnail size: {} bytes", originalThumbnail.length);
+
+        // 3. Copy the file
+        CopyResponse copyResponse = copyFile(originalId);
+        UUID copyId = copyResponse.copyId();
+        log.info("Copied TXT file to ID: {}", copyId);
+
+        // 4. Wait for thumbnail to be copied
+        byte[] copiedThumbnail = waitForThumbnail(copyId);
+        assertValidPngThumbnail(copiedThumbnail);
+        log.info("Copied TXT thumbnail size: {} bytes", copiedThumbnail.length);
+
+        // 5. Compare both thumbnails
+        assertArrayEquals(originalThumbnail, copiedThumbnail,
+                "Original and copied TXT thumbnails should be identical");
+        log.info("TXT thumbnails are identical");
+
+        // 6. Soft-delete the original file
+        softDeleteFiles(List.of(originalId));
+        waitForAsyncOperation(500);
+
+        // 7. Verify original thumbnail still exists after soft-delete
+        assertNotNull(getThumbnailIfExists(originalId), "TXT thumbnail should still exist after soft-delete");
+        log.info("TXT thumbnail preserved after soft-delete");
+
+        // 8. Empty the recycle bin
+        emptyRecycleBin();
+        waitForAsyncOperation(1000);
+
+        // 9. Verify original thumbnail has been deleted
+        assertThumbnailNotFound(originalId);
+        log.info("TXT thumbnail deleted after permanent delete");
+
+        // 10. Verify copied thumbnail still exists
+        assertNotNull(getThumbnailIfExists(copyId), "Copied TXT thumbnail should still exist");
+    }
+
+    @Test
+    @DisplayName("Copy/Delete: Markdown file - should copy thumbnail, preserve on soft-delete, remove on permanent delete")
+    void shouldCopyAndDeleteThumbnailForMarkdownFile() throws InterruptedException {
+        // 1. Upload Markdown file
+        UploadResponse uploadResponse = uploadFile("test-markdown.md");
+        assertNotNull(uploadResponse, "Upload response should not be null");
+        UUID originalId = uploadResponse.id();
+        log.info("Uploaded Markdown file with ID: {}", originalId);
+
+        // 2. Wait for thumbnail generation
+        byte[] originalThumbnail = waitForThumbnail(originalId);
+        assertValidPngThumbnail(originalThumbnail);
+        log.info("Original Markdown thumbnail size: {} bytes", originalThumbnail.length);
+
+        // 3. Copy the file
+        CopyResponse copyResponse = copyFile(originalId);
+        UUID copyId = copyResponse.copyId();
+        log.info("Copied Markdown file to ID: {}", copyId);
+
+        // 4. Wait for thumbnail to be copied
+        byte[] copiedThumbnail = waitForThumbnail(copyId);
+        assertValidPngThumbnail(copiedThumbnail);
+
+        // 5. Compare both thumbnails
+        assertArrayEquals(originalThumbnail, copiedThumbnail,
+                "Original and copied Markdown thumbnails should be identical");
+        log.info("Markdown thumbnails are identical");
+
+        // 6-10. Soft-delete, verify, permanent delete, verify
+        softDeleteFiles(List.of(originalId));
+        waitForAsyncOperation(500);
+        assertNotNull(getThumbnailIfExists(originalId), "Markdown thumbnail should still exist after soft-delete");
+
+        emptyRecycleBin();
+        waitForAsyncOperation(1000);
+        assertThumbnailNotFound(originalId);
+        assertNotNull(getThumbnailIfExists(copyId), "Copied Markdown thumbnail should still exist");
+    }
+
+    @Test
+    @DisplayName("Copy/Delete: YAML file - should copy thumbnail, preserve on soft-delete, remove on permanent delete")
+    void shouldCopyAndDeleteThumbnailForYamlFile() throws InterruptedException {
+        // 1. Upload YAML file
+        UploadResponse uploadResponse = uploadFile("test-config.yaml");
+        assertNotNull(uploadResponse, "Upload response should not be null");
+        UUID originalId = uploadResponse.id();
+        log.info("Uploaded YAML file with ID: {}", originalId);
+
+        // 2. Wait for thumbnail generation
+        byte[] originalThumbnail = waitForThumbnail(originalId);
+        assertValidPngThumbnail(originalThumbnail);
+
+        // 3. Copy the file
+        CopyResponse copyResponse = copyFile(originalId);
+        UUID copyId = copyResponse.copyId();
+
+        // 4. Wait for thumbnail to be copied
+        byte[] copiedThumbnail = waitForThumbnail(copyId);
+        assertValidPngThumbnail(copiedThumbnail);
+
+        // 5. Compare both thumbnails
+        assertArrayEquals(originalThumbnail, copiedThumbnail,
+                "Original and copied YAML thumbnails should be identical");
+        log.info("YAML thumbnails are identical");
+
+        // 6-10. Soft-delete, verify, permanent delete, verify
+        softDeleteFiles(List.of(originalId));
+        waitForAsyncOperation(500);
+        assertNotNull(getThumbnailIfExists(originalId), "YAML thumbnail should still exist after soft-delete");
+
+        emptyRecycleBin();
+        waitForAsyncOperation(1000);
+        assertThumbnailNotFound(originalId);
+        assertNotNull(getThumbnailIfExists(copyId), "Copied YAML thumbnail should still exist");
+    }
+
+    @Test
+    @DisplayName("Copy/Delete: XML file - should copy thumbnail, preserve on soft-delete, remove on permanent delete")
+    void shouldCopyAndDeleteThumbnailForXmlFile() throws InterruptedException {
+        // 1. Upload XML file
+        UploadResponse uploadResponse = uploadFile("test-data.xml");
+        assertNotNull(uploadResponse, "Upload response should not be null");
+        UUID originalId = uploadResponse.id();
+
+        // 2. Wait for thumbnail generation
+        byte[] originalThumbnail = waitForThumbnail(originalId);
+        assertValidPngThumbnail(originalThumbnail);
+
+        // 3. Copy the file
+        CopyResponse copyResponse = copyFile(originalId);
+        UUID copyId = copyResponse.copyId();
+
+        // 4. Wait for thumbnail to be copied
+        byte[] copiedThumbnail = waitForThumbnail(copyId);
+
+        // 5. Compare both thumbnails
+        assertArrayEquals(originalThumbnail, copiedThumbnail,
+                "Original and copied XML thumbnails should be identical");
+        log.info("XML thumbnails are identical");
+
+        // 6-10. Soft-delete, verify, permanent delete, verify
+        softDeleteFiles(List.of(originalId));
+        waitForAsyncOperation(500);
+        assertNotNull(getThumbnailIfExists(originalId), "XML thumbnail should still exist after soft-delete");
+
+        emptyRecycleBin();
+        waitForAsyncOperation(1000);
+        assertThumbnailNotFound(originalId);
+        assertNotNull(getThumbnailIfExists(copyId), "Copied XML thumbnail should still exist");
+    }
+
+    @Test
+    @DisplayName("Copy/Delete: CSV file - should copy thumbnail, preserve on soft-delete, remove on permanent delete")
+    void shouldCopyAndDeleteThumbnailForCsvFile() throws InterruptedException {
+        // 1. Upload CSV file
+        UploadResponse uploadResponse = uploadFile("test-data.csv");
+        assertNotNull(uploadResponse, "Upload response should not be null");
+        UUID originalId = uploadResponse.id();
+
+        // 2. Wait for thumbnail generation
+        byte[] originalThumbnail = waitForThumbnail(originalId);
+        assertValidPngThumbnail(originalThumbnail);
+
+        // 3. Copy the file
+        CopyResponse copyResponse = copyFile(originalId);
+        UUID copyId = copyResponse.copyId();
+
+        // 4. Wait for thumbnail to be copied
+        byte[] copiedThumbnail = waitForThumbnail(copyId);
+
+        // 5. Compare both thumbnails
+        assertArrayEquals(originalThumbnail, copiedThumbnail,
+                "Original and copied CSV thumbnails should be identical");
+        log.info("CSV thumbnails are identical");
+
+        // 6-10. Soft-delete, verify, permanent delete, verify
+        softDeleteFiles(List.of(originalId));
+        waitForAsyncOperation(500);
+        assertNotNull(getThumbnailIfExists(originalId), "CSV thumbnail should still exist after soft-delete");
+
+        emptyRecycleBin();
+        waitForAsyncOperation(1000);
+        assertThumbnailNotFound(originalId);
+        assertNotNull(getThumbnailIfExists(copyId), "Copied CSV thumbnail should still exist");
+    }
+
+    @Test
+    @DisplayName("Copy/Delete: JSON file - should copy thumbnail, preserve on soft-delete, remove on permanent delete")
+    void shouldCopyAndDeleteThumbnailForJsonFile() throws InterruptedException {
+        // 1. Upload JSON file
+        UploadResponse uploadResponse = uploadFile("test-code.json");
+        assertNotNull(uploadResponse, "Upload response should not be null");
+        UUID originalId = uploadResponse.id();
+
+        // 2. Wait for thumbnail generation
+        byte[] originalThumbnail = waitForThumbnail(originalId);
+        assertValidPngThumbnail(originalThumbnail);
+
+        // 3. Copy the file
+        CopyResponse copyResponse = copyFile(originalId);
+        UUID copyId = copyResponse.copyId();
+
+        // 4. Wait for thumbnail to be copied
+        byte[] copiedThumbnail = waitForThumbnail(copyId);
+
+        // 5. Compare both thumbnails
+        assertArrayEquals(originalThumbnail, copiedThumbnail,
+                "Original and copied JSON thumbnails should be identical");
+        log.info("JSON thumbnails are identical");
+
+        // 6-10. Soft-delete, verify, permanent delete, verify
+        softDeleteFiles(List.of(originalId));
+        waitForAsyncOperation(500);
+        assertNotNull(getThumbnailIfExists(originalId), "JSON thumbnail should still exist after soft-delete");
+
+        emptyRecycleBin();
+        waitForAsyncOperation(1000);
+        assertThumbnailNotFound(originalId);
+        assertNotNull(getThumbnailIfExists(copyId), "Copied JSON thumbnail should still exist");
+    }
+
+    @Test
+    @DisplayName("Copy/Delete: SQL file - should copy thumbnail, preserve on soft-delete, remove on permanent delete")
+    void shouldCopyAndDeleteThumbnailForSqlFile() throws InterruptedException {
+        // 1. Upload SQL file
+        UploadResponse uploadResponse = uploadFile("test_file_1.sql");
+        assertNotNull(uploadResponse, "Upload response should not be null");
+        UUID originalId = uploadResponse.id();
+
+        // 2. Wait for thumbnail generation
+        byte[] originalThumbnail = waitForThumbnail(originalId);
+        assertValidPngThumbnail(originalThumbnail);
+
+        // 3. Copy the file
+        CopyResponse copyResponse = copyFile(originalId);
+        UUID copyId = copyResponse.copyId();
+
+        // 4. Wait for thumbnail to be copied
+        byte[] copiedThumbnail = waitForThumbnail(copyId);
+
+        // 5. Compare both thumbnails
+        assertArrayEquals(originalThumbnail, copiedThumbnail,
+                "Original and copied SQL thumbnails should be identical");
+        log.info("SQL thumbnails are identical");
+
+        // 6-10. Soft-delete, verify, permanent delete, verify
+        softDeleteFiles(List.of(originalId));
+        waitForAsyncOperation(500);
+        assertNotNull(getThumbnailIfExists(originalId), "SQL thumbnail should still exist after soft-delete");
+
+        emptyRecycleBin();
+        waitForAsyncOperation(1000);
+        assertThumbnailNotFound(originalId);
+        assertNotNull(getThumbnailIfExists(copyId), "Copied SQL thumbnail should still exist");
+    }
+
+    // ==========================================
+    // Copy and Delete Tests - File without extension (No thumbnail)
+    // ==========================================
+
+    @Test
+    @DisplayName("Copy/Delete: File without extension - should NOT generate thumbnail, copy should have no thumbnail")
+    void shouldNotGenerateThumbnailForFileWithoutExtension() throws InterruptedException {
+        // 1. Upload file without extension
+        UploadResponse uploadResponse = uploadFile("test-file-no-extension");
+        assertNotNull(uploadResponse, "Upload response should not be null");
+        UUID originalId = uploadResponse.id();
+        log.info("Uploaded file without extension with ID: {}", originalId);
+
+        // 2. Wait a bit to allow any potential thumbnail generation
+        waitForAsyncOperation(3000);
+
+        // 3. Verify NO thumbnail was generated (should return 404)
+        assertThumbnailNotFound(originalId);
+        log.info("Correctly no thumbnail generated for file without extension");
+
+        // 4. Copy the file
+        CopyResponse copyResponse = copyFile(originalId);
+        UUID copyId = copyResponse.copyId();
+        log.info("Copied file without extension to ID: {}", copyId);
+
+        // 5. Wait a bit for any async operations
+        waitForAsyncOperation(1000);
+
+        // 6. Verify copy also has no thumbnail
+        assertThumbnailNotFound(copyId);
+        log.info("Copy also has no thumbnail (as expected)");
+
+        // 7. Soft-delete the original file
+        softDeleteFiles(List.of(originalId));
+        waitForAsyncOperation(500);
+
+        // 8. Original should still not have thumbnail (was never created)
+        assertThumbnailNotFound(originalId);
+
+        // 9. Empty the recycle bin
+        emptyRecycleBin();
+        waitForAsyncOperation(1000);
+
+        // 10. Verify both still have no thumbnails
+        assertThumbnailNotFound(originalId);
+        assertThumbnailNotFound(copyId);
+        log.info("File without extension: no thumbnails at any stage (as expected)");
     }
 }

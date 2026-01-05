@@ -80,11 +80,15 @@ public class ThumbnailsLocalStorageIT extends ThumbnailsBaseIT {
         registry.add("openfilz.thumbnail.dimensions.width", () -> "160");
         registry.add("openfilz.thumbnail.dimensions.height", () -> "160");
 
+        // Enable soft-delete and recycle bin for copy/delete tests
+        registry.add("openfilz.soft-delete.active", () -> "true");
+        registry.add("openfilz.soft-delete.recycle-bin.enabled", () -> "true");
+
         log.info("Configured FileSystem storage for thumbnails at: {}", thumbnailStoragePath);
     }
 
     @Test
-    void shouldGenerateThumbnailForDocxDocument() throws InterruptedException{
-        super.shouldGenerateThumbnailForDocxDocument();
+    void shouldCopyAndDeleteThumbnailForJpegImage() throws InterruptedException{
+        super.shouldCopyAndDeleteThumbnailForJpegImage();
     }
 }
