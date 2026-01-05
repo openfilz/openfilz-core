@@ -60,8 +60,6 @@ public abstract class TestContainersBaseConfig {
         registry.add("spring.flyway.user", postgres::getUsername);
         registry.add("spring.flyway.password", postgres::getPassword);
 
-        registry.add("storage.local.base-path", () -> "/tmp/" + UUID.randomUUID());
-
     }
 
     protected HttpGraphQlClient newGraphQlClient() {
