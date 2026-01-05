@@ -14,8 +14,8 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
-import org.springframework.security.oauth2.jwt.ReactiveJwtDecoders;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.authorization.AuthorizationContext;
 
@@ -30,8 +30,8 @@ public class DefaultAuthSecurityConfig {
 
     public static final String ALL_MATCHES = "/**";
 
-    @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}")
-    protected String issuerUri;
+    @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}")
+    protected String jwkSetUri;
 
     @Value("${spring.graphql.http.path:/graphql}")
     protected String graphQlBaseUrl;
@@ -40,7 +40,7 @@ public class DefaultAuthSecurityConfig {
 
     @Bean
     public ReactiveJwtDecoder jwtDecoder() {
-        return ReactiveJwtDecoders.fromIssuerLocation(issuerUri);
+        return NimbusReactiveJwtDecoder.withJwkSetUri(jwkSetUri).build();
     }
 
     private static final String[] AUTH_WHITELIST = {

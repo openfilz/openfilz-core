@@ -1,0 +1,79 @@
+# OpenFilz Docker Compose - OpenSearch Full-Text Search Overlay
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.fulltext.yml up -d
+#
+# Or use the Makefile:
+#   make up-fulltext
+
+volumes:
+  opensearch-data:
+
+services:
+  # =============================================================================
+  # OpenSearch for Full-Text Search
+  # =============================================================================
+  opensearch:
+    image: opensearchproject/opensearch:latest
+    container_name: openfilz-opensearch
+    restart: unless-stopped
+    environment:
+      cluster.name: openfilz-cluster
+      node.name: opensearch-node1
+      discovery.type: single-node
+      bootstrap.memory_lock: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+      DISABLE_SECURITY_PLUGIN: "true"  # Disable security for development
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    ports:
+      - "${OPENSEARCH_PORT:-9200}:9200"
+      - "${OPENSEARCH_PERF_PORT:-9600}:9600"
+    networks:
+      - openfilz-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # =============================================================================
+  # OpenSearch Dashboards (UI for OpenSearch)
+  # =============================================================================
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:latest
+    container_name: openfilz-opensearch-dashboards
+    restart: unless-stopped
+    environment:
+      OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
+      DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"
+    ports:
+      - "${OPENSEARCH_DASHBOARDS_PORT:-5601}:5601"
+    networks:
+      - openfilz-network
+    depends_on:
+      opensearch:
+        condition: service_healthy
+
+  # =============================================================================
+  # OpenFilz API - Full-Text Search Configuration Override
+  # =============================================================================
+  openfilz-api:
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    environment:
+      # Full-text search configuration
+      OPENFILZ_FULLTEXT_ACTIVE: "true"
+      OPENFILZ_FULLTEXT_OPENSEARCH_HOST: opensearch
+      OPENFILZ_FULLTEXT_OPENSEARCH_PORT: 9200
+      OPENFILZ_FULLTEXT_OPENSEARCH_SCHEME: http
