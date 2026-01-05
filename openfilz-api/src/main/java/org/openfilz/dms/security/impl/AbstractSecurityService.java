@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.OnlyOfficeProperties;
 import org.openfilz.dms.config.RestApiVersion;
+import org.openfilz.dms.config.ThumbnailProperties;
 import org.openfilz.dms.enums.Role;
 import org.openfilz.dms.enums.RoleTokenLookup;
 import org.openfilz.dms.security.SecurityService;
@@ -22,6 +23,8 @@ import java.util.List;
 import java.util.Map;
 
 import static java.util.List.of;
+import static org.openfilz.dms.config.RestApiVersion.ENDPOINT_ONLYOFFICE;
+import static org.openfilz.dms.config.RestApiVersion.ENDPOINT_THUMBNAILS;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -41,6 +44,7 @@ public abstract class AbstractSecurityService implements SecurityService {
     protected String graphQlBaseUrl;
 
     protected final OnlyOfficeProperties onlyOfficeProperties;
+    protected final ThumbnailProperties thumbnailProperties;
 
     public boolean authorize(Authentication auth, AuthorizationContext context) {
         ServerHttpRequest request = context.getExchange().getRequest();
@@ -49,14 +53,12 @@ public abstract class AbstractSecurityService implements SecurityService {
             return isAuthorized((JwtAuthenticationToken) auth, Role.CLEANER.toString());
         }
         String path = request.getPath().value();
-        log.debug("method {} -  path {}", method, path);
         int i = getRootContextPathIndex(path);
         if(i < 0) {
             return isGraphQlAuthorized((JwtAuthenticationToken) auth, path);
         }
         path = getContextPath(path, i);
-        log.debug("method {} -  path {}", method, path);
-        if (isQueryOrSearch(method, path))
+        if(isThumbnail(method, path) || isQueryOrSearch(method, path))
             return isAuthorized((JwtAuthenticationToken) auth, of(Role.READER.toString(), Role.CONTRIBUTOR.toString()));
         if(isAudit(path)) {
             return isAuthorized((JwtAuthenticationToken) auth, Role.AUDITOR.toString());
@@ -82,10 +84,14 @@ public abstract class AbstractSecurityService implements SecurityService {
         return isCustomAccessAuthorized(auth, context, method, path);
     }
 
+    private boolean isThumbnail(HttpMethod method, String path) {
+        return thumbnailProperties.isActive() && method.equals(HttpMethod.GET) && path.startsWith(ENDPOINT_THUMBNAILS + "/img/");
+    }
+
     private boolean isOnlyOffice(HttpMethod method, String path) {
         return onlyOfficeProperties.isEnabled()
                 && (method.equals(HttpMethod.GET) || method.equals(HttpMethod.POST))
-                && pathStartsWith(path, "/onlyoffice");
+                && pathStartsWith(path, ENDPOINT_ONLYOFFICE);
     }
 
     protected int getRootContextPathIndex(String path) {

@@ -1,0 +1,155 @@
+# OpenFilz Thumbnail Generation Docker Compose Configuration
+#
+# This file adds ImgProxy and Gotenberg for thumbnail generation.
+# Use in combination with the main docker-compose.yml.
+#
+# Services:
+#   - ImgProxy: Fast image thumbnail generation (JPEG, PNG, GIF, WebP, etc.)
+#   - Gotenberg: PDF and Office document conversion (DOCX, XLSX, PPTX, ODT, etc.)
+#   - PDFBox (in-process): Renders PDF pages as images
+#
+# Usage:
+#   Start with thumbnail support (local mode):
+#     docker-compose -f docker-compose.yml -f docker-compose-thumbnails.yml --profile thumbnails up -d
+#
+#   Start with thumbnail support and Redis (distributed mode):
+#     docker-compose -f docker-compose.yml -f docker-compose-thumbnails.yml --profile thumbnails --profile thumbnails-redis up -d
+#
+# Configuration:
+#   Set OPENFILZ_THUMBNAIL_ACTIVE=true to enable thumbnail generation.
+#   The API will call ImgProxy for images and Gotenberg for documents.
+
+volumes:
+  redis-data:
+
+services:
+  # =============================================================================
+  # ImgProxy - For Image Thumbnails (JPEG, PNG, GIF, WebP, BMP, TIFF)
+  # =============================================================================
+  imgproxy:
+    image: darthsim/imgproxy:latest
+    container_name: openfilz-imgproxy
+    profiles:
+      - thumbnails
+    restart: unless-stopped
+    environment:
+      # Server configuration
+      IMGPROXY_BIND: ":8080"
+
+      # Output format
+      IMGPROXY_PREFERRED_FORMATS: "webp"
+
+      # Skip unsupported formats instead of erroring
+      IMGPROXY_SKIP_UNSUPPORTED_FORMATS: "true"
+
+      # Allow internal URLs (for development)
+      IMGPROXY_ALLOW_INSECURE_SOURCE_URL: "true"
+
+      # Allow loopback addresses (for local development when API runs on host)
+      IMGPROXY_ALLOW_LOOPBACK_SOURCE_ADDRESSES: "true"
+
+      # Allow private IP addresses (for Docker networking)
+      IMGPROXY_ALLOW_PRIVATE_SOURCE_ADDRESSES: "true"
+
+      # Security (disable in development, enable in production)
+      IMGPROXY_ALLOW_ORIGIN: "*"
+
+      # Memory limits
+      IMGPROXY_MAX_SRC_RESOLUTION: "50"
+      IMGPROXY_MAX_SRC_FILE_SIZE: "52428800"  # 50MB
+
+      # Concurrency
+      IMGPROXY_CONCURRENCY: "10"
+      IMGPROXY_MAX_CLIENTS: "200"
+
+      # Logging
+      IMGPROXY_LOG_LEVEL: "info"
+    ports:
+      - "${IMGPROXY_PORT:-8082}:8080"
+    networks:
+      - openfilz-network
+    # Allow ImgProxy to reach the host machine (for local development)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # =============================================================================
+  # Gotenberg - For PDF and Office Document Thumbnails
+  # Converts DOCX, XLSX, PPTX, ODT, ODS, ODP to PDF using LibreOffice
+  # =============================================================================
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: openfilz-gotenberg
+    profiles:
+      - thumbnails
+    restart: unless-stopped
+    command:
+      - "gotenberg"
+      - "--api-timeout=60s"
+      - "--libreoffice-restart-after=100"
+      - "--libreoffice-auto-start=true"
+      - "--log-level=info"
+    ports:
+      - "${GOTENBERG_PORT:-8083}:3000"
+    networks:
+      - openfilz-network
+    # Allow Gotenberg to reach the host machine (for local development)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # =============================================================================
+  # Redis - For Distributed Thumbnail Generation (Optional)
+  # Use when running multiple API instances for load distribution.
+  # =============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: openfilz-redis
+    profiles:
+      - thumbnails-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    networks:
+      - openfilz-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # =============================================================================
+  # OpenFilz API - Extended Configuration for Thumbnails
+  # =============================================================================
+  openfilz-api:
+    environment:
+      # Thumbnail configuration
+      OPENFILZ_THUMBNAIL_ACTIVE: ${OPENFILZ_THUMBNAIL_ACTIVE:-true}
+      OPENFILZ_THUMBNAIL_API_BASE_URL: ${OPENFILZ_THUMBNAIL_API_BASE_URL:-http://openfilz-api:8081}
+      IMGPROXY_URL: ${IMGPROXY_URL:-http://imgproxy:8080}
+      GOTENBERG_URL: ${GOTENBERG_URL:-http://gotenberg:3000}
+
+      # Thumbnail generation mode: local (default) or redis (for multi-instance)
+      OPENFILZ_THUMBNAIL_GENERATION_MODE: ${OPENFILZ_THUMBNAIL_GENERATION_MODE:-local}
+
+      # Redis configuration (only used when generation-mode=redis)
+      SPRING_REDIS_HOST: ${REDIS_HOST:-redis}
+      SPRING_REDIS_PORT: ${REDIS_PORT:-6379}
+    depends_on:
+      imgproxy:
+        condition: service_healthy
+      gotenberg:
+        condition: service_healthy

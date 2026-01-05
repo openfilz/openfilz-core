@@ -442,7 +442,9 @@
         "loading": "Chargement du document...",
         "unsupportedTitle": "Aperçu non disponible",
         "unsupportedMessage": "Ce type de fichier ne peut pas être prévisualisé dans le navigateur.",
-        "downloadFile": "Télécharger le fichier"
+        "downloadFile": "Télécharger le fichier",
+        "fileTooLargeTitle": "Fichier trop volumineux pour l'aperçu",
+        "fileTooLargeMessage": "Ce fichier dépasse la taille maximale pour l'aperçu ({{maxSize}} Mo). Veuillez télécharger le fichier et l'ouvrir sur votre ordinateur."
     },
     "errors": {
         "loadFailed": "Échec du chargement des données",

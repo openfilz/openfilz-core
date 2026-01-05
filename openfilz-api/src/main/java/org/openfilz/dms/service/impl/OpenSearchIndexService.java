@@ -194,7 +194,7 @@ public class OpenSearchIndexService implements IndexService {
                         throw new RuntimeException(e);
                     }
                 })
-                .doOnSuccess(_ -> log.info("Metadata indexed for document {}", documentId))
+                .doOnSuccess(_ -> log.debug("Metadata indexed for document {}", documentId))
                 .then();
     }
 
@@ -204,13 +204,19 @@ public class OpenSearchIndexService implements IndexService {
     public Mono<Void> indexDocumentStream(Flux<String> textFragments, UUID documentId) {
         log.debug("Indexing document stream for document {}", documentId);
         return textFragments
+                .doOnSubscribe(s -> log.debug("Subscribed to text fragments for document {}", documentId))
+                .doOnNext(item -> log.trace("Received text fragment for document {}: {}...", documentId,
+                        item.length() > 50 ? item.substring(0, 50) : item))
+                .doOnComplete(() -> log.debug("Text fragments completed for document {}", documentId))
+                .doOnError(e -> log.error("Error in text fragments for document {}", documentId, e))
                 .bufferTimeout(50, java.time.Duration.ofSeconds(2)) // combine small fragments
+                .doOnNext(batch -> log.debug("Buffered batch of {} fragments for document {}", batch.size(), documentId))
                 .flatMapSequential(batch -> appendToContent(documentId, String.join("\n", batch)))
                 .then();
     }
 
     public Mono<Void> appendToContent(UUID documentId, String textToAppend)  {
-
+        log.debug("Appending document content for document {}", documentId);
         Script script = new Script.Builder()
                 .inline(new InlineScript.Builder()
                         .source(APPEND_CONTENT_SCRIPT)
@@ -226,6 +232,7 @@ public class OpenSearchIndexService implements IndexService {
 
         return Mono.fromFuture(() -> {
                     try {
+                        log.debug("Updating document {}", documentId);
                         return openSearchAsyncClient.update(updateRequest, Void.class);
                     } catch (IOException e) {
                         throw new RuntimeException(e);
@@ -236,7 +243,7 @@ public class OpenSearchIndexService implements IndexService {
     }
 
     private void logUpdateMetadataSuccess(UUID documentId) {
-        log.info("Metadata updated for document {}", documentId);
+        log.debug("Metadata updated for document {}", documentId);
     }
 
 

@@ -1,0 +1,101 @@
+# Thumbnail Services for Local Development
+#
+# Use this file when developing locally with:
+#   - openfilz-api running in your IDE (port 8081)
+#   - openfilz-web running with npm (port 4200)
+#   - PostgreSQL running separately
+#
+# Services:
+#   - ImgProxy (port 8082): Fast image thumbnail generation
+#   - Gotenberg (port 8083): PDF and Office document thumbnail generation
+#
+# Start services:
+#   docker-compose -f docker-compose-imgproxy-dev.yml up -d
+#
+# Stop services:
+#   docker-compose -f docker-compose-imgproxy-dev.yml down
+#
+# View logs:
+#   docker-compose -f docker-compose-imgproxy-dev.yml logs -f
+
+services:
+  # =============================================================================
+  # ImgProxy - For image thumbnails (JPEG, PNG, GIF, WebP, etc.)
+  # =============================================================================
+  imgproxy:
+    image: darthsim/imgproxy:latest
+    container_name: openfilz-imgproxy-dev
+    restart: unless-stopped
+    environment:
+      # Server configuration
+      IMGPROXY_BIND: ":8080"
+
+      # PDF support - generate thumbnails from first page
+      IMGPROXY_ENABLE_PDF_PAGES: "true"
+      IMGPROXY_PDF_PAGES: "true"
+
+      # SVG support
+      IMGPROXY_ENABLE_SVG_SANITIZATION: "false"
+      IMGPROXY_SVG_FIX_UNSUPPORTED: "true"
+
+      # Output format
+      IMGPROXY_PREFERRED_FORMATS: "webp"
+
+      # Skip unsupported formats instead of erroring
+      IMGPROXY_SKIP_UNSUPPORTED_FORMATS: "true"
+
+      # Development settings - allow local connections
+      IMGPROXY_ALLOW_INSECURE_SOURCE_URL: "true"
+      IMGPROXY_ALLOW_LOOPBACK_SOURCE_ADDRESSES: "true"
+      IMGPROXY_ALLOW_PRIVATE_SOURCE_ADDRESSES: "true"
+
+      # CORS
+      IMGPROXY_ALLOW_ORIGIN: "*"
+
+      # Memory limits
+      IMGPROXY_MAX_SRC_RESOLUTION: "50"
+      IMGPROXY_MAX_SRC_FILE_SIZE: "52428800"  # 50MB
+
+      # Concurrency
+      IMGPROXY_CONCURRENCY: "10"
+      IMGPROXY_MAX_CLIENTS: "200"
+
+      # Logging (set to "debug" for troubleshooting)
+      IMGPROXY_LOG_LEVEL: "info"
+    ports:
+      - "8082:8080"
+    # Allow container to reach host machine (where your API runs)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  # =============================================================================
+  # Gotenberg - For PDF and Office document thumbnails
+  # Supports: PDF, DOCX, XLSX, PPTX, ODT, ODS, ODP, and more
+  # =============================================================================
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: openfilz-gotenberg-dev
+    restart: unless-stopped
+    command:
+      - "gotenberg"
+      - "--api-timeout=60s"
+      - "--libreoffice-restart-after=100"
+      - "--libreoffice-auto-start=true"
+      - "--log-level=info"
+    ports:
+      - "8083:3000"
+    # Allow container to reach host machine (where your API runs)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

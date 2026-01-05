@@ -11,7 +11,9 @@ export interface ElementInfo {
   name: string;
   type: DocumentType;
   contentType?: string;
+  size?: number;
   favorite?: boolean;
+  thumbnailUrl?: string;
 }
 
 export interface ListFolderAndCountResponse {
@@ -97,10 +99,8 @@ export interface SearchByMetadataRequest {
 
 export interface FileItem extends ElementInfo {
   selected?: boolean;
-  size?: number;
   modifiedDate?: Date;
   icon?: string;
-  favorite?: boolean;
 }
 
 export interface MultipleUploadFileParameter {

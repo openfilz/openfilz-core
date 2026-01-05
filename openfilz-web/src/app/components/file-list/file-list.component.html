@@ -44,10 +44,19 @@
       <th mat-header-cell *matHeaderCellDef mat-sort-header="name">{{ 'common.name' | translate }}</th>
       <td mat-cell *matCellDef="let item" class="file-name-cell">
         <div class="file-name-content" (click)="onItemClick(item)" (dblclick)="onItemDoubleClick(item)">
-          <mat-icon class="file-icon" [class]="'file-type-' + item.type.toLowerCase()" aria-hidden="true"
-            (click)="onIconClick($event, item)">
-            {{ getFileIcon(item.name, item.type) }}
-          </mat-icon>
+          @if(item.thumbnailUrl && item.type === 'FILE') {
+            <img [authSrc]="item.thumbnailUrl"
+                 [alt]="item.name"
+                 class="file-thumbnail-small"
+                 loading="lazy"
+                 (error)="onThumbnailError($event, item)"
+                 (click)="onIconClick($event, item)" />
+          } @else {
+            <mat-icon class="file-icon" [class]="'file-type-' + item.type.toLowerCase()" aria-hidden="true"
+              (click)="onIconClick($event, item)">
+              {{ getFileIcon(item.name, item.type) }}
+            </mat-icon>
+          }
           <span class="file-name">{{ item.name }}</span>
         </div>
       </td>

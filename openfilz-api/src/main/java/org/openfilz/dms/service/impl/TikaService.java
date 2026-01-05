@@ -45,34 +45,37 @@ public class TikaService {
      * @return A Flux that emits text chunks as they are parsed from the document.
      */
     public Flux<String> processResource(Path stableTempFile, Mono<? extends Resource> resourceMono) {
-        // First, we need the actual Resource. The flatMap operator lets us work within the Mono.
-        return resourceMono.flatMap(resource -> {
-            log.info("Starting memory-safe processing for resource: {}", resource.getDescription());
+        // First, we need the actual Resource. The flatMapMany operator lets us work within the Mono
+        // and return a Flux.
+        return resourceMono.flatMapMany(resource -> {
+            log.debug("Starting memory-safe processing for resource: {}", resource.getDescription());
 
-            // The usingWhen operator ensures our temporary file is created and cleaned up reliably.
-            // It will produce a Mono<Flux<String>> which we will unwrap later.
+            // Copy resource to temp file, then parse with Tika using Flux.defer
+            // to ensure proper subscription timing - the Flux.create is only called
+            // when the downstream subscribes.
             return copyResourceToPath(resource, stableTempFile)
-                .then(
-                    // Step B: Once the copy is complete, create the Tika parsing Flux.
-                    Mono.fromCallable(() -> Flux.<String>create(sink -> {
+                .thenMany(Flux.defer(() -> {
+                    log.debug("Creating Tika parsing flux for stable file [{}].", stableTempFile);
+                    return Flux.<String>create(sink -> {
                         tikaExecutor.submit(() -> {
-                            log.info("Starting Tika parsing from stable file path [{}].", stableTempFile);
+                            log.debug("Starting Tika parsing from stable file path [{}].", stableTempFile);
                             try (TikaInputStream tikaStream = TikaInputStream.get(stableTempFile)) {
-                                ContentHandler handler = new FluxSinkContentHandler(sink); // Your streaming handler
+                                ContentHandler handler = new FluxSinkContentHandler(sink);
                                 parser.parse(tikaStream, handler, new Metadata(), new ParseContext());
-                                log.info("Tika parsing completed for stable file [{}].", stableTempFile);
+                                log.debug("Tika parsing completed for stable file [{}].", stableTempFile);
                                 sink.complete();
-                            } catch (Exception e) {
+                            } catch (Throwable e) {
+                                // Catch Throwable to handle both Exception and Error types
+                                // (e.g., NoClassDefFoundError from missing Tika dependencies)
                                 log.error("Error during Tika parsing of stable file [{}].", stableTempFile, e);
-                                sink.error(e);
+                                sink.error(e instanceof Exception ? (Exception) e : new RuntimeException(e));
+                            } finally {
+                                log.debug("End of Tika parsing from stable file path [{}].", stableTempFile);
                             }
                         });
-                    }))
-                );
-
-            })
-            // Finally, unwrap the Mono<Flux<String>> into the Flux<String> required by the method signature.
-            .flatMapMany(flux -> flux);
+                    });
+                }));
+        });
     }
 
     /**

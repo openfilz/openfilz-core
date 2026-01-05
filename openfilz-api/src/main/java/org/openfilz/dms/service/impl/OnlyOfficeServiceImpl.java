@@ -1,6 +1,7 @@
 package org.openfilz.dms.service.impl;
 
 import lombok.extern.slf4j.Slf4j;
+import org.openfilz.dms.config.CommonProperties;
 import org.openfilz.dms.config.OnlyOfficeProperties;
 import org.openfilz.dms.dto.response.OnlyOfficeUserInfo;
 import org.openfilz.dms.repository.DocumentDAO;
@@ -24,7 +25,8 @@ import org.springframework.web.reactive.function.client.WebClient;
 })
 public class OnlyOfficeServiceImpl extends AbstractOnlyOfficeService<OnlyOfficeUserInfo> {
 
-    public OnlyOfficeServiceImpl(OnlyOfficeProperties properties, OnlyOfficeJwtService<OnlyOfficeUserInfo> jwtService, OnlyOfficeJwtExtractor<OnlyOfficeUserInfo> jwtExtactor, DocumentDAO documentDAO, StorageService storageService, DocumentService documentService, WebClient.Builder webClientBuilder) {
-        super(properties, jwtService, jwtExtactor, documentDAO, storageService, documentService, webClientBuilder);
+
+    public OnlyOfficeServiceImpl(CommonProperties commonProperties, OnlyOfficeProperties onlyOfficeProperties, OnlyOfficeJwtService<OnlyOfficeUserInfo> jwtService, OnlyOfficeJwtExtractor<OnlyOfficeUserInfo> jwtExtactor, DocumentDAO documentDAO, DocumentService documentService, WebClient.Builder webClientBuilder) {
+        super(commonProperties, onlyOfficeProperties, jwtService, jwtExtactor, documentDAO, documentService, webClientBuilder);
     }
 }

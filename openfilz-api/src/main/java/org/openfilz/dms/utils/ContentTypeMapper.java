@@ -19,8 +19,19 @@ public class ContentTypeMapper {
             Map.entry("pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
             Map.entry("txt", MediaType.TEXT_PLAIN_VALUE),
             Map.entry("csv", "text/csv"),
+            Map.entry("tsv", "text/tab-separated-values"),
             Map.entry("rtf", "application/rtf"),
-            
+            Map.entry("log", MediaType.TEXT_PLAIN_VALUE),
+            Map.entry("md", "text/markdown"),
+            Map.entry("rst", MediaType.TEXT_PLAIN_VALUE),
+            Map.entry("ini", MediaType.TEXT_PLAIN_VALUE),
+            Map.entry("cfg", MediaType.TEXT_PLAIN_VALUE),
+            Map.entry("conf", MediaType.TEXT_PLAIN_VALUE),
+            Map.entry("env", MediaType.TEXT_PLAIN_VALUE),
+            Map.entry("sql", "application/x-sql"),
+            Map.entry("graphql", "application/graphql"),
+            Map.entry("ts", "application/typescript"),
+
             // Images
             Map.entry("jpg", MediaType.IMAGE_JPEG_VALUE),
             Map.entry("jpeg", MediaType.IMAGE_JPEG_VALUE),
@@ -54,9 +65,11 @@ public class ContentTypeMapper {
             // Web
             Map.entry("html", MediaType.TEXT_HTML_VALUE),
             Map.entry("htm", MediaType.TEXT_HTML_VALUE),
+            Map.entry("xhtml", MediaType.APPLICATION_XHTML_XML_VALUE),
             Map.entry("css", "text/css"),
             Map.entry("js", "application/javascript"),
             Map.entry("json", MediaType.APPLICATION_JSON_VALUE),
+            Map.entry("jsonl", MediaType.APPLICATION_JSON_VALUE),
             Map.entry("xml", MediaType.APPLICATION_XML_VALUE),
             Map.entry("yml", MediaType.APPLICATION_YAML_VALUE),
             Map.entry("yaml", MediaType.APPLICATION_YAML_VALUE)

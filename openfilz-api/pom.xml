@@ -185,6 +185,14 @@
             <artifactId>httpclient5</artifactId>
         </dependency>
 
+        <!-- Apache PDFBox for PDF thumbnail generation -->
+        <!-- Version must match what Tika 3.2.3 expects (3.0.5) to avoid NoSuchMethodError -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.5</version>
+        </dependency>
+
         <!-- JWT Library for OnlyOffice tokens -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

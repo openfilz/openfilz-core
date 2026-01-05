@@ -102,7 +102,7 @@ public class DocumentSearchUtil {
         UUID uuid = row.get(0, UUID.class);
         String name = row.get(1, String.class);
         DocumentType type = DocumentType.valueOf(row.get(2, String.class));
-        String ext = FileUtils.getFileExtension(type, name);
+        String ext = FileUtils.getDocumentExtension(type, name);
         String s = FileUtils.removeFileExtension(name);
         return new Suggest(uuid, s, ext);
     }

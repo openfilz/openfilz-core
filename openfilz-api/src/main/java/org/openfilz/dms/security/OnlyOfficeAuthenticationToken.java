@@ -1,11 +1,8 @@
 package org.openfilz.dms.security;
 
+import lombok.Getter;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
-import java.util.Collection;
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -14,9 +11,15 @@ import java.util.UUID;
  */
 public class OnlyOfficeAuthenticationToken extends AbstractAuthenticationToken {
 
+    @Getter
     private final String userId;
+
     private final String userName;
+
+    @Getter
     private final UUID documentId;
+
+    @Getter
     private final String rawToken;
 
     /**
@@ -35,7 +38,7 @@ public class OnlyOfficeAuthenticationToken extends AbstractAuthenticationToken {
      * Create an authenticated token (after validation).
      */
     public OnlyOfficeAuthenticationToken(String userId, String userName, UUID documentId, String rawToken) {
-        super(createAuthorities());
+        super(null);
         this.userId = userId;
         this.userName = userName;
         this.documentId = documentId;
@@ -43,13 +46,7 @@ public class OnlyOfficeAuthenticationToken extends AbstractAuthenticationToken {
         setAuthenticated(true);
     }
 
-    private static Collection<? extends GrantedAuthority> createAuthorities() {
-        // OnlyOffice requests get READER role for document access
-        return List.of(
-                new SimpleGrantedAuthority("ROLE_ONLYOFFICE"),
-                new SimpleGrantedAuthority("ROLE_READER")
-        );
-    }
+
 
     @Override
     public Object getCredentials() {
@@ -66,19 +63,4 @@ public class OnlyOfficeAuthenticationToken extends AbstractAuthenticationToken {
         return userName != null ? userName : userId;
     }
 
-    public String getUserId() {
-        return userId;
-    }
-
-    public String getUserName() {
-        return userName;
-    }
-
-    public UUID getDocumentId() {
-        return documentId;
-    }
-
-    public String getRawToken() {
-        return rawToken;
-    }
 }

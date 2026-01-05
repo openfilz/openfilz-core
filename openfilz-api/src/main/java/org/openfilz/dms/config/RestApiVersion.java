@@ -14,4 +14,7 @@ public interface RestApiVersion {
     String ENDPOINT_FILES = "/files";
     String ENDPOINT_FOLDERS = "/folders";
     String ENDPOINT_RECYCLE_BIN = "/recycle-bin";
+
+    String ENDPOINT_ONLYOFFICE = "/onlyoffice";
+    String ENDPOINT_THUMBNAILS = "/thumbnails";
 }

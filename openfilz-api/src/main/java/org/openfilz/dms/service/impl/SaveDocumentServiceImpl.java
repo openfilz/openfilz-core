@@ -1,7 +1,6 @@
 package org.openfilz.dms.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.r2dbc.postgresql.codec.Json;
 import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.dto.audit.ReplaceAudit;
 import org.openfilz.dms.dto.audit.UploadAudit;
@@ -13,6 +12,8 @@ import org.openfilz.dms.service.AuditService;
 import org.openfilz.dms.service.MetadataPostProcessor;
 import org.openfilz.dms.service.SaveDocumentService;
 import org.openfilz.dms.service.StorageService;
+import org.openfilz.dms.utils.FileUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.openfilz.dms.utils.ContentInfo;
 import org.openfilz.dms.utils.JsonUtils;
 import org.openfilz.dms.utils.UserInfoService;
@@ -29,7 +30,6 @@ import java.util.function.Function;
 
 import static org.openfilz.dms.enums.AuditAction.REPLACE_DOCUMENT_CONTENT;
 import static org.openfilz.dms.enums.DocumentType.FILE;
-import static org.openfilz.dms.service.ChecksumService.HASH_SHA256_KEY;
 
 @Service
 @RequiredArgsConstructor
@@ -88,7 +88,7 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
         Document.DocumentBuilder documentBuilder = Document.builder()
                 .name(originalFilename)
                 .type(FILE)
-                .contentType(filePart.headers().getContentType() != null ? filePart.headers().getContentType().toString() : APPLICATION_OCTET_STREAM)
+                .contentType(FileUtils.getContentType(filePart))
                 .size(contentLength)
                 .parentId(parentFolderId)
                 .storagePath(storagePath)
@@ -117,7 +117,7 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
     protected Mono<Document> replaceDocumentInDB(FilePart newFilePart, String newStoragePath, String oldStoragePath, ContentInfo contentInfo, Document document) {
         return doSaveFile(username -> {
                     document.setStoragePath(newStoragePath);
-                    document.setContentType(newFilePart.headers().getContentType() != null ? newFilePart.headers().getContentType().toString() : APPLICATION_OCTET_STREAM);
+                    document.setContentType(FileUtils.getContentType(newFilePart));
                     document.setUpdatedAt(OffsetDateTime.now());
                     document.setUpdatedBy(username);
                     document.setSize(contentInfo.length());
