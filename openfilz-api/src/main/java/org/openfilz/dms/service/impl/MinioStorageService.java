@@ -8,6 +8,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.exception.StorageException;
 import org.openfilz.dms.service.StorageService;
+import org.openfilz.dms.utils.FileUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.InputStreamResource;
@@ -135,8 +136,7 @@ public class MinioStorageService implements StorageService {
                             .object(objectName)
                             .legalHold(wormMode)
                             .stream(pipedInputStream, -1, PutObjectArgs.MIN_MULTIPART_SIZE) // Min part size is 5MiB
-                            .contentType(filePart.headers().getContentType() != null ?
-                                    filePart.headers().getContentType().toString() : "application/octet-stream")
+                            .contentType(FileUtils.getContentType(filePart))
                             .build();
                     minioClient.putObject(args);
                     log.info("Successfully uploaded {} to MinIO bucket {}", objectName, bucketName);

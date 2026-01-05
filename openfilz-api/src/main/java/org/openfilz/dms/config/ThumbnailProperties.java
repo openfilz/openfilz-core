@@ -115,6 +115,8 @@ public class ThumbnailProperties {
             "application/x-javascript",
             "application/typescript",
             "application/xml",
+            "application/xhtml+xml",
+            "application/yaml",
             "application/x-yaml",
             "application/x-sh",
             "application/x-shellscript",
@@ -135,7 +137,8 @@ public class ThumbnailProperties {
             "application/vnd.openxmlformats-officedocument.presentationml.presentation",
             "application/vnd.oasis.opendocument.text",
             "application/vnd.oasis.opendocument.spreadsheet",
-            "application/vnd.oasis.opendocument.presentation"
+            "application/vnd.oasis.opendocument.presentation",
+            "application/rtf"
     );
 
     /**
@@ -152,6 +155,8 @@ public class ThumbnailProperties {
             "application/x-javascript",
             "application/typescript",
             "application/xml",
+            "application/xhtml+xml",
+            "application/yaml",
             "application/x-yaml",
             "application/x-sh",
             "application/x-shellscript",
@@ -311,12 +316,12 @@ public class ThumbnailProperties {
         /**
          * Thumbnail width in pixels.
          */
-        private int width = 160;
+        private int width = 100;
 
         /**
          * Thumbnail height in pixels.
          */
-        private int height = 160;
+        private int height = 100;
     }
 
     /**

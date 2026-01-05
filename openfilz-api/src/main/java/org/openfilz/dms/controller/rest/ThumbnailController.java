@@ -54,7 +54,7 @@ public class ThumbnailController {
                 .map(bytes -> {
                     ByteArrayResource resource = new ByteArrayResource(bytes);
                     return ResponseEntity.ok()
-                            .header(HttpHeaders.CONTENT_TYPE, MediaType.IMAGE_PNG_VALUE)
+                            .header(HttpHeaders.CONTENT_TYPE, "image/*")
                             .header(HttpHeaders.CACHE_CONTROL, "max-age=3600")
                             .contentLength(bytes.length)
                             .body((Resource) resource);

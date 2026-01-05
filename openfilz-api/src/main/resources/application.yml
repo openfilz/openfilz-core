@@ -126,39 +126,6 @@ openfilz:
     dimensions:
       width: 100
       height: 100
-    supported-content-types:
-      # Images (processed by ImgProxy)
-      - image/jpeg
-      - image/png
-      - image/gif
-      - image/webp
-      - image/bmp
-      - image/tiff
-      # PDF (processed by PDFBox)
-      - application/pdf
-      # Microsoft Office (converted by Gotenberg, then PDFBox)
-      - application/msword
-      - application/vnd.openxmlformats-officedocument.wordprocessingml.document
-      - application/vnd.ms-excel
-      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
-      - application/vnd.ms-powerpoint
-      - application/vnd.openxmlformats-officedocument.presentationml.presentation
-      # OpenDocument (converted by Gotenberg, then PDFBox)
-      - application/vnd.oasis.opendocument.text
-      - application/vnd.oasis.opendocument.spreadsheet
-      - application/vnd.oasis.opendocument.presentation
-      # Text files (rendered by Java 2D) - all text/* types are auto-detected
-      - text/plain
-      - text/markdown
-      - text/html
-      - text/css
-      - text/csv
-      - text/xml
-      # Code files (rendered by Java 2D)
-      - application/json
-      - application/javascript
-      - application/xml
-      - application/x-yaml
 
 # OnlyOffice DocumentServer Integration
 onlyoffice:
