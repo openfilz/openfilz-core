@@ -1,6 +1,7 @@
 package org.openfilz.dms.e2e;
 
 import lombok.RequiredArgsConstructor;
+import org.jetbrains.annotations.NotNull;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.CreateFolderRequest;
 import org.openfilz.dms.dto.request.MultipleUploadFileParameter;
@@ -22,9 +23,11 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.util.UriBuilder;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 
+import java.net.URI;
 import java.util.*;
 
 @RequiredArgsConstructor
@@ -36,7 +39,7 @@ public abstract class TestContainersBaseConfig {
     protected String baseGraphQlHttpPath;
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18").withReuse(true);
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:17").withReuse(true);
 
     protected final WebTestClient webTestClient;
     protected final Jackson2JsonEncoder customJackson2JsonEncoder;
@@ -130,21 +133,29 @@ public abstract class TestContainersBaseConfig {
     }
 
     protected WebTestClient.RequestHeadersSpec<?> getUploadDocumentHeader(MultipartBodyBuilder builder) {
-        return getWebTestClient().post().uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/upload")
-                        .queryParam("allowDuplicateFileNames", true)
-                        .build())
+        return getWebTestClient().post().uri(uri -> this.getAllowDuplicateFileNames(uri, true))
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(BodyInserters.fromMultipartData(builder.build()));
     }
 
-    protected UploadResponse getUploadResponse(MultipartBodyBuilder builder) {
-        return getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/documents/upload")
+    private URI getAllowDuplicateFileNames(UriBuilder uri, boolean allowDuplicateFileNames) {
+        return uri.path(RestApiVersion.API_PREFIX + "/documents/upload")
+                .queryParam("allowDuplicateFileNames", allowDuplicateFileNames)
+                .build();
+    }
+
+    protected UploadResponse getUploadResponse(MultipartBodyBuilder builder, Boolean allowDuplicateFileNames) {
+        return getWebTestClient().post().uri(allowDuplicateFileNames != null ? uri -> this.getAllowDuplicateFileNames(uri, allowDuplicateFileNames)  : uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/upload").build())
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(BodyInserters.fromMultipartData(builder.build()))
                 .exchange()
                 .expectStatus().isCreated()
                 .expectBody(UploadResponse.class)
                 .returnResult().getResponseBody();
+    }
+
+    protected UploadResponse getUploadResponse(MultipartBodyBuilder builder) {
+        return getUploadResponse(builder, null);
     }
 
     protected MultipartBodyBuilder newFileBuilder() {

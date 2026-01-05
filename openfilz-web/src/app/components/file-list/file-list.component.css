@@ -82,6 +82,21 @@
   position: relative;
 }
 
+/* Small thumbnail for list view */
+.file-thumbnail-small {
+  width: 24px;
+  height: 24px;
+  object-fit: cover;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: transform 200ms ease;
+}
+
+.file-thumbnail-small:hover {
+  transform: scale(1.1);
+}
+
 /* Ripple effect for touch devices */
 .file-icon.ripple::after {
   content: '';

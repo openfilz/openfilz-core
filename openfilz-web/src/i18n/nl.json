@@ -442,7 +442,9 @@
         "loading": "Document laden...",
         "unsupportedTitle": "Voorbeeld niet beschikbaar",
         "unsupportedMessage": "Dit bestandstype kan niet worden bekeken in de browser.",
-        "downloadFile": "Bestand downloaden"
+        "downloadFile": "Bestand downloaden",
+        "fileTooLargeTitle": "Bestand te groot voor voorbeeld",
+        "fileTooLargeMessage": "Dit bestand overschrijdt de maximale grootte voor voorbeeld ({{maxSize}} MB). Download het bestand en open het op uw computer."
     },
     "errors": {
         "loadFailed": "Laden van gegevens mislukt",

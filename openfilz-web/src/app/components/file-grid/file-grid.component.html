@@ -34,9 +34,17 @@
 
             <div class="file-content">
                 <div class="file-icon" (click)="onIconClick($event, item)">
-                    <mat-icon [class]="'file-type-' + item.type.toLowerCase()" aria-hidden="true">
-                        {{ getFileIcon(item.name, item.type) }}
-                    </mat-icon>
+                    @if(item.thumbnailUrl && item.type === 'FILE') {
+                        <img [authSrc]="item.thumbnailUrl"
+                             [alt]="item.name"
+                             class="file-thumbnail"
+                             loading="lazy"
+                             (error)="onThumbnailError($event, item)" />
+                    } @else {
+                        <mat-icon [class]="'file-type-' + item.type.toLowerCase()" aria-hidden="true">
+                            {{ getFileIcon(item.name, item.type) }}
+                        </mat-icon>
+                    }
                 </div>
 
                 <div class="file-name" [title]="item.name">

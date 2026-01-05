@@ -2,6 +2,7 @@ package org.openfilz.dms.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.openfilz.dms.config.CommonProperties;
 import org.openfilz.dms.config.OnlyOfficeProperties;
 import org.openfilz.dms.dto.request.OnlyOfficeCallbackRequest;
 import org.openfilz.dms.dto.response.IUserInfo;
@@ -41,11 +42,11 @@ import static org.openfilz.dms.service.ChecksumService.SHA_256;
 @RequiredArgsConstructor
 public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOfficeService {
 
-    private final OnlyOfficeProperties properties;
+    private final CommonProperties commonProperties;
+    private final OnlyOfficeProperties onlyOfficeProperties;
     private final OnlyOfficeJwtService<T> jwtService;
     private final OnlyOfficeJwtExtractor<T> jwtExtactor;
     private final DocumentDAO documentDAO;
-    private final StorageService storageService;
     private final DocumentService documentService;
     private final WebClient.Builder webClientBuilder;
 
@@ -77,17 +78,17 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
             return false;
         }
         String extension = getFileExtension(fileName);
-        return properties.isExtensionSupported(extension);
+        return onlyOfficeProperties.isExtensionSupported(extension);
     }
 
     @Override
     public boolean isEnabled() {
-        return properties.isEnabled();
+        return onlyOfficeProperties.isEnabled();
     }
 
     private Mono<OnlyOfficeConfigResponse> buildEditorConfig(Document document, boolean canEdit) {
-        String documentServerUrl = properties.getDocumentServer().getUrl();
-        String apiJsUrl = properties.getDocumentServer().getApiUrl();
+        String documentServerUrl = onlyOfficeProperties.getDocumentServer().getUrl();
+        String apiJsUrl = onlyOfficeProperties.getDocumentServer().getApiUrl();
 
         // Generate document key (unique per version)
         String documentKey = generateDocumentKey(document);
@@ -162,7 +163,7 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
     private String buildDocumentUrl(UUID documentId, String accessToken) {
         // URL for OnlyOffice to download the document
         // Use apiBaseUrl which can be configured to host.docker.internal for Docker setups
-        String baseUrl = properties.getApiBaseUrl();
+        String baseUrl = commonProperties.getApiInternalBaseUrl();
         if (!baseUrl.endsWith("/")) {
             baseUrl += "/";
         }
@@ -172,7 +173,7 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
     private String buildCallbackUrl(UUID documentId) {
         // URL for OnlyOffice to send save callbacks
         // Use apiBaseUrl which can be configured to host.docker.internal for Docker setups
-        String baseUrl = properties.getApiBaseUrl();
+        String baseUrl = commonProperties.getApiInternalBaseUrl();
         if (!baseUrl.endsWith("/")) {
             baseUrl += "/";
         }

@@ -19,6 +19,8 @@ import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.authorization.AuthorizationContext;
 
+import static org.openfilz.dms.config.RestApiVersion.*;
+
 @Configuration
 @EnableWebFluxSecurity
 @EnableReactiveMethodSecurity // For method-level security like @PreAuthorize
@@ -54,9 +56,12 @@ public class DefaultAuthSecurityConfig {
             "/graphiql/**",
             // OnlyOffice DocumentServer endpoints (handled by OnlyOfficeSecurityConfig)
             // These are called by OnlyOffice server, not by authenticated users
-            "/api/v1/documents/*/onlyoffice-download",
-            "/api/v1/onlyoffice/callback/*"
+            API_PREFIX + ENDPOINT_DOCUMENTS + "/*/onlyoffice-download",
+            API_PREFIX + ENDPOINT_ONLYOFFICE + "/callback/*",
             // NOTE: /api/v1/onlyoffice/config/* uses OAuth2 (called by frontend)
+            // ImgProxy endPoint to download files : managed with mTLS
+            API_PREFIX + ENDPOINT_THUMBNAILS + "/source/*"
+            // NOTE: /api/v1/thumbnails/img/* uses OAuth2 (called by frontend)
     };
 
     @Bean
@@ -66,7 +71,7 @@ public class DefaultAuthSecurityConfig {
                 .authorizeExchange(exchanges -> {
                     exchanges.pathMatchers(AUTH_WHITELIST).permitAll() // Whitelist Swagger and health
                             .pathMatchers(HttpMethod.OPTIONS).permitAll()
-                            .pathMatchers(RestApiVersion.API_PREFIX + ALL_MATCHES, graphQlBaseUrl + ALL_MATCHES)
+                            .pathMatchers(API_PREFIX + ALL_MATCHES, graphQlBaseUrl + ALL_MATCHES)
                             .access((mono, context) -> mono
                                     .map(auth -> newAuthorizationDecision(auth, context)))
                             .anyExchange()

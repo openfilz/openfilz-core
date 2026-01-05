@@ -42,6 +42,7 @@ const LIST_FOLDER_QUERY = gql`
       createdBy
       updatedBy
       favorite
+      thumbnailUrl
     }
   }
 `;
@@ -59,6 +60,7 @@ const LIST_FOLDER_AND_COUNT_QUERY = gql`
       createdBy
       updatedBy
       favorite
+      thumbnailUrl
     }
     count(request: $request2)
   }
@@ -77,6 +79,7 @@ const LIST_FAVORITES_AND_COUNT_QUERY = gql`
       createdBy
       updatedBy
       favorite
+      thumbnailUrl
     }
       countFavorites(request: $request2)
   }
@@ -127,6 +130,7 @@ const RECENT_FILES_QUERY = gql`
       createdBy
       updatedBy
       favorite
+      thumbnailUrl
     }
   }
 `;

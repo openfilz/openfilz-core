@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testData xmlns="http://openfilz.org/test">
+    <document id="1">
+        <title>Test XML Document</title>
+        <description>This is a sample XML file for thumbnail generation testing</description>
+        <metadata>
+            <author>OpenFilz Test Suite</author>
+            <created>2024-01-01T12:00:00Z</created>
+            <modified>2024-01-15T15:30:00Z</modified>
+        </metadata>
+    </document>
+    <document id="2">
+        <title>Another Document</title>
+        <description>Second document in the collection</description>
+        <metadata>
+            <author>Test Author</author>
+            <created>2024-01-02T10:00:00Z</created>
+            <modified>2024-01-16T09:00:00Z</modified>
+        </metadata>
+    </document>
+</testData>

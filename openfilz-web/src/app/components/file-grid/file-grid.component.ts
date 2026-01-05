@@ -1,4 +1,6 @@
 import { Component, EventEmitter, HostListener, Input, Output, inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { TranslateModule } from '@ngx-translate/core';
 
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
@@ -8,9 +10,10 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { FileItem } from '../../models/document.models';
 import { FileIconService } from '../../services/file-icon.service';
 import { TouchDetectionService } from '../../services/touch-detection.service';
-import { TranslatePipe } from '@ngx-translate/core';
+
 import { FileDraggableDirective } from '../../directives/file-draggable.directive';
 import { FolderDropZoneDirective } from '../../directives/folder-drop-zone.directive';
+import { AuthImageDirective } from '../../directives/auth-image.directive';
 import { DropEvent } from '../../services/drag-drop.service';
 
 @Component({
@@ -19,15 +22,16 @@ import { DropEvent } from '../../services/drag-drop.service';
   templateUrl: './file-grid.component.html',
   styleUrls: ['./file-grid.component.css'],
   imports: [
-    MatCardModule,
-    MatIconModule,
+    CommonModule,
     MatButtonModule,
+    MatIconModule,
     MatCheckboxModule,
     MatTooltipModule,
-    TranslatePipe,
+    TranslateModule,
     FileDraggableDirective,
-    FolderDropZoneDirective
-],
+    FolderDropZoneDirective,
+    AuthImageDirective
+  ],
 })
 export class FileGridComponent {
   @Input() items: FileItem[] = [];
@@ -133,6 +137,14 @@ export class FileGridComponent {
 
   formatFileSize(bytes: number): string {
     return this.fileIconService.getFileSize(bytes);
+  }
+
+  /**
+   * Handle thumbnail loading error by clearing the URL to show fallback icon
+   */
+  onThumbnailError(event: Event, item: FileItem) {
+    // Clear thumbnail URL to show fallback icon
+    item.thumbnailUrl = undefined;
   }
 
   // Keyboard navigation methods

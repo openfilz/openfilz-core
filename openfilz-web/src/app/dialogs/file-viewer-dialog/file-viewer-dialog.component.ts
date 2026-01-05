@@ -30,9 +30,17 @@ export interface FileViewerDialogData {
   documentId: string;
   fileName: string;
   contentType: string;
+  fileSize?: number;
 }
 
 type ViewerMode = 'pdf' | 'image' | 'text' | 'office' | 'onlyoffice' | 'unsupported';
+
+/**
+ * Maximum file size in bytes for preview (10 MB).
+ * Files larger than this will show a warning and require download.
+ * This limit does NOT apply to OnlyOffice documents.
+ */
+const MAX_PREVIEW_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 @Component({
   selector: 'app-file-viewer-dialog',
@@ -58,6 +66,7 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
   loading: boolean = true;
   error?: string;
   isFullscreen: boolean = false;
+  fileTooLarge: boolean = false;
 
   viewerMode: ViewerMode = 'unsupported';
 
@@ -129,7 +138,29 @@ export class FileViewerDialogComponent implements OnInit, AfterViewInit, OnDestr
     }
 
     this.determineViewerMode();
+
+    // Check file size limit (skip for OnlyOffice which handles its own loading)
+    if (this.viewerMode !== 'onlyoffice' && this.isFileTooLarge()) {
+      this.fileTooLarge = true;
+      this.loading = false;
+      return;
+    }
+
     this.loadDocument();
+  }
+
+  /**
+   * Checks if the file exceeds the maximum preview size.
+   */
+  private isFileTooLarge(): boolean {
+    return this.data.fileSize !== undefined && this.data.fileSize > MAX_PREVIEW_FILE_SIZE;
+  }
+
+  /**
+   * Gets the maximum preview file size in MB for display.
+   */
+  get maxPreviewSizeMB(): number {
+    return MAX_PREVIEW_FILE_SIZE / (1024 * 1024);
   }
 
   ngAfterViewInit() {

@@ -90,6 +90,19 @@
     </div>
     }
 
+    <!-- File Too Large Warning -->
+    @if (fileTooLarge && !loading) {
+    <div class="file-too-large-container">
+      <mat-icon class="warning-icon">warning</mat-icon>
+      <h3>{{ 'fileViewer.fileTooLargeTitle' | translate }}</h3>
+      <p>{{ 'fileViewer.fileTooLargeMessage' | translate:{maxSize: maxPreviewSizeMB} }}</p>
+      <button mat-raised-button color="primary" (click)="download()">
+        <mat-icon>download</mat-icon>
+        {{ 'fileViewer.downloadFile' | translate }}
+      </button>
+    </div>
+    }
+
     <!-- PDF Viewer -->
     @if (viewerMode === 'pdf' && !loading && !error) {
     <div class="pdf-viewer">

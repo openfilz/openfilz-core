@@ -14,8 +14,8 @@
     </logger>
 
     <!-- Spring Security logs - useful for debugging auth issues -->
-    <logger name="org.springframework.security" level="DEBUG"/>
-    <logger name="org.springframework.security.web.server" level="DEBUG"/>
+    <!--<logger name="org.springframework.security" level="DEBUG"/>
+    <logger name="org.springframework.security.web.server" level="DEBUG"/>-->
 
     <!-- Reduce noise from other components -->
     <logger name="org.testcontainers" level="INFO"/>

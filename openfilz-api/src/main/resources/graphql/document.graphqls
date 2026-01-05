@@ -25,6 +25,8 @@ type FolderElementInfo {
     createdBy : String
     updatedBy : String
     favorite : Boolean
+    "URL to fetch the thumbnail image, null if not available"
+    thumbnailUrl : String
 }
 
 type DocumentInfo {
@@ -39,6 +41,8 @@ type DocumentInfo {
     updatedAt : DateTime
     createdBy : String
     updatedBy : String
+    "URL to fetch the thumbnail image, null if not available"
+    thumbnailUrl : String
 }
 
 """

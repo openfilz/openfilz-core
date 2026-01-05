@@ -36,6 +36,8 @@
       "Bash(docker restart:*)",
       "WebSearch",
       "WebFetch(domain:docs.dokploy.com)"
+      "Bash(node create-office-files.js:*)",
+      "Bash(mvn dependency:tree:*)"
     ],
     "deny": [],
     "ask": []
