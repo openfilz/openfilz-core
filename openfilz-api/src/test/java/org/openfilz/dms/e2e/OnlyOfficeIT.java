@@ -71,8 +71,8 @@ public class OnlyOfficeIT extends TestContainersKeyCloakConfig {
     @DynamicPropertySource
     static void registerOnlyOfficeProperties(DynamicPropertyRegistry registry) {
         // Keycloak configuration
-        registry.add("spring.security.oauth2.resourceserver.jwt.issuer-uri",
-                () -> keycloak.getAuthServerUrl() + "/realms/your-realm");
+        registry.add("spring.security.oauth2.resourceserver.jwt.jwk-set-uri",
+                () -> keycloak.getAuthServerUrl() + "/realms/openfilz/protocol/openid-connect/certs");
         registry.add("openfilz.security.no-auth", () -> false);
 
         // Ensure OnlyOfficeSecurityConfig is activated (not custom-access mode)
