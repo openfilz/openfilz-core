@@ -9,7 +9,7 @@ import java.util.UUID;
 
 /**
  * Service interface for thumbnail generation and management.
- * Handles generating thumbnails via ImgProxy and storing them.
+ * Handles generating thumbnails via Custom WebP conversion, GoenBerg / PdfBox and storing them.
  */
 public interface ThumbnailService {
 
@@ -55,7 +55,4 @@ public interface ThumbnailService {
      */
     boolean isSupported(String contentType);
 
-    UUID validateToken(String token);
-
-    String sign(String tokenPayload);
 }

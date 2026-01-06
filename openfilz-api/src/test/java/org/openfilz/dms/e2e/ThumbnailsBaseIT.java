@@ -37,7 +37,7 @@ import org.openfilz.dms.dto.response.CopyResponse;
  * Base integration test class for Thumbnail feature.
  * <p>
  * Tests thumbnail generation for various file types using:
- * - ImgProxy for images (PNG, JPEG, etc.)
+ * - Custom WebP conversion for images (PNG, JPEG, etc.)
  * - Gotenberg + PDFBox for Office documents (DOCX, XLSX, PPTX)
  * - PDFBox for PDF documents
  * - Java 2D renderer for text files (MD, YAML, XML, CSV, JSON, etc.)
@@ -56,30 +56,8 @@ public abstract class ThumbnailsBaseIT extends TestContainersBaseConfig {
     protected static final int TEST_SERVER_PORT = 18081;
 
     // ==========================================
-    // TestContainers for ImgProxy and Gotenberg
+    // TestContainer for Gotenberg
     // ==========================================
-
-    @Container
-    static GenericContainer<?> imgproxy = new GenericContainer<>(DockerImageName.parse("darthsim/imgproxy:latest"))
-            .withExposedPorts(8080)
-            .withEnv("IMGPROXY_BIND", ":8080")
-            .withEnv("IMGPROXY_ENABLE_PDF_PAGES", "true")
-            .withEnv("IMGPROXY_PDF_PAGES", "true")
-            .withEnv("IMGPROXY_ENABLE_SVG_SANITIZATION", "false")
-            .withEnv("IMGPROXY_SVG_FIX_UNSUPPORTED", "true")
-            .withEnv("IMGPROXY_PREFERRED_FORMATS", "webp")
-            .withEnv("IMGPROXY_SKIP_UNSUPPORTED_FORMATS", "true")
-            .withEnv("IMGPROXY_ALLOW_INSECURE_SOURCE_URL", "true")
-            .withEnv("IMGPROXY_ALLOW_LOOPBACK_SOURCE_ADDRESSES", "true")
-            .withEnv("IMGPROXY_ALLOW_PRIVATE_SOURCE_ADDRESSES", "true")
-            .withEnv("IMGPROXY_ALLOW_ORIGIN", "*")
-            .withEnv("IMGPROXY_MAX_SRC_RESOLUTION", "50")
-            .withEnv("IMGPROXY_MAX_SRC_FILE_SIZE", "52428800")
-            .withEnv("IMGPROXY_CONCURRENCY", "10")
-            .withEnv("IMGPROXY_MAX_CLIENTS", "200")
-            .withEnv("IMGPROXY_LOG_LEVEL", "debug")
-            .waitingFor(Wait.forHttp("/health").forPort(8080).forStatusCode(200))
-            .withStartupTimeout(Duration.ofSeconds(60));
 
     @Container
     static GenericContainer<?> gotenberg = new GenericContainer<>(DockerImageName.parse("gotenberg/gotenberg:8"))
@@ -98,7 +76,6 @@ public abstract class ThumbnailsBaseIT extends TestContainersBaseConfig {
 
     @BeforeAll
     static void logContainerInfo() {
-        log.info("ImgProxy running at: http://{}:{}", imgproxy.getHost(), imgproxy.getMappedPort(8080));
         log.info("Gotenberg running at: http://{}:{}", gotenberg.getHost(), gotenberg.getMappedPort(3000));
     }
 
@@ -111,27 +88,16 @@ public abstract class ThumbnailsBaseIT extends TestContainersBaseConfig {
         // Enable thumbnails
         registry.add("openfilz.thumbnail.active", () -> "true");
 
-        // Configure ImgProxy URL
-        registry.add("openfilz.thumbnail.imgproxy.url", () ->
-                String.format("http://%s:%d", imgproxy.getHost(), imgproxy.getMappedPort(8080)));
-
         // Configure Gotenberg URL
         registry.add("openfilz.thumbnail.gotenberg.url", () ->
                 String.format("http://%s:%d", gotenberg.getHost(), gotenberg.getMappedPort(3000)));
 
-        // Configure ImgProxy secret for token signing
-        registry.add("openfilz.thumbnail.imgproxy.secret", () -> "test-secret-for-thumbnails");
-
         // Disable authentication for tests
         registry.add("openfilz.security.no-auth", () -> "true");
 
-        // Configure fixed server port (for ImgProxy to call back)
+        // Configure fixed server port
         registry.add("server.port", () -> String.valueOf(TEST_SERVER_PORT));
 
-        // Configure API internal base URL for ImgProxy callback
-        // ImgProxy needs to reach our API - use host.docker.internal for Docker containers
-        registry.add("openfilz.common.api-internal-base-url", () ->
-                "http://host.docker.internal:" + TEST_SERVER_PORT);
     }
 
     // ==========================================
@@ -217,7 +183,7 @@ public abstract class ThumbnailsBaseIT extends TestContainersBaseConfig {
     }
 
     /**
-     * Verifies that the thumbnail is a valid WebP image (used by ImgProxy).
+     * Verifies that the thumbnail is a valid WebP image (used by custom WebP converter).
      */
     protected void assertValidWebPThumbnail(byte[] thumbnailBytes) {
         assertNotNull(thumbnailBytes, "Thumbnail bytes should not be null");
@@ -258,11 +224,11 @@ public abstract class ThumbnailsBaseIT extends TestContainersBaseConfig {
     }
 
     // ==========================================
-    // Image Thumbnail Tests (ImgProxy)
+    // Image Thumbnail Tests (Custom WebP conversion)
     // ==========================================
 
     @Test
-    @DisplayName("Should generate thumbnail for PNG image using ImgProxy")
+    @DisplayName("Should generate thumbnail for PNG image using Custom WebP conversion")
     void shouldGenerateThumbnailForPngImage() throws InterruptedException {
         // Upload PNG image
         UploadResponse uploadResponse = uploadFile("test-image.png");
@@ -274,13 +240,13 @@ public abstract class ThumbnailsBaseIT extends TestContainersBaseConfig {
         // Wait for thumbnail generation
         byte[] thumbnail = waitForThumbnail(uploadResponse.id());
 
-        // Verify thumbnail is valid (WebP from ImgProxy)
+        // Verify thumbnail is valid (WebP)
         assertValidImageThumbnail(thumbnail);
         log.info("PNG thumbnail generated successfully, size: {} bytes", thumbnail.length);
     }
 
     @Test
-    @DisplayName("Should generate thumbnail for JPEG image using ImgProxy")
+    @DisplayName("Should generate thumbnail for JPEG image using Custom WebP conversion")
     void shouldGenerateThumbnailForJpegImage() throws InterruptedException {
         // Upload JPEG image
         UploadResponse uploadResponse = uploadFile("test-image.jpg");
@@ -292,7 +258,7 @@ public abstract class ThumbnailsBaseIT extends TestContainersBaseConfig {
         // Wait for thumbnail generation
         byte[] thumbnail = waitForThumbnail(uploadResponse.id());
 
-        // Verify thumbnail is valid (WebP from ImgProxy)
+        // Verify thumbnail is valid (WebP )
         assertValidImageThumbnail(thumbnail);
         log.info("JPEG thumbnail generated successfully, size: {} bytes", thumbnail.length);
     }
@@ -642,7 +608,7 @@ public abstract class ThumbnailsBaseIT extends TestContainersBaseConfig {
     }
 
     // ==========================================
-    // Copy and Delete Thumbnail Tests - PNG (ImgProxy)
+    // Copy and Delete Thumbnail Tests - PNG (Custom WebP conversion)
     // ==========================================
 
     @Test
@@ -700,7 +666,7 @@ public abstract class ThumbnailsBaseIT extends TestContainersBaseConfig {
     }
 
     // ==========================================
-    // Copy and Delete Thumbnail Tests - JPEG (ImgProxy)
+    // Copy and Delete Thumbnail Tests - JPEG (Custom WebP conversion)
     // ==========================================
 
     @Test

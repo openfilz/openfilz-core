@@ -59,8 +59,6 @@ public class DefaultAuthSecurityConfig {
             API_PREFIX + ENDPOINT_DOCUMENTS + "/*/onlyoffice-download",
             API_PREFIX + ENDPOINT_ONLYOFFICE + "/callback/*",
             // NOTE: /api/v1/onlyoffice/config/* uses OAuth2 (called by frontend)
-            // ImgProxy endPoint to download files : managed with mTLS
-            API_PREFIX + ENDPOINT_THUMBNAILS + "/source/*"
             // NOTE: /api/v1/thumbnails/img/* uses OAuth2 (called by frontend)
     };
 

@@ -79,8 +79,7 @@ piped:
 openfilz:
   common:
     # URL that OnlyOffice DocumentServer uses to reach OpenFilz API
-    # URL ImgProxy uses to fetch documents
-    # Use host.docker.internal when OnlyOffice / ImgProxy run in Docker and OpenFilz runs on host
+    # Use host.docker.internal when OnlyOffice run in Docker and OpenFilz runs on host
     api-internal-base-url: ${OPENFILZ_INTERNAL_API_BASE_URL:http://host.docker.internal:8081}
     api-public-base-url: ${OPENFILZ_PUBLIC_API_BASE_URL:http://localhost:8081}
  #  calculate-checksum: default false - if true : calculate checksum of each new or modified file
@@ -109,9 +108,6 @@ openfilz:
   # Thumbnail Generation Configuration
   thumbnail:
     active: false  # Feature toggle - set to true to enable thumbnail generation
-    imgproxy:
-      secret: openfilz-secret-to-secure-access-to-the-source-files-when-download-from-imgproxy-2025 # secreyt used to generate a signed token used in the callback URL by ImgProxy to download source files
-      url: ${IMGPROXY_URL:http://localhost:8082}  # ImgProxy service URL (for images)
     gotenberg:
       url: ${GOTENBERG_URL:http://localhost:8083}  # Gotenberg service URL (for PDFs and Office docs)
       timeout-seconds: 60  # Timeout for document conversion

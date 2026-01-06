@@ -1,0 +1,46 @@
+# Thumbnail Services for Local Development
+#
+# Use this file when developing locally with:
+#   - openfilz-api running in your IDE (port 8081)
+#   - openfilz-web running with npm (port 4200)
+#   - PostgreSQL running separately
+#
+# Services:
+#   - Gotenberg (port 8083): PDF and Office document thumbnail generation
+#
+# Start services:
+#   docker-compose -f docker-compose-gotenberg-dev.yml up -d
+#
+# Stop services:
+#   docker-compose -f docker-compose-gotenberg-dev.yml down
+#
+# View logs:
+#   docker-compose -f docker-compose-gotenberg-dev.yml logs -f
+
+services:
+
+  # =============================================================================
+  # Gotenberg - For PDF and Office document thumbnails
+  # Supports: PDF, DOCX, XLSX, PPTX, ODT, ODS, ODP, and more
+  # =============================================================================
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: openfilz-gotenberg-dev
+    restart: unless-stopped
+    command:
+      - "gotenberg"
+      - "--api-timeout=60s"
+      - "--libreoffice-restart-after=100"
+      - "--libreoffice-auto-start=true"
+      - "--log-level=info"
+    ports:
+      - "8083:3000"
+    # Allow container to reach host machine (where your API runs)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

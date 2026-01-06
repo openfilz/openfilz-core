@@ -12,18 +12,16 @@ import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.service.StorageService;
 import org.openfilz.dms.service.ThumbnailService;
 import org.openfilz.dms.service.ThumbnailStorageService;
+import org.openfilz.dms.utils.ImageUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
-import org.springframework.http.HttpEntity;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.stereotype.Service;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -33,7 +31,7 @@ import reactor.util.retry.Retry;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
-import javax.imageio.ImageIO;
+import javax.imageio.*;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.BufferedReader;
@@ -47,26 +45,23 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Base64;
+import java.util.*;
 import java.util.List;
-import java.util.UUID;
 
 import static org.openfilz.dms.config.RestApiVersion.API_PREFIX;
 import static org.openfilz.dms.config.RestApiVersion.ENDPOINT_THUMBNAILS;
 
 /**
  * Implementation of ThumbnailService that uses:
- * - ImgProxy for image thumbnails (JPEG, PNG, GIF, WebP, etc.)
+ * - Custom WebP conversion for image thumbnails (JPEG, PNG, GIF, WebP, etc.)
  * - PDFBox for PDF thumbnails
  * - Gotenberg + PDFBox for Office document thumbnails
  * - Java 2D for text file thumbnails (markdown, code, config files, etc.)
  * <p>
  * Flow for images:
- * 1. Build ImgProxy URL with source document URL
- * 2. ImgProxy fetches document from /api/v1/thumbnails/source/{id}
- * 3. ImgProxy generates thumbnail and returns it
- * 4. Store thumbnail via ThumbnailStorageService
+ * 1. Resize image to 100x100 max
+ * 2. Convert & compress to WebP
+ * 3. Store thumbnail via ThumbnailStorageService
  * <p>
  * Flow for PDFs:
  * 1. Stream PDF from storage directly to PDFBox
@@ -92,33 +87,13 @@ import static org.openfilz.dms.config.RestApiVersion.ENDPOINT_THUMBNAILS;
 @ConditionalOnProperty(name = "openfilz.thumbnail.active", havingValue = "true")
 public class ThumbnailServiceImpl implements ThumbnailService {
 
-    public static final String WEBP_FORMAT = "webp";
-
-    private static final String HMAC_ALGO = "HmacSHA256";
-
-    @Value("${openfilz.thumbnail.imgproxy.secret:my-secret-to-protect-source-files}")
-    private String imgProxySecret;
-
-    private final CommonProperties commonProperties;
+    private static final String WEBP_FORMAT = "webp";
     private final ThumbnailStorageService thumbnailStorage;
     private final ThumbnailProperties thumbnailProperties;
     private final WebClient.Builder webClientBuilder;
     private final StorageService storageService;
 
-    private WebClient imgProxyClient;
     private WebClient gotenbergClient;
-
-    /**
-     * Lazy initialization of ImgProxy WebClient.
-     */
-    private WebClient getImgProxyClient() {
-        if (imgProxyClient == null) {
-            imgProxyClient = webClientBuilder
-                .baseUrl(thumbnailProperties.getImgproxy().getUrl())
-                .build();
-        }
-        return imgProxyClient;
-    }
 
     /**
      * Lazy initialization of Gotenberg WebClient.
@@ -142,12 +117,13 @@ public class ThumbnailServiceImpl implements ThumbnailService {
 
         Mono<byte[]> thumbnailBytes;
         final String extension;
-        if (thumbnailProperties.shouldUseImgProxy(document.getContentType())) {
-            // Images: use ImgProxy
+        if (thumbnailProperties.shouldUseWebpConversion(document.getContentType())) {
+            // Images: use Custom WebP conversion
             extension = WEBP_FORMAT;
-            log.debug("Using ImgProxy for document: {} (type: {})", document.getId(), document.getContentType());
-            thumbnailBytes = buildImgProxyPath(document)
-                .flatMap(this::fetchThumbnailFromImgProxy);
+            log.debug("Using custom WebP generation for images");
+            thumbnailBytes = storageService.loadFile(document.getStoragePath())
+                    .publishOn(Schedulers.boundedElastic())
+                    .flatMap(ImageUtils::resourceToWebpThumbnail);
         } else {
             extension = null;
             if (thumbnailProperties.shouldUsePdfBox(document.getContentType())) {
@@ -181,6 +157,10 @@ public class ThumbnailServiceImpl implements ThumbnailService {
             })
             .subscribeOn(Schedulers.boundedElastic());
     }
+
+
+
+
 
     /**
      * Renders PDF thumbnail by streaming directly from storage to PDFBox.
@@ -464,71 +444,6 @@ public class ThumbnailServiceImpl implements ThumbnailService {
         return thumbnail;
     }
 
-    /**
-     * Builds the ImgProxy request path.
-     * Format: /rs:fit:{width}:{height}/plain/{source_url}@{extension}
-     */
-    private Mono<String> buildImgProxyPath(Document document) {
-        return Mono.fromCallable(() -> {
-            String sourceUrl = buildDocumentSourceUrl(document.getId());
-
-            // Build processing options
-            StringBuilder path = new StringBuilder();
-
-            // Resize option
-            path.append("/w:")
-                .append(thumbnailProperties.getDimensions().getWidth())
-                .append("/h:")
-                .append(thumbnailProperties.getDimensions().getHeight());
-
-            // Plain URL mode with extension hint
-            path.append("/plain/").append(sourceUrl).append("@webp");
-
-            return path.toString();
-        });
-    }
-
-    private String generateToken(UUID documentId) {
-        long timestamp = Instant.now().getEpochSecond();
-
-        String payload = documentId + ":" + timestamp;
-
-        String signature = sign(payload);
-
-        return Base64.getUrlEncoder().withoutPadding()
-                .encodeToString(payload.getBytes(StandardCharsets.UTF_8))
-                + "."
-                + signature;
-    }
-
-    /**
-     * Builds the source URL that ImgProxy will use to fetch the document.
-     * This URL points to our /api/v1/thumbnails/source/{id} endpoint.
-     */
-    private String buildDocumentSourceUrl(UUID documentId) {
-        return UriComponentsBuilder.fromUriString(commonProperties.getApiInternalBaseUrl())
-            .path(API_PREFIX + ENDPOINT_THUMBNAILS + "/source/")
-            .path(generateToken(documentId))
-            .build()
-            .toUriString();
-    }
-
-    /**
-     * Fetches thumbnail from ImgProxy.
-     */
-    private Mono<byte[]> fetchThumbnailFromImgProxy(String path) {
-        log.debug("Fetching thumbnail from ImgProxy: {}", path);
-        return getImgProxyClient()
-            .get()
-            .uri(path)
-            .retrieve()
-            .bodyToMono(byte[].class)
-            .timeout(Duration.ofSeconds(30))
-            .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
-                .maxBackoff(Duration.ofSeconds(10))
-                .doBeforeRetry(signal ->
-                    log.warn("Retrying ImgProxy request, attempt {}", signal.totalRetries() + 1)));
-    }
 
     @Override
     public Mono<byte[]> getThumbnail(UUID documentId) {
@@ -550,50 +465,6 @@ public class ThumbnailServiceImpl implements ThumbnailService {
         return thumbnailProperties.isContentTypeSupported(contentType);
     }
 
-    @Override
-    public UUID validateToken(String token) {
-        String[] parts = token.split("\\.");
-        if (parts.length != 2) {
-            return null;
-        }
-
-        String payload = new String(Base64.getUrlDecoder().decode(parts[0]), StandardCharsets.UTF_8);
-
-        String receivedSignature = parts[1];
-        String expectedSignature = sign(payload);
-
-        // signature invalide
-        if (!MessageDigest.isEqual(
-                receivedSignature.getBytes(),
-                expectedSignature.getBytes())) {
-            return null;
-        }
-
-        // extraction du timestamp
-        String[] payloadParts = payload.split(":");
-        long timestamp = Long.parseLong(payloadParts[1]);
-
-        // anti-replay (ex: 5 minutes)
-        if (Instant.now().getEpochSecond() - timestamp > 300) {
-            return null;
-        }
-
-        return UUID.fromString(payloadParts[0]);
-    }
-
-    @Override
-    public String sign(String tokenPayload) {
-        try {
-            Mac mac = Mac.getInstance(HMAC_ALGO);
-            SecretKeySpec key = new SecretKeySpec(imgProxySecret.getBytes(), HMAC_ALGO);
-            mac.init(key);
-
-            byte[] raw = mac.doFinal(tokenPayload.getBytes(StandardCharsets.UTF_8));
-            return Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
-        } catch (NoSuchAlgorithmException | InvalidKeyException e) {
-            throw new RuntimeException(e);
-        }
-    }
 
     /**
      * A ByteArrayResource that provides a custom filename.

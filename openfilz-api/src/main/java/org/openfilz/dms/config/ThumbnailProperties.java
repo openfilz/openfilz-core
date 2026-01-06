@@ -27,19 +27,9 @@ public class ThumbnailProperties {
     private String generationMode = "local";
 
     /**
-     * ImgProxy configuration (for image thumbnails).
-     */
-    private ImgProxy imgproxy = new ImgProxy();
-
-    /**
      * Gotenberg configuration (for PDF and Office document thumbnails).
      */
     private Gotenberg gotenberg = new Gotenberg();
-
-    /**
-     * mTLS configuration for ImgProxy to access document source endpoint.
-     */
-    private MtlsAccess mtlsAccess = new MtlsAccess();
 
     /**
      * Thumbnail storage configuration.
@@ -58,11 +48,11 @@ public class ThumbnailProperties {
 
     /**
      * Content types supported for thumbnail generation.
-     * Images are processed by ImgProxy, PDFs and Office documents by Gotenberg,
+     * Images are processed by WebP Converter, PDFs and Office documents by Gotenberg,
      * Text files are rendered directly in Java.
      */
     private List<String> supportedContentTypes = List.of(
-            // Images (ImgProxy)
+            // Images (Custom WebP Conversion)
             "image/jpeg",
             "image/png",
             "image/gif",
@@ -166,31 +156,6 @@ public class ThumbnailProperties {
     );
 
     /**
-     * ImgProxy server configuration (for images).
-     */
-    @Data
-    public static class ImgProxy {
-        /**
-         * URL of the ImgProxy server.
-         */
-        private String url = "http://imgproxy:8080";
-
-        /**
-         * mTLS configuration for outbound requests to ImgProxy.
-         */
-        private Mtls mtls = new Mtls();
-
-        @Data
-        public static class Mtls {
-            private boolean enabled = false;
-            private String keystorePath;
-            private String keystorePassword;
-            private String truststorePath;
-            private String truststorePassword;
-        }
-    }
-
-    /**
      * Gotenberg server configuration (for PDFs and Office documents).
      */
     @Data
@@ -204,33 +169,6 @@ public class ThumbnailProperties {
          * Timeout for Gotenberg requests in seconds.
          */
         private int timeoutSeconds = 60;
-    }
-
-    /**
-     * mTLS configuration for inbound requests from ImgProxy.
-     */
-    @Data
-    public static class MtlsAccess {
-        /**
-         * Enable mTLS authentication for ImgProxy access.
-         */
-        private boolean enabled = false;
-
-        /**
-         * Path to truststore containing ImgProxy's CA certificate.
-         */
-        private String truststorePath;
-
-        /**
-         * Password for the truststore.
-         */
-        private String truststorePassword;
-
-        /**
-         * DN pattern to validate ImgProxy client certificates.
-         * Example: "CN=imgproxy.*"
-         */
-        private String allowedDnPattern = "CN=imgproxy.*";
     }
 
     /**
@@ -349,9 +287,9 @@ public class ThumbnailProperties {
     }
 
     /**
-     * Check if a content type should use ImgProxy (images).
+     * Check if a content type should use WebP Conversion (images).
      */
-    public boolean shouldUseImgProxy(String contentType) {
+    public boolean shouldUseWebpConversion(String contentType) {
         return isContentTypeSupported(contentType)
                 && !shouldUseGotenberg(contentType)
                 && !shouldUsePdfBox(contentType)

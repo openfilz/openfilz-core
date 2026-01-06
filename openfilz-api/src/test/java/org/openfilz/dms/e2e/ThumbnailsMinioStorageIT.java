@@ -19,7 +19,7 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
  * End-to-end integration tests for Thumbnail generation using MinIO/S3 storage.
  * <p>
  * This test class verifies thumbnail generation for all supported file types:
- * - Images (PNG, JPEG) via ImgProxy
+ * - Images (PNG, JPEG) via Custom WebP conversion
  * - PDF documents via PDFBox
  * - Office documents (DOCX, XLSX, PPTX) via Gotenberg + PDFBox
  * - Text files (TXT, MD, YAML, XML, CSV, JSON, SQL) via Java 2D renderer
@@ -27,7 +27,6 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
  * Uses TestContainers to run:
  * - PostgreSQL for database
  * - MinIO for document and thumbnail storage
- * - ImgProxy for image thumbnail generation
  * - Gotenberg for Office document conversion to PDF
  * <p>
  * Thumbnail storage backend: MinIO/S3

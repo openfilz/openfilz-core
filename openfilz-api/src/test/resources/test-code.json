@@ -15,7 +15,6 @@
     }
   },
   "features": [
-    "imgproxy",
     "gotenberg",
     "pdfbox"
   ],

@@ -21,14 +21,13 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
  * End-to-end integration tests for Thumbnail generation using FileSystem storage.
  * <p>
  * This test class verifies thumbnail generation for all supported file types:
- * - Images (PNG, JPEG) via ImgProxy
+ * - Images (PNG, JPEG) via Custom WebP conversion
  * - PDF documents via PDFBox
  * - Office documents (DOCX, XLSX, PPTX) via Gotenberg + PDFBox
  * - Text files (TXT, MD, YAML, XML, CSV, JSON, SQL) via Java 2D renderer
  * <p>
  * Uses TestContainers to run:
  * - PostgreSQL for database
- * - ImgProxy for image thumbnail generation
  * - Gotenberg for Office document conversion to PDF
  * <p>
  * Thumbnail storage backend: Local FileSystem
