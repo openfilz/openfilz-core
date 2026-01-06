@@ -54,6 +54,12 @@ jobs:
               "username": "x-access-token",
               "password": "${{ steps.app-token.outputs.token }}"
             }]
+          mirrors: |
+            [{
+               "id": "central",
+               "mirrorOf": "central",
+               "url": "https://repo1.maven.org/maven2"
+            }]
 
       - name: Cache Maven packages
         uses: actions/cache@v4
@@ -64,7 +70,7 @@ jobs:
             ${{ runner.os }}-maven-
 
       - name: Build with Maven
-        run: mvn -s settings.xml -Dmaven.wagon.http.retryHandler.count=3 -B clean install --file pom.xml
+        run: mvn -Dmaven.wagon.http.retryHandler.count=3 -B clean install --file pom.xml
 
       - name: Generate JaCoCo Badge
         id: jacoco-badge

@@ -62,6 +62,12 @@ jobs:
                 "username": "${{ secrets.MAVEN_USERNAME }}",
                 "password": "${{ secrets.MAVEN_PASSWORD }}"
             }]
+          mirrors: |
+            [{
+               "id": "central",
+               "mirrorOf": "central",
+               "url": "https://repo1.maven.org/maven2"
+            }]
 
       - name: Cache Maven packages
         uses: actions/cache@v4
@@ -72,7 +78,7 @@ jobs:
             ${{ runner.os }}-maven-
 
       - name: Extract Maven project version
-        run: echo "version=$(mvn -s settings.xml -Dmaven.wagon.http.retryHandler.count=3 -q -Dexec.executable=echo -Dexec.args='${project.version}' --non-recursive exec:exec)" >> $GITHUB_OUTPUT
+        run: echo "version=$(mvn -Dmaven.wagon.http.retryHandler.count=3 -q -Dexec.executable=echo -Dexec.args='${project.version}' --non-recursive exec:exec)" >> $GITHUB_OUTPUT
         id: project
 
       - name: Remove SNAPSHOT from version
@@ -84,13 +90,13 @@ jobs:
           end: '-SNAPSHOT'
 
       - name: Prepare Release
-        run: mvn -s settings.xml -Dmaven.wagon.http.retryHandler.count=3 -B release:prepare -DtagNameFormat=v@{project.version} -Darguments="-DskipTests"
+        run: mvn -Dmaven.wagon.http.retryHandler.count=3 -B release:prepare -DtagNameFormat=v@{project.version} -Darguments="-DskipTests"
 
       - name: Perform Release
-        run: mvn -s settings.xml -Dmaven.wagon.http.retryHandler.count=3 -B release:perform -Darguments="-Pkube,publishMaven -Dregistry.hostname=ghcr.io -Dregistry.port=443 -Ddocker.context.path=openfilz/ -Djib.to.auth.username=${{ github.actor }} -Djib.to.auth.password=${{ secrets.GITHUB_TOKEN }}"
+        run: mvn -Dmaven.wagon.http.retryHandler.count=3 -B release:perform -Darguments="-Pkube,publishMaven -Dregistry.hostname=ghcr.io -Dregistry.port=443 -Ddocker.context.path=openfilz/ -Djib.to.auth.username=${{ github.actor }} -Djib.to.auth.password=${{ secrets.GITHUB_TOKEN }}"
 
       - name: Generate Changelog
-        run: mvn -s settings.xml -Dmaven.wagon.http.retryHandler.count=3 git-changelog-maven-plugin:git-changelog -PchangeLog
+        run: mvn -Dmaven.wagon.http.retryHandler.count=3 git-changelog-maven-plugin:git-changelog -PchangeLog
 
       - name: Commit Changelog
         run: |
