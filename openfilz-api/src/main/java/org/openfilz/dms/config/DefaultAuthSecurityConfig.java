@@ -14,10 +14,12 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
-import org.springframework.security.oauth2.jwt.ReactiveJwtDecoders;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.authorization.AuthorizationContext;
+
+import static org.openfilz.dms.config.RestApiVersion.*;
 
 @Configuration
 @EnableWebFluxSecurity
@@ -28,8 +30,8 @@ public class DefaultAuthSecurityConfig {
 
     public static final String ALL_MATCHES = "/**";
 
-    @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}")
-    protected String issuerUri;
+    @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}")
+    protected String jwkSetUri;
 
     @Value("${spring.graphql.http.path:/graphql}")
     protected String graphQlBaseUrl;
@@ -38,7 +40,7 @@ public class DefaultAuthSecurityConfig {
 
     @Bean
     public ReactiveJwtDecoder jwtDecoder() {
-        return ReactiveJwtDecoders.fromIssuerLocation(issuerUri);
+        return NimbusReactiveJwtDecoder.withJwkSetUri(jwkSetUri).build();
     }
 
     private static final String[] AUTH_WHITELIST = {
@@ -54,9 +56,10 @@ public class DefaultAuthSecurityConfig {
             "/graphiql/**",
             // OnlyOffice DocumentServer endpoints (handled by OnlyOfficeSecurityConfig)
             // These are called by OnlyOffice server, not by authenticated users
-            "/api/v1/documents/*/onlyoffice-download",
-            "/api/v1/onlyoffice/callback/*"
+            API_PREFIX + ENDPOINT_DOCUMENTS + "/*/onlyoffice-download",
+            API_PREFIX + ENDPOINT_ONLYOFFICE + "/callback/*",
             // NOTE: /api/v1/onlyoffice/config/* uses OAuth2 (called by frontend)
+            // NOTE: /api/v1/thumbnails/img/* uses OAuth2 (called by frontend)
     };
 
     @Bean
@@ -66,7 +69,7 @@ public class DefaultAuthSecurityConfig {
                 .authorizeExchange(exchanges -> {
                     exchanges.pathMatchers(AUTH_WHITELIST).permitAll() // Whitelist Swagger and health
                             .pathMatchers(HttpMethod.OPTIONS).permitAll()
-                            .pathMatchers(RestApiVersion.API_PREFIX + ALL_MATCHES, graphQlBaseUrl + ALL_MATCHES)
+                            .pathMatchers(API_PREFIX + ALL_MATCHES, graphQlBaseUrl + ALL_MATCHES)
                             .access((mono, context) -> mono
                                     .map(auth -> newAuthorizationDecision(auth, context)))
                             .anyExchange()

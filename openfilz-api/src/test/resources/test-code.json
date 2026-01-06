@@ -1,0 +1,25 @@
+{
+  "name": "openfilz-test",
+  "version": "1.0.0",
+  "description": "Test JSON file for thumbnail generation",
+  "config": {
+    "thumbnail": {
+      "enabled": true,
+      "width": 160,
+      "height": 160,
+      "format": "png"
+    },
+    "storage": {
+      "type": "local",
+      "basePath": "/tmp/dms-storage"
+    }
+  },
+  "features": [
+    "gotenberg",
+    "pdfbox"
+  ],
+  "metadata": {
+    "author": "OpenFilz Team",
+    "created": "2024-01-01T00:00:00Z"
+  }
+}

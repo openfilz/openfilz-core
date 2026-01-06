@@ -1,0 +1,47 @@
+# OpenFilz Docker Compose - OnlyOffice Document Server Overlay
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.onlyoffice.yml up -d
+#
+# Or use the Makefile:
+#   make up-onlyoffice
+
+services:
+  # =============================================================================
+  # OnlyOffice Document Server
+  # =============================================================================
+  onlyoffice:
+    image: onlyoffice/documentserver:latest
+    container_name: openfilz-onlyoffice
+    restart: unless-stopped
+    environment:
+      JWT_ENABLED: "true"
+      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-openfilz-onlyoffice-jwt-secret-2024}
+      JWT_HEADER: Authorization
+      # Allow connections from OpenFilz containers
+      ALLOW_META_IP_ADDRESS: "true"
+      ALLOW_PRIVATE_IP_ADDRESS: "true"
+    ports:
+      - "${ONLYOFFICE_PORT:-8080}:80"
+    networks:
+      - openfilz-network
+    # OnlyOffice needs to reach the API for document downloads
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # =============================================================================
+  # OpenFilz API - OnlyOffice Configuration Override
+  # =============================================================================
+  openfilz-api:
+    environment:
+      # OnlyOffice configuration
+      ONLYOFFICE_ENABLED: "true"
+      ONLYOFFICE_URL: ${ONLYOFFICE_URL:-http://onlyoffice}
+      ONLYOFFICE_API_BASE_URL: ${ONLYOFFICE_API_BASE_URL:-http://openfilz-api:8081}
+      ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-openfilz-onlyoffice-jwt-secret-2024}

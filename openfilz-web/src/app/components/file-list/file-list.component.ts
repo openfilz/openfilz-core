@@ -12,6 +12,7 @@ import { TouchDetectionService } from '../../services/touch-detection.service';
 import { TranslatePipe } from '@ngx-translate/core';
 import { FileDraggableDirective } from '../../directives/file-draggable.directive';
 import { FolderDropZoneDirective } from '../../directives/folder-drop-zone.directive';
+import { AuthImageDirective } from '../../directives/auth-image.directive';
 import { DropEvent } from '../../services/drag-drop.service';
 
 @Component({
@@ -29,7 +30,8 @@ import { DropEvent } from '../../services/drag-drop.service';
     MatTooltipModule,
     TranslatePipe,
     FileDraggableDirective,
-    FolderDropZoneDirective
+    FolderDropZoneDirective,
+    AuthImageDirective
   ],
 })
 export class FileListComponent {
@@ -163,6 +165,13 @@ export class FileListComponent {
 
   getFileExtension(fileName: string): string {
     return this.fileIconService.getFileExtension(fileName);
+  }
+
+  /**
+   * Handle thumbnail loading error by clearing the URL to show fallback icon
+   */
+  onThumbnailError(event: Event, item: FileItem) {
+    item.thumbnailUrl = undefined;
   }
 
   onSortChange(sort: Sort) {

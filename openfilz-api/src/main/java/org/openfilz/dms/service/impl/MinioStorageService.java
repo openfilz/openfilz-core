@@ -8,6 +8,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.exception.StorageException;
 import org.openfilz.dms.service.StorageService;
+import org.openfilz.dms.utils.FileUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.InputStreamResource;
@@ -22,6 +23,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
+
+import static org.springframework.http.MediaType.APPLICATION_OCTET_STREAM_VALUE;
 
 @Slf4j
 @Service
@@ -130,13 +133,13 @@ public class MinioStorageService implements StorageService {
                     // MinIO SDK will read from pipedInputStream until it's closed.
                     // The SDK will buffer parts internally (default 5MiB to 5GiB depending on total size).
                     // This internal buffering by SDK is fine and won't exhaust 256MB for a single part.
+                    String contentType = FileUtils.getContentType(filePart);
                     PutObjectArgs args = PutObjectArgs.builder()
                             .bucket(bucketName)
                             .object(objectName)
                             .legalHold(wormMode)
                             .stream(pipedInputStream, -1, PutObjectArgs.MIN_MULTIPART_SIZE) // Min part size is 5MiB
-                            .contentType(filePart.headers().getContentType() != null ?
-                                    filePart.headers().getContentType().toString() : "application/octet-stream")
+                            .contentType(contentType != null ? contentType : APPLICATION_OCTET_STREAM_VALUE)
                             .build();
                     minioClient.putObject(args);
                     log.info("Successfully uploaded {} to MinIO bucket {}", objectName, bucketName);

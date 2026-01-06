@@ -164,7 +164,8 @@ export class FavoritesComponent extends FileOperationsComponent implements OnIni
       data: {
         documentId: item.id,
         fileName: item.name,
-        contentType: item.contentType || ''
+        contentType: item.contentType || '',
+        fileSize: item.size
       }
     });
   }

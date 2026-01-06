@@ -1,0 +1,28 @@
+# Test YAML Configuration File
+# Used for thumbnail generation testing
+
+server:
+  port: 8081
+  host: localhost
+
+database:
+  url: jdbc:postgresql://localhost:5432/testdb
+  username: testuser
+  password: testpass
+  pool:
+    min-size: 5
+    max-size: 20
+    timeout: 30s
+
+features:
+  - name: thumbnail-generation
+    enabled: true
+  - name: full-text-search
+    enabled: true
+  - name: audit-logging
+    enabled: true
+
+logging:
+  level:
+    root: INFO
+    org.openfilz: DEBUG

@@ -442,7 +442,9 @@
         "loading": "Dokument wird geladen...",
         "unsupportedTitle": "Vorschau nicht verfügbar",
         "unsupportedMessage": "Dieser Dateityp kann nicht im Browser in der Vorschau angezeigt werden.",
-        "downloadFile": "Datei herunterladen"
+        "downloadFile": "Datei herunterladen",
+        "fileTooLargeTitle": "Datei zu groß für Vorschau",
+        "fileTooLargeMessage": "Diese Datei überschreitet die maximale Größe für die Vorschau ({{maxSize}} MB). Bitte laden Sie die Datei herunter und öffnen Sie sie auf Ihrem Computer."
     },
     "errors": {
         "loadFailed": "Laden der Daten fehlgeschlagen",

@@ -442,7 +442,9 @@
         "loading": "Cargando documento...",
         "unsupportedTitle": "Vista previa no disponible",
         "unsupportedMessage": "Este tipo de archivo no se puede previsualizar en el navegador.",
-        "downloadFile": "Descargar archivo"
+        "downloadFile": "Descargar archivo",
+        "fileTooLargeTitle": "Archivo demasiado grande para vista previa",
+        "fileTooLargeMessage": "Este archivo supera el tamaño máximo para vista previa ({{maxSize}} MB). Por favor, descargue el archivo y ábralo en su ordenador."
     },
     "errors": {
         "loadFailed": "Error al cargar los datos",

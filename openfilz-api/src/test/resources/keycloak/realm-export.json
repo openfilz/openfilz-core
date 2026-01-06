@@ -1,5 +1,5 @@
 {
-  "realm": "your-realm",
+  "realm": "openfilz",
   "enabled": true,
   "clients": [
     {
@@ -29,7 +29,8 @@
       "alwaysDisplayInConsole": false,
       "clientAuthenticatorType": "client-secret",
       "redirectUris": [
-        "http://localhost:4200/*"
+        "http://localhost:4200/*",
+        "http://localhost:4200"
       ],
       "webOrigins": [
         "http://localhost:4200"
@@ -444,7 +445,8 @@
         }
       ],
       "realmRoles": [
-        "AUDITOR"
+        "AUDITOR",
+        "default-roles-openfilz"
       ],
       "groups": [
         "/GED/AUDITOR"
@@ -464,7 +466,8 @@
         }
       ],
       "realmRoles": [
-        "READER"
+        "READER",
+        "default-roles-openfilz"
       ],
       "groups": [
         "/GED/READER"
@@ -484,7 +487,7 @@
         }
       ],
       "realmRoles": [
-        "default-roles-your-realm",
+        "default-roles-openfilz",
         "CONTRIBUTOR"
       ],
       "groups": [
@@ -505,7 +508,7 @@
         }
       ],
       "realmRoles": [
-        "default-roles-your-realm",
+        "default-roles-openfilz",
         "CLEANER"
       ],
       "groups": [
@@ -526,7 +529,7 @@
         }
       ],
       "realmRoles": [
-        "default-roles-your-realm",
+        "default-roles-openfilz",
         "CONTRIBUTOR",
         "CLEANER",
         "AUDITOR"
@@ -550,7 +553,7 @@
           "value": "password"
         }
       ],
-      "realmRoles": [
+      "realmRoles": [      
 
       ]
     }

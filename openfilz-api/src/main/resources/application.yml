@@ -26,8 +26,7 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/your-realm} # e.g., http://localhost:8080/realms/test-realm
-          # jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:8080/realms/test-realm/protocol/openid-connect/certs} # Often derived from issuer-uri
+          jwk-set-uri: ${KEYCLOAK_REALM_URL:http://localhost:8180/realms/openfilz}/protocol/openid-connect/certs
 
   sql:
     init:
@@ -78,6 +77,11 @@ piped:
     size: 8192
 
 openfilz:
+  common:
+    # URL that OnlyOffice DocumentServer uses to reach OpenFilz API
+    # Use host.docker.internal when OnlyOffice run in Docker and OpenFilz runs on host
+    api-internal-base-url: ${OPENFILZ_INTERNAL_API_BASE_URL:http://host.docker.internal:8081}
+    api-public-base-url: ${OPENFILZ_PUBLIC_API_BASE_URL:http://localhost:8081}
  #  calculate-checksum: default false - if true : calculate checksum of each new or modified file
  #  full-text:
  #openfilz.full-text.opensearch.host=localhost
@@ -101,6 +105,22 @@ openfilz:
     # root-group: GED
   soft-delete:
     active: false
+  # Thumbnail Generation Configuration
+  thumbnail:
+    active: false  # Feature toggle - set to true to enable thumbnail generation
+    gotenberg:
+      url: ${GOTENBERG_URL:http://localhost:8083}  # Gotenberg service URL (for PDFs and Office docs)
+      timeout-seconds: 60  # Timeout for document conversion
+    storage:
+      use-main-storage: true  # Use same storage as documents (storage.type)
+      type: local  # Override storage type for thumbnails (local or minio)
+      local:
+        base-path: ${THUMBNAIL_STORAGE_PATH:/tmp/dms-thumbnails}
+      minio:
+        bucket-name: ${THUMBNAIL_BUCKET_NAME:dms-thumbnails}
+    dimensions:
+      width: 100
+      height: 100
 
 # OnlyOffice DocumentServer Integration
 onlyoffice:
@@ -108,9 +128,6 @@ onlyoffice:
   document-server:
     url: ${ONLYOFFICE_URL:http://localhost}
     api-path: /web-apps/apps/api/documents/api.js
-  # URL that OnlyOffice DocumentServer uses to reach OpenFilz API
-  # Use host.docker.internal when OnlyOffice runs in Docker and OpenFilz runs on host
-  api-base-url: ${ONLYOFFICE_API_BASE_URL:http://host.docker.internal:8081}
   jwt:
     enabled: true
     secret: ${ONLYOFFICE_JWT_SECRET:openfilz-onlyoffice-jwt-secret-2024}

@@ -3,6 +3,7 @@ package org.openfilz.dms.security.impl;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.OnlyOfficeProperties;
+import org.openfilz.dms.config.ThumbnailProperties;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpMethod;
@@ -23,9 +24,10 @@ public class WormSecurityServiceImpl extends AbstractSecurityService {
     @Value("${openfilz.calculate-checksum:false}")
     private Boolean calculateChecksum;
 
-    public WormSecurityServiceImpl(OnlyOfficeProperties onlyOfficeProperties) {
-        super(onlyOfficeProperties);
+    public WormSecurityServiceImpl(OnlyOfficeProperties onlyOfficeProperties, ThumbnailProperties thumbnailProperties) {
+        super(onlyOfficeProperties, thumbnailProperties);
     }
+
 
     @PostConstruct
     public void init() {

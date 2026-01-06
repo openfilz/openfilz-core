@@ -12,8 +12,6 @@ import java.util.function.Function;
 
 public interface SaveDocumentService {
 
-    String APPLICATION_OCTET_STREAM = "application/octet-stream";
-
     Mono<UploadResponse> doSaveFile(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, Mono<String> storagePathMono);
 
     Mono<Document> saveAndReplaceDocument(FilePart newFilePart, ContentInfo contentInfo, Document document, String oldStoragePath);

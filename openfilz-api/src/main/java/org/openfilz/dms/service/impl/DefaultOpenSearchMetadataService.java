@@ -29,7 +29,7 @@ public class DefaultOpenSearchMetadataService implements OpenSearchMetadataServi
         source.put(OpenSearchDocumentKey.id.toString(), document.getId());
         source.put(OpenSearchDocumentKey.name.toString(), document.getName());
         source.put(OpenSearchDocumentKey.name_suggest.toString(), FileUtils.removeFileExtension(document.getName()));
-        source.put(OpenSearchDocumentKey.extension.toString(), FileUtils.getFileExtension(document.getType(), document.getName()));
+        source.put(OpenSearchDocumentKey.extension.toString(), FileUtils.getDocumentExtension(document.getType(), document.getName()));
         source.put(OpenSearchDocumentKey.size.toString(), document.getSize());
         source.put(OpenSearchDocumentKey.parentId.toString(), document.getParentId());
         source.put(OpenSearchDocumentKey.createdAt.toString(), document.getCreatedAt().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));

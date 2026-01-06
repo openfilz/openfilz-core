@@ -71,7 +71,7 @@ public class DefaultDocumentSearchService implements DocumentSearchService {
         return new DocumentSearchInfo(
                 fullDoc.id(),
                 fullDoc.name(),
-                FileUtils.getFileExtension(fullDoc.type(), fullDoc.name()),
+                FileUtils.getDocumentExtension(fullDoc.type(), fullDoc.name()),
                 fullDoc.size(),
                 fullDoc.parentId(),
                 fullDoc.createdAt() != null ? fullDoc.createdAt().toString() : null,
