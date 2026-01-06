@@ -99,7 +99,7 @@ Bearer token → ReactiveJwtDecoder → SecurityService.authorize()
 ### Configuration
 ```yaml
 spring.security.oauth2.resourceserver.jwt:
-  issuer-uri: http://keycloak:8080/realms/...
+  jwk-set-uri: http://lcalhost:8080/realms/.../protocol/openid-connect/certs
 
 openfilz.security:
   no-auth: false
@@ -242,7 +242,7 @@ spring:
     pool: {initial-size: 5, max-size: 10}
   
   security.oauth2.resourceserver.jwt:
-    issuer-uri: http://keycloak:8080/...
+    jwk-set-uri: http://keycloak:8080/realms/.../protocol/openid-connect/certs
   
   graphql.http.path: /graphql/v1
   

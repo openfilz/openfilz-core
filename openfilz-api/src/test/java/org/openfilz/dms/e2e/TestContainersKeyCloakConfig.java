@@ -28,7 +28,7 @@ public abstract class TestContainersKeyCloakConfig extends TestContainersBaseCon
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED_VALUE)
                 .build()
                 .post()
-                .uri("/realms/your-realm/protocol/openid-connect/token")
+                .uri("/realms/openfilz/protocol/openid-connect/token")
                 .body(
                         BodyInserters.fromFormData("grant_type", "password")
                                 .with("client_id", "test-client")
