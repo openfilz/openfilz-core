@@ -57,6 +57,7 @@ jobs:
           mirrors: |
             [{
                "id": "central",
+               "name": "central-mirror",
                "mirrorOf": "central",
                "url": "https://repo1.maven.org/maven2"
             }]
