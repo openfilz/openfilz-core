@@ -506,13 +506,13 @@
                     <plugin>
                         <groupId>com.google.cloud.tools</groupId>
                         <artifactId>jib-maven-plugin</artifactId>
-                        <version>3.4.6</version>
+                        <version>3.5.1</version>
                         <configuration>
                             <container>
                                 <mainClass>org.openfilz.dms.DmsApiApplication</mainClass>
                             </container>
                             <from>
-                                <image>eclipse-temurin:25_36-jdk-noble</image>
+                                <image>eclipse-temurin:25-jre-noble</image>
                             </from>
                             <to>
                                 <image>${registry.hostname}:${registry.port}/${docker.context.path}${project.artifactId}</image>
