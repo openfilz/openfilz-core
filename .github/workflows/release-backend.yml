@@ -72,7 +72,7 @@ jobs:
             ${{ runner.os }}-maven-
 
       - name: Extract Maven project version
-        run: echo "version=$(mvn -q -Dexec.executable=echo -Dexec.args='${project.version}' --non-recursive exec:exec)" >> $GITHUB_OUTPUT
+        run: echo "version=$(mvn -s settings.xml -Dmaven.wagon.http.retryHandler.count=3 -q -Dexec.executable=echo -Dexec.args='${project.version}' --non-recursive exec:exec)" >> $GITHUB_OUTPUT
         id: project
 
       - name: Remove SNAPSHOT from version
