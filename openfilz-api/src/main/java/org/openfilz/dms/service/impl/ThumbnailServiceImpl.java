@@ -16,7 +16,9 @@ import org.openfilz.dms.utils.ImageUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
+import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.http.MediaType;
@@ -25,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriComponentsBuilder;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.retry.Retry;
@@ -40,6 +43,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -70,11 +76,12 @@ import static org.openfilz.dms.config.RestApiVersion.ENDPOINT_THUMBNAILS;
  * 4. Store thumbnail via ThumbnailStorageService
  * <p>
  * Flow for Office documents:
- * 1. Stream document from storage directly to Gotenberg (no byte array in memory)
+ * 1. Stream document from storage directly to Gotenberg
  * 2. Gotenberg converts to PDF using LibreOffice
- * 3. Use PDFBox to render first page as image
- * 4. Resize to thumbnail dimensions
- * 5. Store thumbnail via ThumbnailStorageService
+ * 3. Send PDF to Gotenberg split endpoint to extract only first page
+ * 4. Use PDFBox to render first page as image (small single-page PDF)
+ * 5. Resize to thumbnail dimensions
+ * 6. Store thumbnail via ThumbnailStorageService
  * <p>
  * Flow for text files:
  * 1. Read first N lines from storage (streaming, memory-efficient)
@@ -131,9 +138,13 @@ public class ThumbnailServiceImpl implements ThumbnailService {
                 log.debug("Using PDFBox for document: {} (type: {})", document.getId(), document.getContentType());
                 thumbnailBytes = renderPdfThumbnailFromStorage(document.getStoragePath());
             } else if (thumbnailProperties.shouldUseGotenberg(document.getContentType())) {
-                // Office documents: use Gotenberg + PDFBox
+                // Office documents: use Gotenberg (convert + split) + PDFBox
+                // 1. Convert Office doc to PDF via LibreOffice (stream to temp file)
+                // 2. Split PDF to extract only first page (stream from temp file)
+                // 3. Render first page to thumbnail with PDFBox
+                // Note: Full PDF is never loaded into memory - uses temp file as intermediate storage
                 log.debug("Using Gotenberg for document: {} (type: {})", document.getId(), document.getContentType());
-                thumbnailBytes = convertToPdfWithGotenbergStreaming(document.getStoragePath(), document.getName())
+                thumbnailBytes = convertAndExtractFirstPageWithGotenberg(document.getStoragePath(), document.getName())
                         .flatMap(this::renderPdfThumbnail);
             } else if (thumbnailProperties.shouldUseTextRenderer(document.getContentType())) {
                 // Text files: use Java 2D text rendering
@@ -199,55 +210,137 @@ public class ThumbnailServiceImpl implements ThumbnailService {
     }
 
     /**
-     * Converts Office document to PDF using Gotenberg's LibreOffice endpoint.
-     * Streams the Resource directly to Gotenberg without loading entire file into memory.
+     * Converts Office document to PDF and extracts only the first page.
+     * Uses temp file to avoid loading full PDF into memory:
+     * 1. Stream document to Gotenberg for LibreOffice conversion
+     * 2. Stream PDF response directly to temp file (not into byte[])
+     * 3. Stream temp file to Gotenberg split endpoint to extract page 1
+     * 4. Return only the single-page PDF (small, safe to hold in memory)
+     * 5. Clean up temp file
      *
      * @param storagePath Path to the document in storage
      * @param filename    Original filename (needed by Gotenberg for format detection)
-     * @return Mono containing the converted PDF bytes
+     * @return Mono containing the first page as PDF bytes
      */
-    private Mono<byte[]> convertToPdfWithGotenbergStreaming(String storagePath, String filename) {
+    private Mono<byte[]> convertAndExtractFirstPageWithGotenberg(String storagePath, String filename) {
         return storageService.loadFile(storagePath)
             .flatMap(resource -> {
-                log.debug("Streaming document to Gotenberg for PDF conversion: {}", filename);
+                log.debug("Converting document to PDF with Gotenberg: {}", filename);
 
-                // Buffer the resource content to a byte array to support retries
-                // and avoid InputStreamResource read-once limitation (especially with MinIO)
+                // Buffer the source document to support retries (source doc is usually small compared to PDF)
                 return DataBufferUtils.join(DataBufferUtils.read(resource, new DefaultDataBufferFactory(), 8192))
                     .map(dataBuffer -> {
                         byte[] bytes = new byte[dataBuffer.readableByteCount()];
                         dataBuffer.read(bytes);
                         DataBufferUtils.release(dataBuffer);
                         return bytes;
-                    })
-                    .flatMap(documentBytes -> {
-                        // Create a ByteArrayResource with the correct filename for Gotenberg
-                        Resource namedResource = new NamedByteArrayResource(documentBytes, filename);
-
-                        // Build multipart body with the buffered resource
-                        MultipartBodyBuilder builder = new MultipartBodyBuilder();
-                        builder.part("files", namedResource)
-                            .contentType(MediaType.APPLICATION_OCTET_STREAM);
-
-                        // Request only first page for thumbnail
-                        builder.part("nativePageRanges", "1");
-
-                        return getGotenbergClient()
-                            .post()
-                            .uri("/forms/libreoffice/convert")
-                            .contentType(MediaType.MULTIPART_FORM_DATA)
-                            .body(BodyInserters.fromMultipartData(builder.build()))
-                            .retrieve()
-                            .bodyToMono(byte[].class)
-                            .timeout(Duration.ofSeconds(thumbnailProperties.getGotenberg().getTimeoutSeconds()))
-                            .retryWhen(Retry.backoff(2, Duration.ofSeconds(2))
-                                .maxBackoff(Duration.ofSeconds(10))
-                                .doBeforeRetry(signal ->
-                                    log.warn("Retrying Gotenberg request, attempt {}", signal.totalRetries() + 1)))
-                            .doOnSuccess(pdf -> log.debug("Gotenberg conversion complete, PDF size: {} bytes", pdf.length))
-                            .doOnError(e -> log.error("Gotenberg conversion failed: {}", e.getMessage()));
                     });
+            })
+            .flatMap(documentBytes -> {
+                // Create temp file for PDF output
+                final Path tempPdfPath;
+                try {
+                    tempPdfPath = Files.createTempFile("gotenberg-convert-", ".pdf");
+                    log.debug("Created temp file for PDF: {}", tempPdfPath);
+                } catch (IOException e) {
+                    return Mono.error(new RuntimeException("Failed to create temp file for PDF conversion", e));
+                }
+
+                // Build multipart request for LibreOffice conversion
+                Resource namedResource = new NamedByteArrayResource(documentBytes, filename);
+                MultipartBodyBuilder builder = new MultipartBodyBuilder();
+                builder.part("files", namedResource)
+                    .contentType(MediaType.APPLICATION_OCTET_STREAM);
+
+                // Step 1: Convert to PDF and stream response to temp file
+                return getGotenbergClient()
+                    .post()
+                    .uri("/forms/libreoffice/convert")
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .body(BodyInserters.fromMultipartData(builder.build()))
+                    .retrieve()
+                    .bodyToFlux(DataBuffer.class)
+                    .flatMap(dataBuffer -> writeDataBufferToFile(dataBuffer, tempPdfPath))
+                    .then(Mono.defer(() -> {
+                        // Log the size of the converted PDF
+                        try {
+                            long pdfSize = Files.size(tempPdfPath);
+                            log.debug("Gotenberg conversion complete, PDF written to temp file: {} bytes", pdfSize);
+                        } catch (IOException ignored) {}
+
+                        // Step 2: Stream temp file to split endpoint to extract first page
+                        return extractFirstPageFromTempFile(tempPdfPath);
+                    }))
+                    .timeout(Duration.ofSeconds(thumbnailProperties.getGotenberg().getTimeoutSeconds() * 2)) // Allow time for both operations
+                    .doFinally(signal -> {
+                        // Clean up temp file
+                        try {
+                            Files.deleteIfExists(tempPdfPath);
+                            log.debug("Deleted temp file: {}", tempPdfPath);
+                        } catch (IOException e) {
+                            log.warn("Failed to delete temp file: {}", tempPdfPath, e);
+                        }
+                    })
+                    .doOnError(e -> log.error("Gotenberg convert+split failed: {}", e.getMessage()));
             });
+    }
+
+    /**
+     * Writes a DataBuffer to a file path, then releases the buffer.
+     */
+    private Mono<Void> writeDataBufferToFile(DataBuffer dataBuffer, Path filePath) {
+        return Mono.fromCallable(() -> {
+            try (var channel = Files.newOutputStream(filePath, StandardOpenOption.APPEND)) {
+                byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                dataBuffer.read(bytes);
+                channel.write(bytes);
+                return null;
+            } finally {
+                DataBufferUtils.release(dataBuffer);
+            }
+        }).subscribeOn(Schedulers.boundedElastic()).then();
+    }
+
+    /**
+     * Extracts only the first page from a PDF file using Gotenberg's split endpoint.
+     * Streams directly from file without loading entire PDF into memory.
+     *
+     * @param pdfPath Path to the PDF temp file
+     * @return Mono containing only the first page as PDF bytes
+     */
+    private Mono<byte[]> extractFirstPageFromTempFile(Path pdfPath) {
+        log.debug("Extracting first page from temp PDF file: {}", pdfPath);
+
+        // Use FileSystemResource to stream from file
+        FileSystemResource pdfResource = new FileSystemResource(pdfPath);
+
+        MultipartBodyBuilder builder = new MultipartBodyBuilder();
+        builder.part("files", pdfResource)
+            .filename("document.pdf")
+            .contentType(MediaType.APPLICATION_PDF);
+
+        // Use "pages" mode to extract specific pages
+        builder.part("splitMode", "pages");
+        // Extract only page 1
+        builder.part("splitSpan", "1");
+        // Unify into a single PDF (not a ZIP)
+        builder.part("splitUnify", "true");
+
+        return getGotenbergClient()
+            .post()
+            .uri("/forms/pdfengines/split")
+            .contentType(MediaType.MULTIPART_FORM_DATA)
+            .body(BodyInserters.fromMultipartData(builder.build()))
+            .retrieve()
+            .bodyToMono(byte[].class)
+            .timeout(Duration.ofSeconds(thumbnailProperties.getGotenberg().getTimeoutSeconds()))
+            .doOnSuccess(pdf -> {
+                try {
+                    long originalSize = Files.size(pdfPath);
+                    log.debug("First page extracted: {} bytes (was {} bytes)", pdf.length, originalSize);
+                } catch (IOException ignored) {}
+            })
+            .doOnError(e -> log.error("Gotenberg split failed: {}", e.getMessage()));
     }
 
     /**
