@@ -65,6 +65,8 @@ logging:
   level:
     org.openfilz: DEBUG
     io.r2dbc.postgresql.QUERY: DEBUG # for queries
+    org.apache.pdfbox: ERROR
+    org.apache.fontbox: ERROR
     # io.r2dbc.postgresql.PARAM: DEBUG # for parameters
     # org.springframework.security: TRACE
 
