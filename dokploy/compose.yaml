@@ -39,7 +39,7 @@ services:
     networks:
       - dokploy-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-dms_user} -d ${DB_NAME:-dms_db}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-dms_user} -d ${DB_NAME:-dms_db} && pg_isready -U ${DB_USER:-dms_user} -d ${KEYCLOAK_DB_NAME:-keycloak_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -54,7 +54,7 @@ services:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-dms_db}
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${KEYCLOAK_DB_NAME:-keycloak_db}
       KC_DB_USERNAME: ${DB_USER:-dms_user}
       KC_DB_PASSWORD: ${DB_PASSWORD:-dms_password}
       # Hostname configuration - set to your Keycloak domain
@@ -124,6 +124,7 @@ services:
   openfilz-api:
     image: ${OPENFILZ_API_IMAGE:-ghcr.io/openfilz/openfilz-api:latest}
     restart: unless-stopped
+    pull_policy: always
     depends_on:
       postgres:
         condition: service_healthy
@@ -191,6 +192,7 @@ services:
   openfilz-web:
     image: ${OPENFILZ_WEB_IMAGE:-ghcr.io/openfilz/openfilz-web:latest}
     restart: unless-stopped
+    pull_policy: always
     depends_on:
       - openfilz-api
     environment:
