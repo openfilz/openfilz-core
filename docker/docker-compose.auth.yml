@@ -24,7 +24,7 @@ services:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-dms_db}
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${KEYCLOAK_DB_NAME:-keycloak_db}
       KC_DB_USERNAME: ${DB_USER:-dms_user}
       KC_DB_PASSWORD: ${DB_PASSWORD:-dms_password}
       # Public hostname - used for issuer URL in tokens and OIDC metadata
