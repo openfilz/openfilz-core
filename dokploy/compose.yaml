@@ -39,7 +39,7 @@ services:
     networks:
       - dokploy-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-dms_user} -d ${DB_NAME:-dms_db} && pg_isready -U ${DB_USER:-dms_user} -d ${KEYCLOAK_DB_NAME:-keycloak_db}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-dms_user} -d ${DB_NAME:-dms_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
