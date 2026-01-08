@@ -36,6 +36,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-dms_password}
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ../files/db-create.sql:/docker-entrypoint-initdb.d/init-keycloak-db.sql
     networks:
       - dokploy-network
     healthcheck:
