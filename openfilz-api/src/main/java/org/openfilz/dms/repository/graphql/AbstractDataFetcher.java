@@ -27,6 +27,7 @@ import static org.openfilz.dms.entity.SqlColumnMapping.*;
 public abstract class AbstractDataFetcher<T, R> implements SqlQueryUtils {
 
     protected static final Map<String, String> DOCUMENT_FIELD_SQL_MAP;
+    protected static final String DISTINCT = "distinct ";
 
     static {
         DOCUMENT_FIELD_SQL_MAP = buildFieldToColumnMap();
@@ -57,6 +58,8 @@ public abstract class AbstractDataFetcher<T, R> implements SqlQueryUtils {
     }
 
     protected String prefix = null;
+
+    protected boolean distinct = false;
 
     protected final DatabaseClient databaseClient;
     protected final DocumentMapper mapper;
@@ -91,7 +94,11 @@ public abstract class AbstractDataFetcher<T, R> implements SqlQueryUtils {
     }
 
     protected StringBuilder toSelect(List<String> fields) {
-        return new StringBuilder(SqlUtils.SELECT).append(String.join(SqlUtils.COMMA, prefix == null ? fields : fields.stream().map(s->prefix + s).toList()));
+        StringBuilder sb = new StringBuilder(SqlUtils.SELECT);
+        if(distinct) {
+            sb.append(DISTINCT);
+        }
+        return sb.append(String.join(SqlUtils.COMMA, prefix == null ? fields : fields.stream().map(s->prefix + s).toList()));
     }
 
     protected Document buildDocument(Readable row, List<String> fields) {

@@ -5,6 +5,7 @@ import graphql.schema.DataFetchingEnvironment;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.dto.request.ListFolderRequest;
 import org.openfilz.dms.dto.response.FullDocumentInfo;
+import org.openfilz.dms.entity.SqlColumnMapping;
 import org.openfilz.dms.mapper.DocumentMapper;
 import org.openfilz.dms.utils.SqlUtils;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -16,7 +17,6 @@ import reactor.core.publisher.Flux;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.openfilz.dms.entity.SqlColumnMapping.FAVORITE;
 import static org.openfilz.dms.utils.SqlUtils.FROM_DOCUMENTS;
 import static org.openfilz.dms.utils.SqlUtils.SPACE;
 
@@ -25,6 +25,10 @@ import static org.openfilz.dms.utils.SqlUtils.SPACE;
 @ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
 public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentInfo> {
 
+
+    protected static final String CASE_FOLDER = ", CASE WHEN type = 'FOLDER' THEN 0 ELSE 1 END as d_type";
+    protected static final String D_TYPE = "d_type";
+    protected static final String CASE_FAVORITE = ", CASE WHEN uf.doc_id IS NOT NULL THEN TRUE ELSE FALSE END as favorite";
 
     protected final ListFolderCriteria criteria;
 
@@ -46,7 +50,7 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
         List<String> sqlFields = getSqlFields(environment);
 
         // Check if isFavorite was requested
-        boolean includeIsFavorite = getSelectedFields(environment).anyMatch(f -> f.getName().equals("favorite"));
+        boolean includeIsFavorite = getSelectedFields(environment).anyMatch(f -> f.getName().equals(SqlColumnMapping.FAVORITE));
 
         if(filter.pageInfo() == null || filter.pageInfo().pageSize() == null || filter.pageInfo().pageNumber() == null) {
             throw new IllegalArgumentException("Paging information must be provided");
@@ -62,7 +66,7 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
         log.debug("GraphQL - SQL query : {}", query);
         if(includeIsFavorite) {
             List<String> newFieldsList = new ArrayList<>(sqlFields);
-            newFieldsList.add(FAVORITE);
+            newFieldsList.add(SqlColumnMapping.FAVORITE);
             return getDocuments(sqlQuery, newFieldsList);
         }
         return getDocuments(sqlQuery, sqlFields);
@@ -76,8 +80,9 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
         StringBuilder sb = toSelect(sqlFields);
         // Add isFavorite as computed field if requested
         if (includeIsFavorite || (favoriteFilter != null && !favoriteFilter)) {
-            sb.append(", CASE WHEN uf.doc_id IS NOT NULL THEN TRUE ELSE FALSE END as favorite");
+            sb.append(CASE_FAVORITE);
         }
+        sb.append(CASE_FOLDER);
         sb.append(fromClause);
         appendRemainingFromClause(includeIsFavorite, favoriteFilter, sb);
         return sb;
@@ -95,7 +100,7 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
     }
 
     public void applySort(StringBuilder query, ListFolderRequest request) {
-        query.append(SqlUtils.ORDER_BY).append("CASE WHEN type = 'FOLDER' THEN 0 ELSE 1 END");
+        query.append(SqlUtils.ORDER_BY).append(D_TYPE);
         if(request.pageInfo().sortBy() != null) {
             query.append(", ");
             appendSort(query, request);
