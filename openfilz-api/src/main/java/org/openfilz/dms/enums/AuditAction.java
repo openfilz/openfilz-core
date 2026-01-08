@@ -19,6 +19,9 @@ public enum AuditAction {
     DOWNLOAD_DOCUMENT,
     DELETE_DOCUMENT_METADATA,
     SHARE_DOCUMENTS,
+    SHARE_DOCUMENT_CREATE,
+    SHARE_DOCUMENT_UPDATE,
+    SHARE_DOCUMENT_DELETE,
     // Recycle bin actions
     RESTORE_FILE, // Restore file from recycle bin
     RESTORE_FOLDER, // Restore folder from recycle bin

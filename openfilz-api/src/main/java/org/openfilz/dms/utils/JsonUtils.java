@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.r2dbc.postgresql.codec.Json;
 import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.dto.audit.AuditLogDetails;
+import org.openfilz.dms.dto.audit.IAuditLogDetails;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -58,7 +59,7 @@ public class JsonUtils {
         return sneakyConvertValue(json.asString(), AuditLogDetails.class);
     }
 
-    public Json toJson(AuditLogDetails details) {
+    public Json toJson(IAuditLogDetails details) {
         return sneakyToJson(details);
     }
 

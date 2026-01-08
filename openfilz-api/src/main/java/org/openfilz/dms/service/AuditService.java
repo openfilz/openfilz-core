@@ -2,7 +2,7 @@
 package org.openfilz.dms.service;
 
 import org.openfilz.dms.dto.audit.AuditLog;
-import org.openfilz.dms.dto.audit.AuditLogDetails;
+import org.openfilz.dms.dto.audit.IAuditLogDetails;
 import org.openfilz.dms.dto.request.SearchByAuditLogRequest;
 import org.openfilz.dms.enums.AuditAction;
 import org.openfilz.dms.enums.DocumentType;
@@ -13,7 +13,7 @@ import reactor.core.publisher.Mono;
 import java.util.UUID;
 
 public interface AuditService {
-    Mono<Void> logAction(AuditAction action, DocumentType resourceType, UUID resourceId, AuditLogDetails details);
+    Mono<Void> logAction(AuditAction action, DocumentType resourceType, UUID resourceId, IAuditLogDetails details);
 
     Mono<Void> logAction(AuditAction action, DocumentType resourceType, UUID resourceId);
 
