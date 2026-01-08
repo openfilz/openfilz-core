@@ -26,7 +26,7 @@ import static org.openfilz.dms.utils.SqlUtils.SPACE;
 public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentInfo> {
 
 
-    protected static final String CASE_FOLDER = ", CASE WHEN type = 'FOLDER' THEN 0 ELSE 1 END as d_type";
+    public static final String CASE_FOLDER = ", CASE WHEN type = 'FOLDER' THEN 0 ELSE 1 END as d_type";
     protected static final String D_TYPE = "d_type";
     protected static final String CASE_FAVORITE = ", CASE WHEN uf.doc_id IS NOT NULL THEN TRUE ELSE FALSE END as favorite";
 
@@ -100,14 +100,18 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
     }
 
     public void applySort(StringBuilder query, ListFolderRequest request) {
-        query.append(SqlUtils.ORDER_BY).append(D_TYPE);
+        prepareSort(query).append(D_TYPE);
         if(request.pageInfo().sortBy() != null) {
             query.append(", ");
             appendSort(query, request);
         }
     }
 
-    private void appendSort(StringBuilder query, ListFolderRequest request) {
+    public StringBuilder prepareSort(StringBuilder query) {
+        return query.append(SqlUtils.ORDER_BY);
+    }
+
+    public void appendSort(StringBuilder query, ListFolderRequest request) {
         query.append(getSortByField(request));
         if(request.pageInfo().sortOrder() != null) {
             query.append(SPACE).append(request.pageInfo().sortOrder());
