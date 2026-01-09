@@ -61,13 +61,13 @@ public abstract class AbstractDataFetcher<T, R> implements SqlQueryUtils {
                 .toList();
     }
 
-    protected StringBuilder toSelect(List<String> fields) {
+    protected StringBuilder toSelect(List<String> sqlFields) {
         StringBuilder sb = new StringBuilder(SqlUtils.SELECT);
-        return sb.append(String.join(SqlUtils.COMMA, prefix == null ? fields : getFieldsToInclude(fields).map(s->prefix + s).toList()));
+        return sb.append(String.join(SqlUtils.COMMA, prefix == null ? sqlFields : getFieldsToInclude(sqlFields).map(s->prefix + s).toList()));
     }
 
-    protected Stream<String> getFieldsToInclude(List<String> fields) {
-        return fields.stream();
+    protected Stream<String> getFieldsToInclude(List<String> sqlFields) {
+        return sqlFields.stream();
     }
 
     protected Document buildDocument(Readable row, List<String> fields) {

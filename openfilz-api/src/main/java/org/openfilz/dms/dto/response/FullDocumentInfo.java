@@ -23,6 +23,6 @@ public record FullDocumentInfo(
         @Schema(description = "Creation user") String createdBy,
         @Schema(description = "Last update user") String updatedBy,
         @Schema(description = "Whether this document is favorited by the current user") Boolean favorite,
-        @Schema(description = "Whether this document is shared") Boolean shared,
+        @Schema(description = "Whether this document is a root share") Boolean rootShare,
         @Schema(description = "Whether this document is shared in edit mode") Boolean sharedEdit) {
 }

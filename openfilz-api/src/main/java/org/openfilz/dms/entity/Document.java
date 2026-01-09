@@ -68,7 +68,7 @@ public class Document implements SqlColumnMapping, PhysicalDocument {
     private Boolean favorite; // Not stored in database, populated from JOIN
 
     @Transient
-    private Boolean shared; // Not stored in database, populated from JOIN
+    private Boolean rootShare; // Not stored in database, populated from JOIN
 
     @Transient
     private Boolean sharedEdit; // Not stored in database, populated from JOIN
