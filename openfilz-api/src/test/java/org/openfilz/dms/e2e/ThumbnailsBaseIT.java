@@ -585,7 +585,17 @@ public abstract class ThumbnailsBaseIT extends TestContainersBaseConfig {
                 .returnResult(byte[].class);
 
         if (result.getStatus().is2xxSuccessful()) {
-            return result.getResponseBody().blockFirst();
+            return result.getResponseBody()
+                    .reduce(new ByteArrayOutputStream(), (out, chunk) -> {
+                        try {
+                            out.write(chunk);
+                            return out;
+                        } catch (IOException e) {
+                            throw new UncheckedIOException(e);
+                        }
+                    })
+                    .map(ByteArrayOutputStream::toByteArray)
+                    .block();
         }
         return null;
     }

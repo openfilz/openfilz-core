@@ -24,7 +24,7 @@ services:
   # PostgreSQL Database
   # =============================================================================
   postgres:
-    image: ${POSTGRES_IMAGE:-postgres:16}
+    image: ${POSTGRES_IMAGE:-postgres:18.1}
     container_name: openfilz-postgres
     restart: unless-stopped
     environment:
@@ -50,6 +50,7 @@ services:
     image: ${OPENFILZ_API_IMAGE:-ghcr.io/openfilz/openfilz-api:latest}
     container_name: openfilz-api
     restart: unless-stopped
+    pull_policy: always
     depends_on:
       postgres:
         condition: service_healthy
@@ -99,6 +100,7 @@ services:
   openfilz-web:
     image: ${OPENFILZ_WEB_IMAGE:-ghcr.io/openfilz/openfilz-web:latest}
     container_name: openfilz-web
+    pull_policy: always
     restart: unless-stopped
     depends_on:
       - openfilz-api

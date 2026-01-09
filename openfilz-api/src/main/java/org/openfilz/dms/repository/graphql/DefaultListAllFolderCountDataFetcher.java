@@ -16,8 +16,8 @@ import java.util.List;
 @ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
 public class DefaultListAllFolderCountDataFetcher extends ListFolderCountDataFetcher implements ListAllFolderCountDataFetcher {
 
-    public DefaultListAllFolderCountDataFetcher(DatabaseClient databaseClient, DocumentMapper mapper, ObjectMapper objectMapper, SqlUtils sqlUtils, @Qualifier("allFolders") ListAllFolderCriteria criteria) {
-        super(databaseClient, mapper, objectMapper, sqlUtils, criteria);
+    public DefaultListAllFolderCountDataFetcher(DatabaseClient databaseClient, DocumentMapper mapper, ObjectMapper objectMapper, SqlUtils sqlUtils, @Qualifier("allFolders") ListAllFolderCriteria criteria, DocumentFields documentFields) {
+        super(databaseClient, mapper, objectMapper, sqlUtils, criteria, documentFields);
     }
 
     @Override

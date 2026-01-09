@@ -6,14 +6,12 @@ import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.io.RandomAccessReadBuffer;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.PDFRenderer;
-import org.openfilz.dms.config.CommonProperties;
 import org.openfilz.dms.config.ThumbnailProperties;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.service.StorageService;
 import org.openfilz.dms.service.ThumbnailService;
 import org.openfilz.dms.service.ThumbnailStorageService;
 import org.openfilz.dms.utils.ImageUtils;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.FileSystemResource;
@@ -26,36 +24,21 @@ import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.util.UriComponentsBuilder;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-import reactor.util.retry.Retry;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
-import javax.imageio.*;
+import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
-import java.io.BufferedReader;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.security.InvalidKeyException;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
-import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
 import java.util.List;
-
-import static org.openfilz.dms.config.RestApiVersion.API_PREFIX;
-import static org.openfilz.dms.config.RestApiVersion.ENDPOINT_THUMBNAILS;
+import java.util.UUID;
 
 /**
  * Implementation of ThumbnailService that uses:
@@ -357,6 +340,7 @@ public class ThumbnailServiceImpl implements ThumbnailService {
                 }
 
                 PDFRenderer renderer = new PDFRenderer(document);
+                renderer.setSubsamplingAllowed(true);
                 // Render at 72 DPI for reasonable quality/speed trade-off
                 BufferedImage pageImage = renderer.renderImageWithDPI(0, 72);
 

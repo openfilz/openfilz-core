@@ -1,7 +1,6 @@
 package org.openfilz.dms.e2e;
 
 import lombok.RequiredArgsConstructor;
-import org.jetbrains.annotations.NotNull;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.CreateFolderRequest;
 import org.openfilz.dms.dto.request.MultipleUploadFileParameter;
@@ -39,7 +38,7 @@ public abstract class TestContainersBaseConfig {
     protected String baseGraphQlHttpPath;
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:17").withReuse(true);
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.1").withReuse(true);
 
     protected final WebTestClient webTestClient;
     protected final Jackson2JsonEncoder customJackson2JsonEncoder;

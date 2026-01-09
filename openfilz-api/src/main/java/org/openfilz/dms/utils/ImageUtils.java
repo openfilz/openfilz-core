@@ -4,8 +4,8 @@ import com.luciad.imageio.webp.WebPWriteParam;
 import com.twelvemonkeys.imageio.metadata.CompoundDirectory;
 import com.twelvemonkeys.imageio.metadata.Directory;
 import com.twelvemonkeys.imageio.metadata.Entry;
-import com.twelvemonkeys.imageio.metadata.exif.EXIFReader;
-import com.twelvemonkeys.imageio.metadata.exif.TIFF;
+import com.twelvemonkeys.imageio.metadata.tiff.TIFF;
+import com.twelvemonkeys.imageio.metadata.tiff.TIFFReader;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
@@ -18,11 +18,7 @@ import javax.imageio.stream.MemoryCacheImageInputStream;
 import java.awt.*;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
-import java.io.BufferedInputStream;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.util.Iterator;
 
 @Slf4j
@@ -47,7 +43,7 @@ public class ImageUtils {
 
                 // 1. Check if JPEG and extract EXIF orientation (mark/reset to reuse stream)
                 bis.mark(EXIF_BUFFER_SIZE);
-                byte[] headerBuffer = readLimitedBytes(bis, EXIF_BUFFER_SIZE);
+                byte[] headerBuffer = readLimitedBytes(bis);
                 int orientation = readExifOrientationFromBytes(headerBuffer);
                 log.info("EXIF orientation detected: {}", orientation);
 
@@ -80,10 +76,10 @@ public class ImageUtils {
                 log.debug("Oriented image size: {}x{}", oriented.getWidth(), oriented.getHeight());
 
                 // 4. Resize to thumbnail
-                BufferedImage resized = resizeAndCrop(oriented, 100);
+                BufferedImage resized = resizeAndCrop(oriented);
 
                 // 5. Compress to WebP with target size
-                return compressWebpToTargetSize(resized, TARGET_MAX_BYTES);
+                return compressWebpToTargetSize(resized);
             }
         });
     }
@@ -91,13 +87,13 @@ public class ImageUtils {
     /**
      * Read up to maxBytes from the input stream without loading the entire stream.
      */
-    private static byte[] readLimitedBytes(InputStream is, int maxBytes) throws IOException {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream(maxBytes);
+    private static byte[] readLimitedBytes(InputStream is) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream(ImageUtils.EXIF_BUFFER_SIZE);
         byte[] buffer = new byte[8192];
         int totalRead = 0;
         int bytesRead;
 
-        while (totalRead < maxBytes && (bytesRead = is.read(buffer, 0, Math.min(buffer.length, maxBytes - totalRead))) != -1) {
+        while (totalRead < ImageUtils.EXIF_BUFFER_SIZE && (bytesRead = is.read(buffer, 0, Math.min(buffer.length, ImageUtils.EXIF_BUFFER_SIZE - totalRead))) != -1) {
             baos.write(buffer, 0, bytesRead);
             totalRead += bytesRead;
         }
@@ -191,7 +187,7 @@ public class ImageUtils {
              ImageInputStream iis = new MemoryCacheImageInputStream(bais)) {
 
             // Use TwelveMonkeys EXIFReader to parse the TIFF structure
-            EXIFReader exifReader = new EXIFReader();
+            TIFFReader exifReader = new TIFFReader();
             Directory directory = exifReader.read(iis);
 
             if (directory instanceof CompoundDirectory compoundDir) {
@@ -204,7 +200,7 @@ public class ImageUtils {
                         return orientation;
                     }
                 }
-            } else if (directory != null) {
+            } else {
                 Integer orientation = findOrientationInDirectory(directory);
                 if (orientation != null) {
                     return orientation;
@@ -240,7 +236,7 @@ public class ImageUtils {
      * Compress image to WebP format with target maximum size.
      * Uses LOSSY compression for better size control.
      */
-    private byte[] compressWebpToTargetSize(BufferedImage image, int maxBytes) throws IOException {
+    private byte[] compressWebpToTargetSize(BufferedImage image) throws IOException {
         BufferedImage rgbImage = convertToRgb(image);
 
         float[] qualityLevels = {0.85f, 0.75f, 0.65f, 0.55f, 0.45f, 0.35f, 0.25f, 0.15f, 0.05f};
@@ -248,12 +244,12 @@ public class ImageUtils {
         for (float quality : qualityLevels) {
             byte[] webp = writeWebpLossy(rgbImage, quality);
             log.debug("WebP at quality {}: {} bytes", quality, webp.length);
-            if (webp.length <= maxBytes) {
+            if (webp.length <= ImageUtils.TARGET_MAX_BYTES) {
                 return webp;
             }
         }
 
-        log.warn("Could not compress WebP to target size of {} bytes, returning smallest possible", maxBytes);
+        log.warn("Could not compress WebP to target size of {} bytes, returning smallest possible", ImageUtils.TARGET_MAX_BYTES);
         return writeWebpLossy(rgbImage, 0.01f);
     }
 
@@ -274,17 +270,17 @@ public class ImageUtils {
         return rgb;
     }
 
-    private BufferedImage resizeAndCrop(BufferedImage src, int maxSize) {
+    private BufferedImage resizeAndCrop(BufferedImage src) {
         int srcW = src.getWidth();
         int srcH = src.getHeight();
 
-        if (srcW <= maxSize && srcH <= maxSize) {
+        if (srcW <= 100 && srcH <= 100) {
             return src;
         }
 
         double scale = Math.min(
-                (double) maxSize / srcW,
-                (double) maxSize / srcH
+                (double) 100 / srcW,
+                (double) 100 / srcH
         );
 
         int targetW = (int) Math.round(srcW * scale);
@@ -306,7 +302,7 @@ public class ImageUtils {
 
     /**
      * Apply EXIF orientation transformation.
-     *
+     * <p>
      * EXIF Orientation values:
      * 1 = Normal (0° rotation)
      * 2 = Flip horizontal

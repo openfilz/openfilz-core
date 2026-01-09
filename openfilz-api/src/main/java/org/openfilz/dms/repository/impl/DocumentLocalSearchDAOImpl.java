@@ -49,7 +49,12 @@ public class DocumentLocalSearchDAOImpl implements DocumentLocalSearchDAO {
         Map<String, String> filterMap = documentSearchUtil.toFilterMap(filters);
         ListFolderRequest listFolderRequest =  documentSearchUtil.toListFolderRequest(query, filterMap, sort, 1, 10);
         boolean allFolders = applyFilters(filterMap, sqlQuery, listFolderRequest);
-        listFolderDataFetcher.applySort(sqlQuery, listFolderRequest);
+
+        if(listFolderRequest.pageInfo().sortBy() != null) {
+            listFolderDataFetcher.prepareSort(sqlQuery);
+            listFolderDataFetcher.appendSort(sqlQuery, listFolderRequest);
+        }
+
         listFolderDataFetcher.appendOffsetLimit(sqlQuery, listFolderRequest);
         DatabaseClient.GenericExecuteSpec sqlDbQuery = databaseClient.sql(sqlQuery.toString());
         if(allFolders) {

@@ -23,8 +23,8 @@ public class DocumentDataFetcher extends AbstractDataFetcher<UUID, FullDocumentI
 
     protected String fromDocumentsWhere;
 
-    public DocumentDataFetcher(DatabaseClient databaseClient, DocumentMapper mapper, ObjectMapper objectMapper, SqlUtils sqlUtils) {
-        super(databaseClient, mapper, objectMapper, sqlUtils);
+    public DocumentDataFetcher(DatabaseClient databaseClient, DocumentMapper mapper, ObjectMapper objectMapper, SqlUtils sqlUtils, DocumentFields documentFields) {
+        super(databaseClient, mapper, objectMapper, sqlUtils, documentFields);
     }
 
     @Override

@@ -36,6 +36,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-dms_password}
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ../files/db-create.sql:/docker-entrypoint-initdb.d/init-keycloak-db.sql
     networks:
       - dokploy-network
     healthcheck:
@@ -54,7 +55,7 @@ services:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-dms_db}
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${KEYCLOAK_DB_NAME:-keycloak_db}
       KC_DB_USERNAME: ${DB_USER:-dms_user}
       KC_DB_PASSWORD: ${DB_PASSWORD:-dms_password}
       # Hostname configuration - set to your Keycloak domain
@@ -124,6 +125,7 @@ services:
   openfilz-api:
     image: ${OPENFILZ_API_IMAGE:-ghcr.io/openfilz/openfilz-api:latest}
     restart: unless-stopped
+    pull_policy: always
     depends_on:
       postgres:
         condition: service_healthy
@@ -191,6 +193,7 @@ services:
   openfilz-web:
     image: ${OPENFILZ_WEB_IMAGE:-ghcr.io/openfilz/openfilz-web:latest}
     restart: unless-stopped
+    pull_policy: always
     depends_on:
       - openfilz-api
     environment:

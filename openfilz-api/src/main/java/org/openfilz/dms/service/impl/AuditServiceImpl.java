@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.dto.audit.AuditLog;
 import org.openfilz.dms.dto.audit.AuditLogDetails;
+import org.openfilz.dms.dto.audit.IAuditLogDetails;
 import org.openfilz.dms.dto.request.SearchByAuditLogRequest;
 import org.openfilz.dms.enums.AuditAction;
 import org.openfilz.dms.enums.DocumentType;
@@ -25,7 +26,7 @@ public class AuditServiceImpl implements AuditService {
     private final AuditDAO auditDAO;
 
     @Override
-    public Mono<Void> logAction(AuditAction action, DocumentType resourceType, UUID resourceId, AuditLogDetails details) {
+    public Mono<Void> logAction(AuditAction action, DocumentType resourceType, UUID resourceId, IAuditLogDetails details) {
         return auditDAO.logAction(action, resourceType, resourceId, details);
     }
 

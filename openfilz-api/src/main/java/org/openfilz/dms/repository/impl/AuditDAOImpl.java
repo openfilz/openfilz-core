@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.dto.audit.AuditLog;
 import org.openfilz.dms.dto.audit.AuditLogDetails;
+import org.openfilz.dms.dto.audit.IAuditLogDetails;
 import org.openfilz.dms.dto.request.SearchByAuditLogRequest;
 import org.openfilz.dms.enums.AuditAction;
 import org.openfilz.dms.enums.DocumentType;
@@ -43,14 +44,17 @@ public class AuditDAOImpl implements AuditDAO, UserInfoService {
         String sql = "SELECT timestamp, user_principal, action, resource_type, details FROM audit_logs WHERE resource_id = :resourceId ORDER BY timestamp " + sort.toString();
         return databaseClient.sql(sql)
                 .bind("resourceId", resourceId)
-                .map(row -> new AuditLog(
-                        null,
-                        row.get("timestamp", OffsetDateTime.class),
-                        row.get("user_principal", String.class),
-                        AuditAction.valueOf(row.get("action", String.class)),
-                        DocumentType.valueOf(row.get("resource_type", String.class)),
-                        jsonUtils.toAudiLogDetails(row.get("details", Json.class))
-                )).all();
+                .map(row -> {
+                    String type = row.get("resource_type", String.class);
+                    return new AuditLog(
+                            null,
+                            row.get("timestamp", OffsetDateTime.class),
+                            row.get("user_principal", String.class),
+                            AuditAction.valueOf(row.get("action", String.class)),
+                            type != null ? DocumentType.valueOf(type) : null,
+                            jsonUtils.toAudiLogDetails(row.get("details", Json.class))
+                    );
+                }).all();
     }
 
     @Override
@@ -115,7 +119,7 @@ public class AuditDAOImpl implements AuditDAO, UserInfoService {
     }
 
     @Override
-    public Mono<Void> logAction(AuditAction action, DocumentType resourceType, UUID resourceId, AuditLogDetails details) {
+    public Mono<Void> logAction(AuditAction action, DocumentType resourceType, UUID resourceId, IAuditLogDetails details) {
         StringBuilder sql = new StringBuilder(AUDIT_INSERT_SQL);
         if (details != null) {
             sql.append(", details ").append(AUDIT_VALUES_SQL).append(", :det)");

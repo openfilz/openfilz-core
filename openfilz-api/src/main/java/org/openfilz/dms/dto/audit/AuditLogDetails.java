@@ -19,7 +19,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
         @JsonSubTypes.Type(value = UploadAudit.class, name = AuditLogDetails.UPLOAD)
 
 })
-public abstract class AuditLogDetails {
+public abstract class AuditLogDetails implements IAuditLogDetails {
 
     public static final String DISCRIMINATOR = "type";
 

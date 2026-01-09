@@ -5,6 +5,7 @@ import graphql.schema.DataFetchingEnvironment;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.dto.request.ListFolderRequest;
 import org.openfilz.dms.dto.response.FullDocumentInfo;
+import org.openfilz.dms.entity.SqlColumnMapping;
 import org.openfilz.dms.mapper.DocumentMapper;
 import org.openfilz.dms.utils.SqlUtils;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -16,7 +17,6 @@ import reactor.core.publisher.Flux;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.openfilz.dms.entity.SqlColumnMapping.FAVORITE;
 import static org.openfilz.dms.utils.SqlUtils.FROM_DOCUMENTS;
 import static org.openfilz.dms.utils.SqlUtils.SPACE;
 
@@ -26,12 +26,16 @@ import static org.openfilz.dms.utils.SqlUtils.SPACE;
 public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentInfo> {
 
 
+    public static final String CASE_FOLDER = ", CASE WHEN type = 'FOLDER' THEN 0 ELSE 1 END as d_type";
+    protected static final String D_TYPE = "d_type";
+    protected static final String CASE_FAVORITE = ", CASE WHEN uf.doc_id IS NOT NULL THEN TRUE ELSE FALSE END as favorite";
+
     protected final ListFolderCriteria criteria;
 
     protected String fromClause;
 
-    public ListFolderDataFetcher(DatabaseClient databaseClient, DocumentMapper mapper, ObjectMapper objectMapper, SqlUtils sqlUtils, @Qualifier("defaultListFolderCriteria") ListFolderCriteria listFolderCriteria) {
-        super(databaseClient, mapper, objectMapper, sqlUtils);
+    public ListFolderDataFetcher(DatabaseClient databaseClient, DocumentMapper mapper, ObjectMapper objectMapper, SqlUtils sqlUtils, DocumentFields documentFields, @Qualifier("defaultListFolderCriteria") ListFolderCriteria listFolderCriteria) {
+        super(databaseClient, mapper, objectMapper, sqlUtils, documentFields);
         this.criteria = listFolderCriteria;
         this.prefix = "d.";
     }
@@ -46,7 +50,7 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
         List<String> sqlFields = getSqlFields(environment);
 
         // Check if isFavorite was requested
-        boolean includeIsFavorite = getSelectedFields(environment).anyMatch(f -> f.getName().equals("favorite"));
+        boolean includeIsFavorite = getSelectedFields(environment).anyMatch(f -> f.getName().equals(SqlColumnMapping.FAVORITE));
 
         if(filter.pageInfo() == null || filter.pageInfo().pageSize() == null || filter.pageInfo().pageNumber() == null) {
             throw new IllegalArgumentException("Paging information must be provided");
@@ -62,7 +66,7 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
         log.debug("GraphQL - SQL query : {}", query);
         if(includeIsFavorite) {
             List<String> newFieldsList = new ArrayList<>(sqlFields);
-            newFieldsList.add(FAVORITE);
+            newFieldsList.add(SqlColumnMapping.FAVORITE);
             return getDocuments(sqlQuery, newFieldsList);
         }
         return getDocuments(sqlQuery, sqlFields);
@@ -73,15 +77,21 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
     }
 
     protected StringBuilder getSelectRequest(List<String> sqlFields, boolean includeIsFavorite, Boolean favoriteFilter) {
-        StringBuilder sb = toSelect(sqlFields);
-        // Add isFavorite as computed field if requested
-        if (includeIsFavorite || (favoriteFilter != null && !favoriteFilter)) {
-            sb.append(", CASE WHEN uf.doc_id IS NOT NULL THEN TRUE ELSE FALSE END as favorite");
-        }
+        StringBuilder sb = getSelectFieldsPart(sqlFields, includeIsFavorite, favoriteFilter);
         sb.append(fromClause);
         appendRemainingFromClause(includeIsFavorite, favoriteFilter, sb);
         return sb;
 
+    }
+
+    protected StringBuilder getSelectFieldsPart(List<String> sqlFields, boolean includeIsFavorite, Boolean favoriteFilter) {
+        StringBuilder sb = toSelect(sqlFields);
+        // Add isFavorite as computed field if requested
+        if (includeIsFavorite || (favoriteFilter != null && !favoriteFilter)) {
+            sb.append(CASE_FAVORITE);
+        }
+        sb.append(CASE_FOLDER);
+        return sb;
     }
 
     protected void applyFilter(ListFolderRequest filter, String newPrefix, StringBuilder query) {
@@ -95,14 +105,18 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
     }
 
     public void applySort(StringBuilder query, ListFolderRequest request) {
-        query.append(SqlUtils.ORDER_BY).append("CASE WHEN type = 'FOLDER' THEN 0 ELSE 1 END");
+        prepareSort(query).append(D_TYPE);
         if(request.pageInfo().sortBy() != null) {
             query.append(", ");
             appendSort(query, request);
         }
     }
 
-    private void appendSort(StringBuilder query, ListFolderRequest request) {
+    public StringBuilder prepareSort(StringBuilder query) {
+        return query.append(SqlUtils.ORDER_BY);
+    }
+
+    public void appendSort(StringBuilder query, ListFolderRequest request) {
         query.append(getSortByField(request));
         if(request.pageInfo().sortOrder() != null) {
             query.append(SPACE).append(request.pageInfo().sortOrder());
@@ -110,7 +124,7 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
     }
 
     private String getSortByField(ListFolderRequest request) {
-        String sortBy = DOCUMENT_FIELD_SQL_MAP.get(request.pageInfo().sortBy());
+        String sortBy = documentFields.getDocumentFieldSqlMap().get(request.pageInfo().sortBy());
         return prefix == null ? sortBy : prefix + sortBy;
     }
 
