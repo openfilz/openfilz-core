@@ -12,8 +12,9 @@ import static org.openfilz.dms.security.JwtTokenParser.EMAIL;
 
 public abstract class AbstractListDataFetcher<T> extends AbstractDataFetcher<ListFolderRequest, T> {
 
-    public AbstractListDataFetcher(DatabaseClient databaseClient, DocumentMapper mapper, ObjectMapper objectMapper, SqlUtils sqlUtils) {
-        super(databaseClient, mapper, objectMapper, sqlUtils);
+
+    public AbstractListDataFetcher(DatabaseClient databaseClient, DocumentMapper mapper, ObjectMapper objectMapper, SqlUtils sqlUtils, DocumentFields documentFields) {
+        super(databaseClient, mapper, objectMapper, sqlUtils, documentFields);
     }
 
     private void appendLeftJoin(StringBuilder sb) {

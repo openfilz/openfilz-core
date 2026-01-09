@@ -34,8 +34,8 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
 
     protected String fromClause;
 
-    public ListFolderDataFetcher(DatabaseClient databaseClient, DocumentMapper mapper, ObjectMapper objectMapper, SqlUtils sqlUtils, @Qualifier("defaultListFolderCriteria") ListFolderCriteria listFolderCriteria) {
-        super(databaseClient, mapper, objectMapper, sqlUtils);
+    public ListFolderDataFetcher(DatabaseClient databaseClient, DocumentMapper mapper, ObjectMapper objectMapper, SqlUtils sqlUtils, DocumentFields documentFields, @Qualifier("defaultListFolderCriteria") ListFolderCriteria listFolderCriteria) {
+        super(databaseClient, mapper, objectMapper, sqlUtils, documentFields);
         this.criteria = listFolderCriteria;
         this.prefix = "d.";
     }
@@ -77,16 +77,21 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
     }
 
     protected StringBuilder getSelectRequest(List<String> sqlFields, boolean includeIsFavorite, Boolean favoriteFilter) {
+        StringBuilder sb = getSelectFieldsPart(sqlFields, includeIsFavorite, favoriteFilter);
+        sb.append(fromClause);
+        appendRemainingFromClause(includeIsFavorite, favoriteFilter, sb);
+        return sb;
+
+    }
+
+    protected StringBuilder getSelectFieldsPart(List<String> sqlFields, boolean includeIsFavorite, Boolean favoriteFilter) {
         StringBuilder sb = toSelect(sqlFields);
         // Add isFavorite as computed field if requested
         if (includeIsFavorite || (favoriteFilter != null && !favoriteFilter)) {
             sb.append(CASE_FAVORITE);
         }
         sb.append(CASE_FOLDER);
-        sb.append(fromClause);
-        appendRemainingFromClause(includeIsFavorite, favoriteFilter, sb);
         return sb;
-
     }
 
     protected void applyFilter(ListFolderRequest filter, String newPrefix, StringBuilder query) {
@@ -119,7 +124,7 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
     }
 
     private String getSortByField(ListFolderRequest request) {
-        String sortBy = DOCUMENT_FIELD_SQL_MAP.get(request.pageInfo().sortBy());
+        String sortBy = documentFields.getDocumentFieldSqlMap().get(request.pageInfo().sortBy());
         return prefix == null ? sortBy : prefix + sortBy;
     }
 

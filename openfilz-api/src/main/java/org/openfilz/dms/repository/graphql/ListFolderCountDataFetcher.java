@@ -25,8 +25,8 @@ public class ListFolderCountDataFetcher  extends AbstractListDataFetcher<Long> {
 
     protected String distinctColumn = "id";
 
-    public ListFolderCountDataFetcher(DatabaseClient databaseClient, DocumentMapper mapper, ObjectMapper objectMapper, SqlUtils sqlUtils, @Qualifier("defaultListFolderCriteria") ListFolderCriteria criteria) {
-        super(databaseClient, mapper, objectMapper, sqlUtils);
+    public ListFolderCountDataFetcher(DatabaseClient databaseClient, DocumentMapper mapper, ObjectMapper objectMapper, SqlUtils sqlUtils, @Qualifier("defaultListFolderCriteria") ListFolderCriteria criteria, DocumentFields documentFields) {
+        super(databaseClient, mapper, objectMapper, sqlUtils, documentFields);
         this.criteria = criteria;
         this.prefix = "d.";
     }
@@ -43,15 +43,7 @@ public class ListFolderCountDataFetcher  extends AbstractListDataFetcher<Long> {
     public Mono<Long> get(ListFolderRequest filter, DataFetchingEnvironment environment) {
         DatabaseClient.GenericExecuteSpec sqlQuery;
         StringBuilder query = new StringBuilder(SqlUtils.SELECT);
-        if(distinct) {
-            query.append("count(").append(DISTINCT);
-            if(this.prefix != null) {
-                query.append(this.prefix);
-            }
-            query.append(distinctColumn).append(") ");
-        } else {
-            query.append(COUNT);
-        }
+        query.append(COUNT);
         query.append(fromClause);
         if(filter != null && filter.favorite() != null) {
             appendRemainingFromClause(false, filter.favorite(), query);
