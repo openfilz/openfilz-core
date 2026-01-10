@@ -26,6 +26,8 @@ import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import reactor.util.retry.Retry;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
@@ -235,7 +237,8 @@ public class ThumbnailServiceImpl implements ThumbnailService {
                 builder.part("files", namedResource)
                     .contentType(MediaType.APPLICATION_OCTET_STREAM);
 
-                // Step 1: Convert to PDF and stream response to temp file
+                // Step 1: Convert to PDF and stream response to temp file (with retry)
+                ThumbnailProperties.Gotenberg.Retry retryConfig = thumbnailProperties.getGotenberg().getRetry();
                 return getGotenbergClient()
                     .post()
                     .uri("/forms/libreoffice/convert")
@@ -244,6 +247,24 @@ public class ThumbnailServiceImpl implements ThumbnailService {
                     .retrieve()
                     .bodyToFlux(DataBuffer.class)
                     .flatMap(dataBuffer -> writeDataBufferToFile(dataBuffer, tempPdfPath))
+                    .then()
+                    .retryWhen(Retry.backoff(retryConfig.getMaxAttempts(), Duration.ofMillis(retryConfig.getBackoffInitialDelayMs()))
+                        .maxBackoff(Duration.ofMillis(retryConfig.getBackoffMaxDelayMs()))
+                        .filter(throwable -> throwable instanceof WebClientResponseException.ServiceUnavailable
+                                || throwable instanceof WebClientResponseException.InternalServerError
+                                || throwable instanceof WebClientResponseException.BadGateway
+                                || throwable instanceof WebClientResponseException.GatewayTimeout)
+                        .doBeforeRetry(retrySignal -> {
+                            log.warn("Gotenberg convert API failed (attempt {}), retrying: {}",
+                                retrySignal.totalRetries() + 1, retrySignal.failure().getMessage());
+                            // Clear temp file for retry
+                            try {
+                                Files.deleteIfExists(tempPdfPath);
+                                Files.createFile(tempPdfPath);
+                            } catch (IOException e) {
+                                log.warn("Failed to reset temp file for retry: {}", e.getMessage());
+                            }
+                        }))
                     .then(Mono.defer(() -> {
                         // Log the size of the converted PDF
                         try {
@@ -309,6 +330,7 @@ public class ThumbnailServiceImpl implements ThumbnailService {
         // Unify into a single PDF (not a ZIP)
         builder.part("splitUnify", "true");
 
+        ThumbnailProperties.Gotenberg.Retry retryConfig = thumbnailProperties.getGotenberg().getRetry();
         return getGotenbergClient()
             .post()
             .uri("/forms/pdfengines/split")
@@ -317,6 +339,14 @@ public class ThumbnailServiceImpl implements ThumbnailService {
             .retrieve()
             .bodyToMono(byte[].class)
             .timeout(Duration.ofSeconds(thumbnailProperties.getGotenberg().getTimeoutSeconds()))
+            .retryWhen(Retry.backoff(retryConfig.getMaxAttempts(), Duration.ofMillis(retryConfig.getBackoffInitialDelayMs()))
+                .maxBackoff(Duration.ofMillis(retryConfig.getBackoffMaxDelayMs()))
+                .filter(throwable -> throwable instanceof WebClientResponseException.ServiceUnavailable
+                        || throwable instanceof WebClientResponseException.InternalServerError
+                        || throwable instanceof WebClientResponseException.BadGateway
+                        || throwable instanceof WebClientResponseException.GatewayTimeout)
+                .doBeforeRetry(retrySignal -> log.warn("Gotenberg split API failed (attempt {}), retrying: {}",
+                    retrySignal.totalRetries() + 1, retrySignal.failure().getMessage())))
             .doOnSuccess(pdf -> {
                 try {
                     long originalSize = Files.size(pdfPath);
