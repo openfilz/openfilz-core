@@ -157,7 +157,7 @@ services:
       API_ROOT_URL: https://${API_HOSTNAME:-api.yourdomain.com}/
 
       # Server configuration
-      SERVER_PORT: 8081
+      SERVER_PORT: 8080
 
       # Java options
       JAVA_OPTS: ${JAVA_OPTS:--Xmx512m -Xms256m}
@@ -187,7 +187,7 @@ services:
       - "traefik.http.routers.openfilz-api.rule=Host(`${API_HOSTNAME:-api.openfilz.org}`)"
       - "traefik.http.routers.openfilz-api.entrypoints=websecure"
       - "traefik.http.routers.openfilz-api.tls.certResolver=letsencrypt"
-      - "traefik.http.services.openfilz-api.loadbalancer.server.port=8081"
+      - "traefik.http.services.openfilz-api.loadbalancer.server.port=8080"
 
   # =============================================================================
   # OpenFilz Web (Frontend)
