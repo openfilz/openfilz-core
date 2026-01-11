@@ -83,7 +83,7 @@ services:
       retries: 5
       start_period: 120s
     labels:
-      - "traefik.http.routers.openfilz-keycloak.service=keycloak"
+      - "traefik.http.routers.openfilz-keycloak.service=openfilz-keycloak"
       - "traefik.enable=true"
       - "traefik.http.routers.openfilz-keycloak.rule=Host(`${KEYCLOAK_HOSTNAME:-keycloak.yourdomain.com}`)"
       - "traefik.http.routers.openfilz-keycloak.entrypoints=websecure"
