@@ -96,14 +96,6 @@ services:
   onlyoffice:
     image: onlyoffice/documentserver:latest
     restart: unless-stopped
-    entrypoint:
-      - "sh"
-      - "-c"
-      - |
-        echo 'patching https://github.com/ONLYOFFICE/DocumentServer/issues/2186...'
-        find /var/www/onlyoffice/documentserver -name sdk-all-min.js -exec sed -E -i 's|(function +\w+\(\w+\) *\{ *function +\w+\(\)) *\{ *(\w+)\.open\((\w+),(\w+),(\w+)\);|\1{\nif (\4 \&\& \4.length > 5) {if (\4.substring(0, 5) == "http:") {\4 = \4.replace("http://", "https://");}};\n\2.open(\3,\4,\5);\n|' '{}' ';'
-        echo 'done! starting server...'
-        /app/ds/run-document-server.sh
     environment:
       JWT_ENABLED: "true"
       JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-change-this-secret-in-production}
@@ -123,6 +115,12 @@ services:
       start_period: 120s
     labels:
       - "traefik.enable=true"
+      # Create middleware for redirect all HTTP connections to HTTPS
+      - "traefik.http.middlewares.onlyoffice_redirect_http2https.redirectscheme.scheme=https"
+      # Make the redirect permanent
+      - "traefik.http.middlewares.onlyoffice_redirect_http2https.redirectscheme.permanent=true"
+      # Select the middleware from Traefik which is used for incoming connection.
+      - "traefik.http.routers.openfilz-onlyoffice.middlewares=onlyoffice_redirect_http2https"
       - "traefik.http.routers.openfilz-onlyoffice.rule=Host(`${ONLYOFFICE_HOSTNAME:-onlyoffice.yourdomain.com}`)"
       - "traefik.http.routers.openfilz-onlyoffice.entrypoints=websecure"
       - "traefik.http.routers.openfilz-onlyoffice.tls.certResolver=letsencrypt"
