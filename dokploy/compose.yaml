@@ -188,7 +188,7 @@ services:
       - dokploy-network
     healthcheck:
       disable: true
-      test: false
+      test: "false"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.openfilz-api.service=openfilz-api"
