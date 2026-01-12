@@ -115,13 +115,12 @@ services:
       start_period: 120s
     labels:
       - "traefik.enable=true"
-      # Create middleware for redirect all HTTP connections to HTTPS
-      - "traefik.http.middlewares.onlyoffice_redirect_http2https.redirectscheme.scheme=https"
-      # Make the redirect permanent
-      - "traefik.http.middlewares.onlyoffice_redirect_http2https.redirectscheme.permanent=true"
-      # Select the middleware from Traefik which is used for incoming connection.
-      - "traefik.http.routers.openfilz-onlyoffice.middlewares=onlyoffice_redirect_http2https"
       - "traefik.http.routers.openfilz-onlyoffice.rule=Host(`${ONLYOFFICE_HOSTNAME:-onlyoffice.yourdomain.com}`)"
+
+      - "traefik.http.routers.openfilz-onlyoffice.middlewares=onlyoffice-headers"
+      - "traefik.http.middlewares.onlyoffice-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
+      - "traefik.http.middlewares.onlyoffice-headers.headers.accessControlAllowOriginList=*"
+      
       - "traefik.http.routers.openfilz-onlyoffice.entrypoints=websecure"
       - "traefik.http.routers.openfilz-onlyoffice.tls.certResolver=letsencrypt"
       - "traefik.http.services.openfilz-onlyoffice.loadbalancer.server.port=80"
