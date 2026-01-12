@@ -127,6 +127,8 @@ services:
     image: ${OPENFILZ_API_IMAGE:-ghcr.io/openfilz/openfilz-api:latest}
     restart: unless-stopped
     pull_policy: always
+    expose:
+      - "8080"
     depends_on:
       postgres:
         condition: service_healthy
