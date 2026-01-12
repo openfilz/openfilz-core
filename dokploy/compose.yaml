@@ -96,6 +96,14 @@ services:
   onlyoffice:
     image: onlyoffice/documentserver:latest
     restart: unless-stopped
+    entrypoint:
+      - "sh"
+      - "-c"
+      - |
+        echo 'patching https://github.com/ONLYOFFICE/DocumentServer/issues/2186...'
+        find /var/www/onlyoffice/documentserver -name sdk-all-min.js -exec sed -E -i 's|(function +\w+\(\w+\) *\{ *function +\w+\(\)) *\{ *(\w+)\.open\((\w+),(\w+),(\w+)\);|\1{\nif (\4 \&\& \4.length > 5) {if (\4.substring(0, 5) == "http:") {\4 = \4.replace("http://", "https://");}};\n\2.open(\3,\4,\5);\n|' '{}' ';'
+        echo 'done! starting server...'
+        /app/ds/run-document-server.sh
     environment:
       JWT_ENABLED: "true"
       JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-change-this-secret-in-production}
