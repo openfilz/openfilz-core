@@ -72,6 +72,12 @@ services:
       # CORS configuration
       OPENFILZ_SECURITY_CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:4200,http://localhost:80}
 
+      OPENFILZ_INTERNAL_API_BASE_URL: ${OPENFILZ_INTERNAL_API_BASE_URL:-http://openfilz-api:8081}
+      OPENFILZ_PUBLIC_API_BASE_URL: ${OPENFILZ_PUBLIC_API_BASE_URL:-http://localhost:8081}
+
+      OPENFILZ_SOFT_DELETE: ${OPENFILZ_SOFT_DELETE:-true}
+
+
       # Server configuration
       SERVER_PORT: 8081
 

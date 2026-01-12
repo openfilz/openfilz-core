@@ -163,6 +163,11 @@ services:
       # API URL for Swagger/OpenAPI (public URL)
       API_ROOT_URL: https://${API_HOSTNAME:-api.yourdomain.com}/
 
+      OPENFILZ_INTERNAL_API_BASE_URL: ${OPENFILZ_INTERNAL_API_BASE_URL:-http://openfilz-api:8081}
+      OPENFILZ_PUBLIC_API_BASE_URL: ${OPENFILZ_PUBLIC_API_BASE_URL:-http://localhost:8081}
+
+      OPENFILZ_SOFT_DELETE: ${OPENFILZ_SOFT_DELETE:-true}
+
       # Server configuration
       SERVER_PORT: 8080
 
@@ -176,16 +181,14 @@ services:
       # OnlyOffice configuration
       ONLYOFFICE_ENABLED: "true"
       ONLYOFFICE_URL: ${ONLYOFFICE_URL:-http://onlyoffice}
-      ONLYOFFICE_API_BASE_URL: ${ONLYOFFICE_API_BASE_URL:-http://openfilz-api:8081}
       ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-change-this-secret-in-production}
-      OPENFILZ_INTERNAL_API_BASE_URL: ${OPENFILZ_INTERNAL_API_BASE_URL}
-      OPENFILZ_PUBLIC_API_BASE_URL: ${OPENFILZ_PUBLIC_API_BASE_URL}
     volumes:
       - openfilz-storage:/var/data/openfilz
     networks:
       - dokploy-network
     healthcheck:
       disable: true
+      test: false
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.openfilz-api.service=openfilz-api"

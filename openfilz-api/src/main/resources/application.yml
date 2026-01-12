@@ -106,7 +106,7 @@ openfilz:
     # root-group: name of the root group holding the 3 Roles as subgroups : eg. 'GED' is the root group in the group /GED/AUDITORS
     # root-group: GED
   soft-delete:
-    active: false
+    active: ${OPENFILZ_SOFT_DELETE:false}
   # Thumbnail Generation Configuration
   thumbnail:
     active: false  # Feature toggle - set to true to enable thumbnail generation

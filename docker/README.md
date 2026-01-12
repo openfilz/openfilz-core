@@ -190,12 +190,15 @@ cp .env.example .env
 
 ### API Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OPENFILZ_API_IMAGE` | `ghcr.io/openfilz/openfilz-api:latest` | Docker image for the API |
-| `API_PORT` | `8081` | API exposed port |
-| `JAVA_OPTS` | `-Xmx512m -Xms256m` | JVM memory options |
-| `CORS_ALLOWED_ORIGINS` | `http://localhost:4200,http://localhost:80` | Allowed CORS origins |
+| Variable | Default                                     | Description                              |
+|----------|---------------------------------------------|------------------------------------------|
+| `OPENFILZ_API_IMAGE` | `ghcr.io/openfilz/openfilz-api:latest`      | Docker image for the API                 |
+| `API_PORT` | `8081`                                      | API exposed port                         |
+| `JAVA_OPTS` | `-Xmx512m -Xms256m`                         | JVM memory options                       |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:4200,http://localhost:80` | Allowed CORS origins                     |
+| `OPENFILZ_INTERNAL_API_BASE_URL` | `http://openfilz-api:8081`                  | API route for internal calls (inter-pods) |
+| `OPENFILZ_PUBLIC_API_BASE_URL` | `http://localhost:8081`                     | API route for external calls             |
+| `OPENFILZ_SOFT_DELETE` | `true or false`                             | Soft Delete feature activation           |
 
 ### Web Configuration
 
