@@ -119,7 +119,7 @@ services:
 
       - "traefik.http.routers.openfilz-onlyoffice.middlewares=onlyoffice-headers"
       - "traefik.http.middlewares.onlyoffice-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
-      - "traefik.http.middlewares.onlyoffice-headers.headers.accessControlAllowOriginList=*"
+      - "traefik.http.middlewares.onlyoffice-headers.headers.accessControlAllowOriginList=https://api.openfilz.org,https://app.openfilz.org"
       
       - "traefik.http.routers.openfilz-onlyoffice.entrypoints=websecure"
       - "traefik.http.routers.openfilz-onlyoffice.tls.certResolver=letsencrypt"
