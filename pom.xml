@@ -69,7 +69,7 @@
         <opensearch.version>3.3.0</opensearch.version>
         <httpcore.version>5.3.6</httpcore.version>
         <httpclient.version>5.5.1</httpclient.version>
-        <testcontainers-keycloak.version>3.9.0</testcontainers-keycloak.version>
+        <testcontainers-keycloak.version>4.1.0</testcontainers-keycloak.version>
         <opensearch-testcontainers.version>4.0.0</opensearch-testcontainers.version>
         <maven.javadoc.failOnError>false</maven.javadoc.failOnError>
     </properties>

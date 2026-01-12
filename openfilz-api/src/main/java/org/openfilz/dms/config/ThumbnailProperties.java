@@ -169,6 +169,29 @@ public class ThumbnailProperties {
          * Timeout for Gotenberg requests in seconds.
          */
         private int timeoutSeconds = 60;
+
+        /**
+         * Retry configuration for Gotenberg API calls.
+         */
+        private Retry retry = new Retry();
+
+        @Data
+        public static class Retry {
+            /**
+             * Maximum number of retry attempts for Gotenberg API calls.
+             */
+            private int maxAttempts = 5;
+
+            /**
+             * Initial backoff delay in milliseconds for exponential backoff.
+             */
+            private long backoffInitialDelayMs = 1000;
+
+            /**
+             * Maximum backoff delay in milliseconds for exponential backoff.
+             */
+            private long backoffMaxDelayMs = 10000;
+        }
     }
 
     /**
