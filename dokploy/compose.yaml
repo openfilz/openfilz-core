@@ -196,15 +196,9 @@ services:
     pull_policy: always
     depends_on:
       - openfilz-api
-    environment:
-      # These environment variables are used by the container to generate ngx-env.js
-      NG_APP_API_URL: https://${API_HOSTNAME:-api.yourdomain.com}/api/v1
-      NG_APP_GRAPHQL_URL: https://${API_HOSTNAME:-api.yourdomain.com}/graphql/v1
-      NG_APP_AUTHENTICATION_ENABLED: "true"
-      NG_APP_AUTHENTICATION_AUTHORITY: https://${KEYCLOAK_HOSTNAME:-keycloak.yourdomain.com}/realms/openfilz
-      NG_APP_AUTHENTICATION_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-openfilz-web}
-      NG_APP_ONLYOFFICE_ENABLED: "true"
-      NG_APP_ONLYOFFICE_URL: https://${ONLYOFFICE_HOSTNAME:-onlyoffice.yourdomain.com}
+    volumes:
+      # Mount ngx-env.js configuration file - upload via Dokploy File Mounts
+      - ../files/ngx-env.js:/usr/share/nginx/html/ngx-env.js:ro
     networks:
       - dokploy-network
     labels:
