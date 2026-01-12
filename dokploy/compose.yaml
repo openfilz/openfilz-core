@@ -198,7 +198,7 @@ services:
       - openfilz-api
     volumes:
       # Mount ngx-env.js configuration file - upload via Dokploy File Mounts
-      - ../files/ngx-env.js:/usr/share/nginx/html/ngx-env.js:ro
+      - ../../files/ngx-env.js:/usr/share/nginx/html/ngx-env.js:ro
     networks:
       - dokploy-network
     labels:
