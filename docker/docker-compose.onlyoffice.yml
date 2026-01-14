@@ -43,5 +43,4 @@ services:
       # OnlyOffice configuration
       ONLYOFFICE_ENABLED: "true"
       ONLYOFFICE_URL: ${ONLYOFFICE_URL:-http://onlyoffice}
-      ONLYOFFICE_API_BASE_URL: ${ONLYOFFICE_API_BASE_URL:-http://openfilz-api:8081}
       ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-openfilz-onlyoffice-jwt-secret-2024}
