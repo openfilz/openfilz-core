@@ -182,6 +182,10 @@ services:
       ONLYOFFICE_ENABLED: "true"
       ONLYOFFICE_URL: ${ONLYOFFICE_URL:-http://onlyoffice}
       ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-change-this-secret-in-production}
+
+      OPENFILZ_THUMBNAIL_ACTIVE: ${OPENFILZ_THUMBNAIL_ACTIVE}
+      OPENFILZ_SOFTDELETE_ACTIVE: ${OPENFILZ_SOFTDELETE_ACTIVE}
+
     volumes:
       - openfilz-storage:/var/data/openfilz
     networks:
@@ -218,3 +222,25 @@ services:
       - "traefik.http.routers.openfilz-web.entrypoints=websecure"
       - "traefik.http.routers.openfilz-web.tls.certResolver=letsencrypt"
       - "traefik.http.services.openfilz-web.loadbalancer.server.port=8080"
+
+  # =============================================================================
+  # Gotenberg - For PDF and Office Document Thumbnails
+  # Converts DOCX, XLSX, PPTX, ODT, ODS, ODP to PDF using LibreOffice
+  # =============================================================================
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    restart: unless-stopped
+    command:
+      - "gotenberg"
+      - "--api-timeout=60s"
+      - "--libreoffice-restart-after=100"
+      - "--libreoffice-auto-start=true"
+      - "--log-level=info"
+    networks:
+      - dokploy-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
