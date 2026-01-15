@@ -45,6 +45,18 @@ public class DocumentSearchUtil {
         return null;
     }
 
+    public static String splitWithSpaces(String s) {
+        if (s == null || s.isEmpty()) {
+            return s;
+        }
+        return s
+                .replaceAll("([a-z])([A-Z])", "$1 $2")  // Split camelCase
+                .replaceAll("[_-]", " ")                 // Replace underscores and hyphens with spaces
+                .toLowerCase()
+                .replaceAll("\\s+", " ")                 // Normalize multiple spaces
+                .trim();
+    }
+
     public PageCriteria toPageCriteria(SortInput sort, int page, int size) {
         String sortBy = null;
         SortOrder sortOrder = null;
