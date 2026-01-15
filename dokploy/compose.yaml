@@ -24,7 +24,6 @@ volumes:
 networks:
   dokploy-network:
     external: true
-  opensearch-net:
 
 services:
   # =============================================================================
@@ -279,7 +278,7 @@ services:
     volumes:
       - opensearch-data1:/usr/share/opensearch/data # Creates volume called opensearch-data1 and mounts it to the container
     networks:
-      - opensearch-net # All of the containers will join the same Docker bridge network
+      - dokploy-network # All of the containers will join the same Docker bridge network
   opensearch-node2:
     image: opensearchproject/opensearch:latest # This should be the same image used for opensearch-node1 to avoid issues
     environment:
@@ -302,14 +301,14 @@ services:
     volumes:
       - opensearch-data2:/usr/share/opensearch/data
     networks:
-      - opensearch-net
+      - dokploy-network
   opensearch-dashboards:
     image: opensearchproject/opensearch-dashboards:latest # Make sure the version of opensearch-dashboards matches the version of opensearch installed on other nodes
     environment:
       - 'OPENSEARCH_HOSTS=["http://opensearch-node1:9200","http://opensearch-node2:9200"]' # Define the OpenSearch nodes that OpenSearch Dashboards will query
       - "DISABLE_SECURITY_DASHBOARDS_PLUGIN=true"
     networks:
-      - opensearch-net
+      - dokploy-network
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.opensearch-dashboards.service=opensearch-dashboards"
