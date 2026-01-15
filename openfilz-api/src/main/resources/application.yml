@@ -84,7 +84,9 @@ openfilz:
     # Use host.docker.internal when OnlyOffice run in Docker and OpenFilz runs on host
     api-internal-base-url: ${OPENFILZ_INTERNAL_API_BASE_URL:http://host.docker.internal:8081}
     api-public-base-url: ${OPENFILZ_PUBLIC_API_BASE_URL:http://localhost:8081}
- #  calculate-checksum: default false - if true : calculate checksum of each new or modified file
+
+    calculate-checksum: false
+  #  calculate-checksum: default false - if true : calculate checksum of each new or modified file
  #  full-text:
  #openfilz.full-text.opensearch.host=localhost
   #openfilz.full-text.opensearch.port=9200
@@ -105,8 +107,18 @@ openfilz:
     # role-token-lookup: GROUPS
     # root-group: name of the root group holding the 3 Roles as subgroups : eg. 'GED' is the root group in the group /GED/AUDITORS
     # root-group: GED
+
+  full-text:
+    active: false
+    indexation-mode: local # local (only choice for the moment) -> to be developed : redis | kafka | nats
+    opensearch:
+      host: localhost
+      port: 9200
+      scheme: https
+      username: admin
+      password: yourStrongPassword123!
   soft-delete:
-    active: ${OPENFILZ_SOFT_DELETE:false}
+    active: false
   # Thumbnail Generation Configuration
   thumbnail:
     active: false  # Feature toggle - set to true to enable thumbnail generation
