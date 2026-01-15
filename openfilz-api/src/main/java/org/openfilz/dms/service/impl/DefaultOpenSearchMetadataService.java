@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.OpenSearchDocumentKey;
 import org.openfilz.dms.service.OpenSearchMetadataService;
+import org.openfilz.dms.utils.DocumentSearchUtil;
 import org.openfilz.dms.utils.FileUtils;
 import org.openfilz.dms.utils.JsonUtils;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperties;
@@ -28,7 +29,7 @@ public class DefaultOpenSearchMetadataService implements OpenSearchMetadataServi
     public Mono<Map<String, Object>> fillOpenSearchDocumentMetadataMap(Document document, Map<String, Object> source) {
         source.put(OpenSearchDocumentKey.id.toString(), document.getId());
         source.put(OpenSearchDocumentKey.name.toString(), document.getName());
-        source.put(OpenSearchDocumentKey.name_suggest.toString(), FileUtils.removeFileExtension(document.getName()));
+        source.put(OpenSearchDocumentKey.name_suggest.toString(), DocumentSearchUtil.splitWithSpaces(FileUtils.removeFileExtension(document.getName())));
         source.put(OpenSearchDocumentKey.extension.toString(), FileUtils.getDocumentExtension(document.getType(), document.getName()));
         source.put(OpenSearchDocumentKey.size.toString(), document.getSize());
         source.put(OpenSearchDocumentKey.parentId.toString(), document.getParentId());
