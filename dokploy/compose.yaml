@@ -186,6 +186,8 @@ services:
       OPENFILZ_THUMBNAIL_ACTIVE: ${OPENFILZ_THUMBNAIL_ACTIVE}
       OPENFILZ_SOFTDELETE_ACTIVE: ${OPENFILZ_SOFTDELETE_ACTIVE}
 
+      GOTENBERG_URL: ${GOTENBERG_URL}
+
     volumes:
       - openfilz-storage:/var/data/openfilz
     networks:
