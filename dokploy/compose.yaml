@@ -306,9 +306,7 @@ services:
     image: opensearchproject/opensearch-dashboards:latest # Make sure the version of opensearch-dashboards matches the version of opensearch installed on other nodes
     environment:
       - 'OPENSEARCH_HOSTS=["http://opensearch-node1:9200","http://opensearch-node2:9200"]' # Define the OpenSearch nodes that OpenSearch Dashboards will query
-      - opensearch.username=${OPENSEARCH_USERNAME}
-      - opensearch.password=${OPENSEARCH_PASSWORD}
-      - opensearch.requestHeadersWhitelist=[authorization, securitytenant]
+      - "DISABLE_SECURITY_DASHBOARDS_PLUGIN=true" # Must match OpenSearch nodes which have security disabled
     networks:
       - dokploy-network
     labels:
@@ -317,6 +315,8 @@ services:
       - "traefik.http.routers.opensearch-dashboards.rule=Host(`${OPENSEARCH_DASHBOARDS_HOSTNAME:-app.yourdomain.com}`)"
       - "traefik.http.routers.opensearch-dashboards.entrypoints=websecure"
       - "traefik.http.routers.opensearch-dashboards.tls.certResolver=letsencrypt"
+      - "traefik.http.routers.opensearch-dashboards.middlewares=opensearch-dashboards-auth"
+      - "traefik.http.middlewares.opensearch-dashboards-auth.basicauth.users=${OPENSEARCH_DASHBOARDS_BASIC_AUTH}"
       - "traefik.http.services.opensearch-dashboards.loadbalancer.server.port=5601"
 
 
