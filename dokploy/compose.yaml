@@ -306,7 +306,6 @@ services:
     image: opensearchproject/opensearch-dashboards:latest # Make sure the version of opensearch-dashboards matches the version of opensearch installed on other nodes
     environment:
       - 'OPENSEARCH_HOSTS=["http://opensearch-node1:9200","http://opensearch-node2:9200"]' # Define the OpenSearch nodes that OpenSearch Dashboards will query
-      - "DISABLE_SECURITY_DASHBOARDS_PLUGIN=true"
     networks:
       - dokploy-network
     labels:
