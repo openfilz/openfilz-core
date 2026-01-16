@@ -308,6 +308,7 @@ services:
       - 'OPENSEARCH_HOSTS=["http://opensearch-node1:9200","http://opensearch-node2:9200"]' # Define the OpenSearch nodes that OpenSearch Dashboards will query
       - opensearch.username=${OPENSEARCH_USERNAME}
       - opensearch.password=${OPENSEARCH_PASSWORD}
+      - opensearch.requestHeadersWhitelist=authorization, securitytenant
     networks:
       - dokploy-network
     labels:
