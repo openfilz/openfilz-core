@@ -448,7 +448,7 @@
         "default-roles-openfilz"
       ],
       "groups": [
-        "/GED/AUDITOR"
+        "/OPENFILZ/AUDITOR"
       ]
     },
     {
@@ -469,7 +469,7 @@
         "default-roles-openfilz"
       ],
       "groups": [
-        "/GED/READER"
+        "/OPENFILZ/READER"
       ]
     },
     {
@@ -490,7 +490,7 @@
         "CONTRIBUTOR"
       ],
       "groups": [
-        "/GED/CONTRIBUTOR"
+        "/OPENFILZ/CONTRIBUTOR"
       ]
     },
     {
@@ -511,7 +511,7 @@
         "CLEANER"
       ],
       "groups": [
-        "/GED/CLEANER"
+        "/OPENFILZ/CLEANER"
       ]
     },
     {
@@ -534,9 +534,9 @@
         "AUDITOR"
       ],
       "groups": [
-        "/GED/CONTRIBUTOR",
-        "/GED/CLEANER",
-        "/GED/AUDITOR"
+        "/OPENFILZ/CONTRIBUTOR",
+        "/OPENFILZ/CLEANER",
+        "/OPENFILZ/AUDITOR"
       ]
     },
     {
@@ -579,24 +579,24 @@
   },
   "groups": [
     {
-      "name": "GED",
-      "path": "/GED",
+      "name": "OPENFILZ",
+      "path": "/OPENFILZ",
       "subGroups": [
         {
           "name": "AUDITOR",
-          "path": "/GED/AUDITOR"
+          "path": "/OPENFILZ/AUDITOR"
         },
         {
           "name": "CONTRIBUTOR",
-          "path": "/GED/CONTRIBUTOR"
+          "path": "/OPENFILZ/CONTRIBUTOR"
         },
         {
           "name": "READER",
-          "path": "/GED/READER"
+          "path": "/OPENFILZ/READER"
         },
         {
           "name": "CLEANER",
-          "path": "/GED/CLEANER"
+          "path": "/OPENFILZ/CLEANER"
         }
       ]
     }

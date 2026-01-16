@@ -22,7 +22,7 @@ public final class SharedKeyCloakContainer {
         KEYCLOAK_CONTAINER = new KeycloakContainer()
                 .withRealmImportFile("keycloak/realm-export.json")
                 .withEnv("KEYCLOAK_DEFAULT_ROLE", "READER")
-                .withEnv("KEYCLOAK_DEFAULT_GROUP", "GED/READER")
+                .withEnv("KEYCLOAK_DEFAULT_GROUP", "OPENFILZ/READER")
                 .withEnv("KC_HTTP_ENABLED", "true")
                 .withReuse(true);
         KEYCLOAK_CONTAINER.start();

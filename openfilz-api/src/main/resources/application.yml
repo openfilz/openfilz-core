@@ -94,8 +94,8 @@ openfilz:
     # cors-allowed-origins: http://localhost:4200/ # Comma-separated list of authorized origins
     # role-token-lookup: GROUPS or REALM_ACCESS (default value) : optional value used in org.openfilz.dms.security.impl.AbstractSecurityService to retrieve Role information from Groups or from the Realm_access
     # role-token-lookup: GROUPS
-    # root-group: name of the root group holding the 3 Roles as subgroups : eg. 'GED' is the root group in the group /GED/AUDITORS
-    # root-group: GED
+    # root-group: name of the root group holding the 3 Roles as subgroups : eg. 'OPENFILZ' is the root group in the group /OPENFILZ/AUDITORS
+    # root-group: OPENFILZ
 
   full-text:
     active: false
