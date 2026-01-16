@@ -315,9 +315,8 @@ services:
       - "traefik.http.routers.opensearch-dashboards.rule=Host(`${OPENSEARCH_DASHBOARDS_HOSTNAME:-app.yourdomain.com}`)"
       - "traefik.http.routers.opensearch-dashboards.entrypoints=websecure"
       - "traefik.http.routers.opensearch-dashboards.tls.certResolver=letsencrypt"
-      - "traefik.http.routers.opensearch-dashboards.middlewares=opensearch-dashboards-auth,opensearch-dashboards-headers"
+      - "traefik.http.routers.opensearch-dashboards.middlewares=opensearch-dashboards-auth"
       - "traefik.http.middlewares.opensearch-dashboards-auth.basicauth.users=${OPENSEARCH_DASHBOARDS_BASIC_AUTH}"
-      - "traefik.http.middlewares.opensearch-dashboards-headers.headers.customrequestheaders.Authorization="
       - "traefik.http.services.opensearch-dashboards.loadbalancer.server.port=5601"
 
 
