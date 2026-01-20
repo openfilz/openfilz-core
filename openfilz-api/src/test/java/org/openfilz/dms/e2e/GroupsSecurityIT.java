@@ -24,6 +24,6 @@ public class GroupsSecurityIT extends SecurityIT {
     static void registerResourceServerIssuerProperty(DynamicPropertyRegistry registry) {
 
         registry.add("openfilz.security.role-token-lookup", () -> GROUPS);
-        registry.add("openfilz.security.root-group", () -> "GED");
+        registry.add("openfilz.security.root-group", () -> "OPENFILZ");
     }
 }
