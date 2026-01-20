@@ -57,9 +57,9 @@ services:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/${KEYCLOAK_DB_NAME:-keycloak_db}
-      KC_DB_USERNAME: ${DB_USER:-dms_user}
-      KC_DB_PASSWORD: ${DB_PASSWORD:-dms_password}
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${KEYCLOAK_DB_NAME:-keycloak}
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER:-keycloak}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak}
       # Hostname configuration - set to your Keycloak domain
       KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:-keycloak.yourdomain.com}
       KC_HOSTNAME_STRICT: "false"
@@ -151,10 +151,10 @@ services:
 
       # Storage configuration (local)
       STORAGE_TYPE: ${STORAGE_TYPE:-local}
-      STORAGE_LOCAL_BASE_PATH: /var/data/openfilz
+      STORAGE_LOCAL_BASEPATH: ${STORAGE_LOCAL_BASEPATH:-/var/data/openfilz}
 
       # Security configuration - authentication enabled
-      OPENFILZ_SECURITY_NO_AUTH: "false"
+      OPENFILZ_SECURITY_NOAUTH: ${OPENFILZ_SECURITY_NOAUTH:-false}
 
       # Keycloak realm URL (internal Docker network)
       KEYCLOAK_REALM_URL: ${KEYCLOAK_REALM_URL:-http://keycloak:8080/realms/openfilz}
@@ -189,6 +189,7 @@ services:
       GOTENBERG_URL: ${GOTENBERG_URL}
 
       OPENFILZ_COMMON_CALCULATECHECKSUM: ${OPENFILZ_COMMON_CALCULATECHECKSUM}
+      OPENFILZ_COMMON_WEBPUBLICBASEURL: ${OPENFILZ_COMMON_WEBPUBLICBASEURL}
 
       OPENFILZ_FULLTEXT_ACTIVE: ${OPENFILZ_FULLTEXT_ACTIVE}
       OPENFILZ_FULLTEXT_OPENSEARCH_HOST: ${OPENFILZ_FULLTEXT_OPENSEARCH_HOST}

@@ -91,11 +91,9 @@ openfilz:
     no-auth: true # No authentication required
     worm-mode: false # if true : only read-only endPoints (for list, query and download) and upload (and upload-multiple) endPoints are accessible
     custom-roles: false # if true : you can provide a custom implementation of org.openfilz.dms.config.DefaultAuthSecurityConfig and org.openfilz.dms.security.impl.SecurityServiceImpl
-    # cors-allowed-origins: http://localhost:4200/ # Comma-separated list of authorized origins
-    # role-token-lookup: GROUPS or REALM_ACCESS (default value) : optional value used in org.openfilz.dms.security.impl.AbstractSecurityService to retrieve Role information from Groups or from the Realm_access
-    # role-token-lookup: GROUPS
-    # root-group: name of the root group holding the 3 Roles as subgroups : eg. 'OPENFILZ' is the root group in the group /OPENFILZ/AUDITORS
-    # root-group: OPENFILZ
+    cors-allowed-origins: http://localhost:4200/ # Comma-separated list of authorized origins
+    role-token-lookup: REALM_ACCESS # GROUPS or REALM_ACCESS (default value) : optional value used in org.openfilz.dms.security.impl.AbstractSecurityService to retrieve Role information from Groups or from the Realm_access
+    root-group: OPENFILZ # when role-token-lookup is GROUP, name of the root group holding the 3 Roles as subgroups : eg. 'OPENFILZ' is the root group in the group /OPENFILZ/AUDITORS
 
   full-text:
     active: false
