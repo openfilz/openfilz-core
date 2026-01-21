@@ -1,2 +1,3 @@
-CREATE DATABASE keycloak;
-GRANT ALL PRIVILEGES ON DATABASE keycloak TO keycloak;
+CREATE ROLE keycloak WITH LOGIN PASSWORD 'f3Z(|-0v)s%Q~1@8';
+
+CREATE DATABASE keycloak owner keycloak;
