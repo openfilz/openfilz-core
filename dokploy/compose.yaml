@@ -72,7 +72,7 @@ services:
     volumes:
       - keycloak-data:/opt/keycloak/data
       # Realm import file - upload realm-export.json via Dokploy File Mounts
-      - ../files/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+      - ../../files/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
     networks:
       - dokploy-network
     depends_on:
