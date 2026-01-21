@@ -14,7 +14,6 @@
 
 volumes:
   postgres-data:
-  keycloak-data:
   openfilz-storage:
   onlyoffice-data:
   onlyoffice-logs:
@@ -66,17 +65,12 @@ services:
       KC_PROXY_HEADERS: xforwarded
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
-      # Tell Keycloak to look here for imports
-      KC_DIR_IMPORT: /opt/keycloak/import
-
     command:
       - start
       - --import-realm
     volumes:
-      - keycloak-data:/opt/keycloak/data
       # Realm import file - upload realm-export.json via Dokploy File Mounts
-      # Outside the data volume
-      - ../../files/keycloak/realm-export.json:/opt/keycloak/import/realm-export.json:ro
+      - ../../files/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
     networks:
       - dokploy-network
     depends_on:
