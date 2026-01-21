@@ -1,3 +1,3 @@
-CREATE ROLE keycloak WITH LOGIN PASSWORD 'f3Z(|-0v)s%Q~1@8';
+CREATE ROLE keycloak WITH LOGIN PASSWORD 'password';
 
 CREATE DATABASE keycloak owner keycloak;
