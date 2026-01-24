@@ -26,10 +26,7 @@ import reactor.core.publisher.Mono;
 import java.io.IOException;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 @Slf4j
 @Service
@@ -44,10 +41,10 @@ public class OpenSearchIndexService implements IndexService {
     private static final String NEW_TEXT = "new_text";
     private static final String APPEND_CONTENT_SCRIPT = "if (ctx._source.content != null) { ctx._source.content += ' ' + params.new_text; } else { ctx._source.content = params.new_text; }";
 
-    private final OpenSearchAsyncClient openSearchAsyncClient;
-    private final IndexNameProvider indexNameProvider;
-    private final OpenSearchMetadataService openSearchMetadataService;
-    private final JsonUtils jsonUtils;
+    protected final OpenSearchAsyncClient openSearchAsyncClient;
+    protected final IndexNameProvider indexNameProvider;
+    protected final OpenSearchMetadataService openSearchMetadataService;
+    protected final JsonUtils jsonUtils;
 
 
 
@@ -55,7 +52,7 @@ public class OpenSearchIndexService implements IndexService {
     public Mono<Void> updateMetadata(Document document) {
         // Create a map for the partial update (doc_as_upsert = true allows to create if not exists)
         Object value = getMetadataObject(document.getMetadata());
-        return doUpdateIndexField(document, OpenSearchDocumentKey.metadata.toString(), value);
+        return doUpdateIndexField(document.getId(), OpenSearchDocumentKey.metadata.toString(), value);
     }
 
     private Object getMetadataObject(Json metadata) {
@@ -65,7 +62,7 @@ public class OpenSearchIndexService implements IndexService {
     @Override
     public Mono<Void> updateIndexField(Document document, String key, Object value) {
         Object valueToIndex = getValueToIndex(key, value);
-        return doUpdateIndexField(document, key, valueToIndex);
+        return doUpdateIndexField(document.getId(), key, valueToIndex);
     }
 
     @Override
@@ -85,7 +82,7 @@ public class OpenSearchIndexService implements IndexService {
     }
 
 
-    private Object getValueToIndex(String key, Object value) {
+    public Object getValueToIndex(String key, Object value) {
         if(value == null) {
             return null;
         }
@@ -97,12 +94,12 @@ public class OpenSearchIndexService implements IndexService {
         };
     }
 
-    private Mono<Void> doUpdateIndexField(Document document, String key, Object value) {
+    public Mono<Void> doUpdateIndexField(UUID documentId, String key, Object value) {
         Map<String, Object> updateDoc = Collections.singletonMap(key, value);
         // Build the UpdateRequest with retryOnConflict to handle concurrent updates
         UpdateRequest<Void, Map<String, Object>> updateRequest = new UpdateRequest.Builder<Void, Map<String, Object>>()
-                .index(indexNameProvider.getIndexName(document))
-                .id(document.getId().toString())
+                .index(indexNameProvider.getIndexName(documentId))
+                .id(documentId.toString())
                 .doc(updateDoc)
                 .retryOnConflict(APPEND_RETRY_NUMBER)
                 .build();
@@ -112,7 +109,7 @@ public class OpenSearchIndexService implements IndexService {
             return Mono.fromFuture(openSearchAsyncClient.update(updateRequest, Void.class))
                     .then();
         } catch (IOException e) {
-            return Mono.error(new RuntimeException("Failed to update document " + document.getId(), e));
+            return Mono.error(new RuntimeException("Failed to update document " + documentId, e));
         }
     }
 

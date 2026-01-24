@@ -6,13 +6,14 @@ import java.util.UUID;
 
 public interface MetadataPostProcessor {
 
-    void processDocument(Document document);
+    default void processDocument(Document document) {}
 
-    void processMetadata(Document document);
+    default void processMetadata(Document document) {}
 
-    void copyIndex(UUID sourceFileId, Document createdDocument);
+    default void copyIndex(UUID sourceFileId, Document createdDocument) {}
 
-    void updateIndexField(Document document, String openSearchDocumentKey, Object value);
+    default void updateIndexField(Document document, String openSearchDocumentKey, Object value) {}
 
-    void deleteDocument(UUID id);
+    default void deleteDocument(UUID id) {}
+
 }
