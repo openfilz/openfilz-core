@@ -14,26 +14,5 @@ import java.util.UUID;
         @ConditionalOnProperty(name = "openfilz.thumbnail.active", havingValue = "false", matchIfMissing = true)
 })
 public class EmptyMetadataPostProcessor implements MetadataPostProcessor {
-    @Override
-    public void processDocument(Document document) {
 
-    }
-
-    @Override
-    public void processMetadata(Document document) {}
-
-    @Override
-    public void copyIndex(UUID sourceFileId, Document createdDocument) {
-
-    }
-
-    @Override
-    public void updateIndexField(Document document, String openSearchDocumentKey, Object value) {
-
-    }
-
-    @Override
-    public void deleteDocument(UUID id) {
-
-    }
 }
