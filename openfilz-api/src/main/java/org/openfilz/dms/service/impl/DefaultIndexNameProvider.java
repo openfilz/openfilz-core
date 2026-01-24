@@ -10,6 +10,7 @@ import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.opensearch.indices.CreateIndexRequest;
 import org.opensearch.client.opensearch.indices.ExistsRequest;
 import org.opensearch.client.transport.endpoints.BooleanResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
@@ -30,24 +31,27 @@ public class DefaultIndexNameProvider implements IndexNameProvider {
     private final OpenSearchAsyncClient openSearchAsyncClient;
     private final IndexMappingsProvider indexMappingsProvider;
 
+    @Value("${openfilz.full-text.default-index:openfilz}")
+    private String defaultIndexName;
+
     @PostConstruct
     public void init() {
-        createIndex(DEFAULT_INDEX_NAME).subscribe();
+        createIndex(defaultIndexName).subscribe();
     }
 
     @Override
     public String getIndexName(Document document) {
-        return DEFAULT_INDEX_NAME;
+        return defaultIndexName;
     }
 
     @Override
     public String getIndexName(UUID documentId) {
-        return DEFAULT_INDEX_NAME;
+        return defaultIndexName;
     }
 
     @Override
     public String getDocumentsIndexName() {
-        return DEFAULT_INDEX_NAME;
+        return defaultIndexName;
     }
 
     /**

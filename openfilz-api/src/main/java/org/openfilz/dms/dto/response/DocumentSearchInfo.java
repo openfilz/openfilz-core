@@ -5,6 +5,7 @@ import java.util.UUID;
 public record DocumentSearchInfo(UUID id,
                                  String name,
                                  String extension,
+                                 String contentType,
                                  Long size,
                                  UUID parentId,
                                  String createdAt,

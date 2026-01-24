@@ -35,6 +35,7 @@ openfilz:
       cleanup-cron: "0 0 2 * * ?" # Cron expression for cleanup job (daily at 2 AM)
   calculate-checksum: true
   full-text:
+    default-index: openfilz-ce
     active: true
     indexation-mode: local # local (only choice for the moment) -> to be developed : redis | kafka | nats
     opensearch:
