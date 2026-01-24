@@ -102,7 +102,11 @@ public class OpenSearchDocumentSuggestionService implements DocumentSuggestionSe
      */
     private Suggest createSuggestFromHit(Hit<DocumentSource> hit) {
         DocumentSource source = hit.source();
-        List<String> highlights = hit.highlight().get(NAME_SUGGEST);
+        if (source != null && source.id() != null) {
+            return new Suggest(source.id(), source.name(), source.extension());
+        }
+        return null;
+        /*List<String> highlights = hit.highlight().get(NAME_SUGGEST);
 
         // Ensure we have both the source with an ID and at least one highlight fragment.
         if (source != null && source.id() != null) {
@@ -112,10 +116,10 @@ public class OpenSearchDocumentSuggestionService implements DocumentSuggestionSe
                 return new Suggest(source.id(), suggestionText, source.extension());
             }
             return new Suggest(source.id(), source.name(), source.extension());
-        }
+        }*/
 
         // Return null if we can't construct a valid Suggest object.
-        return null;
+        //return null;
     }
 
 /*

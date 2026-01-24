@@ -22,7 +22,6 @@ import org.openfilz.dms.dto.response.CopyResponse;
 import org.openfilz.dms.dto.response.DocumentInfo;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.e2e.util.PdfLoremGeneratorStreaming;
-import org.openfilz.dms.service.IndexNameProvider;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.opensearch._types.query_dsl.MatchQuery;
 import org.opensearch.client.opensearch.core.SearchRequest;
@@ -66,6 +65,7 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
 
 
+    public static final String DEFAULT_INDEX_NAME = "openfilz";
     private static OpenSearchAsyncClient openSearchAsyncClient;
 
     @Container
@@ -189,7 +189,7 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
         UploadResponse response = getUploadResponse(builder);
 
         SearchRequest searchRequest = new SearchRequest.Builder()
-                .index(IndexNameProvider.DEFAULT_INDEX_NAME)
+                .index(DEFAULT_INDEX_NAME)
                 .query(q -> q.match(MatchQuery.builder()
                         .field("metadata.owner")
                         .query(fv -> fv.stringValue("OpenFilz1")).build()))
@@ -224,7 +224,7 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
         Assertions.assertEquals(0, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
 
         searchRequest = new SearchRequest.Builder()
-                .index(IndexNameProvider.DEFAULT_INDEX_NAME)
+                .index(DEFAULT_INDEX_NAME)
                 .query(q -> q.match(MatchQuery.builder()
                         .field("metadata.owner")
                         .query(fv -> fv.stringValue("Joe")).build()))
@@ -244,7 +244,7 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
         waitFor(3000);
 
         searchRequest = new SearchRequest.Builder()
-                .index(IndexNameProvider.DEFAULT_INDEX_NAME)
+                .index(DEFAULT_INDEX_NAME)
                 .query(q -> q.match(MatchQuery.builder()
                         .field("name")
                         .query(fv -> fv.stringValue("new-name.sql")).build()))
@@ -261,7 +261,7 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
                 .returnResult().getResponseBody();
 
         searchRequest = new SearchRequest.Builder()
-                .index(IndexNameProvider.DEFAULT_INDEX_NAME)
+                .index(DEFAULT_INDEX_NAME)
                 .query(q -> q.match(MatchQuery.builder()
                         .field("metadata.appId")
                         .query(fv -> fv.stringValue(appId)).build()))
@@ -289,7 +289,7 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
         UploadResponse response = getUploadResponse(builder, true);
 
         SearchRequest searchRequest = new SearchRequest.Builder()
-                .index(IndexNameProvider.DEFAULT_INDEX_NAME)
+                .index(DEFAULT_INDEX_NAME)
                 .query(q -> q.match(MatchQuery.builder()
                         .field("content")
                         .query(fv -> fv.stringValue("systèmes d'exploitations")).build()))
@@ -318,7 +318,7 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
         UploadResponse response = getUploadResponse(builder);
 
         SearchRequest searchRequest = new SearchRequest.Builder()
-                .index(IndexNameProvider.DEFAULT_INDEX_NAME)
+                .index(DEFAULT_INDEX_NAME)
                 .query(q -> q.match(MatchQuery.builder()
                         .field("content")
                         .query(fv -> fv.stringValue("vestibulum")).build()))
