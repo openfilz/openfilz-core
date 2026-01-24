@@ -3,6 +3,7 @@ type DocumentSearchInfo {
     id: ID!
     name: String!
     extension: String
+    contentType: String
     size: Long
     parentId: ID
     createdAt: DateTime
@@ -10,6 +11,8 @@ type DocumentSearchInfo {
     createdBy: String
     updatedBy: String
     contentSnippet: String # return a snippet instead of the full content
+    "URL to fetch the thumbnail image, null if not available"
+    thumbnailUrl: String
 }
 
 # The response object containing results and pagination info

@@ -2,16 +2,12 @@ package org.openfilz.dms.controller.graphql;
 
 import graphql.schema.DataFetchingEnvironment;
 import jakarta.validation.constraints.NotNull;
-import org.openfilz.dms.config.CommonProperties;
-import org.openfilz.dms.config.ThumbnailProperties;
 import org.openfilz.dms.dto.request.FavoriteRequest;
 import org.openfilz.dms.dto.request.ListFolderRequest;
 import org.openfilz.dms.dto.response.FullDocumentInfo;
-import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.repository.DocumentQueryService;
 import org.openfilz.dms.repository.graphql.AllFoldersDocumentQueryService;
-import org.openfilz.dms.service.ThumbnailStorageService;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.openfilz.dms.service.ThumbnailUrlResolver;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.graphql.data.method.annotation.Argument;
@@ -23,28 +19,20 @@ import reactor.core.publisher.Mono;
 
 import java.util.UUID;
 
-import static org.openfilz.dms.config.RestApiVersion.API_PREFIX;
-import static org.openfilz.dms.config.RestApiVersion.ENDPOINT_THUMBNAILS;
-
 @Controller
 @ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
 public class DocumentQueryController {
 
     protected final DocumentQueryService documentService;
     private final AllFoldersDocumentQueryService allDocumentQueryService;
+    private final ThumbnailUrlResolver thumbnailUrlResolver;
 
-    private final CommonProperties commonProperties;
-
-    @Autowired(required = false)
-    private ThumbnailProperties thumbnailProperties;
-
-    @Autowired(required = false)
-    private ThumbnailStorageService thumbnailStorageService;
-
-    public DocumentQueryController(@Qualifier("defaultDocumentQueryService") DocumentQueryService documentService, AllFoldersDocumentQueryService allDocumentQueryService, CommonProperties commonProperties) {
+    public DocumentQueryController(@Qualifier("defaultDocumentQueryService") DocumentQueryService documentService,
+                                   AllFoldersDocumentQueryService allDocumentQueryService,
+                                   ThumbnailUrlResolver thumbnailUrlResolver) {
         this.documentService = documentService;
         this.allDocumentQueryService = allDocumentQueryService;
-        this.commonProperties = commonProperties;
+        this.thumbnailUrlResolver = thumbnailUrlResolver;
     }
 
     @QueryMapping
@@ -79,15 +67,10 @@ public class DocumentQueryController {
 
     /**
      * Resolves the thumbnailUrl field for FolderElementInfo type.
-     * Returns the thumbnail URL if:
-     * - Thumbnail feature is active
-     * - Document is a FILE (not FOLDER)
-     * - Content type is supported for thumbnail generation
-     * - Thumbnail exists in storage
      */
     @SchemaMapping(typeName = "FolderElementInfo", field = "thumbnailUrl")
     public Mono<String> folderElementThumbnailUrl(FullDocumentInfo info) {
-        return resolveThumbnailUrl(info);
+        return thumbnailUrlResolver.resolveThumbnailUrl(info.id(), info.type(), info.contentType());
     }
 
     /**
@@ -95,34 +78,7 @@ public class DocumentQueryController {
      */
     @SchemaMapping(typeName = "DocumentInfo", field = "thumbnailUrl")
     public Mono<String> documentInfoThumbnailUrl(FullDocumentInfo info) {
-        return resolveThumbnailUrl(info);
-    }
-
-    private Mono<String> resolveThumbnailUrl(FullDocumentInfo info) {
-        // Feature not active
-        if (thumbnailProperties == null || thumbnailStorageService == null) {
-            return Mono.empty();
-        }
-
-        // Only files can have thumbnails
-        if (info.type() == DocumentType.FOLDER) {
-            return Mono.empty();
-        }
-
-        // Check if content type is supported
-        if (!thumbnailProperties.isContentTypeSupported(info.contentType())) {
-            return Mono.empty();
-        }
-
-        // Check if thumbnail exists and return URL
-        return thumbnailStorageService.thumbnailExists(info.id())
-                .flatMap(exists -> {
-                    if (exists) {
-                        String url = commonProperties.getApiPublicBaseUrl() + API_PREFIX + ENDPOINT_THUMBNAILS + "/img/" + info.id();
-                        return Mono.just(url);
-                    }
-                    return Mono.empty();
-                });
+        return thumbnailUrlResolver.resolveThumbnailUrl(info.id(), info.type(), info.contentType());
     }
 
 }
