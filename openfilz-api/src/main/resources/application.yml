@@ -97,6 +97,7 @@ openfilz:
 
   full-text:
     active: false
+    default-index: openfilz
     indexation-mode: local # local (only choice for the moment) -> to be developed : redis | kafka | nats
     opensearch:
       host: localhost
