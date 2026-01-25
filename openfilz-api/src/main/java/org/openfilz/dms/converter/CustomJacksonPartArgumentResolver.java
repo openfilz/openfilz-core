@@ -1,7 +1,6 @@
 package org.openfilz.dms.converter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.jetbrains.annotations.NotNull;
 import org.springframework.core.MethodParameter;
 import org.springframework.core.ResolvableType;
 import org.springframework.core.io.buffer.DataBufferUtils;
@@ -31,9 +30,9 @@ public class CustomJacksonPartArgumentResolver implements HandlerMethodArgumentR
     }
     
     @Override
-    public @NotNull Mono<Object> resolveArgument(
+    public Mono<Object> resolveArgument(
             MethodParameter parameter,
-            @NotNull BindingContext bindingContext,
+            BindingContext bindingContext,
             ServerWebExchange exchange) {
         
         CustomJsonPart annotation = parameter.getParameterAnnotation(CustomJsonPart.class);
