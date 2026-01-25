@@ -7,6 +7,7 @@ public interface RestApiVersion {
 
     String ENDPOINT_AUDIT = "/audit";
     String ENDPOINT_DASHBOARD = "/dashboard";
+    String ENDPOINT_SETTINGS = "/settings";
 
     String ENDPOINT_DOCUMENTS = "/documents";
     String ENDPOINT_SUGGESTIONS = "/suggestions";
