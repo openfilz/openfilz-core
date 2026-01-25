@@ -208,7 +208,8 @@ public abstract class AbstractSecurityService implements SecurityService {
                     RestApiVersion.ENDPOINT_SUGGESTIONS,
                     RestApiVersion.ENDPOINT_RECYCLE_BIN,
                     RestApiVersion.ENDPOINT_DASHBOARD,
-                    RestApiVersion.ENDPOINT_FAVORITES
+                    RestApiVersion.ENDPOINT_FAVORITES,
+                    RestApiVersion.ENDPOINT_SETTINGS
                 ))
                 ||
                 (method.equals(HttpMethod.POST) && (
