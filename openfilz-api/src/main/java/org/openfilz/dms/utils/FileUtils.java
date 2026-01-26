@@ -1,7 +1,6 @@
 package org.openfilz.dms.utils;
 
 import lombok.experimental.UtilityClass;
-import org.jetbrains.annotations.NotNull;
 import org.openfilz.dms.enums.DocumentType;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.multipart.FilePart;
