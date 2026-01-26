@@ -190,7 +190,9 @@ public abstract class AbstractSecurityService implements SecurityService {
                         pathStartsWith(path, RestApiVersion.ENDPOINT_FILES, "/documents/upload", "/documents/upload-multiple", RestApiVersion.ENDPOINT_RECYCLE_BIN) ||
                                 path.equals(RestApiVersion.ENDPOINT_FOLDERS) ||
                                 path.equals("/folders/move") ||
-                                path.equals("/folders/copy")));
+                                path.equals("/folders/copy") ||
+                                path.equals("/documents/create-blank")
+                        ));
     }
 
     protected final boolean isAudit(String path) {
