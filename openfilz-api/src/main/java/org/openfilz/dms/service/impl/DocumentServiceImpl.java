@@ -15,6 +15,7 @@ import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.entity.PhysicalDocument;
 import org.openfilz.dms.enums.AccessType;
 import org.openfilz.dms.enums.AuditAction;
+import org.openfilz.dms.enums.DocumentTemplateType;
 import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.enums.OpenSearchDocumentKey;
 import org.openfilz.dms.exception.DocumentNotFoundException;
@@ -23,7 +24,9 @@ import org.openfilz.dms.exception.OperationForbiddenException;
 import org.openfilz.dms.exception.StorageException;
 import org.openfilz.dms.repository.DocumentDAO;
 import org.openfilz.dms.service.*;
+import org.openfilz.dms.utils.BlankDocumentGenerator;
 import org.openfilz.dms.utils.ContentInfo;
+import org.openfilz.dms.utils.InMemoryFilePart;
 import org.openfilz.dms.utils.JsonUtils;
 import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.beans.factory.annotation.Value;
@@ -67,6 +70,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
     protected final SaveDocumentService saveDocumentService;
     protected final MetadataPostProcessor metadataPostProcessor;
     protected final DocumentDeleteService documentDeleteService;
+    protected final BlankDocumentGenerator blankDocumentGenerator;
 
     @Value("${piped.buffer.size:1024}")
     private Integer pipedBufferSize;
@@ -158,6 +162,85 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                     return storageService.saveFile(filePart);
                 })
         );
+    }
+
+    @Override
+    public Mono<UploadResponse> createBlankDocument(String name, DocumentTemplateType documentType, UUID parentFolderId) {
+        if (name.contains(StorageService.FOLDER_SEPARATOR)) {
+            return Mono.error(new OperationForbiddenException("Document name should not contain any '/'"));
+        }
+
+        String contentType = getContentType(documentType);
+        String normalizedName = ensureCorrectExtension(name, documentType);
+
+        if (parentFolderId != null) {
+            return documentDAO.existsByIdAndType(parentFolderId, FOLDER, AccessType.RW)
+                    .flatMap(exists -> {
+                        if (!exists) {
+                            return Mono.error(new DocumentNotFoundException(FOLDER, parentFolderId));
+                        }
+                        return doCreateBlankDocument(normalizedName, documentType, contentType, parentFolderId);
+                    });
+        }
+        return doCreateBlankDocument(normalizedName, documentType, contentType, null);
+    }
+
+    private Mono<UploadResponse> doCreateBlankDocument(String name, DocumentTemplateType documentType, String contentType, UUID parentFolderId) {
+        Mono<Boolean> duplicateCheck = documentExists(name, parentFolderId);
+
+        return duplicateCheck.flatMap(exists -> {
+            if (exists) {
+                return Mono.error(new DuplicateNameException(FILE, name));
+            }
+
+            return Mono.fromCallable(() -> {
+                byte[] documentBytes = blankDocumentGenerator.generateBlankDocument(documentType);
+                return new InMemoryFilePart(name, documentBytes, contentType);
+            }).subscribeOn(Schedulers.boundedElastic())
+            .flatMap(filePart -> {
+                long size = filePart.headers().getContentLength();
+                return storageService.saveFile(filePart)
+                    .flatMap(storagePath -> {
+                        Document.DocumentBuilder documentBuilder = Document.builder()
+                                .name(name)
+                                .type(FILE)
+                                .contentType(contentType)
+                                .size(size)
+                                .parentId(parentFolderId)
+                                .storagePath(storagePath);
+
+                        return saveDocumentService.doSaveFile(saveDocumentService.saveNewDocumentFunction(documentBuilder))
+                                .flatMap(savedDoc -> auditService.logAction(AuditAction.UPLOAD_DOCUMENT, FILE, savedDoc.getId())
+                                        .thenReturn(savedDoc))
+                                .as(tx::transactional)
+                                .doOnSuccess(this::postProcessDocument)
+                                .map(doc -> new UploadResponse(doc.getId(), doc.getName(), doc.getContentType(), doc.getSize()));
+                    });
+            });
+        });
+    }
+
+    private String getContentType(DocumentTemplateType documentType) {
+        return switch (documentType) {
+            case WORD -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            case EXCEL -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            case POWERPOINT -> "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+            case TEXT -> "text/plain";
+        };
+    }
+
+    private String ensureCorrectExtension(String name, DocumentTemplateType documentType) {
+        String expectedExtension = switch (documentType) {
+            case WORD -> ".docx";
+            case EXCEL -> ".xlsx";
+            case POWERPOINT -> ".pptx";
+            case TEXT -> ".txt";
+        };
+
+        if (!name.toLowerCase().endsWith(expectedExtension)) {
+            return name + expectedExtension;
+        }
+        return name;
     }
 
 

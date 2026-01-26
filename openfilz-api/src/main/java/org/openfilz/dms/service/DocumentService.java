@@ -2,6 +2,7 @@ package org.openfilz.dms.service;
 
 import org.openfilz.dms.dto.request.*;
 import org.openfilz.dms.dto.response.*;
+import org.openfilz.dms.enums.DocumentTemplateType;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.utils.ContentInfo;
 import org.springframework.core.io.Resource;
@@ -36,6 +37,16 @@ public interface DocumentService {
 
     // Document (File/Folder) Operations
     Mono<UploadResponse> uploadDocument(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, Boolean allowDuplicateFileNames);
+
+    /**
+     * Create a blank document from a template.
+     *
+     * @param name           The name for the new document (including extension).
+     * @param documentType   The type of document to create (WORD, EXCEL, POWERPOINT, TEXT).
+     * @param parentFolderId The parent folder ID, or null for root.
+     * @return A Mono containing the upload response with the new document's ID.
+     */
+    Mono<UploadResponse> createBlankDocument(String name, DocumentTemplateType documentType, UUID parentFolderId);
 
     Mono<Document> replaceDocumentContent(UUID documentId, FilePart newFilePart, ContentInfo contentInfo);
 

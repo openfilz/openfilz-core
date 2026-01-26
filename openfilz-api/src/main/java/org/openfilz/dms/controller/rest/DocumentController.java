@@ -73,6 +73,15 @@ public class DocumentController {
                 .map(uploadResponse -> ResponseEntity.status(HttpStatus.CREATED).body(uploadResponse));
     }
 
+    @PostMapping(value = "/create-blank")
+    @Operation(summary = "Create a blank document from template",
+            description = "Creates a new blank document (Word, Excel, PowerPoint, or Text) from a template in the specified folder.")
+    public Mono<ResponseEntity<UploadResponse>> createBlankDocument(
+            @Valid @org.springframework.web.bind.annotation.RequestBody CreateBlankDocumentRequest request) {
+        return documentService.createBlankDocument(request.name(), request.documentType(), request.parentFolderId())
+                .map(uploadResponse -> ResponseEntity.status(HttpStatus.CREATED).body(uploadResponse));
+    }
+
     @PostMapping(value = "/upload-multiple", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Upload multiple documents",
             description = "Uploads multiple files, optionally with metadata and a parent folder ID. " +
