@@ -33,13 +33,6 @@ public class BlankDocumentGenerator {
         };
     }
 
-    /**
-     * Gets the size of a blank document of the specified type.
-     */
-    public int getBlankDocumentSize(DocumentTemplateType documentType) throws IOException {
-        return generateBlankDocument(documentType).length;
-    }
-
     private byte[] generateBlankTxt() {
         return EMPTY_BYTES;
     }
