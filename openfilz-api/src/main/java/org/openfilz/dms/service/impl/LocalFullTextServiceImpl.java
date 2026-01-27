@@ -19,6 +19,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.UUID;
+import java.util.function.Function;
 
 @Slf4j
 @Service
@@ -43,41 +44,48 @@ public class LocalFullTextServiceImpl implements FullTextService {
     }
 
     private void indexFolder(Document document) {
-        indexService.indexDocMetadataMono(document)
-                .retryWhen(Retry.backoff(3, Duration.ofMillis(100))
-                        .filter(this::isRetryableException)
-                        .doBeforeRetry(signal -> log.warn("Retrying indexFolder for document {}, attempt {}",
-                                document.getId(), signal.totalRetries() + 1)))
-                .doOnError(err -> log.error("indexFolder error for {} : {}", document.getId(), err.getMessage()))
-                .subscribeOn(Schedulers.boundedElastic())
-                .subscribe();
+        doIndexDocMetadataMono(document, "Retrying indexFolder for document {}, attempt {}", "indexFolder error for {} : {}");
     }
 
     private void indexFile(Document document) {
         try {
-            Path tempFile = Files.createTempFile("upload-opf", ".tmp");
-            indexService.indexDocMetadataMono(document)
-                    .then(tikaService.processResource(tempFile, storageService.loadFile(document.getStoragePath()))
-                            .as(flux -> indexService.indexDocumentStream(flux, document.getId()))
-                    )
-                    .then(Mono.fromRunnable(() -> {
-                        try {
-                            Files.deleteIfExists(tempFile);
-                            log.info("Cleaned up stable temp file [{}].", tempFile);
-                        } catch (Exception e) {
-                            log.error("Failed to clean up stable temp file [{}].", tempFile, e);
-                        }
-                    }))
-                    .retryWhen(Retry.backoff(3, Duration.ofMillis(100))
-                            .filter(this::isRetryableException)
-                            .doBeforeRetry(signal -> log.warn("Retrying indexFile for document {}, attempt {}",
-                                    document.getId(), signal.totalRetries() + 1)))
-                    .doOnError(err -> log.error("indexFile error for {} : {}", document.getId(), err.getMessage()))
-                    .subscribeOn(Schedulers.boundedElastic())
-                    .subscribe();
+            if(document.getSize() > 0) {
+                Path tempFile = Files.createTempFile("upload-opf", ".tmp");
+                subscribeAndRetryOnError(indexService.indexDocMetadataMono(document)
+                        .then(tikaService.processResource(tempFile, storageService.loadFile(document.getStoragePath()))
+                                .as(flux -> indexService.indexDocumentStream(flux, document.getId()))
+                        )
+                        .then(Mono.fromRunnable(() -> {
+                            try {
+                                Files.deleteIfExists(tempFile);
+                                log.info("Cleaned up stable temp file [{}].", tempFile);
+                            } catch (Exception e) {
+                                log.error("Failed to clean up stable temp file [{}].", tempFile, e);
+                            }
+                        })),
+                        document,
+                        "Retrying indexFile for document {}, attempt {}", "indexFile error for {} : {}"
+                );
+            } else {
+                doIndexDocMetadataMono(document, "Retrying indexFile for document {}, attempt {}", "indexFile error for {} : {}");
+            }
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private void doIndexDocMetadataMono(Document document, String warningMessage, String errorMessage) {
+        subscribeAndRetryOnError(indexService.indexDocMetadataMono(document), document, warningMessage, errorMessage);
+    }
+
+    private void subscribeAndRetryOnError(Mono<Void> indexProcessMono, Document document, String warningMessage, String errorMessage) {
+        indexProcessMono.retryWhen(Retry.backoff(3, Duration.ofMillis(100))
+                        .filter(this::isRetryableException)
+                        .doBeforeRetry(signal -> log.warn(warningMessage,
+                                document.getId(), signal.totalRetries() + 1)))
+                .doOnError(err -> log.error(errorMessage, document.getId(), err.getMessage()))
+                .subscribeOn(Schedulers.boundedElastic())
+                .subscribe();
     }
 
     private boolean isRetryableException(Throwable throwable) {
