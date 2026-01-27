@@ -412,4 +412,22 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
                 ))
                 .one();
     }
+
+    @Override
+    public Mono<Long> getTotalStorageByUser(String username) {
+        // Optimized query: sum only FILE sizes (folders have no size), filter by created_by and active
+        // Uses COALESCE to return 0 if no files exist for the user
+        String sql = """
+            SELECT COALESCE(SUM(size), 0) as total_size
+            FROM documents
+            WHERE created_by = :username
+              AND type = 'FILE'
+              AND active = true
+            """;
+        return databaseClient.sql(sql)
+                .bind("username", username)
+                .map(row -> row.get("total_size", Long.class))
+                .one()
+                .defaultIfEmpty(0L);
+    }
 }

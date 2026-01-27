@@ -85,6 +85,15 @@ openfilz:
     api-internal-base-url: ${OPENFILZ_INTERNAL_API_BASE_URL:http://host.docker.internal:8081}
     api-public-base-url: ${OPENFILZ_PUBLIC_API_BASE_URL:http://localhost:8081}
 
+  # Quota Configuration
+  quota:
+    # Maximum file size for each uploaded file in megabytes (MB)
+    # 0 = no limit (default), > 0 = max file size in MB per file
+    file-upload: ${OPENFILZ_QUOTA_FILE_UPLOAD:0}
+    # Maximum total storage quota per user in megabytes (MB)
+    # 0 = no limit (default), > 0 = max total storage in MB per user
+    user: ${OPENFILZ_QUOTA_USER:0}
+
   calculate-checksum: false
   #  calculate-checksum: default false - if true : calculate checksum of each new or modified file
   security:
