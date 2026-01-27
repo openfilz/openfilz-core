@@ -3,6 +3,7 @@ package org.openfilz.dms.service.impl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.r2dbc.postgresql.codec.Json;
 import lombok.extern.slf4j.Slf4j;
+import org.openfilz.dms.config.QuotaProperties;
 import org.openfilz.dms.dto.audit.UploadAudit;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.entity.Document;
@@ -33,8 +34,8 @@ import static org.openfilz.dms.service.ChecksumService.HASH_SHA256_KEY;
 public class ChecksumSaveDocumentServiceImpl extends SaveDocumentServiceImpl {
     private final ChecksumService checksumService;
 
-    public ChecksumSaveDocumentServiceImpl(StorageService storageService, ObjectMapper objectMapper, AuditService auditService, JsonUtils jsonUtils, DocumentDAO documentDAO, MetadataPostProcessor metadataPostProcessor, TransactionalOperator tx, ChecksumService checksumService) {
-        super(storageService, objectMapper, auditService, jsonUtils, documentDAO, metadataPostProcessor, tx);
+    public ChecksumSaveDocumentServiceImpl(StorageService storageService, ObjectMapper objectMapper, AuditService auditService, JsonUtils jsonUtils, DocumentDAO documentDAO, MetadataPostProcessor metadataPostProcessor, TransactionalOperator tx, QuotaProperties quotaProperties, ChecksumService checksumService) {
+        super(storageService, objectMapper, auditService, jsonUtils, documentDAO, metadataPostProcessor, tx, quotaProperties);
         this.checksumService = checksumService;
     }
 

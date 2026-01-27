@@ -59,4 +59,13 @@ public interface DocumentDAO {
      * @return A Mono containing the document's position information.
      */
     Mono<DocumentPosition> getDocumentPosition(UUID documentId, String sortBy, String sortOrder);
+
+    /**
+     * Get the total storage size used by a user (sum of all file sizes created by the user).
+     * This is an optimized query for quota enforcement.
+     *
+     * @param username The username (created_by field) to calculate storage for.
+     * @return A Mono containing the total size in bytes (0 if no files exist).
+     */
+    Mono<Long> getTotalStorageByUser(String username);
 }

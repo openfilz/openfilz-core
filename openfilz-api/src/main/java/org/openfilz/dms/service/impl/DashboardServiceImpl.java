@@ -2,6 +2,8 @@ package org.openfilz.dms.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.openfilz.dms.config.CommonProperties;
+import org.openfilz.dms.config.QuotaProperties;
 import org.openfilz.dms.dto.response.DashboardStatisticsResponse;
 import org.openfilz.dms.dto.response.FileTypeStats;
 import org.openfilz.dms.dto.response.StorageBreakdown;
@@ -23,6 +25,7 @@ import java.util.List;
 public class DashboardServiceImpl implements DashboardService {
 
     private final StatisticsDAO statisticsDAO;
+    private final QuotaProperties commonProperties;
 
     // File type patterns for categorization
     private static final String DOCUMENTS_PATTERN = "application/%";
@@ -93,7 +96,7 @@ public class DashboardServiceImpl implements DashboardService {
                     );
 
                     // For now, set total available to null (no quota system)
-                    return new StorageBreakdown(totalStorage, null, breakdown);
+                    return new StorageBreakdown(totalStorage, commonProperties.getUserQuotaInBytes(), breakdown);
                 });
     }
 

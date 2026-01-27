@@ -2,18 +2,20 @@ package org.openfilz.dms.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.openfilz.dms.config.QuotaProperties;
 import org.openfilz.dms.dto.audit.ReplaceAudit;
 import org.openfilz.dms.dto.audit.UploadAudit;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.AuditAction;
+import org.openfilz.dms.exception.FileSizeExceededException;
+import org.openfilz.dms.exception.UserQuotaExceededException;
 import org.openfilz.dms.repository.DocumentDAO;
 import org.openfilz.dms.service.AuditService;
 import org.openfilz.dms.service.MetadataPostProcessor;
 import org.openfilz.dms.service.SaveDocumentService;
 import org.openfilz.dms.service.StorageService;
 import org.openfilz.dms.utils.FileUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.openfilz.dms.utils.ContentInfo;
 import org.openfilz.dms.utils.JsonUtils;
 import org.openfilz.dms.utils.UserInfoService;
@@ -43,6 +45,7 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
     protected final DocumentDAO documentDAO;
     protected final MetadataPostProcessor metadataPostProcessor;
     protected final TransactionalOperator tx;
+    protected final QuotaProperties quotaProperties;
 
 
    public Mono<UploadResponse> doSaveFile(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, Mono<String> storagePathMono) {
@@ -58,10 +61,12 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
     }
 
     protected Mono<Document> replaceFileContentAndSave(FilePart newFilePart, ContentInfo contentInfo, Document document, String newStoragePath, String oldStoragePath) {
-        if(contentInfo.length() == null) {
+        if(contentInfo == null || contentInfo.length() == null) {
+            // Content-Length was not provided - get actual size from storage and validate quota
             return storageService.getFileLength(newStoragePath)
-                    .flatMap(fileLength -> replaceDocumentInDB(newFilePart,
-                            newStoragePath, oldStoragePath, new ContentInfo(fileLength, contentInfo.checksum()), document))
+                    .flatMap(fileLength -> validateFileSizeAfterStorage(fileLength, newFilePart.filename(), newStoragePath)
+                            .then(replaceDocumentInDB(newFilePart,
+                                    newStoragePath, oldStoragePath, new ContentInfo(fileLength, contentInfo != null ? contentInfo.checksum() : null), document)))
                     .doOnSuccess(this::postProcessDocument);
         }
         return replaceDocumentInDB(newFilePart, newStoragePath, oldStoragePath, contentInfo, document)
@@ -78,10 +83,57 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
 
     protected Mono<Document> saveDocumentInDatabase(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, String storagePath) {
         if(contentLength == null) {
+            // Content-Length was not provided - get actual size from storage and validate quota
             return storageService.getFileLength(storagePath)
-                    .flatMap(fileLength -> saveDocumentInDB(filePart, storagePath, fileLength, parentFolderId, metadata, originalFilename));
+                    .flatMap(fileLength -> validateFileSizeAfterStorage(fileLength, originalFilename, storagePath)
+                            .then(saveDocumentInDB(filePart, storagePath, fileLength, parentFolderId, metadata, originalFilename)));
         }
         return saveDocumentInDB(filePart, storagePath, contentLength, parentFolderId, metadata, originalFilename);
+    }
+
+    /**
+     * Validates file size and user quota after storage when Content-Length header was not available.
+     * If any quota is exceeded, deletes the stored file and returns an error.
+     */
+    private Mono<Void> validateFileSizeAfterStorage(Long fileLength, String filename, String storagePath) {
+        return validateFileUploadQuota(fileLength, filename, storagePath)
+                .then(validateUserQuotaAfterStorage(fileLength, storagePath));
+    }
+
+    /**
+     * Validates file upload quota (single file size limit).
+     */
+    private Mono<Void> validateFileUploadQuota(Long fileLength, String filename, String storagePath) {
+        if (!quotaProperties.isFileUploadQuotaEnabled()) {
+            return Mono.empty();
+        }
+        Long maxSize = quotaProperties.getFileUploadQuotaInBytes();
+        if (fileLength > maxSize) {
+            // Delete the file that was already stored, then return error
+            return storageService.deleteFile(storagePath)
+                    .then(Mono.error(new FileSizeExceededException(filename, fileLength, maxSize)));
+        }
+        return Mono.empty();
+    }
+
+    /**
+     * Validates user quota after storage when Content-Length was not available.
+     */
+    private Mono<Void> validateUserQuotaAfterStorage(Long fileLength, String storagePath) {
+        if (!quotaProperties.isUserQuotaEnabled()) {
+            return Mono.empty();
+        }
+        Long maxQuota = quotaProperties.getUserQuotaInBytes();
+        return getConnectedUserEmail()
+                .flatMap(username -> documentDAO.getTotalStorageByUser(username)
+                        .flatMap(currentUsage -> {
+                            if (currentUsage + fileLength > maxQuota) {
+                                // Delete the file that was already stored, then return error
+                                return storageService.deleteFile(storagePath)
+                                        .then(Mono.error(new UserQuotaExceededException(username, currentUsage, fileLength, maxQuota)));
+                            }
+                            return Mono.empty();
+                        }));
     }
 
     private Mono<Document> saveDocumentInDB(FilePart filePart, String storagePath, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename) {

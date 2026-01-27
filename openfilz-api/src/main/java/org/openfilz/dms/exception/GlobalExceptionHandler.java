@@ -28,6 +28,19 @@ public class GlobalExceptionHandler {
         return Mono.just(ResponseEntity.status(HttpStatus.CONFLICT).body(new ErrorResponse(HttpStatus.CONFLICT.value(), ex.getMessage())));
     }
 
+    @ExceptionHandler(FileSizeExceededException.class)
+    public Mono<ResponseEntity<ErrorResponse>> handleFileSizeExceeded(FileSizeExceededException ex) {
+        log.warn("File size exceeded: {}", ex.getMessage());
+        return Mono.just(ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(new ErrorResponse(HttpStatus.PAYLOAD_TOO_LARGE.value(), ex.getMessage())));
+    }
+
+    @ExceptionHandler(UserQuotaExceededException.class)
+    public Mono<ResponseEntity<ErrorResponse>> handleUserQuotaExceeded(UserQuotaExceededException ex) {
+        log.warn("User quota exceeded: {}", ex.getMessage());
+        // HTTP 507 Insufficient Storage is appropriate for quota exceeded scenarios
+        return Mono.just(ResponseEntity.status(HttpStatus.INSUFFICIENT_STORAGE).body(new ErrorResponse(HttpStatus.INSUFFICIENT_STORAGE.value(), ex.getMessage())));
+    }
+
     @ExceptionHandler(OperationForbiddenException.class)
     public Mono<ResponseEntity<ErrorResponse>> handleOperationForbidden(OperationForbiddenException ex) {
         log.warn("Operation forbidden: {}", ex.getMessage());

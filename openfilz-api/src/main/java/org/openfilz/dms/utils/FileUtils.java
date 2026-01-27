@@ -13,6 +13,8 @@ import static org.openfilz.dms.service.ChecksumService.HASH_SHA256_KEY;
 @UtilityClass
 public class FileUtils {
 
+    private static final String[] UNITS = {"kB", "MB", "GB", "TB"};
+
     public static String removeFileExtension(String name) {
         int endIndex = name.lastIndexOf(".");
         if(endIndex > 0) {
@@ -52,6 +54,22 @@ public class FileUtils {
         return contentType != null && !MediaType.APPLICATION_OCTET_STREAM_VALUE.equals(contentType.toString()) ?
                 contentType.toString() :
                 ContentTypeMapper.getContentType(getFileExtension(filePart.filename()));
+    }
+
+    public static String humanReadableBytes(long bytes) {
+        if (bytes < 1024) {
+            return bytes + " B";
+        }
+
+        double value = bytes;
+        int unitIndex = -1;
+
+        do {
+            value /= 1024;
+            unitIndex++;
+        } while (value >= 1024 && unitIndex < UNITS.length - 1);
+
+        return String.format("%.2f %s", value, UNITS[unitIndex]);
     }
 
 }
