@@ -1,13 +1,15 @@
 package org.openfilz.dms.config;
 
 import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Configuration properties for thumbnail generation feature.
- * Maps to openfilz.thumbnail.* properties in application.yml
+ * Configuration properties for common OpenFilz settings.
+ * Maps to openfilz.common.* properties in application.yml
  */
+@Slf4j
 @Data
 @Configuration
 @ConfigurationProperties(prefix = "openfilz.common")

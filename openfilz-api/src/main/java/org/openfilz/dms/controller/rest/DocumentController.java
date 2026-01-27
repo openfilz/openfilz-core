@@ -103,17 +103,22 @@ public class DocumentController {
         return filePartFlux.flatMapSequential(filePart -> {
                     MultipleUploadFileParameterAttributes fileParameters = parametersByFilenameMap.get(filePart.filename());
                     String filename = filePart.filename();
+                    // Get content length from FilePart headers if available (for quota validation)
+                    Long fileContentLength = filePart.headers().getContentLength();
+                    if (fileContentLength != null && fileContentLength < 0) {
+                        fileContentLength = null; // -1 means unknown size
+                    }
 
                     Mono<UploadResponse> uploadMono;
                     if (fileParameters == null) {
                         log.debug("Processing file: {}", filename);
-                        uploadMono = documentService.uploadDocument(filePart, null, null, null, allowDuplicateFileNames);
+                        uploadMono = documentService.uploadDocument(filePart, fileContentLength, null, null, allowDuplicateFileNames);
                     } else {
                         log.debug("Processing file: {}, parentId: {}, metadata: {}",
                                 filename,
                                 fileParameters.parentFolderId(),
                                 fileParameters.metadata());
-                        uploadMono = documentService.uploadDocument(filePart, null, fileParameters.parentFolderId(), fileParameters.metadata(), allowDuplicateFileNames);
+                        uploadMono = documentService.uploadDocument(filePart, fileContentLength, fileParameters.parentFolderId(), fileParameters.metadata(), allowDuplicateFileNames);
                     }
 
                     // Handle errors gracefully - convert exceptions to error responses
@@ -173,6 +178,8 @@ public class DocumentController {
                 case DOCUMENT_NOT_FOUND -> HttpStatus.NOT_FOUND;
                 case DUPLICATE_NAME -> HttpStatus.CONFLICT;
                 case OPERATION_FORBIDDEN -> HttpStatus.FORBIDDEN;
+                case FILE_SIZE_EXCEEDED -> HttpStatus.PAYLOAD_TOO_LARGE;
+                case USER_QUOTA_EXCEEDED -> HttpStatus.INSUFFICIENT_STORAGE;
                 default -> HttpStatus.INTERNAL_SERVER_ERROR;
             };
         }
