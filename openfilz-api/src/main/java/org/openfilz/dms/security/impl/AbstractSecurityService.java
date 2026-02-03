@@ -6,7 +6,7 @@ import org.openfilz.dms.config.OnlyOfficeProperties;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.config.ThumbnailProperties;
 import org.openfilz.dms.enums.Role;
-import org.openfilz.dms.enums.RoleTokenLookup;
+import org.openfilz.dms.config.AutorizationMode;
 import org.openfilz.dms.security.SecurityService;
 import org.openfilz.dms.utils.FileConstants;
 import org.springframework.beans.factory.annotation.Value;
@@ -34,15 +34,10 @@ public abstract class AbstractSecurityService implements SecurityService {
     protected static final String REALM_ACCESS = "realm_access";
     protected static final String GROUPS = "groups";
 
-    @Value("${openfilz.security.role-token-lookup:#{null}}")
-    protected RoleTokenLookup roleTokenLookup;
-
-    @Value("${openfilz.security.root-group:#{null}}")
-    protected String rootGroupName;
-
     @Value("${spring.graphql.http.path:/graphql}")
     protected String graphQlBaseUrl;
 
+    protected final AutorizationMode autorizationMode;
     protected final OnlyOfficeProperties onlyOfficeProperties;
     protected final ThumbnailProperties thumbnailProperties;
 
@@ -115,7 +110,7 @@ public abstract class AbstractSecurityService implements SecurityService {
         /*if(roleTokenLookup == RoleTokenLookup.AUTHORITIES) {
             return isInAuthorities(auth, anyRoles);
         }*/
-        if(roleTokenLookup == RoleTokenLookup.GROUPS) {
+        if(autorizationMode.areRolesBasedOnGroups()) {
             return isInOneOfGroups(auth, anyRoles);
         }
         return isInOneOfRealmRoles(auth, anyRoles);
@@ -126,7 +121,7 @@ public abstract class AbstractSecurityService implements SecurityService {
         /*if(roleTokenLookup == RoleTokenLookup.AUTHORITIES) {
             return isInAuthorities(auth, anyRoles);
         }*/
-        if(roleTokenLookup == RoleTokenLookup.GROUPS) {
+        if(autorizationMode.areRolesBasedOnGroups()) {
             return hasGroup(auth, role);
         }
         return hasRealmRole(auth, role);
@@ -135,7 +130,7 @@ public abstract class AbstractSecurityService implements SecurityService {
     private boolean hasGroup(JwtAuthenticationToken auth, String groupSuffix) {
         List<String> groups = auth.getToken().getClaim(GROUPS);
         if(groups != null && !groups.isEmpty()) {
-            String group = FileConstants.SLASH + rootGroupName + FileConstants.SLASH + groupSuffix;
+            String group = FileConstants.SLASH + autorizationMode.getRootGroupName() + FileConstants.SLASH + groupSuffix;
             return groups.contains(group);
         }
         return false;
@@ -152,7 +147,7 @@ public abstract class AbstractSecurityService implements SecurityService {
     }
 
     protected boolean isInGroups(String groupSuffix, List<String> groups) {
-        String group = FileConstants.SLASH + rootGroupName + FileConstants.SLASH + groupSuffix;
+        String group = FileConstants.SLASH + autorizationMode.getRootGroupName() + FileConstants.SLASH + groupSuffix;
         return groups.contains(group);
     }
 
