@@ -1,6 +1,7 @@
 package org.openfilz.dms.service.impl;
 
 import lombok.RequiredArgsConstructor;
+import org.openfilz.dms.config.QuotaProperties;
 import org.openfilz.dms.config.RecycleBinProperties;
 import org.openfilz.dms.dto.response.Settings;
 import org.openfilz.dms.service.SettingsService;
@@ -17,27 +18,27 @@ public class SettingsServiceImpl implements SettingsService {
 
     private final RecycleBinProperties recycleBinProperties;
 
+    private final QuotaProperties quotaProperties;
+
     @Override
     public Mono<Settings> getSettings() {
-        if(!softDelete || !recycleBinProperties.isEnabled()) {
-            return emptySettings();
+        Integer emptyBinInterval = null;
+        if(softDelete && recycleBinProperties.isEnabled()) {
+            String autoCleanupInterval = recycleBinProperties.getAutoCleanupInterval();
+            if(autoCleanupInterval != null) {
+                autoCleanupInterval = autoCleanupInterval.trim();
+                if(!autoCleanupInterval.isEmpty() && !autoCleanupInterval.equals("0")) {
+                    int i = autoCleanupInterval.indexOf((" "));
+                    if(i < 0) {
+                        emptyBinInterval = Integer.parseInt(autoCleanupInterval);
+                    } else {
+                        emptyBinInterval = Integer.parseInt(autoCleanupInterval.substring(0, i));
+                    }
+                }
+            }
         }
-        String autoCleanupInterval = recycleBinProperties.getAutoCleanupInterval();
-        if(autoCleanupInterval == null) {
-            return emptySettings();
-        }
-        autoCleanupInterval = autoCleanupInterval.trim();
-        if(autoCleanupInterval.isEmpty() || autoCleanupInterval.equals("0")) {
-            return emptySettings();
-        }
-        int i = autoCleanupInterval.indexOf((" "));
-        if(i < 0) {
-            return Mono.just(new Settings(Integer.parseInt(autoCleanupInterval)));
-        }
-        return Mono.just(new Settings(Integer.parseInt(autoCleanupInterval.substring(0, i))));
+       return Mono.just(new Settings(emptyBinInterval, quotaProperties.getFileUpload(), quotaProperties.getUser()));
+
     }
 
-    private Mono<Settings> emptySettings() {
-        return Mono.just(new Settings(null));
-    }
 }
