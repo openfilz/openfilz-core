@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.DefaultRolesNoWormCondition;
 import org.openfilz.dms.config.OnlyOfficeProperties;
 import org.openfilz.dms.config.ThumbnailProperties;
+import org.openfilz.dms.config.AutorizationMode;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.stereotype.Service;
 
@@ -13,7 +14,7 @@ import org.springframework.stereotype.Service;
 public class SecurityServiceImpl extends AbstractSecurityService {
 
 
-    public SecurityServiceImpl(OnlyOfficeProperties onlyOfficeProperties, ThumbnailProperties thumbnailProperties) {
-        super(onlyOfficeProperties, thumbnailProperties);
+    public SecurityServiceImpl(AutorizationMode autorizationMode, OnlyOfficeProperties onlyOfficeProperties, ThumbnailProperties thumbnailProperties) {
+        super(autorizationMode, onlyOfficeProperties, thumbnailProperties);
     }
 }
