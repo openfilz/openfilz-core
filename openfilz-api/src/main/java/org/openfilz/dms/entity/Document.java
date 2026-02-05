@@ -72,4 +72,7 @@ public class Document implements SqlColumnMapping, PhysicalDocument {
 
     @Transient
     private Boolean sharedEdit; // Not stored in database, populated from JOIN
+
+    @Transient
+    private Boolean sharedComment; // Not stored in database, populated from JOIN
 }
