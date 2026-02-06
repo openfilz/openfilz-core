@@ -29,6 +29,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -37,8 +38,6 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
-
-import reactor.core.scheduler.Schedulers;
 
 import static org.openfilz.dms.enums.DocumentType.FILE;
 import static org.openfilz.dms.enums.DocumentType.FOLDER;
@@ -347,7 +346,7 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
                 .filter(path -> path.endsWith(".json"))
                 .flatMap(metaPath -> {
                     String uploadId = extractUploadIdFromMetaPath(metaPath);
-                    return loadMetadata(uploadId)
+                    return loadMetadata(false, uploadId)
                             .filter(TusUploadMetadata::isExpired)
                             .flatMap(meta -> cancelUpload(uploadId).thenReturn(1))
                             .onErrorResume(e -> {
@@ -370,6 +369,10 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
     }
 
     private Mono<TusUploadMetadata> loadMetadata(String uploadId) {
+        return loadMetadata(true, uploadId);
+    }
+
+    private Mono<TusUploadMetadata> loadMetadata(boolean checkOwner, String uploadId) {
         return getConnectedUserEmail()
                 .flatMap(email -> {
                     String metaPath = storageService.getTusMetadataPath(uploadId);
@@ -381,7 +384,7 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
                                 log.debug("Reading InputStream from resource: {}", resource);
                                 try (InputStream is = resource.getInputStream()) {
                                     TusUploadMetadata meta = objectMapper.readValue(is, TusUploadMetadata.class);
-                                    if(!email.equals(meta.email())) {
+                                    if(checkOwner && !email.equals(meta.email())) {
                                         throw new OperationForbiddenException("Upload email does not match TUS email");
                                     }
                                     log.debug("Loaded TUS metadata: uploadId={}, offset={}, length={}", uploadId, meta.offset(), meta.length());
