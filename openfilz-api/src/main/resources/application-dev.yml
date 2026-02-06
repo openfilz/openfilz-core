@@ -36,7 +36,7 @@ openfilz:
   calculate-checksum: true
   full-text:
     default-index: openfilz-ce
-    active: true
+    active: false
     indexation-mode: local # local (only choice for the moment) -> to be developed : redis | kafka | nats
     opensearch:
       host: localhost

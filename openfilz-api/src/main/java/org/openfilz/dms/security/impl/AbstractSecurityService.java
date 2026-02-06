@@ -181,6 +181,7 @@ public abstract class AbstractSecurityService implements SecurityService {
     protected boolean isInsertOrUpdateAccess(HttpMethod method, String path) {
         return ((method.equals(HttpMethod.PATCH) || method.equals(HttpMethod.PUT))
                 && pathStartsWith(path, RestApiVersion.ENDPOINT_FILES, RestApiVersion.ENDPOINT_FOLDERS, RestApiVersion.ENDPOINT_DOCUMENTS)) ||
+                ((!method.equals(HttpMethod.TRACE) && !method.equals(HttpMethod.PUT)) && pathStartsWith(path, "/tus")) ||
                 (method.equals(HttpMethod.POST) && (
                         pathStartsWith(path, RestApiVersion.ENDPOINT_FILES, "/documents/upload", "/documents/upload-multiple", RestApiVersion.ENDPOINT_RECYCLE_BIN) ||
                                 path.equals(RestApiVersion.ENDPOINT_FOLDERS) ||

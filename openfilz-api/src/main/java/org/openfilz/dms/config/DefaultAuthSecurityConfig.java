@@ -65,6 +65,7 @@ public class DefaultAuthSecurityConfig {
     @Bean
     public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http) {
         return http
+                .cors(Customizer.withDefaults()) // Enable CORS - uses CorsConfigurationSource bean
                 .csrf(ServerHttpSecurity.CsrfSpec::disable) // Disable CSRF for stateless APIs
                 .authorizeExchange(exchanges -> {
                     exchanges.pathMatchers(AUTH_WHITELIST).permitAll() // Whitelist Swagger and health
