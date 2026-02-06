@@ -68,7 +68,7 @@ logging:
     org.apache.pdfbox: ERROR
     org.apache.fontbox: ERROR
     # io.r2dbc.postgresql.PARAM: DEBUG # for parameters
-    # org.springframework.security: TRACE
+    org.springframework.security: TRACE
 
 server:
   port: 8081
@@ -96,6 +96,22 @@ openfilz:
 
   calculate-checksum: false
   #  calculate-checksum: default false - if true : calculate checksum of each new or modified file
+
+  # TUS Protocol Configuration (Resumable Uploads)
+  # Enables chunked uploads to bypass Cloudflare's 100MB limit
+  tus:
+    enabled: ${TUS_ENABLED:true}
+    # Temporary storage path for TUS uploads in progress
+    temp-storage-path: ${TUS_TEMP_STORAGE:/tmp/tus-uploads}
+    # Maximum upload size in bytes (default: 10GB)
+    max-upload-size: ${TUS_MAX_UPLOAD_SIZE:10737418240}
+    # Recommended chunk size in bytes (default: 50MB - safely under Cloudflare's 100MB limit)
+    chunk-size: ${TUS_CHUNK_SIZE:52428800}
+    # Upload expiration period in milliseconds (default: 24 hours)
+    upload-expiration-period: ${TUS_UPLOAD_EXPIRATION:86400000}
+    # Cleanup interval for expired uploads in milliseconds (default: 1 hour)
+    cleanup-interval: ${TUS_CLEANUP_INTERVAL:3600000}
+
   security:
     no-auth: true # No authentication required
     worm-mode: false # if true : only read-only endPoints (for list, query and download) and upload (and upload-multiple) endPoints are accessible

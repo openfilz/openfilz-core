@@ -3,6 +3,7 @@ package org.openfilz.dms.service.impl;
 
 import io.minio.*;
 import io.minio.errors.ErrorResponseException;
+import io.minio.messages.Item;
 import io.minio.messages.ObjectLockConfiguration;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -13,16 +14,23 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
+import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.springframework.http.MediaType.APPLICATION_OCTET_STREAM_VALUE;
 
@@ -236,6 +244,245 @@ public class MinioStorageService implements StorageService {
                 throw new StorageException("MinIO getFileLength failed", e);
             }
         }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    // ==================== TUS Upload Support Methods ====================
+    // For MinIO/S3, we store each chunk as a separate object and compose them at finalization.
+    // Chunk objects are stored as: {storagePath}.chunk.{offset}
+    // This approach works because S3 doesn't support random writes.
+
+    @Override
+    public Mono<Void> createEmptyFile(String storagePath) {
+        // For MinIO, we don't need to create an empty file.
+        // We'll create chunk objects as data arrives.
+        // Just verify the path is valid (no-op for now).
+        return Mono.empty();
+    }
+
+    @Override
+    public Mono<Long> appendData(String storagePath, Flux<DataBuffer> data, long offset) {
+        // Store this chunk as a separate object with offset in the name
+        String chunkObjectName = storagePath + ".chunk." + String.format("%020d", offset);
+
+        // Use PipedInputStream/PipedOutputStream for streaming without loading all data into memory
+        PipedInputStream pipedInputStream = new PipedInputStream(pipedBufferSize);
+        PipedOutputStream pipedOutputStream;
+        try {
+            pipedOutputStream = new PipedOutputStream(pipedInputStream);
+        } catch (IOException e) {
+            log.error("Failed to create PipedOutputStream for TUS chunk", e);
+            return Mono.error(e);
+        }
+
+        // Track bytes written
+        AtomicLong bytesWritten = new AtomicLong(0);
+
+        // Write data from Flux to PipedOutputStream (runs in separate thread)
+        DataBufferUtils.write(data, pipedOutputStream)
+                .doOnNext(DataBufferUtils::release)
+                .doOnError(e -> {
+                    log.error("Error writing TUS chunk to PipedOutputStream for {}", chunkObjectName, e);
+                    try {
+                        pipedOutputStream.close();
+                    } catch (IOException ignored) {
+                    }
+                })
+                .doOnComplete(() -> {
+                    log.debug("Finished writing TUS chunk to PipedOutputStream for {}", chunkObjectName);
+                    try {
+                        pipedOutputStream.close();
+                    } catch (IOException e) {
+                        log.warn("Error closing PipedOutputStream for {}: {}", chunkObjectName, e.getMessage());
+                    }
+                })
+                .subscribeOn(Schedulers.boundedElastic())
+                .subscribe(dataBuffer -> bytesWritten.addAndGet(dataBuffer.readableByteCount()));
+
+        // Upload to MinIO using streaming
+        return Mono.fromCallable(() -> {
+                    log.debug("Starting MinIO putObject for TUS chunk {}", chunkObjectName);
+                    PutObjectArgs args = PutObjectArgs.builder()
+                            .bucket(bucketName)
+                            .object(chunkObjectName)
+                            .stream(pipedInputStream, -1, PutObjectArgs.MIN_MULTIPART_SIZE)
+                            .contentType(APPLICATION_OCTET_STREAM_VALUE)
+                            .build();
+                    minioClient.putObject(args);
+
+                    // Get the actual size from MinIO after upload
+                    StatObjectResponse stat = minioClient.statObject(
+                            StatObjectArgs.builder()
+                                    .bucket(bucketName)
+                                    .object(chunkObjectName)
+                                    .build());
+                    long chunkSize = stat.size();
+                    log.debug("Stored TUS chunk {} ({} bytes) to MinIO", chunkObjectName, chunkSize);
+                    return offset + chunkSize;
+                })
+                .subscribeOn(Schedulers.boundedElastic())
+                .doOnTerminate(() -> {
+                    try {
+                        pipedInputStream.close();
+                    } catch (IOException e) {
+                        log.warn("Error closing PipedInputStream for {}: {}", chunkObjectName, e.getMessage());
+                    }
+                })
+                .doOnError(e -> log.error("Failed to store TUS chunk {} to MinIO", chunkObjectName, e));
+    }
+
+    @Override
+    public Mono<Void> saveData(String storagePath, Flux<DataBuffer> data) {
+        // Use PipedInputStream/PipedOutputStream for streaming without loading all data into memory
+        PipedInputStream pipedInputStream = new PipedInputStream(pipedBufferSize);
+        PipedOutputStream pipedOutputStream;
+        try {
+            pipedOutputStream = new PipedOutputStream(pipedInputStream);
+        } catch (IOException e) {
+            log.error("Failed to create PipedOutputStream for saveData", e);
+            return Mono.error(e);
+        }
+
+        // Write data from Flux to PipedOutputStream (runs in separate thread)
+        DataBufferUtils.write(data, pipedOutputStream)
+                .doOnNext(DataBufferUtils::release)
+                .doOnError(e -> {
+                    log.error("Error writing data to PipedOutputStream for {}", storagePath, e);
+                    try {
+                        pipedOutputStream.close();
+                    } catch (IOException ignored) {
+                    }
+                })
+                .doOnComplete(() -> {
+                    log.debug("Finished writing data to PipedOutputStream for {}", storagePath);
+                    try {
+                        pipedOutputStream.close();
+                    } catch (IOException e) {
+                        log.warn("Error closing PipedOutputStream for {}: {}", storagePath, e.getMessage());
+                    }
+                })
+                .subscribeOn(Schedulers.boundedElastic())
+                .subscribe();
+
+        // Upload to MinIO using streaming
+        return Mono.<Void>fromRunnable(() -> {
+                    try {
+                        log.debug("Starting MinIO putObject for {}", storagePath);
+                        PutObjectArgs args = PutObjectArgs.builder()
+                                .bucket(bucketName)
+                                .object(storagePath)
+                                .stream(pipedInputStream, -1, PutObjectArgs.MIN_MULTIPART_SIZE)
+                                .contentType(APPLICATION_OCTET_STREAM_VALUE)
+                                .build();
+                        minioClient.putObject(args);
+                        log.debug("Saved data to MinIO: {}", storagePath);
+                    } catch (Exception e) {
+                        log.error("Error saving data to MinIO: {}", storagePath, e);
+                        throw new StorageException("MinIO saveData failed", e);
+                    }
+                })
+                .subscribeOn(Schedulers.boundedElastic())
+                .doOnTerminate(() -> {
+                    try {
+                        pipedInputStream.close();
+                    } catch (IOException e) {
+                        log.warn("Error closing PipedInputStream for {}: {}", storagePath, e.getMessage());
+                    }
+                });
+    }
+
+    @Override
+    public Mono<Void> moveFile(String sourcePath, String destPath) {
+        // For TUS finalization, sourcePath will be like "_tus/{uploadId}.bin"
+        // We need to compose all chunk objects into the destination
+        String chunkPrefix = sourcePath + ".chunk.";
+
+        return Mono.fromCallable(() -> {
+            try {
+                // List all chunk objects for this upload
+                List<String> chunkObjects = new ArrayList<>();
+                Iterable<Result<Item>> results = minioClient.listObjects(
+                        ListObjectsArgs.builder()
+                                .bucket(bucketName)
+                                .prefix(chunkPrefix)
+                                .build());
+
+                for (Result<Item> result : results) {
+                    chunkObjects.add(result.get().objectName());
+                }
+
+                if (chunkObjects.isEmpty()) {
+                    // No chunks - this might be an empty file or error
+                    // Create an empty object at destination
+                    try (ByteArrayInputStream emptyStream = new ByteArrayInputStream(new byte[0])) {
+                        minioClient.putObject(PutObjectArgs.builder()
+                                .bucket(bucketName)
+                                .object(destPath)
+                                .legalHold(wormMode)
+                                .stream(emptyStream, 0, -1)
+                                .build());
+                    }
+                    log.info("Created empty file at {} in MinIO", destPath);
+                    return null;
+                }
+
+                // Sort chunks by offset (extracted from object name)
+                chunkObjects.sort(Comparator.naturalOrder());
+
+                // Compose all chunks into the destination object
+                List<ComposeSource> sources = chunkObjects.stream()
+                        .map(obj -> ComposeSource.builder()
+                                .bucket(bucketName)
+                                .object(obj)
+                                .build())
+                        .toList();
+
+                minioClient.composeObject(ComposeObjectArgs.builder()
+                        .bucket(bucketName)
+                        .object(destPath)
+                        .sources(sources)
+                        .build());
+
+                log.info("Composed {} chunks into {} in MinIO", chunkObjects.size(), destPath);
+
+                // Delete chunk objects
+                for (String chunkObject : chunkObjects) {
+                    try {
+                        minioClient.removeObject(RemoveObjectArgs.builder()
+                                .bucket(bucketName)
+                                .object(chunkObject)
+                                .build());
+                    } catch (Exception e) {
+                        log.warn("Error deleting chunk object {}: {}", chunkObject, e.getMessage());
+                    }
+                }
+
+                return null;
+            } catch (Exception e) {
+                log.error("Error moving file from {} to {} in MinIO", sourcePath, destPath, e);
+                throw new StorageException("MinIO moveFile failed", e);
+            }
+        }).subscribeOn(Schedulers.boundedElastic()).then();
+    }
+
+    @Override
+    public Flux<String> listFiles(String prefix) {
+        return Flux.create(sink -> {
+            try {
+                Iterable<Result<Item>> results = minioClient.listObjects(
+                        ListObjectsArgs.builder()
+                                .bucket(bucketName)
+                                .prefix(prefix)
+                                .recursive(true)
+                                .build());
+
+                for (Result<Item> result : results) {
+                    sink.next(result.get().objectName());
+                }
+                sink.complete();
+            } catch (Exception e) {
+                sink.error(new StorageException("MinIO listFiles failed", e));
+            }
+        });
     }
 
 }

@@ -18,6 +18,11 @@ spring:
   graphql:
     graphiql:
       enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:8080/realms/openfilz/protocol/openid-connect/certs
 
 #logging:
   #level:
@@ -36,7 +41,7 @@ openfilz:
   calculate-checksum: true
   full-text:
     default-index: openfilz-ce
-    active: true
+    active: false
     indexation-mode: local # local (only choice for the moment) -> to be developed : redis | kafka | nats
     opensearch:
       host: localhost
