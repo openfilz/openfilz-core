@@ -7,9 +7,11 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import jakarta.annotation.PostConstruct;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.openfilz.dms.config.CommonProperties;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.config.TusProperties;
 import org.openfilz.dms.dto.request.TusFinalizeRequest;
@@ -60,6 +62,15 @@ public class TusController {
 
     private final TusUploadService tusUploadService;
     private final TusProperties tusProperties;
+    private final CommonProperties commonProperties;
+
+    private String baseUrl;
+
+    @PostConstruct
+    public void init() {
+        baseUrl = commonProperties.getApiPublicBaseUrl() + RestApiVersion.API_PREFIX +
+                RestApiVersion.ENDPOINT_TUS;
+    }
 
     /**
      * TUS capability discovery endpoint.
@@ -132,8 +143,6 @@ public class TusController {
                     .header("Tus-Resumable", TUS_VERSION)
                     .build());
         }
-
-        String baseUrl = getBaseUrl(request);
 
         // Validate all preconditions before creating the upload
         return tusUploadService.validateUploadCreation(
@@ -346,7 +355,6 @@ public class TusController {
             @Parameter(description = "Upload identifier") @PathVariable String uploadId,
             ServerHttpRequest request) {
 
-        String baseUrl = getBaseUrl(request);
         return tusUploadService.getUploadInfo(uploadId, baseUrl)
                 .map(ResponseEntity::ok);
     }
@@ -401,7 +409,6 @@ public class TusController {
     @Operation(summary = "Get TUS configuration",
             description = "Returns configuration values for client-side TUS setup.")
     public Mono<ResponseEntity<TusConfigResponse>> getConfig(ServerHttpRequest request) {
-        String baseUrl = getBaseUrl(request);
         return Mono.just(ResponseEntity.ok(new TusConfigResponse(
                 tusProperties.isEnabled(),
                 baseUrl,
@@ -409,25 +416,6 @@ public class TusController {
                 tusProperties.getChunkSize(),
                 tusProperties.getUploadExpirationPeriod()
         )));
-    }
-
-    private String getBaseUrl(ServerHttpRequest request) {
-        URI uri = request.getURI();
-        String scheme = uri.getScheme();
-        String host = uri.getHost();
-        int port = uri.getPort();
-
-        StringBuilder baseUrl = new StringBuilder();
-        baseUrl.append(scheme).append("://").append(host);
-
-        if (port > 0 && !((scheme.equals("http") && port == 80) || (scheme.equals("https") && port == 443))) {
-            baseUrl.append(":").append(port);
-        }
-
-        baseUrl.append(RestApiVersion.API_PREFIX)
-                .append(RestApiVersion.ENDPOINT_TUS);
-
-        return baseUrl.toString();
     }
 
     /**
