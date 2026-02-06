@@ -18,6 +18,11 @@ spring:
   graphql:
     graphiql:
       enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:8080/realms/openfilz/protocol/openid-connect/certs
 
 #logging:
   #level:
