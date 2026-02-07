@@ -1,6 +1,5 @@
 package org.openfilz.dms.e2e;
 
-import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.CreateFolderRequest;
 import org.openfilz.dms.dto.request.MultipleUploadFileParameter;
@@ -29,7 +28,6 @@ import org.testcontainers.junit.jupiter.Container;
 import java.net.URI;
 import java.util.*;
 
-@RequiredArgsConstructor
 @Import(GraphQlTestConfig.class)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public abstract class TestContainersBaseConfig {
@@ -40,8 +38,13 @@ public abstract class TestContainersBaseConfig {
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.1").withReuse(true);
 
-    protected final WebTestClient webTestClient;
+    protected WebTestClient webTestClient;
     protected final Jackson2JsonEncoder customJackson2JsonEncoder;
+
+    protected TestContainersBaseConfig(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
+        this.webTestClient = webTestClient;
+        this.customJackson2JsonEncoder = customJackson2JsonEncoder;
+    }
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
