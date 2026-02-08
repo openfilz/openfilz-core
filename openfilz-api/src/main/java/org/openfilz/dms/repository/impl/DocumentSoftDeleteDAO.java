@@ -224,5 +224,29 @@ public class DocumentSoftDeleteDAO implements UserInfoService, SqlQueryUtils {
     public Mono<Void> updateStatistics() {
         return databaseClient.sql("VACUUM ANALYZE documents").then();
     }
-    
+
+    /**
+     * Calculate the total size of files that would be restored for a single document ID.
+     * If the document is a folder, recursively includes all descendant files.
+     *
+     * @param documentId The document (file or folder) to calculate restore size for.
+     * @return The total size in bytes of all files that would be restored.
+     */
+    public Mono<Long> getTotalSizeToRestore(UUID documentId) {
+        String sql = """
+                WITH RECURSIVE descendants AS (
+                    SELECT id, type, size FROM documents WHERE id = :docId
+                    UNION ALL
+                    SELECT d.id, d.type, d.size FROM documents d
+                    INNER JOIN descendants parent ON d.parent_id = parent.id
+                )
+                SELECT COALESCE(SUM(size), 0) as total_size FROM descendants WHERE type = 'FILE'
+                """;
+        return databaseClient.sql(sql)
+                .bind("docId", documentId)
+                .map(row -> row.get("total_size", Long.class))
+                .one()
+                .defaultIfEmpty(0L);
+    }
+
 }
