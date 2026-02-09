@@ -39,6 +39,7 @@ services:
     volumes:
       - keycloak-data:/opt/keycloak/data
       - ../openfilz-api/src/test/resources/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+      - ../themes/openfilz:/opt/keycloak/themes/openfilz:ro
     ports:
       - "${KEYCLOAK_PORT:-8180}:8080"
     networks:

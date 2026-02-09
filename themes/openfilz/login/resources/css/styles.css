@@ -1,0 +1,679 @@
+/* ==========================================================================
+   OpenFilz Keycloak Theme - Main Styles
+   ========================================================================== */
+
+/* ---------- Reset & Base ---------- */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--of-text-primary);
+    background-color: var(--of-bg-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    min-height: 100vh;
+}
+
+/* ---------- Layout ---------- */
+.of-page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 24px 16px;
+}
+
+.of-card {
+    width: 100%;
+    max-width: 420px;
+    background: var(--of-bg-card);
+    border-radius: var(--of-border-radius-xl);
+    box-shadow: var(--of-shadow-card);
+    padding: 40px 36px 36px;
+    position: relative;
+    transition: box-shadow var(--of-transition-normal);
+}
+
+.of-card:hover {
+    box-shadow: var(--of-shadow-lg);
+}
+
+/* ---------- Header / Logo ---------- */
+.of-logo-wrapper {
+    text-align: center;
+    margin-bottom: 8px;
+}
+
+.of-logo {
+    height: 40px;
+    width: auto;
+    color: var(--of-text-primary);
+}
+
+.of-card-title {
+    text-align: center;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--of-text-primary);
+    margin: 0 0 4px;
+}
+
+.of-card-subtitle {
+    text-align: center;
+    font-size: 13px;
+    color: var(--of-text-secondary);
+    margin: 0 0 28px;
+}
+
+/* ---------- Locale Switcher ---------- */
+.of-locale-wrapper {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    z-index: 10;
+}
+
+.of-locale-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--of-text-secondary);
+    background: var(--of-bg-overlay);
+    border: 1px solid var(--of-border-color);
+    border-radius: var(--of-border-radius-sm);
+    cursor: pointer;
+    transition: all var(--of-transition-fast);
+    text-decoration: none;
+}
+
+.of-locale-toggle:hover {
+    color: var(--of-text-primary);
+    border-color: var(--of-border-color-focus);
+    background: var(--of-bg-hover);
+}
+
+.of-locale-toggle svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.of-locale-chevron {
+    width: 10px !important;
+    height: 10px !important;
+    transition: transform var(--of-transition-fast);
+}
+
+.of-locale-toggle[aria-expanded="true"] .of-locale-chevron {
+    transform: rotate(180deg);
+}
+
+.of-locale-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    min-width: 140px;
+    background: var(--of-bg-card);
+    border: 1px solid var(--of-border-color);
+    border-radius: var(--of-border-radius-sm);
+    box-shadow: var(--of-shadow-md);
+    overflow: hidden;
+    z-index: 20;
+}
+
+.of-locale-dropdown--open {
+    display: block;
+}
+
+.of-locale-dropdown a {
+    display: block;
+    padding: 8px 14px;
+    font-size: 13px;
+    color: var(--of-text-secondary);
+    text-decoration: none;
+    transition: all var(--of-transition-fast);
+}
+
+.of-locale-dropdown a:hover {
+    background: var(--of-bg-hover);
+    color: var(--of-text-primary);
+}
+
+.of-locale-dropdown a.active {
+    color: var(--of-brand-primary);
+    font-weight: 600;
+    background: var(--of-brand-primary-light);
+}
+
+/* ---------- Alerts / Messages ---------- */
+.of-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: var(--of-border-radius-sm);
+    font-size: 13px;
+    line-height: 1.5;
+    margin-bottom: 20px;
+    border: 1px solid;
+}
+
+.of-alert-icon {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    margin-top: 1px;
+}
+
+.of-alert--error {
+    color: var(--of-color-error);
+    background: var(--of-color-error-bg);
+    border-color: var(--of-color-error-border);
+}
+
+.of-alert--success {
+    color: var(--of-color-success);
+    background: var(--of-color-success-bg);
+    border-color: var(--of-color-success-border);
+}
+
+.of-alert--warning {
+    color: var(--of-color-warning);
+    background: var(--of-color-warning-bg);
+    border-color: var(--of-color-warning-border);
+}
+
+.of-alert--info {
+    color: var(--of-color-info);
+    background: var(--of-color-info-bg);
+    border-color: var(--of-color-info-border);
+}
+
+/* ---------- Form Elements ---------- */
+.of-form-group {
+    margin-bottom: 18px;
+}
+
+.of-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--of-text-primary);
+    margin-bottom: 6px;
+}
+
+.of-label .of-required {
+    color: var(--of-color-error);
+    margin-left: 2px;
+}
+
+.of-input-wrapper {
+    position: relative;
+}
+
+.of-input {
+    display: block;
+    width: 100%;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-family: inherit;
+    line-height: 1.5;
+    color: var(--of-text-primary);
+    background: var(--of-bg-input);
+    border: 1px solid var(--of-border-color);
+    border-radius: var(--of-border-radius-sm);
+    outline: none;
+    transition: all var(--of-transition-fast);
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.of-input::placeholder {
+    color: var(--of-text-muted);
+}
+
+.of-input:hover {
+    border-color: var(--of-text-muted);
+}
+
+.of-input:focus {
+    border-color: var(--of-border-color-focus);
+    background: var(--of-bg-input-focus);
+    box-shadow: 0 0 0 3px var(--of-brand-primary-light);
+}
+
+.of-input--error {
+    border-color: var(--of-color-error) !important;
+}
+
+.of-input--error:focus {
+    box-shadow: 0 0 0 3px rgba(229, 62, 62, 0.1);
+}
+
+.of-field-error {
+    display: block;
+    font-size: 12px;
+    color: var(--of-color-error);
+    margin-top: 4px;
+}
+
+/* Password input with toggle */
+.of-input-wrapper--password .of-input {
+    padding-right: 42px;
+}
+
+.of-password-toggle {
+    position: absolute;
+    right: 1px;
+    top: 1px;
+    bottom: 1px;
+    width: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--of-text-muted);
+    border-radius: 0 var(--of-border-radius-sm) var(--of-border-radius-sm) 0;
+    transition: color var(--of-transition-fast);
+    padding: 0;
+}
+
+.of-password-toggle:hover {
+    color: var(--of-text-primary);
+}
+
+.of-eye-icon {
+    width: 18px;
+    height: 18px;
+}
+
+/* Checkbox */
+.of-checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 18px;
+}
+
+.of-checkbox {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--of-brand-primary);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.of-checkbox-label {
+    font-size: 13px;
+    color: var(--of-text-secondary);
+    cursor: pointer;
+    user-select: none;
+}
+
+/* ---------- Buttons ---------- */
+.of-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 11px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    line-height: 1.5;
+    border-radius: var(--of-border-radius-sm);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all var(--of-transition-fast);
+    text-decoration: none;
+    text-align: center;
+    outline: none;
+}
+
+.of-btn:focus-visible {
+    box-shadow: 0 0 0 3px var(--of-brand-primary-light);
+}
+
+.of-btn--primary {
+    color: var(--of-text-inverse);
+    background: var(--of-brand-primary);
+    border-color: var(--of-brand-primary);
+}
+
+.of-btn--primary:hover {
+    background: var(--of-brand-primary-hover);
+    border-color: var(--of-brand-primary-hover);
+}
+
+.of-btn--primary:active {
+    background: var(--of-brand-primary-active);
+    border-color: var(--of-brand-primary-active);
+}
+
+.of-btn--secondary {
+    color: var(--of-text-primary);
+    background: transparent;
+    border-color: var(--of-border-color);
+}
+
+.of-btn--secondary:hover {
+    background: var(--of-bg-hover);
+    border-color: var(--of-text-muted);
+}
+
+.of-btn--link {
+    color: var(--of-text-link);
+    background: transparent;
+    border: none;
+    padding: 0;
+    width: auto;
+    font-weight: 500;
+    font-size: 13px;
+}
+
+.of-btn--link:hover {
+    text-decoration: underline;
+}
+
+/* ---------- Social / Identity Provider Buttons ---------- */
+.of-social-section {
+    margin-bottom: 24px;
+}
+
+.of-social-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.of-social-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: inherit;
+    line-height: 1.5;
+    border-radius: var(--of-border-radius-sm);
+    border: 1px solid var(--of-border-color);
+    cursor: pointer;
+    transition: all var(--of-transition-fast);
+    text-decoration: none;
+    text-align: center;
+    background: var(--of-bg-card);
+    color: var(--of-text-primary);
+}
+
+.of-social-btn:hover {
+    background: var(--of-bg-hover);
+    border-color: var(--of-text-muted);
+}
+
+.of-social-btn:focus-visible {
+    box-shadow: 0 0 0 3px var(--of-brand-primary-light);
+    outline: none;
+}
+
+.of-social-btn--google {
+    background: var(--of-social-google-bg);
+    color: var(--of-social-google-text);
+    border-color: var(--of-social-google-border);
+}
+
+.of-social-btn--google:hover {
+    background: var(--of-social-google-hover);
+}
+
+.of-social-btn--microsoft {
+    background: var(--of-social-microsoft-bg);
+    color: var(--of-social-microsoft-text);
+    border-color: var(--of-social-microsoft-border);
+}
+
+.of-social-btn--microsoft:hover {
+    background: var(--of-social-microsoft-hover);
+}
+
+.of-social-btn--github {
+    background: var(--of-social-github-bg);
+    color: var(--of-social-github-text);
+    border-color: transparent;
+}
+
+.of-social-btn--github:hover {
+    background: var(--of-social-github-hover);
+}
+
+.of-social-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
+
+/* ---------- Separator ---------- */
+.of-separator {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin: 24px 0;
+}
+
+.of-separator::before,
+.of-separator::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--of-separator-color);
+}
+
+.of-separator-text {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--of-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+/* ---------- Links / Footer ---------- */
+.of-form-links {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+}
+
+.of-form-links--center {
+    justify-content: center;
+}
+
+.of-link {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--of-text-link);
+    text-decoration: none;
+    transition: color var(--of-transition-fast);
+}
+
+.of-link:hover {
+    text-decoration: underline;
+}
+
+.of-card-footer {
+    text-align: center;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--of-border-color);
+}
+
+.of-card-footer-text {
+    font-size: 13px;
+    color: var(--of-text-secondary);
+}
+
+.of-card-footer-text a {
+    color: var(--of-text-link);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.of-card-footer-text a:hover {
+    text-decoration: underline;
+}
+
+/* ---------- OTP ---------- */
+.of-otp-input {
+    text-align: center;
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: 8px;
+    padding: 12px 16px;
+}
+
+.of-otp-info {
+    text-align: center;
+    font-size: 13px;
+    color: var(--of-text-secondary);
+    margin-bottom: 20px;
+}
+
+/* ---------- Error Page ---------- */
+.of-error-icon {
+    text-align: center;
+    margin-bottom: 16px;
+}
+
+.of-error-icon svg {
+    width: 56px;
+    height: 56px;
+    color: var(--of-color-error);
+}
+
+.of-error-message {
+    text-align: center;
+    font-size: 14px;
+    color: var(--of-text-secondary);
+    margin-bottom: 24px;
+    line-height: 1.6;
+}
+
+/* ---------- Try Another Way ---------- */
+.of-try-another {
+    text-align: center;
+    margin-top: 16px;
+}
+
+/* ---------- Utility ---------- */
+.of-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.of-mb-0 { margin-bottom: 0; }
+.of-mt-sm { margin-top: 8px; }
+.of-mt-md { margin-top: 16px; }
+.of-mb-sm { margin-bottom: 8px; }
+.of-mb-md { margin-bottom: 16px; }
+.of-text-center { text-align: center; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 480px) {
+    .of-card {
+        padding: 32px 20px 28px;
+        border-radius: var(--of-border-radius-lg);
+        max-width: 100%;
+    }
+
+    .of-page {
+        padding: 16px 12px;
+    }
+
+    .of-card-title {
+        font-size: 18px;
+    }
+
+    .of-social-buttons {
+        gap: 8px;
+    }
+}
+
+/* ---------- Animations ---------- */
+@keyframes of-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.of-card {
+    animation: of-fade-in 0.3s ease-out;
+}
+
+/* ---------- Hard Reset for any inherited Keycloak / PatternFly styles ---------- */
+html, body {
+    background: var(--of-bg-primary) !important;
+    background-image: none !important;
+    color: var(--of-text-primary) !important;
+}
+
+html {
+    height: 100%;
+}
+
+/* Nuke all default Keycloak layout wrappers */
+#kc-header,
+#kc-header-wrapper,
+#kc-locale,
+.kc-logo-text {
+    display: none !important;
+}
+
+/* Reset any PF containers that might leak through */
+.container,
+.container-fluid {
+    all: unset !important;
+    display: block !important;
+}
+
+.card-pf,
+#kc-content,
+#kc-content-wrapper {
+    all: unset !important;
+    display: block !important;
+}
+
+/* Reset any PF grid/row/col */
+.row, [class*="col-"] {
+    all: unset !important;
+    display: block !important;
+}
