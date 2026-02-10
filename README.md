@@ -5,74 +5,118 @@
 ![Branches Coverage](./.github/badges/branches.svg)
 ![Maven Central Version](https://img.shields.io/maven-central/v/org.openfilz/openfilz-api?link=https%3A%2F%2Fcentral.sonatype.com%2Fnamespace%2Forg.openfilz)
 
-OpenFilz is a document management API designed for scalability, security, and performance. It provides a centralized solution for handling document and folder-related operations within your application.
+OpenFilz is a modern, reactive document management API designed for scalability, security, and performance. Built on **Spring Boot 3.5+ / WebFlux**, it provides a centralized solution for handling document and folder-related operations through comprehensive REST and GraphQL APIs.
 
 ---
 
 ## Related Components
 
-- [Document Management Gateway](./openfilz-gateway/README.md): Describes the API gateway, security configuration, and how to access the Swagger UI.
+- [API Gateway](./openfilz-gateway/README.md) - Spring Cloud Gateway handling JWT authentication, rate limiting, and request routing.
+- [OpenFilz Web](https://github.com/openfilz/openfilz-web) - Angular web interface for managing documents through a Google Drive-like GUI.
 
 ---
 
-## Web Interface
+## Tech Stack
 
-A web-based graphical user interface (GUI), similar to Google Drive, is currently under development in the `openfilz-web` module. This interface will provide a user-friendly way to perform all file and folder operations provided by the API.
+| Component | Technology |
+|-----------|------------|
+| Language | Java 25 |
+| Framework | Spring Boot 3.5.8, Spring WebFlux |
+| Database | PostgreSQL (R2DBC, non-blocking) |
+| Migrations | Flyway |
+| Storage | Local filesystem or S3/MinIO (pluggable) |
+| Authentication | OIDC / JWT (Keycloak) |
+| APIs | REST (OpenAPI/Swagger) + GraphQL (GraphiQL) |
+| Build | Maven, Jib (Docker images) |
+| Testing | JUnit 5, Testcontainers |
 
 ---
 
 ## Features
 
-### File System Operations
+### Document & Folder Management
 
-- **Hierarchical Folder Management:** Organize files within a nested folder structure. Create folders at the root level or within other folders by specifying a `parentId`.
-- **Bulk Operations:** Move, copy, or delete multiple files and folders in a single API call for efficiency.
-- **Recursive Actions:** Operations on folders (move, copy, delete) are applied recursively to all their contents.
-- **Renaming:** Files and folders can be renamed via a `PUT` request. This is a fast metadata-only operation.
+- **Virtual Folder Hierarchy** - Organize files in a nested folder structure. Folders exist as metadata in PostgreSQL, making move/rename operations instant regardless of folder size.
+- **Bulk Operations** - Move, copy, or delete multiple files and folders in a single API call. Recursive operations on folders apply to all contents.
+- **Renaming** - Fast metadata-only operation via `PUT` request.
+- **Favorites** - Mark frequently used documents and folders for quick access. Per-user favorites with dedicated API endpoints and GraphQL queries.
+- **Recycle Bin** - Soft-delete with recovery. Deleted documents move to a recycle bin instead of being permanently destroyed. Restore or permanently purge via API.
+
+### File Upload & Download
+
+- **Resumable Uploads (TUS Protocol)** - Upload files of any size with automatic resume on interruption. Chunked uploads work reliably over unreliable networks and bypass upload size limits (e.g., Cloudflare's 100MB limit).
+  - `POST /api/v1/tus` - Create upload
+  - `PATCH /api/v1/tus/{uploadId}` - Upload chunk
+  - `POST /api/v1/tus/{uploadId}/finalize` - Complete upload
+  - Conditionally enabled via `openfilz.tus.enabled`
+- **Bulk Uploads** - Upload multiple files in a single `multipart/form-data` request, with optional metadata and target folder.
+- **ZIP Downloads** - Download multiple documents or entire folder hierarchies as a single `.zip` archive.
 
 ### Metadata Management
 
-- **Dynamic Metadata:** Attach custom JSON metadata to files during upload.
-- **Granular Metadata Control:**
-    - **Update:** Add or modify specific key-value pairs in a document's metadata.
-    - **Replace:** Overwrite a document's existing metadata with a new JSON object.
-    - **Delete:** Remove specific keys from a document's metadata.
-- **Metadata-based Search:**
-    - **Query by Content:** Find documents matching specific metadata criteria.
-    - **Retrieve Specific Fields:** Fetch only the required metadata fields for a document to reduce payload size.
+- **Dynamic Metadata** - Attach custom JSON metadata to files during upload.
+- **Granular Control** - Update (add/modify key-value pairs), replace (overwrite entire metadata), or delete (remove specific keys).
+- **Search** - Query documents by metadata content. Retrieve specific metadata fields to reduce payload size.
+- **Document Suggestions** - Smart document suggestions based on context and user activity.
 
-### Data Transfer
+### Document Experience
 
-- **Bulk Uploads:** Upload multiple files in a single `multipart/form-data` request, with optional metadata and a target folder for each.
-- **ZIP Downloads:** Download multiple documents as a single `.zip` archive by providing a list of document IDs.
+- **Thumbnail Generation** - Automatic server-side thumbnail generation for images, PDFs, and Office documents. Served via dedicated REST endpoints.
+- **OnlyOffice Integration** - Open and edit Word, Excel, and PowerPoint files in the browser with real-time collaboration support.
+- **Dashboard & Statistics** - Real-time dashboard API providing storage usage, document counts by type, file distribution, and system health metrics.
 
-### Security Management
+### Security
 
-- **OIDC Resource Server:** When enabled, the API acts as an OIDC resource server, validating JWT tokens for every request.
-- **Pluggable Authorization:** Supports a default role-based authorization model using roles from the JWT, and allows for a fully custom authorization model to be implemented for advanced scenarios.
-- **Security Toggle:** Security can be disabled for development and testing environments.
+- **OIDC Resource Server** - Validates JWT tokens for every request. Native Keycloak integration with pre-built configurations.
+- **Role-Based Authorization** - Built-in roles: `READER`, `CONTRIBUTOR`, `CLEANER`, `AUDITOR`. Roles extracted from JWT claims.
+- **Pluggable Authorization** - Default role-based model with support for fully custom authorization implementations.
+- **Defense in Depth** - Gateway validates JWT first, then the API re-validates, ensuring security even within the internal network.
+- **Security Toggle** - Disable security for development and testing via `openfilz.security.no-auth`.
 
-### Checksum (SHA-256) Calculation
+### Compliance & Auditing
 
-This optional feature, when enabled, calculates the SHA-256 checksum for every file uploaded to the system. The checksum is then stored as a metadata property with the key `sha256`, ensuring data integrity and providing a reliable way to verify file contents.
-
-### WORM (Write Once Read Many) Mode
-
-Transform OpenFilz into a compliant archiving system with WORM mode. When enabled, this feature ensures that once a file is written, it cannot be modified or deleted, making it ideal for regulatory and long-term data retention requirements.
-
+- **SHA-256 Checksums** - Optional automatic SHA-256 calculation on upload. Stored as metadata for integrity verification.
+- **WORM Mode** - Write Once Read Many ensures documents cannot be modified or deleted. Meets SEC 17a-4, FINRA, and similar retention requirements.
+- **Immutable Audit Trail** - Every operation recorded with who (user email from JWT), what (action type), when (timestamp), and which document.
 
 ### GraphQL API
 
-In addition to the standard REST API, OpenFilz offers GraphQL endpoints for querying document lists and counts, providing a more flexible and efficient way to fetch data.
+Flexible GraphQL endpoint at `/graphql/v1` with interactive GraphiQL explorer:
 
--   **GraphQL Schema:** The complete schema for all available queries is defined in `openfilz-api/src/main/resources/graphql/document.graphqls`. This includes operations like `listFolder`, `documentById`, and `count`.
--   **GraphiQL UI:** The interactive GraphiQL interface, available at the `/graphiql` endpoint, can be enabled by setting the `spring.graphql.graphiql.enabled` property to `true`. It is automatically enabled when the OpenFilz API is started with the `dev` Spring profile, allowing you to explore the schema and test queries directly in your browser.
+```graphql
+type Query {
+  listFolder(request: ListFolderRequest!): [FolderElementInfo]
+  documentById(id: UUID!): DocumentInfo
+  count(request: ListFolderRequest): Long
+  listFavorites(request: FavoriteRequest!): [FolderElementInfo]
+  countFavorites(request: FavoriteRequest): Long
+}
+```
 
-**Main Benefits of using GraphQL:**
+- **FolderElementInfo** includes: id, type, contentType, name, metadata (JSONB), size, timestamps, createdBy/updatedBy, favorite status, thumbnailUrl.
+- **Filtering** - By name, type, content type, metadata, date ranges, size, and creator.
+- **Pagination & Sorting** - Via `PageInfo` input with configurable page size, sort field, and order.
 
--   **Flexible Queries:** Request only the data you need, reducing payload size and improving application performance. For example, you can fetch a list of documents with only their `name` and `size`, ignoring other metadata.
--   **Single Endpoint:** Access all your data needs through a single, smart endpoint, simplifying the client-side logic.
--   **Strongly Typed Schema:** The schema serves as a clear contract between the client and server, enabling better developer tools and reducing the chance of bugs.
+### REST API
+
+15 controllers providing 40+ endpoints:
+
+| Controller | Purpose |
+|------------|---------|
+| `DocumentController` | Core CRUD operations, upload, download |
+| `FileController` | File-specific operations (move, copy, delete) |
+| `FolderController` | Folder management (create, list, move, copy) |
+| `TusController` | Resumable uploads (TUS protocol, 9 endpoints) |
+| `FavoriteController` | Favorites management |
+| `RecycleBinController` | Soft-delete and recovery |
+| `DashboardController` | Statistics and metrics |
+| `ThumbnailController` | Thumbnail generation and serving |
+| `AuditController` | Audit trail queries |
+| `OnlyOfficeController` | OnlyOffice editor integration |
+| `DocumentSuggestionController` | Document suggestions |
+| `SettingsController` | User settings |
+
+Full OpenAPI documentation available at `/swagger-ui.html`.
 
 ---
 
@@ -80,42 +124,15 @@ In addition to the standard REST API, OpenFilz offers GraphQL endpoints for quer
 
 ### Reactive Core
 
-The system is built on a non-blocking, reactive stack using **Spring WebFlux** and **R2DBC** for high concurrency and scalability. This ensures that the application remains responsive under heavy load.
+Built on a non-blocking, reactive stack using **Spring WebFlux** and **R2DBC** for high concurrency and scalability. The application remains responsive under heavy load with efficient resource utilization.
 
 ### Storage Abstraction
 
-OpenFilz separates the logical folder hierarchy from the physical file storage.
+OpenFilz separates the logical folder hierarchy from physical file storage:
 
-- **Virtual Folders:** Folders are represented as metadata in a **PostgreSQL** database. Only files are stored in the physical storage backend (e.g., Local Filesystem or S3-compatible object storage).
-- **Efficient Operations:** As a result, operations like moving or renaming a folder are fast metadata updates in the database, avoiding costly file system operations.
-- **Pluggable Storage Backend:** The storage layer is designed as an interface, allowing you to switch between a local filesystem for development and a **MinIO/S3** backend for production without application code changes.
-
-### Developer Experience
-
-- **Modern Java:** Uses **Java Records** for immutable Data Transfer Objects (DTOs) and **Lombok** to reduce boilerplate code.
-- **API Documentation:** Endpoints are documented using OpenAPI (Swagger) for a clear and interactive API contract.
-- **Testing:** The project includes a comprehensive suite of **JUnit** tests.
-
----
-
-## Security and Auditing
-
-### Centralized Security
-
-Security is handled by the **Spring Cloud Gateway**, which acts as the single point of entry.
-
-1.  **Authentication:** The gateway integrates with **Keycloak** to validate JWT tokens for every incoming request.
-2.  **Secure Routing:** Only authenticated and authorized requests are forwarded to the Document Management API.
-3.  **Defense in Depth:** The API re-validates the JWT, ensuring security even within the internal network.
-
-### Audit Trail
-
-Every operation is recorded in an immutable audit trail. The audit log captures:
-
-- **Who:** The email of the user from the JWT token (the user `email` has to be mapped to a claim in the token)
-- **What:** The action performed (e.g., `CREATE_FOLDER`, `UPLOAD_DOCUMENT`, `DOWNLOAD_DOCUMENT`...).
-- **When:** A precise timestamp of the event.
-- **Where:** The document concerned by this action.
+- **Virtual Folders** - Represented as metadata in PostgreSQL. Only files are stored in the physical storage backend.
+- **Efficient Operations** - Moving or renaming a folder is a fast metadata update, avoiding costly filesystem operations.
+- **Pluggable Backends** - Switch between local filesystem (`storage.type=local`) and MinIO/S3 (`storage.type=minio`) without code changes.
 
 ### Request Flow
 
@@ -144,6 +161,90 @@ sequenceDiagram
 
 ---
 
+## Deployment
+
+### Docker
+
+```bash
+# Build Docker image
+docker build -t ghcr.io/openfilz/openfilz-api:latest openfilz-api/
+
+# Or using Jib (no Docker daemon required)
+mvn clean install -Pkube -pl openfilz-api -am
+```
+
+### Docker Compose
+
+Multiple compose files for different configurations:
+
+| File | Purpose |
+|------|---------|
+| `docker-compose.yml` | Core services (API + PostgreSQL) |
+| `docker-compose.auth.yml` | Keycloak authentication |
+| `docker-compose.minio.yml` | MinIO S3 storage |
+| `docker-compose.onlyoffice.yml` | OnlyOffice document editing |
+| `docker-compose.fulltext.yml` | OpenSearch full-text search |
+| `docker-compose-thumbnails.yml` | Thumbnail generation service |
+| `docker-compose-gotenberg-dev.yml` | Gotenberg PDF conversion |
+
+### Kubernetes / Helm
+
+Helm charts available for `openfilz-api` and `openfilz-web` with templates for:
+- Deployment, Service, Ingress, Secrets, PV/PVC
+- OpenShift Route support
+
+### Dokploy
+
+Single `dokploy/compose.yaml` for Dokploy platform deployment.
+
+---
+
 ## Building and Running
 
-See [BUILD_AND_TEST.md](BUILD_AND_TEST.md) for detailed instructions on how to build, configure, and run the application, including how to execute integration tests with Testcontainers.
+See [BUILD_AND_TEST.md](BUILD_AND_TEST.md) for detailed instructions on how to build, configure, and run the application, including integration tests with Testcontainers.
+
+### Quick Start
+
+```bash
+# Prerequisites: Java 25, Maven 3.x, Docker
+
+# Build all modules
+mvn clean install
+
+# Build only API module
+mvn clean install -pl openfilz-api -am
+
+# Run API (port 8081)
+cd openfilz-api && mvn spring-boot:run
+
+# Run Gateway (port 8888, optional)
+cd openfilz-gateway && mvn spring-boot:run
+```
+
+---
+
+## Project Structure
+
+```
+openfilz-core/
+├── openfilz-api/              # Core DMS service (REST + GraphQL)
+│   ├── src/main/java/org/openfilz/dms/
+│   │   ├── controller/        # REST & GraphQL controllers
+│   │   ├── service/           # Business logic
+│   │   ├── repository/        # R2DBC repositories
+│   │   ├── entity/            # Database entities
+│   │   ├── dto/               # Request/Response DTOs
+│   │   └── config/            # Spring configurations
+│   └── src/main/resources/
+│       └── graphql/           # GraphQL schema
+├── openfilz-gateway/          # Spring Cloud Gateway
+├── docker/                    # Docker Compose files
+├── helm/                      # Kubernetes Helm charts
+└── dokploy/                   # Dokploy deployment
+```
+
+---
+
+## License
+
+Apache License 2.0 - See [LICENSE](LICENSE) for details.

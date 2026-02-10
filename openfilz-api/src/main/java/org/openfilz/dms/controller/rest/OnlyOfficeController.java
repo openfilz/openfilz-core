@@ -12,7 +12,6 @@ import org.openfilz.dms.service.OnlyOfficeService;
 import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
@@ -120,23 +119,4 @@ public class OnlyOfficeController implements UserInfoService {
         ));
     }
 
-    private String extractUserName(Jwt jwt) {
-        // Try common claims for user name
-        String name = jwt.getClaimAsString("name");
-        if (name != null && !name.isEmpty()) {
-            return name;
-        }
-
-        String preferredUsername = jwt.getClaimAsString("preferred_username");
-        if (preferredUsername != null && !preferredUsername.isEmpty()) {
-            return preferredUsername;
-        }
-
-        String email = jwt.getClaimAsString("email");
-        if (email != null && !email.isEmpty()) {
-            return email;
-        }
-
-        return "User";
-    }
 }

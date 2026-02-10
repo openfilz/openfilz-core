@@ -68,7 +68,7 @@ logging:
     org.apache.pdfbox: ERROR
     org.apache.fontbox: ERROR
     # io.r2dbc.postgresql.PARAM: DEBUG # for parameters
-    org.springframework.security: TRACE
+    # org.springframework.security: TRACE
 
 server:
   port: 8081

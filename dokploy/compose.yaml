@@ -170,7 +170,8 @@ services:
       SERVER_PORT: 8080
 
       # Java options
-      JAVA_OPTS: ${JAVA_OPTS:--Xmx512m -Xms256m}
+      # JAVA_OPTS: ${JAVA_OPTS:--Xmx512m -Xms256m}
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS}
 
       # Flyway configuration
       SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"
