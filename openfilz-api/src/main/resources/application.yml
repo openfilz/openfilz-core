@@ -33,6 +33,8 @@ spring:
       mode: always
 
   graphql:
+    graphiql:
+      enabled: true
     http:
       path: /graphql/v1
 
