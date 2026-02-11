@@ -113,7 +113,7 @@ public class RecycleBinCleanupScheduler {
                     });
         } else {
             // For folders, recursively delete all children first
-            return documentDAO.findDocumentsByParentIdAndType(docId, null)
+            return documentDAO.findDocumentsByParentId(docId)
                     .flatMap(this::permanentlyDeleteDocumentRecursive)
                     .then(documentSoftDeleteDAO.permanentDelete(docId))
                     .then(auditService.logAction(action, type, docId))

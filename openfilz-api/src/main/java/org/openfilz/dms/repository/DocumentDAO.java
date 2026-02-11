@@ -34,6 +34,8 @@ public interface DocumentDAO {
 
     Flux<Document> findDocumentsByParentIdAndType(@Nonnull UUID folderId, @Nonnull DocumentType documentType);
 
+    Flux<Document> findDocumentsByParentId(@Nonnull UUID folderId);
+
     Mono<Document> findById(UUID documentId, AccessType accessType);
 
     Mono<Document> update(Document document);

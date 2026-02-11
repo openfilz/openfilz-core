@@ -118,7 +118,7 @@ public class RecycleBinServiceImpl implements RecycleBinService, UserInfoService
                     .doOnSuccess(_ -> metadataPostProcessor.deleteDocument(docId));
         } else {
             // For folders, recursively delete all children first
-            return documentRepository.findByParentIdAndType(docId, null) // Get all children (files and folders)
+            return documentRepository.findByParentId(docId)
                     .flatMap(child -> permanentlyDeleteDocumentRecursive(child, userId))
                     .then(documentSoftDeleteDAO.permanentDelete(docId))
                     .then(auditService.logAction(action, type, docId))

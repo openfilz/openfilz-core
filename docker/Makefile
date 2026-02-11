@@ -6,6 +6,7 @@
 #   make up-minio      - Start with MinIO storage
 #   make up-onlyoffice - Start with OnlyOffice document server
 #   make up-fulltext   - Start with OpenSearch full-text search
+#   make up-demo       - Start all CE features (no auth) for demo
 #   make up-full       - Start all services
 #   make down          - Stop all services
 #   make logs          - View logs
@@ -33,9 +34,10 @@ AUTH := -f docker-compose.auth.yml
 MINIO := -f docker-compose.minio.yml
 ONLYOFFICE := -f docker-compose.onlyoffice.yml
 FULLTEXT := -f docker-compose.fulltext.yml
+THUMBNAILS := -f docker-compose-thumbnails.yml
 
 .PHONY: help generate-config up up-auth up-minio up-onlyoffice up-fulltext up-full \
-        up-auth-minio up-auth-fulltext up-auth-onlyoffice down logs ps restart clean build pull
+        up-auth-minio up-auth-fulltext up-auth-onlyoffice up-demo down logs ps restart clean build pull
 
 help:
 	@echo "OpenFilz Docker Compose Commands:"
@@ -45,6 +47,7 @@ help:
 	@echo "  make up-minio        Start with MinIO storage"
 	@echo "  make up-onlyoffice   Start with OnlyOffice document server"
 	@echo "  make up-fulltext     Start with OpenSearch full-text search"
+	@echo "  make up-demo         Start all CE features (no auth) for demo"
 	@echo "  make up-full         Start all services"
 	@echo ""
 	@echo "  make down            Stop all services"
@@ -113,6 +116,11 @@ up-auth-onlyoffice:
 	$(call generate_config,true,true)
 	$(COMPOSE) $(AUTH) $(ONLYOFFICE) up -d
 
+# Community Edition demo (all features, no auth)
+up-demo:
+	$(call generate_config,false,true)
+	OPENFILZ_CALCULATECHECKSUM=true $(COMPOSE) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) --profile thumbnails up -d
+
 # All services
 up-full:
 	$(call generate_config,true,true)
@@ -120,10 +128,10 @@ up-full:
 
 # Management commands
 down:
-	$(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) down
+	$(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) --profile thumbnails down
 
 logs:
-	$(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) logs -f
+	$(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) --profile thumbnails logs -f
 
 ps:
 	docker-compose ps
@@ -131,7 +139,7 @@ ps:
 restart: down up
 
 clean:
-	$(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) down -v
+	$(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) --profile thumbnails down -v
 	@rm -f ngx-env.js
 
 # Build images locally (if needed)
@@ -140,7 +148,7 @@ build:
 
 # Pull latest images
 pull:
-	$(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) pull
+	$(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) --profile thumbnails pull
 
 # Generate config only (useful for debugging)
 generate-config:

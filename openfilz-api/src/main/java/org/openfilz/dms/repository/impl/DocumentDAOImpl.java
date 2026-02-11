@@ -320,6 +320,11 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
     }
 
     @Override
+    public Flux<Document> findDocumentsByParentId(@Nonnull UUID folderId) {
+        return documentRepository.findByParentId(folderId);
+    }
+
+    @Override
     public Mono<Document> findById(UUID documentId, AccessType accessType) {
         return documentRepository.findByIdAndActive(documentId, true);
     }

@@ -42,5 +42,5 @@ services:
     environment:
       # OnlyOffice configuration
       ONLYOFFICE_ENABLED: "true"
-      ONLYOFFICE_URL: ${ONLYOFFICE_URL:-http://onlyoffice}
+      ONLYOFFICE_URL: ${ONLYOFFICE_URL:-http://localhost:8080}
       ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-openfilz-onlyoffice-jwt-secret-2024}

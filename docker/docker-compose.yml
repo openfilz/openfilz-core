@@ -24,7 +24,7 @@ services:
   # PostgreSQL Database
   # =============================================================================
   postgres:
-    image: ${POSTGRES_IMAGE:-postgres:18.1}
+    image: ${POSTGRES_IMAGE:-postgres:17}
     container_name: openfilz-postgres
     restart: unless-stopped
     environment:
@@ -75,8 +75,9 @@ services:
       OPENFILZ_INTERNAL_API_BASE_URL: ${OPENFILZ_INTERNAL_API_BASE_URL:-http://openfilz-api:8081}
       OPENFILZ_PUBLIC_API_BASE_URL: ${OPENFILZ_PUBLIC_API_BASE_URL:-http://localhost:8081}
 
-      OPENFILZ_SOFT_DELETE: ${OPENFILZ_SOFT_DELETE:-true}
+      OPENFILZ_SOFTDELETE_ACTIVE: ${OPENFILZ_SOFTDELETE_ACTIVE:-true}
 
+      OPENFILZ_CALCULATECHECKSUM: ${OPENFILZ_CALCULATECHECKSUM:-false}
 
       # Server configuration
       SERVER_PORT: 8081
