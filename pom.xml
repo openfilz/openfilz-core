@@ -4,7 +4,7 @@
 
     <groupId>org.openfilz</groupId>
     <artifactId>openfilz-core</artifactId>
-    <version>1.0.54-SNAPSHOT</version>
+    <version>1.0.54</version>
     <packaging>pom</packaging>
     <url>https://github.com/openfilz/openfilz-core</url>
 
@@ -37,7 +37,7 @@
         <connection>scm:git:https://github.com/openfilz/openfilz-core.git</connection>
         <developerConnection>scm:git:https://github.com/openfilz/openfilz-core.git</developerConnection>
         <url>https://github.com/openfilz/openfilz-core</url>
-        <tag>HEAD</tag>
+        <tag>v1.0.54</tag>
     </scm>
 
     <properties>
