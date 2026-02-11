@@ -54,6 +54,12 @@ public class DocumentQueryController {
     }
 
     @QueryMapping
+    public Flux<FullDocumentInfo> listAllFolder(@Argument @NotNull ListFolderRequest request,
+                                             DataFetchingEnvironment environment) {
+        return allDocumentQueryService.findAll(request, environment);
+    }
+
+    @QueryMapping
     public Flux<FullDocumentInfo> listFavorites(@Argument @NotNull FavoriteRequest request,
                                              DataFetchingEnvironment environment) {
         return allDocumentQueryService.findAll(request.toListFolderRequest(), environment);

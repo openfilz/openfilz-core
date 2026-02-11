@@ -7,6 +7,8 @@ scalar UUID
 
 type Query {
     listFolder(request: ListFolderRequest!): [FolderElementInfo]
+    "List documents across all folders (ignores parent folder filter)"
+    listAllFolder(request: ListFolderRequest!): [FolderElementInfo]
     documentById(id: UUID!): DocumentInfo
     count(request: ListFolderRequest): Long
     listFavorites(request: FavoriteRequest!): [FolderElementInfo]
