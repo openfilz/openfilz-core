@@ -10,6 +10,8 @@ import java.util.UUID;
 
 public interface DocumentRepository extends ReactiveCrudRepository<Document, UUID> {
 
+    Flux<Document> findByParentId(UUID parentId);
+
     Flux<Document> findByParentIdAndType(UUID parentId, DocumentType type);
 
     Mono<Document> findByIdAndType(UUID id, DocumentType documentType);
