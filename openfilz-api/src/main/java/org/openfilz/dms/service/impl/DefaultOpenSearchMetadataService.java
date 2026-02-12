@@ -37,6 +37,7 @@ public class DefaultOpenSearchMetadataService implements OpenSearchMetadataServi
         source.put(OpenSearchDocumentKey.createdBy.toString(), document.getCreatedBy());
         source.put(OpenSearchDocumentKey.updatedAt.toString(), document.getUpdatedAt().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
         source.put(OpenSearchDocumentKey.updatedBy.toString(), document.getUpdatedBy());
+        source.put(OpenSearchDocumentKey.active.toString(), document.getActive());
         Json metadata = document.getMetadata();
         if(metadata != null) {
             source.put(OpenSearchDocumentKey.metadata.toString(), jsonUtils.toMap(metadata));

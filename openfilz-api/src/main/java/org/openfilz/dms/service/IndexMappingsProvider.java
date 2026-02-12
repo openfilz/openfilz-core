@@ -26,7 +26,8 @@ public interface IndexMappingsProvider {
                 .properties(OpenSearchDocumentKey.createdBy.toString(), p -> p.keyword(k -> k))
                 .properties(OpenSearchDocumentKey.updatedBy.toString(), p -> p.keyword(k -> k))
                 .properties(OpenSearchDocumentKey.content.toString(), p -> p.text(txt -> txt.analyzer("standard")))
-                .properties(OpenSearchDocumentKey.metadata.toString(), p -> p.object(tx -> tx.dynamic(DynamicMapping.True)));
+                .properties(OpenSearchDocumentKey.metadata.toString(), p -> p.object(tx -> tx.dynamic(DynamicMapping.True)))
+                .properties(OpenSearchDocumentKey.active.toString(), p -> p.boolean_(b -> b));
     }
 
 }
