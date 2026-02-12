@@ -66,6 +66,12 @@ public class OpenSearchIndexService implements IndexService {
     }
 
     @Override
+    public Mono<Void> updateIndexField(UUID documentId, String key, Object value) {
+        Object valueToIndex = getValueToIndex(key, value);
+        return doUpdateIndexField(documentId, key, valueToIndex);
+    }
+
+    @Override
     public Mono<Void> deleteDocument(UUID id) {
         // Build the DeleteRequest
         DeleteRequest deleteRequest = new DeleteRequest.Builder()

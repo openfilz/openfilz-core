@@ -7,6 +7,7 @@ import org.openfilz.dms.dto.response.FolderElementInfo;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.AuditAction;
 import org.openfilz.dms.enums.DocumentType;
+import org.openfilz.dms.enums.OpenSearchDocumentKey;
 import org.openfilz.dms.exception.DocumentNotFoundException;
 import org.openfilz.dms.exception.UserQuotaExceededException;
 import org.openfilz.dms.repository.DocumentDAO;
@@ -34,6 +35,8 @@ import static org.openfilz.dms.enums.DocumentType.FOLDER;
 @RequiredArgsConstructor
 @ConditionalOnProperty(name = "openfilz.soft-delete.active", havingValue = "true")
 public class RecycleBinServiceImpl implements RecycleBinService, UserInfoService {
+
+    private static final String ACTIVE_KEY = OpenSearchDocumentKey.active.toString();
 
     private final DocumentRepository documentRepository;
     private final DocumentDAO documentDAO;
@@ -80,14 +83,20 @@ public class RecycleBinServiceImpl implements RecycleBinService, UserInfoService
                             DocumentType type = doc.getType();
                             AuditAction action = type == FILE ? AuditAction.RESTORE_FILE : AuditAction.RESTORE_FOLDER;
 
-                            // Restore recursively if it's a folder
-                            Mono<Void> restore = type == FOLDER
-                                    ? documentSoftDeleteDAO.restoreRecursive(docId)
-                                    : documentSoftDeleteDAO.restore(docId);
+                            if (type == FOLDER) {
+                                return documentSoftDeleteDAO.restoreRecursive(docId)
+                                        .then(auditService.logAction(action, type, docId))
+                                        .as(tx::transactional)
+                                        .thenMany(documentSoftDeleteDAO.findDescendantIds(docId))
+                                        .doOnNext(id -> metadataPostProcessor.updateIndexField(id, ACTIVE_KEY, true))
+                                        .then();
+                            }
 
-                            return restore.then(auditService.logAction(action, type, docId));
+                            return documentSoftDeleteDAO.restore(docId)
+                                    .then(auditService.logAction(action, type, docId))
+                                    .as(tx::transactional)
+                                    .doOnSuccess(_ -> metadataPostProcessor.updateIndexField(doc, ACTIVE_KEY, true));
                         })
-                        .as(tx::transactional)
                 )
                 .then());
     }

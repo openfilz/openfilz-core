@@ -14,6 +14,8 @@ public interface MetadataPostProcessor {
 
     default void updateIndexField(Document document, String openSearchDocumentKey, Object value) {}
 
+    default void updateIndexField(UUID documentId, String openSearchDocumentKey, Object value) {}
+
     default void deleteDocument(UUID id) {}
 
 }

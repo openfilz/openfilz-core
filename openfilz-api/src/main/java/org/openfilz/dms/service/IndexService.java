@@ -15,6 +15,8 @@ public interface IndexService {
 
     Mono<Void> updateIndexField(Document document, String openSearchDocumentKey, Object value);
 
+    Mono<Void> updateIndexField(UUID documentId, String openSearchDocumentKey, Object value);
+
     Mono<Void> deleteDocument(UUID id);
 
     Mono<Map<String, Object>> newOpenSearchDocumentMetadata(Document document);

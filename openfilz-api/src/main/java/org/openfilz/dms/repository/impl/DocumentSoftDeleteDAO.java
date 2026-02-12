@@ -98,6 +98,15 @@ public class DocumentSoftDeleteDAO implements UserInfoService, SqlQueryUtils {
             SET active = true
             WHERE id IN (SELECT id FROM descendants)
             """;
+    public static final String FIND_DESCENDANT_IDS = """
+            WITH RECURSIVE descendants AS (
+                SELECT id FROM documents WHERE id = :docId
+                UNION ALL
+                SELECT d.id FROM documents d
+                INNER JOIN descendants parent ON d.parent_id = parent.id
+            )
+            SELECT id FROM descendants""";
+
     public static final String EMPTY_BIN_WHERE_IDS = """
             WITH RECURSIVE descendants AS (
                 SELECT id FROM documents WHERE id = :docId
@@ -115,6 +124,13 @@ public class DocumentSoftDeleteDAO implements UserInfoService, SqlQueryUtils {
     protected  final SqlUtils sqlUtils;
     
    
+    public Flux<UUID> findDescendantIds(UUID documentId) {
+        return databaseClient.sql(FIND_DESCENDANT_IDS)
+                .bind("docId", documentId)
+                .map(row -> row.get("id", UUID.class))
+                .all();
+    }
+
     public Mono<Void> softDelete(UUID documentId) {
         return getConnectedUserEmail()
                 .flatMap(userEmail -> databaseClient.sql(SOFT_DELETE_DOC)

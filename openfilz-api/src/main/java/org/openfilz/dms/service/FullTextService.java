@@ -14,5 +14,7 @@ public interface FullTextService {
 
     void updateIndexField(Document document, String openSearchDocumentKey, Object value);
 
+    void updateIndexField(UUID documentId, String openSearchDocumentKey, Object value);
+
     void deleteDocument(UUID id);
 }
