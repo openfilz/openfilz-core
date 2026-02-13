@@ -61,8 +61,9 @@ public class Document implements SqlColumnMapping, PhysicalDocument {
     @Column(UPDATED_BY)
     private String updatedBy;
 
+    @Builder.Default
     @Column(ACTIVE)
-    private Boolean active; // When Soft delete is active : set to false to soft-delete a document
+    private Boolean active = true; // When Soft delete is active : set to false to soft-delete a document
 
     @Transient
     private Boolean favorite; // Not stored in database, populated from JOIN

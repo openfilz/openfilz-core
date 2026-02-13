@@ -70,7 +70,7 @@ public class OpenSearchDocumentSearchService implements DocumentSearchService, O
                     // 7. Execute the request asynchronously
                     SearchRequest searchRequest = requestBuilder
                             .source(fn -> fn.filter(v ->
-                                    v.excludes(NAME_SUGGEST, openSearchQueryService.getSourceOtherExclusions()))).build();
+                                    v.excludes(NAME_SUGGEST, openSearchQueryService.getSourceOtherExclusions()).excludes(ACTIVE))).build();
                     try {
                         return Mono.fromFuture(client.search(searchRequest, DocumentSearchInfo.class))
                                 .map(this::toDocumentSearchResult); // Convert the response to our DTO
@@ -82,6 +82,12 @@ public class OpenSearchDocumentSearchService implements DocumentSearchService, O
 
     private BoolQuery.Builder getBoolQueryBuilder(String query) {
         BoolQuery.Builder boolQueryBuilder = new BoolQuery.Builder();
+
+        // Filter to only include active (non-deleted) documents
+        boolQueryBuilder.filter(f -> f.term(t -> t
+                .field(ACTIVE)
+                .value(FieldValue.of(true))
+        ));
 
         String trimQuery = query != null && !query.isEmpty() ? query.trim() : null;
 

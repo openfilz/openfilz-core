@@ -25,6 +25,7 @@ public interface OpenSearchService {
     String EXTENSION = OpenSearchDocumentKey.extension.toString();
     String CREATED_BY = OpenSearchDocumentKey.createdBy.toString();
     String UPDATED_BY = OpenSearchDocumentKey.updatedBy.toString();
+    String ACTIVE = OpenSearchDocumentKey.active.toString();
 
     default String getTrimQuery(String query) {
         return query.trim();

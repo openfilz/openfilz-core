@@ -69,6 +69,13 @@ public class DefaultMetadataPostProcessor implements MetadataPostProcessor {
     }
 
     @Override
+    public void updateIndexField(UUID documentId, String openSearchDocumentKey, Object value) {
+        if(fullText) {
+            fullTextService.updateIndexField(documentId, openSearchDocumentKey, value);
+        }
+    }
+
+    @Override
     public void deleteDocument(UUID id) {
         if(fullText) {
             fullTextService.deleteDocument(id);

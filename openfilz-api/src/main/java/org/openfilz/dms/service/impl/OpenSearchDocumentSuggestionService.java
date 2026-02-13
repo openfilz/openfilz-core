@@ -10,6 +10,8 @@ import org.openfilz.dms.service.IndexNameProvider;
 import org.openfilz.dms.service.OpenSearchQueryService;
 import org.openfilz.dms.service.OpenSearchService;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
+import org.opensearch.client.opensearch._types.FieldValue;
+import org.opensearch.client.opensearch._types.query_dsl.BoolQuery;
 import org.opensearch.client.opensearch.core.SearchRequest;
 import org.opensearch.client.opensearch.core.SearchResponse;
 import org.opensearch.client.opensearch.core.search.Hit;
@@ -53,9 +55,17 @@ public class OpenSearchDocumentSuggestionService implements DocumentSuggestionSe
         SearchRequest.Builder requestBuilder = new SearchRequest.Builder();
         return openSearchQueryService.getQuery(trimQuery, filters)
                     .flatMapMany(openQuery -> {
+                        // Wrap the query in a BoolQuery to add the active filter
+                        BoolQuery.Builder activeFilterBuilder = new BoolQuery.Builder();
+                        activeFilterBuilder.must(openQuery.toQuery());
+                        activeFilterBuilder.filter(f -> f.term(t -> t
+                                .field(ACTIVE)
+                                .value(FieldValue.of(true))
+                        ));
+
                         requestBuilder
                                 .index(indexNameProvider.getDocumentsIndexName())
-                                .query(openQuery.toQuery());
+                                .query(activeFilterBuilder.build().toQuery());
                         addSorting(sort, requestBuilder);
                         SearchRequest searchRequest = requestBuilder
                                 // We don't need the full document source, making the request very lightweight.

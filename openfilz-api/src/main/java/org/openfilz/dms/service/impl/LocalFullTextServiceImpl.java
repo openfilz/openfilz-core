@@ -125,6 +125,15 @@ public class LocalFullTextServiceImpl implements FullTextService {
     }
 
     @Override
+    public void updateIndexField(UUID documentId, String openSearchDocumentKey, Object value) {
+        indexService.updateIndexField(documentId, openSearchDocumentKey, value)
+                .doOnError(err ->
+                        log.error("updateIndexField error for {} : {}", documentId, err.getMessage()))
+                .subscribeOn(Schedulers.boundedElastic())
+                .subscribe();
+    }
+
+    @Override
     public void deleteDocument(UUID id) {
         Mono.fromCallable(() -> indexService.deleteDocument(id))
                 .doOnError(err ->
