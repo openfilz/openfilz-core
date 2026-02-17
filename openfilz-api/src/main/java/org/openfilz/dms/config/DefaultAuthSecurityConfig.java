@@ -36,6 +36,9 @@ public class DefaultAuthSecurityConfig {
     @Value("${spring.graphql.http.path:/graphql}")
     protected String graphQlBaseUrl;
 
+    @Value("${spring.graphql.graphiql.enabled:false}")
+    private boolean graphiqlEnabled;
+
     protected final SecurityService securityService;
 
     @Bean
@@ -72,7 +75,8 @@ public class DefaultAuthSecurityConfig {
                             .pathMatchers(HttpMethod.OPTIONS).permitAll()
                             .pathMatchers(API_PREFIX + ALL_MATCHES, graphQlBaseUrl + ALL_MATCHES)
                             .access((mono, context) -> mono
-                                    .map(auth -> newAuthorizationDecision(auth, context)))
+                                    .map(auth -> newAuthorizationDecision(auth, context))
+                                    .defaultIfEmpty(newUnauthenticatedDecision(context)))
                             .anyExchange()
                             .authenticated();
                 })
@@ -86,7 +90,27 @@ public class DefaultAuthSecurityConfig {
     }
 
     private AuthorizationDecision newAuthorizationDecision(Authentication auth, AuthorizationContext context) {
+        if (isGraphQlIntrospection(context)) {
+            return new AuthorizationDecision(true);
+        }
         return new AuthorizationDecision(securityService.authorize(auth, context));
+    }
+
+    /**
+     * Handles unauthenticated requests (no JWT token provided).
+     * Only GraphQL introspection queries are allowed without authentication,
+     * analogous to how Swagger serves its OpenAPI spec publicly at /v3/api-docs.
+     */
+    private AuthorizationDecision newUnauthenticatedDecision(AuthorizationContext context) {
+        if (isGraphQlIntrospection(context)) {
+            return new AuthorizationDecision(true);
+        }
+        return new AuthorizationDecision(false);
+    }
+
+    private boolean isGraphQlIntrospection(AuthorizationContext context) {
+        return graphiqlEnabled
+                && Boolean.TRUE.equals(context.getExchange().getAttribute(GraphQlIntrospectionFilter.GRAPHQL_INTROSPECTION_ATTRIBUTE));
     }
 
 }
