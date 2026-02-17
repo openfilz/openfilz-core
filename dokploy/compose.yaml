@@ -197,6 +197,8 @@ services:
       OPENFILZ_QUOTA_FILE_UPLOAD: ${OPENFILZ_QUOTA_FILE_UPLOAD}
       OPENFILZ_QUOTA_USER: ${OPENFILZ_QUOTA_USER}
 
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: "TRACE"
+
     volumes:
       - openfilz-storage:/var/data/openfilz
     networks:
