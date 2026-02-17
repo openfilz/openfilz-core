@@ -1,5 +1,6 @@
 package org.openfilz.dms.config;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -33,6 +34,7 @@ import java.nio.charset.StandardCharsets;
         @ConditionalOnProperty(name = "openfilz.security.no-auth", havingValue = "false"),
         @ConditionalOnProperty(name = "spring.graphql.graphiql.enabled", havingValue = "true")
 })
+@Slf4j
 public class GraphQlIntrospectionFilter implements WebFilter, Ordered {
 
     public static final String GRAPHQL_INTROSPECTION_ATTRIBUTE = "GRAPHQL_INTROSPECTION";
@@ -40,13 +42,14 @@ public class GraphQlIntrospectionFilter implements WebFilter, Ordered {
     // Pre-computed ASCII byte patterns for zero-allocation scanning.
     // Safe to match against UTF-8 content since ASCII bytes are identical in UTF-8.
     private static final byte[] SCHEMA_MARKER = "__schema".getBytes(StandardCharsets.US_ASCII);
-    private static final byte[] TYPE_MARKER = "__type".getBytes(StandardCharsets.US_ASCII);
+    private static final byte[] TYPE_MARKER = "__type(".getBytes(StandardCharsets.US_ASCII);
     private static final byte[] INTROSPECTION_MARKER = "IntrospectionQuery".getBytes(StandardCharsets.US_ASCII);
 
     private final String graphQlPath;
 
     public GraphQlIntrospectionFilter(@Value("${spring.graphql.http.path:/graphql}") String graphQlPath) {
         this.graphQlPath = graphQlPath;
+        log.info("GraphQlIntrospectionFilter created - graphQlPath={}", graphQlPath);
     }
 
     @Override
@@ -62,6 +65,13 @@ public class GraphQlIntrospectionFilter implements WebFilter, Ordered {
         // Only process POST requests to the GraphQL endpoint
         if (!HttpMethod.POST.equals(request.getMethod())
                 || !request.getPath().value().equals(graphQlPath)) {
+            return chain.filter(exchange);
+        }
+
+        // Introspection queries from GraphiQL are unauthenticated.
+        // Skip body consumption for authenticated requests to avoid
+        // breaking context propagation through the ServerWebExchangeDecorator.
+        if (request.getHeaders().containsKey("Authorization")) {
             return chain.filter(exchange);
         }
 
