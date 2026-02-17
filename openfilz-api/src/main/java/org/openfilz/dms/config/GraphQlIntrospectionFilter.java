@@ -1,5 +1,6 @@
 package org.openfilz.dms.config;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -33,6 +34,7 @@ import java.nio.charset.StandardCharsets;
         @ConditionalOnProperty(name = "openfilz.security.no-auth", havingValue = "false"),
         @ConditionalOnProperty(name = "spring.graphql.graphiql.enabled", havingValue = "true")
 })
+@Slf4j
 public class GraphQlIntrospectionFilter implements WebFilter, Ordered {
 
     public static final String GRAPHQL_INTROSPECTION_ATTRIBUTE = "GRAPHQL_INTROSPECTION";
@@ -47,6 +49,7 @@ public class GraphQlIntrospectionFilter implements WebFilter, Ordered {
 
     public GraphQlIntrospectionFilter(@Value("${spring.graphql.http.path:/graphql}") String graphQlPath) {
         this.graphQlPath = graphQlPath;
+        log.info("GraphQlIntrospectionFilter created - graphQlPath={}", graphQlPath);
     }
 
     @Override
@@ -65,9 +68,13 @@ public class GraphQlIntrospectionFilter implements WebFilter, Ordered {
             return chain.filter(exchange);
         }
 
+        log.debug("Processing POST {} - path matches graphQlPath={}", request.getPath().value(), graphQlPath);
+
         return DataBufferUtils.join(request.getBody())
                 .flatMap(dataBuffer -> {
-                    if (containsIntrospectionMarker(dataBuffer)) {
+                    boolean isIntrospection = containsIntrospectionMarker(dataBuffer);
+                    log.debug("Introspection marker detected: {}", isIntrospection);
+                    if (isIntrospection) {
                         exchange.getAttributes().put(GRAPHQL_INTROSPECTION_ATTRIBUTE, Boolean.TRUE);
                     }
 
