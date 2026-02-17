@@ -25,10 +25,12 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 
+import static org.awaitility.Awaitility.await;
 import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 
 @Testcontainers
@@ -125,19 +127,21 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
                 .exchange()
                 .expectStatus().isNoContent();
 
-        waitFor(3000);
+        await().atMost(Duration.ofSeconds(15))
+                .pollInterval(Duration.ofSeconds(1))
+                .untilAsserted(() -> {
+                    List<Suggest> deletedSuggestions = getWebTestClient().get().uri(uri ->
+                                    uri.path(RestApiVersion.API_PREFIX + "/suggestions")
+                                            .queryParam("q", getSuggestionQuery1())
+                                            .build())
+                            .exchange()
+                            .expectBody(new ParameterizedTypeReference<List<Suggest>>() {
+                            })
+                            .returnResult().getResponseBody();
 
-        suggestions = getWebTestClient().get().uri(uri ->
-                        uri.path(RestApiVersion.API_PREFIX + "/suggestions")
-                                .queryParam("q", getSuggestionQuery1())
-                                .build())
-                .exchange()
-                .expectBody(new ParameterizedTypeReference<List<Suggest>>() {
-                })
-                .returnResult().getResponseBody();
-
-        Assertions.assertNotNull(suggestions);
-        Assertions.assertEquals(0, suggestions.size());
+                    Assertions.assertNotNull(deletedSuggestions);
+                    Assertions.assertEquals(0, deletedSuggestions.size());
+                });
     }
 
     protected String getSuggestionQuery1() {

@@ -4,7 +4,7 @@
     <parent>
         <groupId>org.openfilz</groupId>
         <artifactId>openfilz-core</artifactId>
-        <version>1.0.56-SNAPSHOT</version>
+        <version>1.0.57-SNAPSHOT</version>
     </parent>
 
     <artifactId>openfilz-api</artifactId>
@@ -363,6 +363,11 @@
             <groupId>com.squareup.okhttp3</groupId>
             <artifactId>mockwebserver</artifactId>
             <version>4.12.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
