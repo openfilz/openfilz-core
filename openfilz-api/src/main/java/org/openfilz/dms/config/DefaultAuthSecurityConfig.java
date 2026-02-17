@@ -7,7 +7,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableReactiveMethodSecurity;
@@ -17,7 +20,10 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.security.web.server.SecurityWebFilterChain;
+import org.springframework.security.web.server.ServerAuthenticationEntryPoint;
 import org.springframework.security.web.server.authorization.AuthorizationContext;
+import org.springframework.security.web.server.authorization.ServerAccessDeniedHandler;
+import reactor.core.publisher.Mono;
 
 import static org.openfilz.dms.config.RestApiVersion.*;
 
@@ -35,6 +41,9 @@ public class DefaultAuthSecurityConfig {
 
     @Value("${spring.graphql.http.path:/graphql}")
     protected String graphQlBaseUrl;
+
+    @Value("${spring.graphql.graphiql.enabled:false}")
+    private boolean graphiqlEnabled;
 
     protected final SecurityService securityService;
 
@@ -72,11 +81,14 @@ public class DefaultAuthSecurityConfig {
                             .pathMatchers(HttpMethod.OPTIONS).permitAll()
                             .pathMatchers(API_PREFIX + ALL_MATCHES, graphQlBaseUrl + ALL_MATCHES)
                             .access((mono, context) -> mono
-                                    .map(auth -> newAuthorizationDecision(auth, context)))
+                                    .map(auth -> newAuthorizationDecision(auth, context))
+                                    .defaultIfEmpty(newUnauthenticatedDecision(context)))
                             .anyExchange()
                             .authenticated();
                 })
                 .oauth2ResourceServer(oauth2 -> oauth2
+                        .authenticationEntryPoint(bearerEntryPoint())
+                        .accessDeniedHandler(bearerAccessDeniedHandler())
                         .jwt(getJwtSpecCustomizer()))
                 .build();
     }
@@ -86,7 +98,62 @@ public class DefaultAuthSecurityConfig {
     }
 
     private AuthorizationDecision newAuthorizationDecision(Authentication auth, AuthorizationContext context) {
+        if (isGraphQlIntrospection(context)) {
+            return new AuthorizationDecision(true);
+        }
         return new AuthorizationDecision(securityService.authorize(auth, context));
+    }
+
+    /**
+     * Handles unauthenticated requests (no JWT token provided).
+     * Only GraphQL introspection queries are allowed without authentication,
+     * analogous to how Swagger serves its OpenAPI spec publicly at /v3/api-docs.
+     */
+    private AuthorizationDecision newUnauthenticatedDecision(AuthorizationContext context) {
+        if (isGraphQlIntrospection(context)) {
+            return new AuthorizationDecision(true);
+        }
+        return new AuthorizationDecision(false);
+    }
+
+    private boolean isGraphQlIntrospection(AuthorizationContext context) {
+        return graphiqlEnabled
+                && Boolean.TRUE.equals(context.getExchange().getAttribute(GraphQlIntrospectionFilter.GRAPHQL_INTROSPECTION_ATTRIBUTE));
+    }
+
+    /**
+     * Custom access denied handler with the same resilience as {@link #bearerEntryPoint()}.
+     * Handles the 403 case when an authenticated user lacks the required role.
+     */
+    protected ServerAccessDeniedHandler bearerAccessDeniedHandler() {
+        return (exchange, denied) -> Mono.defer(() -> {
+            ServerHttpResponse response = exchange.getResponse();
+            response.setStatusCode(HttpStatus.FORBIDDEN);
+            try {
+                response.getHeaders().set(HttpHeaders.WWW_AUTHENTICATE, "Bearer error=\"insufficient_scope\"");
+            } catch (UnsupportedOperationException ignored) {
+                // Headers read-only (response already committed) — 403 status is set
+            }
+            return response.setComplete();
+        });
+    }
+
+    /**
+     * Custom entry point that sets the 401 status BEFORE attempting to write headers.
+     * The default {@code BearerTokenServerAuthenticationEntryPoint} writes the
+     * {@code WWW-Authenticate} header first, which throws on read-only headers.
+     */
+    protected ServerAuthenticationEntryPoint bearerEntryPoint() {
+        return (exchange, ex) -> Mono.defer(() -> {
+            ServerHttpResponse response = exchange.getResponse();
+            response.setStatusCode(HttpStatus.UNAUTHORIZED);
+            try {
+                response.getHeaders().set(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
+            } catch (UnsupportedOperationException ignored) {
+                // Headers read-only (response already committed) — 401 status is set
+            }
+            return response.setComplete();
+        });
     }
 
 }

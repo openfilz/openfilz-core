@@ -50,7 +50,7 @@ openfilz:
       username: admin
       password: yourStrongPassword123!
   security:
-    no-auth: true
+    no-auth: false
     worm-mode: false
     cors-allowed-origins: http://localhost:4200, http://localhost:4900 # Comma-separated list of authorized origins
   thumbnail:
