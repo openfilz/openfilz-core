@@ -68,13 +68,11 @@ public class GraphQlIntrospectionFilter implements WebFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        log.debug("Processing POST {} - path matches graphQlPath={}", request.getPath().value(), graphQlPath);
+        //log.debug("Processing POST {} - path matches graphQlPath={}", request.getPath().value(), graphQlPath);
 
         return DataBufferUtils.join(request.getBody())
                 .flatMap(dataBuffer -> {
-                    boolean isIntrospection = containsIntrospectionMarker(dataBuffer);
-                    log.debug("Introspection marker detected: {}", isIntrospection);
-                    if (isIntrospection) {
+                    if (containsIntrospectionMarker(dataBuffer)) {
                         exchange.getAttributes().put(GRAPHQL_INTROSPECTION_ATTRIBUTE, Boolean.TRUE);
                     }
 
