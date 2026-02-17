@@ -68,7 +68,12 @@ public class GraphQlIntrospectionFilter implements WebFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        //log.debug("Processing POST {} - path matches graphQlPath={}", request.getPath().value(), graphQlPath);
+        // Introspection queries from GraphiQL are unauthenticated.
+        // Skip body consumption for authenticated requests to avoid
+        // breaking context propagation through the ServerWebExchangeDecorator.
+        if (request.getHeaders().containsKey("Authorization")) {
+            return chain.filter(exchange);
+        }
 
         return DataBufferUtils.join(request.getBody())
                 .flatMap(dataBuffer -> {
