@@ -42,7 +42,7 @@ public class GraphQlIntrospectionFilter implements WebFilter, Ordered {
     // Pre-computed ASCII byte patterns for zero-allocation scanning.
     // Safe to match against UTF-8 content since ASCII bytes are identical in UTF-8.
     private static final byte[] SCHEMA_MARKER = "__schema".getBytes(StandardCharsets.US_ASCII);
-    private static final byte[] TYPE_MARKER = "__type".getBytes(StandardCharsets.US_ASCII);
+    private static final byte[] TYPE_MARKER = "__type(".getBytes(StandardCharsets.US_ASCII);
     private static final byte[] INTROSPECTION_MARKER = "IntrospectionQuery".getBytes(StandardCharsets.US_ASCII);
 
     private final String graphQlPath;

@@ -34,7 +34,7 @@ public class GraphQlRequestInterceptor implements WebGraphQlInterceptor {
     private boolean isIntrospectionQuery(WebGraphQlRequest request) {
         String document = request.getDocument();
         return document != null && (document.contains("__schema")
-                || document.contains("__type")
+                || document.contains("__type(")
                 || document.contains("IntrospectionQuery"));
     }
 }
