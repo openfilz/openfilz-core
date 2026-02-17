@@ -11,6 +11,7 @@ import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpRequestDecorator;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.server.ServerWebExchangeDecorator;
 import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Flux;
@@ -70,15 +71,26 @@ public class GraphQlIntrospectionFilter implements WebFilter, Ordered {
                         exchange.getAttributes().put(GRAPHQL_INTROSPECTION_ATTRIBUTE, Boolean.TRUE);
                     }
 
-                    // Replay the original DataBuffer for downstream consumption — no copy needed
-                    ServerHttpRequest mutatedRequest = new ServerHttpRequestDecorator(request) {
+                    // Replay the consumed body for downstream consumption
+                    ServerHttpRequest replayedRequest = new ServerHttpRequestDecorator(request) {
                         @Override
                         public Flux<DataBuffer> getBody() {
                             return Flux.just(dataBuffer);
                         }
                     };
 
-                    return chain.filter(exchange.mutate().request(mutatedRequest).build());
+                    // Use ServerWebExchangeDecorator instead of exchange.mutate() to
+                    // avoid StrictServerWebExchangeFirewall incompatibility
+                    // (spring-security#16002) where mutated exchanges get
+                    // ReadOnlyHttpHeaders on the response, causing
+                    // UnsupportedOperationException when the security chain sets
+                    // WWW-Authenticate on a 401 response.
+                    return chain.filter(new ServerWebExchangeDecorator(exchange) {
+                        @Override
+                        public ServerHttpRequest getRequest() {
+                            return replayedRequest;
+                        }
+                    });
                 })
                 .switchIfEmpty(chain.filter(exchange));
     }
