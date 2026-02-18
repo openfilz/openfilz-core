@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.response.Settings;
 import org.openfilz.dms.service.SettingsService;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,6 +21,7 @@ import reactor.core.publisher.Mono;
 @RequestMapping(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_SETTINGS)
 @RequiredArgsConstructor
 @Tag(name = "Settings", description = "Openfilz global settings and User preferences")
+@ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
 public class SettingsController {
 
     private final SettingsService settingsService;
