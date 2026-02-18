@@ -24,3 +24,11 @@ database:
 # replicaCount: 1
 # image:
 #   tag: "1.2.3"
+
+# -- Extra environment variables injected via a chart-managed ConfigMap.
+# extraEnv:
+#   MY_CUSTOM_VAR: "my-value"
+#   FEATURE_FLAG_X: "true"
+
+# -- Inject sensitive env vars from an existing Secret.
+# extraEnvSecretRef: "my-app-secrets"

@@ -45,10 +45,24 @@ spec:
                   key: password
             - name: JAVA_TOOL_OPTIONS
               value: "-Dopenfilz.security.cors-allowed-origins={{ .Values.api.corsAllowedUrls }} -Dserver.port={{ .Values.api.port }} -Dstorage.type={{ .Values.storage.type }} -Dstorage.local.basePath={{ .Values.storage.basePath }}"
+          {{- if or .Values.extraEnv .Values.extraEnvSecretRef }}
+          envFrom:
+            {{- if .Values.extraEnv }}
+            - configMapRef:
+                name: {{ include "common.names.fullname" . }}-extra-env
+            {{- end }}
+            {{- if .Values.extraEnvSecretRef }}
+            - secretRef:
+                name: {{ .Values.extraEnvSecretRef }}
+            {{- end }}
+          {{- end }}
           {{- if .Values.persistence.enabled }}
           volumeMounts:
             - name: data
               mountPath: {{ .Values.storage.basePath }}
+          {{- end }}
+          {{- if .Values.resources }}
+          resources: {{ toYaml .Values.resources | nindent 12 }}
           {{- end }}
       {{- if .Values.persistence.enabled }}
       volumes:

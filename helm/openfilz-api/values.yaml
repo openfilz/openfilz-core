@@ -95,6 +95,23 @@ storage:
   # @param storage.basePath The path within the container where the volume is mounted.
   basePath: /var/data/ged
 
+# -- Extra environment variables.
+# These key-value pairs will be stored in a chart-managed ConfigMap and
+# injected into the container via envFrom. This lets you add arbitrary
+# environment variables without modifying the chart templates.
+# Example:
+#   extraEnv:
+#     MINIO_URL: "http://minio.svc:9000"
+#     MINIO_BUCKET: "my-bucket"
+# @param extraEnv A map of extra environment variables for the container.
+extraEnv: {}
+
+# -- Reference to an existing Secret whose data will be injected as
+# environment variables via envFrom. Useful for sensitive values like
+# API keys or third-party credentials.
+# @param extraEnvSecretRef Name of an existing Secret to load env vars from.
+extraEnvSecretRef: ""
+
 # -- Service resource configuration.
 # @param service.type The type of Kubernetes Service.
 # @param service.port The port the Service will expose.
@@ -147,3 +164,12 @@ persistence:
   hostPath: /tmp/kube-storage
   # @param persistence.existingClaim Use an existing PVC instead of creating a new one.
   existingClaim: ""
+
+# -- Resources
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 1
+    memory: 1024Mi
