@@ -61,6 +61,9 @@ spec:
             - name: data
               mountPath: {{ .Values.storage.basePath }}
           {{- end }}
+          {{- if .Values.resources }}
+          resources: {{ toYaml .Values.resources | nindent 12 }}
+          {{- end }}
       {{- if .Values.persistence.enabled }}
       volumes:
         - name: data

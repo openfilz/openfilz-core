@@ -164,3 +164,12 @@ persistence:
   hostPath: /tmp/kube-storage
   # @param persistence.existingClaim Use an existing PVC instead of creating a new one.
   existingClaim: ""
+
+# -- Resources
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 1
+    memory: 1024Mi
