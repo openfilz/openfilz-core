@@ -112,6 +112,55 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
     protected static final String PARENT_ID = "parentId";
     protected static final String IDS = "ids";
 
+    private static final String SELECT_POSITION = """
+            WITH target_doc AS (
+                SELECT id, parent_id FROM documents WHERE id = :documentId AND active = true
+            ),
+            folder_items AS (
+                SELECT
+                    id,
+                    ROW_NUMBER() OVER (
+                        ORDER BY
+                            CASE WHEN type = 'FOLDER' THEN 0 ELSE 1 END,
+                            %s %s
+                    ) - 1 as position
+                FROM documents
+                WHERE (parent_id = (SELECT parent_id FROM target_doc) OR (parent_id IS NULL AND (SELECT parent_id FROM target_doc) IS NULL))
+                  AND active = true
+            )
+            SELECT
+                :documentId as document_id,
+                (SELECT parent_id FROM target_doc) as parent_id,
+                (SELECT position FROM folder_items WHERE id = :documentId) as position,
+                (SELECT COUNT(*) FROM folder_items) as total_items
+            """;
+
+    public static final String DESC = "DESC";
+    public static final String ASC = "ASC";
+    private static final String SELECT_ANCESTORS = """
+            WITH RECURSIVE ancestors AS (
+                SELECT id, name, type, parent_id, 1 as depth
+                FROM documents
+                WHERE id = (SELECT parent_id FROM documents WHERE id = :documentId AND active = true)
+                  AND active = true
+                UNION ALL
+                SELECT d.id, d.name, d.type, d.parent_id, a.depth + 1
+                FROM documents d
+                JOIN ancestors a ON d.id = a.parent_id
+                WHERE d.active = true
+            )
+            SELECT id, name, type FROM ancestors
+            ORDER BY depth DESC
+            """;
+    private static final String DOCUMENT_ID = "documentId";
+    private static final String DOCUMENT_ID1 = "document_id";
+    private static final String POSITION = "position";
+    private static final String TOTAL_ITEMS = "total_items";
+    public static final String UPDATEDAT = "updatedat";
+    public static final String CREATEDAT = "createdat";
+    public static final String USERNAME = "username";
+    public static final String TOTAL_SIZE = "total_size";
+
     protected final DocumentRepository documentRepository;
 
     protected final DatabaseClient databaseClient;
@@ -346,23 +395,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
 
     @Override
     public Flux<AncestorInfo> getAncestors(UUID documentId) {
-        String sql = """
-            WITH RECURSIVE ancestors AS (
-                SELECT id, name, type, parent_id, 1 as depth
-                FROM documents
-                WHERE id = (SELECT parent_id FROM documents WHERE id = :documentId AND active = true)
-                  AND active = true
-                UNION ALL
-                SELECT d.id, d.name, d.type, d.parent_id, a.depth + 1
-                FROM documents d
-                JOIN ancestors a ON d.id = a.parent_id
-                WHERE d.active = true
-            )
-            SELECT id, name, type FROM ancestors
-            ORDER BY depth DESC
-            """;
-        return databaseClient.sql(sql)
-                .bind("documentId", documentId)
+        return bindDocumentQuery(documentId, SELECT_ANCESTORS)
                 .map(row -> new AncestorInfo(
                         row.get(ID, UUID.class),
                         row.get(NAME, String.class),
@@ -373,49 +406,44 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
 
     @Override
     public Mono<DocumentPosition> getDocumentPosition(UUID documentId, String sortBy, String sortOrder) {
-        // Validate and sanitize sort parameters to prevent SQL injection
-        String safeSortBy = switch (sortBy != null ? sortBy.toLowerCase() : "name") {
-            case "name" -> "name";
-            case "updated_at", "updatedat" -> "updated_at";
-            case "created_at", "createdat" -> "created_at";
-            case "size" -> "size";
-            case "type" -> "type";
-            default -> "name";
-        };
-        String safeSortOrder = "DESC".equalsIgnoreCase(sortOrder) ? "DESC" : "ASC";
+        String safeSortBy = getSafeSortBy(sortBy);
+        String safeSortOrder = getSafeSortOrder(sortOrder);
 
-        String sql = String.format("""
-            WITH target_doc AS (
-                SELECT id, parent_id FROM documents WHERE id = :documentId AND active = true
-            ),
-            folder_items AS (
-                SELECT
-                    id,
-                    ROW_NUMBER() OVER (
-                        ORDER BY
-                            CASE WHEN type = 'FOLDER' THEN 0 ELSE 1 END,
-                            %s %s
-                    ) - 1 as position
-                FROM documents
-                WHERE (parent_id = (SELECT parent_id FROM target_doc) OR (parent_id IS NULL AND (SELECT parent_id FROM target_doc) IS NULL))
-                  AND active = true
-            )
-            SELECT
-                :documentId as document_id,
-                (SELECT parent_id FROM target_doc) as parent_id,
-                (SELECT position FROM folder_items WHERE id = :documentId) as position,
-                (SELECT COUNT(*) FROM folder_items) as total_items
-            """, safeSortBy, safeSortOrder);
+        String sql = String.format(SELECT_POSITION, safeSortBy, safeSortOrder);
 
-        return databaseClient.sql(sql)
-                .bind("documentId", documentId)
-                .map(row -> new DocumentPosition(
-                        row.get("document_id", UUID.class),
-                        row.get("parent_id", UUID.class),
-                        row.get("position", Long.class),
-                        row.get("total_items", Long.class)
-                ))
+        return bindDocumentQuery(documentId, sql)
+                .map(mapPositionQuery())
                 .one();
+    }
+
+    protected DatabaseClient.GenericExecuteSpec bindDocumentQuery(UUID documentId, String sql) {
+        return databaseClient.sql(sql)
+                .bind(DOCUMENT_ID, documentId);
+    }
+
+    protected Function<Readable, DocumentPosition> mapPositionQuery() {
+        return row -> new DocumentPosition(
+                row.get(DOCUMENT_ID1, UUID.class),
+                row.get( SqlColumnMapping.PARENT_ID, UUID.class),
+                row.get(POSITION, Long.class),
+                row.get(TOTAL_ITEMS, Long.class)
+        );
+    }
+
+    protected String getSafeSortOrder(String sortOrder) {
+        return DESC.equalsIgnoreCase(sortOrder) ? DESC : ASC;
+    }
+
+    protected String getSafeSortBy(String sortBy) {
+        // Validate and sanitize sort parameters to prevent SQL injection
+        return switch (sortBy != null ? sortBy.toLowerCase() : NAME) {
+            case NAME -> NAME;
+            case UPDATED_AT, UPDATEDAT ->  UPDATED_AT;
+            case CREATED_AT, CREATEDAT -> CREATED_AT;
+            case SIZE -> SIZE;
+            case TYPE -> TYPE;
+            default -> NAME;
+        };
     }
 
     @Override
@@ -430,8 +458,8 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
               AND active = true
             """;
         return databaseClient.sql(sql)
-                .bind("username", username)
-                .map(row -> row.get("total_size", Long.class))
+                .bind(USERNAME, username)
+                .map(row -> row.get(TOTAL_SIZE, Long.class))
                 .one()
                 .defaultIfEmpty(0L);
     }
