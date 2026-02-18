@@ -106,6 +106,8 @@ The following table lists the configurable parameters of the Document Management
 | `database.createPassword`| The database password to create. If empty, a random one is generated. | `""`                      |
 | `storage.type` | The type of storage backend (e.g., 'local' or 'minio'). | `"local"`                 |
 | `storage.basePath` | The path within the container where the volume is mounted. | `"/var/data/ged"`         |
+| `extraEnv` | A map of extra environment variables. Stored in a chart-managed ConfigMap and injected via `envFrom`. | `{}`                      |
+| `extraEnvSecretRef` | Name of an existing Secret to inject as environment variables via `envFrom`. | `""`                      |
 | `service.type` | The type of Kubernetes Service. | `"ClusterIP"`             |
 | `service.port` | The port the Service will expose. | `80`                      |
 | `ingress.enabled` | Enables the Ingress resource (only if `openshift.enabled` is false). | `true`                    |
@@ -119,3 +121,28 @@ The following table lists the configurable parameters of the Document Management
 | `persistence.storageClass`| PVC StorageClass. If `""`, the cluster's default is used. | `""`                      |
 | `persistence.hostPath` | The host path for the manual PV (used only if `openshift.enabled` is false). | `"/tmp/kube-storage"`     |
 | `persistence.existingClaim`| Use an existing PVC instead of creating a new one. | `""`                      |
+
+## Extra Environment Variables
+
+You can inject additional environment variables into the application container without modifying the chart templates.
+
+### Via `extraEnv` (ConfigMap — managed by the chart)
+
+Add key-value pairs under `extraEnv` in your values file. The chart creates a ConfigMap and mounts it via `envFrom`:
+
+```yaml
+extraEnv:
+  MINIO_URL: "http://minio.svc:9000"
+  MINIO_BUCKET: "my-bucket"
+  FEATURE_FLAG_X: "true"
+```
+
+### Via `extraEnvSecretRef` (existing Secret)
+
+Point to a pre-existing Secret to inject sensitive values:
+
+```yaml
+extraEnvSecretRef: "my-app-secrets"
+```
+
+Both options can be used together. All keys from the ConfigMap and Secret are exposed as environment variables in the container.
