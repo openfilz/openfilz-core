@@ -69,7 +69,7 @@ public class ChecksumSaveDocumentServiceImpl extends SaveDocumentServiceImpl {
 
     @Override
     public Mono<Document> saveAndReplaceDocument(FilePart newFilePart, ContentInfo contentInfo, Document document, String oldStoragePath) {
-        return storageService.saveFile(newFilePart)
+        return storageService.replaceFile(oldStoragePath, newFilePart)
                 .flatMap(newStoragePath -> checkNewFileIsDifferentFromExisting(newStoragePath, contentInfo,
                         getChecksum(document), oldStoragePath)
                         .flatMap(checksumInfo -> {

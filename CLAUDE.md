@@ -48,6 +48,7 @@ org/openfilz/dms/
 ### StorageService Interface
 All methods return Mono (reactive):
 - Mono<String> saveFile(FilePart)
+- Mono<String> replaceFile(oldStoragePath, FilePart) — replaces file content
 - Mono<Resource> loadFile(storagePath)
 - Mono<Void> deleteFile(storagePath)
 - Mono<String> copyFile(sourceStoragePath)
@@ -61,9 +62,18 @@ All methods return Mono (reactive):
 
 **MinioStorageService:**
 - Activated: storage.type=minio
-- Piped streams for uploads
+- Piped streams for uploads (shared `uploadToObject()` method used by both `saveFile` and `replaceFile`)
 - WORM mode support
+- Bucket versioning support: when `versioning-enabled=true`, `replaceFile` overwrites the same object (MinIO keeps previous versions automatically) and returns the unchanged storage path
 - I/O on boundedElastic()
+
+### MinioProperties (`@ConfigurationProperties(prefix = "storage.minio")`)
+Centralized MinIO configuration used by `MinioStorageService`, `MinioChecksumService`, and `MinioThumbnailStorageService`:
+- `endpoint` — MinIO server URL
+- `accessKey` — MinIO access key
+- `secretKey` — MinIO secret key
+- `bucketName` — bucket name for document storage
+- `versioningEnabled` — enables S3 bucket versioning (default: `false`). When enabled, bucket versioning is set at startup and `replaceFile` preserves previous object versions
 
 ### Configuration
 ```yaml
@@ -75,6 +85,7 @@ storage:
     access-key: minioadmin
     secret-key: minioadmin
     bucket-name: dms-bucket
+    versioning-enabled: false
 ```
 
 ---
@@ -140,7 +151,7 @@ openfilz.security:
 
 ### Configuration
 ```java
-@Bean RuntimeWiringConfigurer runtimeWiringConfigurer()
+@Bean RuntimeWiringConfigurer runtimeWiringConfigurer();
 // Registers: Json, UUID, DateTime scalars
 ```
 
@@ -166,6 +177,8 @@ type Query {
 **WebFluxConfig:** HTTP codecs
 **DefaultAuthSecurityConfig:** OAuth2/JWT
 **GraphQlConfig:** GraphQL scalars
+**MinioProperties:** `@ConfigurationProperties` for `storage.minio.*` (endpoint, credentials, bucket, versioning)
+**ThumbnailProperties:** `@ConfigurationProperties` for `openfilz.thumbnail.*`
 **Conditional Beans:** Feature toggles
 
 ---
@@ -200,7 +213,7 @@ POST   /api/v1/documents/upload
 POST   /api/v1/documents/upload-multiple
 GET    /api/v1/documents/{id}
 GET    /api/v1/documents/{id}/download
-POST   /api/v1/documents/{id}/replace
+PUT    /api/v1/documents/{id}/replace-content
 PUT    /api/v1/documents/{id}
 DELETE /api/v1/documents/{id}
 POST   /api/v1/documents/move
@@ -251,6 +264,12 @@ spring:
 
 storage:
   type: local
+  minio:
+    endpoint: http://localhost:9000
+    access-key: minioadmin
+    secret-key: minioadmin
+    bucket-name: dms-bucket
+    versioning-enabled: false
 
 openfilz:
   security:
@@ -270,6 +289,7 @@ server.port: 8081
 **Security:** OAuth2/JWT with role-based authorization
 **Audit:** Full operation tracking
 **WORM Mode:** Compliance-ready read-only mode
+**Bucket Versioning:** MinIO versioning support for file replace operations (previous versions preserved)
 
 ---
 

@@ -105,4 +105,8 @@ public interface StorageService {
      * @return flux of storage paths under the prefix
      */
     Flux<String> listFiles(String prefix);
+
+    default Mono<String> replaceFile(String oldStoragePath, FilePart newFilePart) {
+        return saveFile(newFilePart);
+    }
 }

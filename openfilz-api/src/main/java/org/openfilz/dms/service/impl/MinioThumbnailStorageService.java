@@ -4,9 +4,9 @@ import io.minio.*;
 import io.minio.errors.ErrorResponseException;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.openfilz.dms.config.MinioProperties;
 import org.openfilz.dms.config.ThumbnailProperties;
 import org.openfilz.dms.service.ThumbnailStorageService;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
@@ -38,25 +38,16 @@ public class MinioThumbnailStorageService implements ThumbnailStorageService {
     private static final String IMAGE = "image/";
 
     private final ThumbnailProperties thumbnailProperties;
-    private final String mainBucketName;
-    private final String mainEndpoint;
-    private final String mainAccessKey;
-    private final String mainSecretKey;
+    private final MinioProperties minioProperties;
 
     private MinioClient minioClient;
     private String bucketName;
 
     public MinioThumbnailStorageService(
             ThumbnailProperties thumbnailProperties,
-            @Value("${storage.minio.bucket-name:dms-bucket}") String mainBucketName,
-            @Value("${storage.minio.endpoint:http://localhost:9000}") String mainEndpoint,
-            @Value("${storage.minio.access-key:minioadmin}") String mainAccessKey,
-            @Value("${storage.minio.secret-key:minioadmin}") String mainSecretKey) {
+            MinioProperties minioProperties) {
         this.thumbnailProperties = thumbnailProperties;
-        this.mainBucketName = mainBucketName;
-        this.mainEndpoint = mainEndpoint;
-        this.mainAccessKey = mainAccessKey;
-        this.mainSecretKey = mainSecretKey;
+        this.minioProperties = minioProperties;
     }
 
     @PostConstruct
@@ -67,15 +58,15 @@ public class MinioThumbnailStorageService implements ThumbnailStorageService {
         String secretKey;
 
         if (thumbnailProperties.getStorage().isUseMainStorage()) {
-            endpoint = mainEndpoint;
-            accessKey = mainAccessKey;
-            secretKey = mainSecretKey;
-            bucketName = mainBucketName;
+            endpoint = minioProperties.getEndpoint();
+            accessKey = minioProperties.getAccessKey();
+            secretKey = minioProperties.getSecretKey();
+            bucketName = minioProperties.getBucketName();
         } else {
             ThumbnailProperties.Storage.Minio minioConfig = thumbnailProperties.getStorage().getMinio();
-            endpoint = minioConfig.getEndpoint() != null ? minioConfig.getEndpoint() : mainEndpoint;
-            accessKey = minioConfig.getAccessKey() != null ? minioConfig.getAccessKey() : mainAccessKey;
-            secretKey = minioConfig.getSecretKey() != null ? minioConfig.getSecretKey() : mainSecretKey;
+            endpoint = minioConfig.getEndpoint() != null ? minioConfig.getEndpoint() : minioProperties.getEndpoint();
+            accessKey = minioConfig.getAccessKey() != null ? minioConfig.getAccessKey() : minioProperties.getAccessKey();
+            secretKey = minioConfig.getSecretKey() != null ? minioConfig.getSecretKey() : minioProperties.getSecretKey();
             bucketName = minioConfig.getBucketName() != null ? minioConfig.getBucketName() : "dms-thumbnails";
         }
 
