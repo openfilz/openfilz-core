@@ -1,0 +1,36 @@
+name: Build & Push Docker image
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "dokploy/keycloak/**"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        run: |
+          docker login ghcr.io \
+            -u ${{ github.actor }} \
+            -p ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Keycloak version from Dockerfile
+        id: version
+        run: |
+          KC_VERSION=$(grep -oP '(?<=keycloak:)\S+' dokploy/keycloak/Dockerfile)
+          echo "keycloak_version=$KC_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build image
+        run: docker build -t ghcr.io/openfilz/keycloak:${{ steps.version.outputs.keycloak_version }} dokploy/keycloak
+
+      - name: Push image
+        run: docker push ghcr.io/openfilz/keycloak:${{ steps.version.outputs.keycloak_version }}
