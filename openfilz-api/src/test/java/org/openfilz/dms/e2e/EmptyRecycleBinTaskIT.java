@@ -8,7 +8,6 @@ import org.openfilz.dms.dto.request.DeleteRequest;
 import org.openfilz.dms.dto.request.ListFolderRequest;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.graphql.client.ClientGraphQlResponse;
 import org.springframework.graphql.client.HttpGraphQlClient;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.client.MultipartBodyBuilder;
@@ -19,12 +18,12 @@ import org.springframework.test.context.TestConstructor;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import reactor.core.publisher.Mono;
-import reactor.test.StepVerifier;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
+import static org.awaitility.Awaitility.await;
 import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 
 @Testcontainers
@@ -95,9 +94,9 @@ public class EmptyRecycleBinTaskIT extends TestContainersBaseConfig {
                 .exchange()
                 .expectStatus().isNoContent();
 
-        waitFor(3000L);
-
-        verifyBinIsEmpty(initialInactiveCount, initialBinCount);
+        await().atMost(Duration.ofSeconds(15))
+                .pollInterval(Duration.ofSeconds(1))
+                .untilAsserted(() -> verifyBinIsEmpty(initialInactiveCount, initialBinCount));
 
     }
 
@@ -129,32 +128,13 @@ public class EmptyRecycleBinTaskIT extends TestContainersBaseConfig {
     }
 
     private void verifyBinIsEmpty(long initialInactiveCount, long initialBinCount) {
-        HttpGraphQlClient httpGraphQlClient = getGraphQlHttpClient();
-        var graphQlRequest = """
-                query count($request:ListFolderRequest) {
-                    count(request:$request)
-                }
-                """.trim();
-        ListFolderRequest request = new ListFolderRequest(null, null, null, null, null, null, null, null, null, null, null, null
-                , null, null, false, null);
+        long currentInactiveCount = getInactiveCount();
+        Assertions.assertEquals(initialInactiveCount, currentInactiveCount,
+                "Inactive document count should return to initial value after cron cleanup");
 
-        Mono<ClientGraphQlResponse> countGraphQl = httpGraphQlClient
-                .document(graphQlRequest)
-                .variable("request",request)
-                .execute();
-
-        StepVerifier.create(countGraphQl)
-                .expectNextMatches(doc -> checkCountIsOK(doc, initialInactiveCount))
-                .expectComplete()
-                .verify();
-
-        Long count = getWebTestClient().method(HttpMethod.GET).uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_RECYCLE_BIN + "/count")
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody(Long.class)
-                .returnResult().getResponseBody();
-
-        Assertions.assertEquals(initialBinCount, count);
+        long currentBinCount = getRecycleBinCount();
+        Assertions.assertEquals(initialBinCount, currentBinCount,
+                "Recycle bin count should return to initial value after cron cleanup");
     }
 
 

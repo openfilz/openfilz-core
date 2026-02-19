@@ -29,11 +29,12 @@ import org.testcontainers.containers.MinIOContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+
+import static org.awaitility.Awaitility.await;
 
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -145,7 +146,7 @@ public class MinioIT extends LocalStorageIT {
     }
 
     @Test
-    void whenDownloadFolder_thenOK() throws IOException {
+    void whenDownloadFolder_thenOK() {
         String folderName = "whenDownloadFolder_thenOK";
         CreateFolderRequest createFolderRequest = new CreateFolderRequest(folderName, null);
 
@@ -197,17 +198,24 @@ public class MinioIT extends LocalStorageIT {
         Assertions.assertNotNull(uploadResponse);
 
 
-        Resource resource = webTestClient.mutate().responseTimeout(Duration.ofSeconds(30)).build()
-                .get().uri(RestApiVersion.API_PREFIX + "/documents/{id}/download", folder.id())
-                .exchange()
-                .expectStatus().isOk()
-                .expectHeader().contentType(MediaType.APPLICATION_OCTET_STREAM)
-                .expectBody(Resource.class)
-                .returnResult().getResponseBody();
-        Assertions.assertNotNull(resource);
-        Assertions.assertEquals(folderName + ".zip", resource.getFilename());
+        // Retry the ZIP download: the MinIO testcontainer can transiently close the
+        // connection while the server streams the ZIP (PrematureCloseException).
+        await().atMost(Duration.ofSeconds(60))
+                .pollInterval(Duration.ofSeconds(3))
+                .ignoreExceptions()
+                .untilAsserted(() -> {
+                    Resource resource = webTestClient.mutate().responseTimeout(Duration.ofSeconds(30)).build()
+                            .get().uri(RestApiVersion.API_PREFIX + "/documents/{id}/download", folder.id())
+                            .exchange()
+                            .expectStatus().isOk()
+                            .expectHeader().contentType(MediaType.APPLICATION_OCTET_STREAM)
+                            .expectBody(Resource.class)
+                            .returnResult().getResponseBody();
+                    Assertions.assertNotNull(resource);
+                    Assertions.assertEquals(folderName + ".zip", resource.getFilename());
 
-        checkFilesInZip(resource, file1, file2, subfolderName);
+                    checkFilesInZip(resource, file1, file2, subfolderName);
+                });
     }
 
 }
