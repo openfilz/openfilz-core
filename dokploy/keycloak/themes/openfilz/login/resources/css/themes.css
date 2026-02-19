@@ -1,0 +1,142 @@
+/* ==========================================================================
+   OpenFilz Keycloak Theme - CSS Custom Properties (Light & Dark)
+   ========================================================================== */
+
+:root,
+[data-theme="light"] {
+    /* Background */
+    --of-bg-primary: #f0f2f5;
+    --of-bg-secondary: #ffffff;
+    --of-bg-card: #ffffff;
+    --of-bg-input: #ffffff;
+    --of-bg-input-focus: #ffffff;
+    --of-bg-hover: #f5f7fa;
+    --of-bg-overlay: rgba(0, 0, 0, 0.04);
+
+    /* Text */
+    --of-text-primary: #1a1a2e;
+    --of-text-secondary: #5a5a7a;
+    --of-text-muted: #8e8ea0;
+    --of-text-inverse: #ffffff;
+    --of-text-link: #4361ee;
+
+    /* Brand */
+    --of-brand-primary: #4361ee;
+    --of-brand-primary-hover: #3a56d4;
+    --of-brand-primary-active: #3049b8;
+    --of-brand-primary-light: rgba(67, 97, 238, 0.08);
+
+    /* Borders */
+    --of-border-color: #e0e0e6;
+    --of-border-color-focus: #4361ee;
+    --of-border-radius-sm: 8px;
+    --of-border-radius-md: 12px;
+    --of-border-radius-lg: 16px;
+    --of-border-radius-xl: 20px;
+
+    /* Status */
+    --of-color-error: #e53e3e;
+    --of-color-error-bg: #fff5f5;
+    --of-color-error-border: #feb2b2;
+    --of-color-success: #38a169;
+    --of-color-success-bg: #f0fff4;
+    --of-color-success-border: #9ae6b4;
+    --of-color-warning: #d69e2e;
+    --of-color-warning-bg: #fffff0;
+    --of-color-warning-border: #fefcbf;
+    --of-color-info: #3182ce;
+    --of-color-info-bg: #ebf8ff;
+    --of-color-info-border: #90cdf4;
+
+    /* Shadows */
+    --of-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+    --of-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+    --of-shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.1);
+    --of-shadow-card: 0 4px 24px rgba(0, 0, 0, 0.06);
+
+    /* Social Buttons */
+    --of-social-google-bg: #ffffff;
+    --of-social-google-text: #3c4043;
+    --of-social-google-border: #dadce0;
+    --of-social-google-hover: #f8f9fa;
+    --of-social-microsoft-bg: #ffffff;
+    --of-social-microsoft-text: #5e5e5e;
+    --of-social-microsoft-border: #8c8c8c;
+    --of-social-microsoft-hover: #f3f3f3;
+    --of-social-github-bg: #24292e;
+    --of-social-github-text: #ffffff;
+    --of-social-github-hover: #2f363d;
+
+    /* Separator */
+    --of-separator-color: #e0e0e6;
+    --of-separator-text-bg: var(--of-bg-card);
+
+    /* Transitions */
+    --of-transition-fast: 150ms ease;
+    --of-transition-normal: 250ms ease;
+}
+
+[data-theme="dark"] {
+    /* Background */
+    --of-bg-primary: #0f0f1a;
+    --of-bg-secondary: #1a1a2e;
+    --of-bg-card: #1e1e32;
+    --of-bg-input: #252540;
+    --of-bg-input-focus: #2a2a48;
+    --of-bg-hover: #2a2a48;
+    --of-bg-overlay: rgba(255, 255, 255, 0.04);
+
+    /* Text */
+    --of-text-primary: #e8e8f0;
+    --of-text-secondary: #a0a0b8;
+    --of-text-muted: #6e6e88;
+    --of-text-inverse: #1a1a2e;
+    --of-text-link: #6b8aff;
+
+    /* Brand */
+    --of-brand-primary: #6b8aff;
+    --of-brand-primary-hover: #5a7aef;
+    --of-brand-primary-active: #4a6adf;
+    --of-brand-primary-light: rgba(107, 138, 255, 0.12);
+
+    /* Borders */
+    --of-border-color: #2e2e4a;
+    --of-border-color-focus: #6b8aff;
+
+    /* Status */
+    --of-color-error: #fc8181;
+    --of-color-error-bg: rgba(229, 62, 62, 0.12);
+    --of-color-error-border: rgba(229, 62, 62, 0.3);
+    --of-color-success: #68d391;
+    --of-color-success-bg: rgba(56, 161, 105, 0.12);
+    --of-color-success-border: rgba(56, 161, 105, 0.3);
+    --of-color-warning: #f6e05e;
+    --of-color-warning-bg: rgba(214, 158, 46, 0.12);
+    --of-color-warning-border: rgba(214, 158, 46, 0.3);
+    --of-color-info: #63b3ed;
+    --of-color-info-bg: rgba(49, 130, 206, 0.12);
+    --of-color-info-border: rgba(49, 130, 206, 0.3);
+
+    /* Shadows */
+    --of-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.2);
+    --of-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+    --of-shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.4);
+    --of-shadow-card: 0 4px 24px rgba(0, 0, 0, 0.2);
+
+    /* Social Buttons */
+    --of-social-google-bg: #252540;
+    --of-social-google-text: #e8e8f0;
+    --of-social-google-border: #3e3e5a;
+    --of-social-google-hover: #2a2a48;
+    --of-social-microsoft-bg: #252540;
+    --of-social-microsoft-text: #e8e8f0;
+    --of-social-microsoft-border: #3e3e5a;
+    --of-social-microsoft-hover: #2a2a48;
+    --of-social-github-bg: #e8e8f0;
+    --of-social-github-text: #1a1a2e;
+    --of-social-github-hover: #d0d0e0;
+
+    /* Separator */
+    --of-separator-color: #2e2e4a;
+    --of-separator-text-bg: var(--of-bg-card);
+}
