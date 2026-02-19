@@ -2,6 +2,7 @@
 package org.openfilz.dms.service;
 
 import org.openfilz.dms.dto.audit.AuditLog;
+import org.openfilz.dms.dto.audit.AuditVerificationResult;
 import org.openfilz.dms.dto.audit.IAuditLogDetails;
 import org.openfilz.dms.dto.request.SearchByAuditLogRequest;
 import org.openfilz.dms.enums.AuditAction;
@@ -20,4 +21,8 @@ public interface AuditService {
     Flux<AuditLog> getAuditTrail(UUID resourceId, SortOrder sort);
 
     Flux<AuditLog> searchAuditTrail(SearchByAuditLogRequest request);
+
+    Mono<AuditVerificationResult> verifyChain();
+
+    Mono<Void> initializeChainIfNeeded();
 }

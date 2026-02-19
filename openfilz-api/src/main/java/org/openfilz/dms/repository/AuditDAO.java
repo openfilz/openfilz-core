@@ -15,4 +15,8 @@ public interface AuditDAO {
     Mono<Void> logAction(AuditAction action, DocumentType resourceType, UUID resourceId, IAuditLogDetails details);
     Flux<AuditLog> getAuditTrail(UUID resourceId, SortOrder sort);
     Flux<AuditLog> searchAuditTrail(SearchByAuditLogRequest request);
+    Mono<String> getLastHash();
+    Mono<Boolean> isChainInitialized();
+    Flux<AuditLog> getChainedEntries();
+    Flux<AuditLog> getChainedEntriesInRange(long fromId, long toId);
 }
