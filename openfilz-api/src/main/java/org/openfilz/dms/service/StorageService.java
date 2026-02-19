@@ -109,4 +109,15 @@ public interface StorageService {
     default Mono<String> replaceFile(String oldStoragePath, FilePart newFilePart) {
         return saveFile(newFilePart);
     }
+
+    /**
+     * Delete the latest version of a versioned object, effectively reverting to the previous version.
+     * No-op for non-versioned storage implementations.
+     *
+     * @param storagePath the object path
+     * @return empty Mono on success
+     */
+    default Mono<Void> deleteLatestVersion(String storagePath) {
+        return Mono.empty();
+    }
 }

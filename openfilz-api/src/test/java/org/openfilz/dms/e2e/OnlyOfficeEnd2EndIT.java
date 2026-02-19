@@ -349,15 +349,28 @@ public class OnlyOfficeEnd2EndIT extends TestContainersKeyCloakConfig {
                 .uri(URI.create(getOnlyOfficeServerUrl() + "/coauthoring/CommandService.ashx"))
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
+                .timeout(Duration.ofSeconds(30))
                 .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
                 .build();
 
-        // Retry logic for 502 Bad Gateway errors
+        // Retry logic for 502 Bad Gateway errors and transient connection issues
         int maxRetries = 5;
         int retryDelay = 2000; // 2 seconds
 
         for (int attempt = 1; attempt <= maxRetries; attempt++) {
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response;
+            try {
+                response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            } catch (IOException e) {
+                if (attempt < maxRetries) {
+                    log.warn("Command Service connection failed (attempt {}/{}): {}, retrying in {}ms...",
+                            attempt, maxRetries, e.getMessage(), retryDelay);
+                    TimeUnit.MILLISECONDS.sleep(retryDelay);
+                    retryDelay = Math.min(retryDelay * 2, 10000);
+                    continue;
+                }
+                throw new IOException("Command Service connection failed after " + maxRetries + " attempts", e);
+            }
             log.debug("Command Service response: {} - {}", response.statusCode(), response.body());
 
             if (response.statusCode() == 200 && !response.body().trim().startsWith("<")) {

@@ -35,9 +35,12 @@ services:
       POSTGRES_DB: ${DB_NAME:-dms_db}
       POSTGRES_USER: ${DB_USER:-dms_user}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-dms_password}
+      KEYCLOAK_DB_USER: ${KEYCLOAK_DB_USER:-keycloak}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak}
+      KEYCLOAK_DB_NAME: ${KEYCLOAK_DB_NAME:-keycloak}
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ../../files/db-create.sql:/docker-entrypoint-initdb.d/init-keycloak-db.sql
+      - ./init-keycloak-db.sh:/docker-entrypoint-initdb.d/init-keycloak-db.sh:ro
     networks:
       - dokploy-network
     healthcheck:
@@ -50,7 +53,7 @@ services:
   # Keycloak Authentication Server
   # =============================================================================
   keycloak:
-    image: quay.io/keycloak/keycloak:latest
+    image: ${KEYCLOAK_IMAGE:-ghcr.io/openfilz/keycloak:26.5}
     restart: unless-stopped
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
@@ -68,9 +71,6 @@ services:
     command:
       - start
       - --import-realm
-    volumes:
-      # Realm import file - upload realm-export.json via Dokploy File Mounts
-      - ../../files/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
     networks:
       - dokploy-network
     depends_on:
@@ -119,7 +119,7 @@ services:
 
       - "traefik.http.routers.openfilz-onlyoffice.middlewares=onlyoffice-headers"
       - "traefik.http.middlewares.onlyoffice-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
-      - "traefik.http.middlewares.onlyoffice-headers.headers.accessControlAllowOriginList=https://api.openfilz.org,https://app.openfilz.org"
+      - "traefik.http.middlewares.onlyoffice-headers.headers.accessControlAllowOriginList=https://${API_HOSTNAME:-api.yourdomain.com},https://${WEB_HOSTNAME:-app.yourdomain.com}"
       
       - "traefik.http.routers.openfilz-onlyoffice.entrypoints=websecure"
       - "traefik.http.routers.openfilz-onlyoffice.tls.certResolver=letsencrypt"
@@ -225,7 +225,7 @@ services:
       - openfilz-api
     volumes:
       # Mount ngx-env.js configuration file - upload via Dokploy File Mounts
-      - ../../files/ngx-env.js:/usr/share/nginx/html/ngx-env.js:ro
+      - ./openfilz-web/ngx-env.js:/usr/share/nginx/html/ngx-env.js:ro
     networks:
       - dokploy-network
     labels:

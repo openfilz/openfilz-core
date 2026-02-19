@@ -14,6 +14,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -43,9 +44,13 @@ public class MinioThumbnailStorageService implements ThumbnailStorageService {
     private MinioClient minioClient;
     private String bucketName;
 
+    @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
     public MinioThumbnailStorageService(
             ThumbnailProperties thumbnailProperties,
-            MinioProperties minioProperties) {
+            MinioProperties minioProperties,
+            Optional<MinioStorageService> minioStorageService) {
+        // minioStorageService is injected to ensure MinioStorageService @PostConstruct
+        // runs before this bean's init() when storage.type=minio (shared bucket setup)
         this.thumbnailProperties = thumbnailProperties;
         this.minioProperties = minioProperties;
     }

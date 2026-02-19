@@ -8,11 +8,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.audit.AuditLog;
+import org.openfilz.dms.dto.audit.AuditVerificationResult;
 import org.openfilz.dms.dto.request.SearchByAuditLogRequest;
 import org.openfilz.dms.enums.SortOrder;
 import org.openfilz.dms.service.AuditService;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.util.UUID;
 
@@ -39,5 +41,11 @@ public class AuditController {
     public Flux<AuditLog> searchAuditTrail(
             @Valid @org.springframework.web.bind.annotation.RequestBody SearchByAuditLogRequest request) {
         return auditService.searchAuditTrail(request);
+    }
+
+    @GetMapping("/verify")
+    @Operation(summary = "Verify audit chain integrity", description = "Verifies the cryptographic hash chain of the audit log to detect any tampering.")
+    public Mono<AuditVerificationResult> verifyChain() {
+        return auditService.verifyChain();
     }
 }

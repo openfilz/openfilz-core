@@ -9,15 +9,12 @@
 #   - API: http://localhost:8081
 #   - Keycloak Admin: http://localhost:8180
 
-volumes:
-  keycloak-data:
-
 services:
   # =============================================================================
   # Keycloak Authentication Server
   # =============================================================================
   keycloak:
-    image: quay.io/keycloak/keycloak:latest
+    image: ${KEYCLOAK_IMAGE:-ghcr.io/openfilz/keycloak:26.5}
     container_name: openfilz-keycloak
     restart: unless-stopped
     environment:
@@ -25,8 +22,8 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/${KEYCLOAK_DB_NAME:-keycloak_db}
-      KC_DB_USERNAME: ${DB_USER:-dms_user}
-      KC_DB_PASSWORD: ${DB_PASSWORD:-dms_password}
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER:-keycloak}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak}
       # Public hostname - used for issuer URL in tokens and OIDC metadata
       KC_HOSTNAME: localhost
       KC_HOSTNAME_PORT: ${KEYCLOAK_PORT:-8180}
@@ -34,11 +31,8 @@ services:
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
     command:
-      - start-dev
+      - start
       - --import-realm
-    volumes:
-      - keycloak-data:/opt/keycloak/data
-      - ../openfilz-api/src/test/resources/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
     ports:
       - "${KEYCLOAK_PORT:-8180}:8080"
     networks:

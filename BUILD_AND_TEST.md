@@ -41,7 +41,7 @@ For local testing, you will need to run MinIO if you are using it for storage. P
 
 ### 1. Start Dependent Services (MinIO only, if applicable)
 
-If you are using MinIO for storage, navigate to the `helm/kube-deploy` directory and run the following command:
+If you are using MinIO for storage, navigate to the `deploy/docker-compose` directory and run the following command:
 
 ```bash
 docker-compose up -d minio

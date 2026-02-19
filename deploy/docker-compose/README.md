@@ -244,10 +244,20 @@ Used with `docker-compose.auth.yml`:
 | `KEYCLOAK_ADMIN` | `admin` | Keycloak admin username |
 | `KEYCLOAK_ADMIN_PASSWORD` | `admin` | Keycloak admin password |
 | `KEYCLOAK_PORT` | `8180` | Keycloak exposed port |
+| `KEYCLOAK_IMAGE` | `ghcr.io/openfilz/keycloak:26.5` | Custom Keycloak Docker image |
 | `KEYCLOAK_MANAGEMENT_PORT` | `9000` | Keycloak management port |
 | `KEYCLOAK_REALM_URL` | `http://keycloak:8080/realms/openfilz` | Internal Docker URL for Keycloak realm (used by API for JWK fetching) |
+| `KEYCLOAK_DB_USER` | `keycloak` | Keycloak database user |
+| `KEYCLOAK_DB_PASSWORD` | `keycloak` | Keycloak database password |
+| `KEYCLOAK_DB_NAME` | `keycloak_db` | Keycloak database name |
 
 > **Note**: The API uses `KEYCLOAK_REALM_URL` with internal Docker DNS (`keycloak:8080`) for JWT validation, while the frontend uses the public URL (`localhost:8180`) for browser authentication. This avoids network issues where the API container cannot reach `localhost`.
+
+#### Keycloak Database Auto-Initialization
+
+The Keycloak database and user are automatically created on the first PostgreSQL startup via the `init-keycloak-db.sh` script mounted into `/docker-entrypoint-initdb.d/`. The script uses the `KEYCLOAK_DB_USER`, `KEYCLOAK_DB_PASSWORD`, and `KEYCLOAK_DB_NAME` environment variables passed to the postgres service.
+
+> **Note**: This only runs when the PostgreSQL data volume is empty (first startup). If you already have a running database, create the Keycloak database manually.
 
 ### OnlyOffice Configuration
 
