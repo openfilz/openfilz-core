@@ -19,4 +19,15 @@ public interface ChecksumService {
 
     Mono<Checksum> calculateChecksum(String storagePath, Map<String, Object> metadata);
 
+    /**
+     * Calculate the checksum of the previous version of a versioned object.
+     * Returns empty Mono for non-versioned storage implementations or when no previous version exists.
+     *
+     * @param storagePath the object path
+     * @return Mono containing the hex-encoded SHA-256 checksum, or empty if unavailable
+     */
+    default Mono<String> calculatePreviousVersionChecksum(String storagePath) {
+        return Mono.empty();
+    }
+
 }

@@ -77,7 +77,7 @@ public class MinioStorageService implements StorageService {
                 log.info("Bucket '{}' already exists.", minioProperties.getBucketName());
                 if(minioProperties.isVersioningEnabled()) {
                     VersioningConfiguration bucketVersioning = minioClient.getBucketVersioning(GetBucketVersioningArgs.builder().bucket(minioProperties.getBucketName()).build());
-                    log.debug("Bucket Versioning: {}", bucketVersioning);
+                    log.debug("Bucket Versioning: {}", bucketVersioning.status());
                 }
                 if(wormMode) {
                     try {
@@ -462,6 +462,34 @@ public class MinioStorageService implements StorageService {
             } catch (Exception e) {
                 log.error("Error moving file from {} to {} in MinIO", sourcePath, destPath, e);
                 throw new StorageException("MinIO moveFile failed", e);
+            }
+        }).subscribeOn(Schedulers.boundedElastic()).then();
+    }
+
+    @Override
+    public Mono<Void> deleteLatestVersion(String storagePath) {
+        if (!minioProperties.isVersioningEnabled()) {
+            return Mono.empty();
+        }
+        return Mono.fromRunnable(() -> {
+            try {
+                StatObjectResponse stat = minioClient.statObject(
+                        StatObjectArgs.builder()
+                                .bucket(minioProperties.getBucketName())
+                                .object(storagePath)
+                                .build());
+                String versionId = stat.versionId();
+                if (versionId != null) {
+                    minioClient.removeObject(
+                            RemoveObjectArgs.builder()
+                                    .bucket(minioProperties.getBucketName())
+                                    .object(storagePath)
+                                    .versionId(versionId)
+                                    .build());
+                    log.info("Reverted '{}' by deleting version '{}'", storagePath, versionId);
+                }
+            } catch (Exception e) {
+                log.warn("Could not revert latest version of '{}': {}", storagePath, e.getMessage());
             }
         }).subscribeOn(Schedulers.boundedElastic()).then();
     }

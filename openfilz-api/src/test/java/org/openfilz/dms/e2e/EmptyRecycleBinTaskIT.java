@@ -66,6 +66,14 @@ public class EmptyRecycleBinTaskIT extends TestContainersBaseConfig {
 
     @Test
     void testEmptyRecycleBinTask() throws InterruptedException {
+        // Wait for the cleanup cron to stabilize: clean up any pre-existing recycle bin entries
+        // left by other test classes sharing the same PostgreSQL container
+        waitFor(3000L);
+
+        // Capture stable baseline counts after cron has settled
+        long initialInactiveCount = getInactiveCount();
+        long initialBinCount = getRecycleBinCount();
+
         RestoreHandler folderAndFile1 = createFolderAndFile("test-restore-folder-1", null);
         RestoreHandler folderAndFile2 = createFolderAndFile("test-restore-folder-2", null);
         RestoreHandler folderAndFile1_1 = createFolderAndFile("test-restore-folder-1-1", folderAndFile1.parent().id());
@@ -89,11 +97,38 @@ public class EmptyRecycleBinTaskIT extends TestContainersBaseConfig {
 
         waitFor(3000L);
 
-        verifyBinIsEmpty();
+        verifyBinIsEmpty(initialInactiveCount, initialBinCount);
 
     }
 
-    private void verifyBinIsEmpty() {
+    private long getInactiveCount() {
+        HttpGraphQlClient httpGraphQlClient = getGraphQlHttpClient();
+        var graphQlRequest = """
+                query count($request:ListFolderRequest) {
+                    count(request:$request)
+                }
+                """.trim();
+        ListFolderRequest request = new ListFolderRequest(null, null, null, null, null, null, null, null, null, null, null, null
+                , null, null, false, null);
+
+        return httpGraphQlClient
+                .document(graphQlRequest)
+                .variable("request", request)
+                .execute()
+                .map(doc -> ((Integer) ((java.util.Map<String, Object>) doc.getData()).get("count")).longValue())
+                .block();
+    }
+
+    private long getRecycleBinCount() {
+        Long count = getWebTestClient().method(HttpMethod.GET).uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_RECYCLE_BIN + "/count")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(Long.class)
+                .returnResult().getResponseBody();
+        return count != null ? count : 0L;
+    }
+
+    private void verifyBinIsEmpty(long initialInactiveCount, long initialBinCount) {
         HttpGraphQlClient httpGraphQlClient = getGraphQlHttpClient();
         var graphQlRequest = """
                 query count($request:ListFolderRequest) {
@@ -108,9 +143,8 @@ public class EmptyRecycleBinTaskIT extends TestContainersBaseConfig {
                 .variable("request",request)
                 .execute();
 
-
         StepVerifier.create(countGraphQl)
-                .expectNextMatches(doc -> checkCountIsOK(doc, 0L))
+                .expectNextMatches(doc -> checkCountIsOK(doc, initialInactiveCount))
                 .expectComplete()
                 .verify();
 
@@ -120,7 +154,7 @@ public class EmptyRecycleBinTaskIT extends TestContainersBaseConfig {
                 .expectBody(Long.class)
                 .returnResult().getResponseBody();
 
-        Assertions.assertEquals(0L, count);
+        Assertions.assertEquals(initialBinCount, count);
     }
 
 

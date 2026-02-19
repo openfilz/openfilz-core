@@ -391,7 +391,10 @@ mvn test -pl openfilz-api
 ### Local Setup
 ```bash
 # Start MinIO (if using MinIO storage)
-cd helm/kube-deploy && docker-compose up -d minio
+cd deploy/docker-compose && docker-compose -f docker-compose.minio.yml up -d minio
+
+# Start all dev services with auth
+cd deploy/docker-compose && make up-auth
 ```
 
 **Prerequisites:** Java 24+, Maven 3.x, Docker (for MinIO & integration tests)

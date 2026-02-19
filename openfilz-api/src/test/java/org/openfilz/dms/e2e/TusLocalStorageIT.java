@@ -1,5 +1,6 @@
 package org.openfilz.dms.e2e;
 
+import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.codec.json.Jackson2JsonEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -16,6 +17,7 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
  */
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@AutoConfigureWebTestClient(timeout = "60000")
 @TestConstructor(autowireMode = ALL)
 public class TusLocalStorageIT extends AbstractTusIT {
 

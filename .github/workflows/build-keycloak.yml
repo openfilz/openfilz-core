@@ -4,7 +4,7 @@ on:
   push:
     branches: ["main"]
     paths:
-      - "dokploy/keycloak/**"
+      - "deploy/docker-compose/dokploy/keycloak/**"
 
 permissions:
   contents: read
@@ -26,11 +26,11 @@ jobs:
       - name: Extract Keycloak version from Dockerfile
         id: version
         run: |
-          KC_VERSION=$(grep -oP '(?<=keycloak:)\S+' dokploy/keycloak/Dockerfile)
+          KC_VERSION=$(grep -oP '(?<=keycloak:)\S+' deploy/docker-compose/dokploy/keycloak/Dockerfile)
           echo "keycloak_version=$KC_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build image
-        run: docker build -t ghcr.io/openfilz/keycloak:${{ steps.version.outputs.keycloak_version }} dokploy/keycloak
+        run: docker build -t ghcr.io/openfilz/keycloak:${{ steps.version.outputs.keycloak_version }} deploy/docker-compose/dokploy/keycloak
 
       - name: Push image
         run: docker push ghcr.io/openfilz/keycloak:${{ steps.version.outputs.keycloak_version }}

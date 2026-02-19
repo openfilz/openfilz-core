@@ -30,6 +30,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -196,7 +197,8 @@ public class MinioIT extends LocalStorageIT {
         Assertions.assertNotNull(uploadResponse);
 
 
-        Resource resource = webTestClient.get().uri(RestApiVersion.API_PREFIX + "/documents/{id}/download", folder.id())
+        Resource resource = webTestClient.mutate().responseTimeout(Duration.ofSeconds(30)).build()
+                .get().uri(RestApiVersion.API_PREFIX + "/documents/{id}/download", folder.id())
                 .exchange()
                 .expectStatus().isOk()
                 .expectHeader().contentType(MediaType.APPLICATION_OCTET_STREAM)

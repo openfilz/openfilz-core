@@ -300,9 +300,9 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
 
     @Override
     public Mono<? extends Resource> downloadDocument(Document doc) {
-        return doc.getType() == FILE ?
+        return (doc.getType() == FILE ?
                 storageService.loadFile(doc.getStoragePath())
-                : zipFolder(documentDAO.getChildren(doc.getId()))
+                : zipFolder(documentDAO.getChildren(doc.getId())))
                 .flatMap(r -> auditService.logAction(AuditAction.DOWNLOAD_DOCUMENT, FILE, doc.getId())
                         .thenReturn(r));
     }

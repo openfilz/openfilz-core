@@ -2,8 +2,11 @@ package org.openfilz.dms.service.impl;
 
 import io.minio.GetObjectArgs;
 import io.minio.GetObjectResponse;
+import io.minio.ListObjectsArgs;
 import io.minio.MinioAsyncClient;
+import io.minio.Result;
 import io.minio.errors.MinioException;
+import io.minio.messages.Item;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -79,6 +82,53 @@ public class MinioChecksumService implements ChecksumService {
                         }
                     }
                 )
+                .flatMap(this::streamAndCalculateChecksum)
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @Override
+    public Mono<String> calculatePreviousVersionChecksum(String objectName) {
+        return getPreviousVersionId(objectName)
+                .flatMap(versionId -> calculateSha256ChecksumForVersion(objectName, versionId));
+    }
+
+    private Mono<String> getPreviousVersionId(String objectName) {
+        return Mono.<String>fromCallable(() -> {
+            Iterable<Result<Item>> results = minioAsyncClient.listObjects(
+                    ListObjectsArgs.builder()
+                            .bucket(minioProperties.getBucketName())
+                            .prefix(objectName)
+                            .includeVersions(true)
+                            .build());
+            boolean foundLatest = false;
+            for (Result<Item> result : results) {
+                Item item = result.get();
+                if (item.isLatest()) {
+                    foundLatest = true;
+                    continue;
+                }
+                if (foundLatest) {
+                    return item.versionId();
+                }
+            }
+            return null;
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private Mono<String> calculateSha256ChecksumForVersion(String objectName, String versionId) {
+        return Mono.fromCompletionStage(() -> {
+                    try {
+                        return minioAsyncClient.getObject(
+                                GetObjectArgs.builder()
+                                        .bucket(minioProperties.getBucketName())
+                                        .object(objectName)
+                                        .versionId(versionId)
+                                        .build()
+                        );
+                    } catch (MinioException | InvalidKeyException | IOException | NoSuchAlgorithmException e) {
+                        throw new RuntimeException(e);
+                    }
+                })
                 .flatMap(this::streamAndCalculateChecksum)
                 .subscribeOn(Schedulers.boundedElastic());
     }
