@@ -27,5 +27,7 @@ public enum AuditAction {
     RESTORE_FOLDER, // Restore folder from recycle bin
     PERMANENT_DELETE_FILE, // Permanently delete file from recycle bin
     PERMANENT_DELETE_FOLDER, // Permanently delete folder from recycle bin
-    COMMENT_CREATE, COMMENT_UPDATE, COMMENT_DELETE, EMPTY_RECYCLE_BIN // Empty entire recycle bin
+    COMMENT_CREATE, COMMENT_UPDATE, COMMENT_DELETE, EMPTY_RECYCLE_BIN, // Empty entire recycle bin
+    // Audit chain actions
+    CHAIN_GENESIS // Marks the start of the hash chain
 }

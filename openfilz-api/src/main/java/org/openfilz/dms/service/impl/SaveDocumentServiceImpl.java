@@ -74,7 +74,7 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
     }
 
     public Mono<Document> saveAndReplaceDocument(FilePart newFilePart, ContentInfo contentInfo, Document document, String oldStoragePath) {
-        return storageService.saveFile(newFilePart)
+        return storageService.replaceFile(oldStoragePath, newFilePart)
                 .flatMap(newStoragePath ->
                         replaceFileContentAndSave(newFilePart, contentInfo, document, newStoragePath, oldStoragePath));
     }

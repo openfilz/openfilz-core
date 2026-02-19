@@ -9,6 +9,7 @@ import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.AuditAction;
 import org.openfilz.dms.repository.DocumentDAO;
+import org.openfilz.dms.dto.Checksum;
 import org.openfilz.dms.service.AuditService;
 import org.openfilz.dms.service.ChecksumService;
 import org.openfilz.dms.service.MetadataPostProcessor;
@@ -69,18 +70,61 @@ public class ChecksumSaveDocumentServiceImpl extends SaveDocumentServiceImpl {
 
     @Override
     public Mono<Document> saveAndReplaceDocument(FilePart newFilePart, ContentInfo contentInfo, Document document, String oldStoragePath) {
-        return storageService.saveFile(newFilePart)
-                .flatMap(newStoragePath -> checkNewFileIsDifferentFromExisting(newStoragePath, contentInfo,
-                        getChecksum(document), oldStoragePath)
-                        .flatMap(checksumInfo -> {
-                            if(!checksumInfo.isSame()) {
-                                log.debug("the new file is not the same as the existing one");
-                                return replaceFileContentAndSave(newFilePart, new ContentInfo(contentInfo.length(), checksumInfo.newValue()), document, newStoragePath, oldStoragePath);
-                            }
-                            log.debug("the new file is the same as the existing one");
-                            return storageService.deleteFile(newStoragePath).thenReturn(document);
-                        }));
+        return storageService.replaceFile(oldStoragePath, newFilePart)
+                .flatMap(newStoragePath -> {
+                    if (newStoragePath.equals(oldStoragePath)) {
+                        // Versioning mode: file was replaced in-place (new version of same object)
+                        return handleVersionedReplace(newFilePart, contentInfo, document, newStoragePath);
+                    }
+                    // Non-versioning mode: a new file was created with a different path
+                    return checkNewFileIsDifferentFromExisting(newStoragePath, contentInfo,
+                            getChecksum(document), oldStoragePath)
+                            .flatMap(checksumInfo -> {
+                                if (!checksumInfo.isSame()) {
+                                    log.debug("the new file is not the same as the existing one");
+                                    return replaceFileContentAndSave(newFilePart, new ContentInfo(contentInfo.length(), checksumInfo.newValue()), document, newStoragePath, oldStoragePath);
+                                }
+                                log.debug("the new file is the same as the existing one");
+                                return storageService.deleteFile(newStoragePath).thenReturn(document);
+                            });
+                });
+    }
 
+    private Mono<Document> handleVersionedReplace(FilePart newFilePart, ContentInfo contentInfo, Document document, String storagePath) {
+        // Calculate the new file's checksum (from client-provided value or from storage)
+        Mono<String> newChecksumMono = contentInfo != null && contentInfo.checksum() != null
+                ? Mono.just(contentInfo.checksum())
+                : checksumService.calculateChecksum(storagePath, null).map(Checksum::hash);
+
+        return newChecksumMono.flatMap(newHash -> {
+            String existingChecksum = getChecksum(document);
+            if (existingChecksum != null) {
+                return compareAndHandleVersioned(newFilePart, contentInfo, document, storagePath, newHash, existingChecksum);
+            }
+            // No existing checksum in document metadata - calculate from previous version in MinIO
+            return checksumService.calculatePreviousVersionChecksum(storagePath)
+                    .flatMap(oldHash -> compareAndHandleVersioned(newFilePart, contentInfo, document, storagePath, newHash, oldHash))
+                    // If no previous version checksum available, treat as different content
+                    .switchIfEmpty(Mono.defer(() -> {
+                        log.debug("Versioned replace: no previous version checksum available, treating as different");
+                        return replaceFileContentAndSave(newFilePart,
+                                new ContentInfo(contentInfo != null ? contentInfo.length() : null, newHash),
+                                document, storagePath, storagePath);
+                    }));
+        });
+    }
+
+    private Mono<Document> compareAndHandleVersioned(FilePart newFilePart, ContentInfo contentInfo,
+                                                     Document document, String storagePath,
+                                                     String newHash, String oldHash) {
+        if (newHash.equals(oldHash)) {
+            log.debug("Versioned replace: new file is identical to previous version, reverting");
+            return storageService.deleteLatestVersion(storagePath).thenReturn(document);
+        }
+        log.debug("Versioned replace: new file differs from previous version, updating document");
+        return replaceFileContentAndSave(newFilePart,
+                new ContentInfo(contentInfo != null ? contentInfo.length() : null, newHash),
+                document, storagePath, storagePath);
     }
 
     private Mono<ChecksumInfo> checkNewFileIsDifferentFromExisting(String newStoragePath, ContentInfo contentInfo, String checksum, String oldStoragePath) {

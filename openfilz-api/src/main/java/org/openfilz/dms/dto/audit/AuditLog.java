@@ -17,5 +17,7 @@ public record AuditLog(
         String username,
         AuditAction action,
         DocumentType resourceType,
-        AuditLogDetails details) {
+        AuditLogDetails details,
+        String previousHash,
+        String hash) {
 }

@@ -48,6 +48,7 @@ storage:
     access-key: ${MINIO_ACCESS_KEY:minioadmin}
     secret-key: ${MINIO_SECRET_KEY:minioadmin}
     bucket-name: ${MINIO_BUCKET_NAME:dms-bucket}
+    versioning-enabled: false
 
 # Swagger / OpenAPI
 openapi:
@@ -132,6 +133,13 @@ openfilz:
       scheme: https
       username: admin
       password: yourStrongPassword123!
+  audit:
+    excluded-actions: [] # Actions to exclude from auditing, e.g. [DOWNLOAD_DOCUMENT, COPY_FILE]
+    chain:
+      enabled: true
+      algorithm: SHA-256
+      verification-cron: "0 0 3 * * ?"
+      verification-enabled: true
   soft-delete:
     active: false
     # Properties below soft-delete.recycle-bin are used only when soft-delete.active is true

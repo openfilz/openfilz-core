@@ -8,7 +8,6 @@ import org.openfilz.dms.dto.request.DeleteRequest;
 import org.openfilz.dms.dto.request.ListFolderRequest;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.graphql.client.ClientGraphQlResponse;
 import org.springframework.graphql.client.HttpGraphQlClient;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.client.MultipartBodyBuilder;
@@ -19,12 +18,12 @@ import org.springframework.test.context.TestConstructor;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import reactor.core.publisher.Mono;
-import reactor.test.StepVerifier;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
+import static org.awaitility.Awaitility.await;
 import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 
 @Testcontainers
@@ -66,6 +65,14 @@ public class EmptyRecycleBinTaskIT extends TestContainersBaseConfig {
 
     @Test
     void testEmptyRecycleBinTask() throws InterruptedException {
+        // Wait for the cleanup cron to stabilize: clean up any pre-existing recycle bin entries
+        // left by other test classes sharing the same PostgreSQL container
+        waitFor(3000L);
+
+        // Capture stable baseline counts after cron has settled
+        long initialInactiveCount = getInactiveCount();
+        long initialBinCount = getRecycleBinCount();
+
         RestoreHandler folderAndFile1 = createFolderAndFile("test-restore-folder-1", null);
         RestoreHandler folderAndFile2 = createFolderAndFile("test-restore-folder-2", null);
         RestoreHandler folderAndFile1_1 = createFolderAndFile("test-restore-folder-1-1", folderAndFile1.parent().id());
@@ -87,13 +94,13 @@ public class EmptyRecycleBinTaskIT extends TestContainersBaseConfig {
                 .exchange()
                 .expectStatus().isNoContent();
 
-        waitFor(3000L);
-
-        verifyBinIsEmpty();
+        await().atMost(Duration.ofSeconds(15))
+                .pollInterval(Duration.ofSeconds(1))
+                .untilAsserted(() -> verifyBinIsEmpty(initialInactiveCount, initialBinCount));
 
     }
 
-    private void verifyBinIsEmpty() {
+    private long getInactiveCount() {
         HttpGraphQlClient httpGraphQlClient = getGraphQlHttpClient();
         var graphQlRequest = """
                 query count($request:ListFolderRequest) {
@@ -103,24 +110,31 @@ public class EmptyRecycleBinTaskIT extends TestContainersBaseConfig {
         ListFolderRequest request = new ListFolderRequest(null, null, null, null, null, null, null, null, null, null, null, null
                 , null, null, false, null);
 
-        Mono<ClientGraphQlResponse> countGraphQl = httpGraphQlClient
+        return httpGraphQlClient
                 .document(graphQlRequest)
-                .variable("request",request)
-                .execute();
+                .variable("request", request)
+                .execute()
+                .map(doc -> ((Integer) ((java.util.Map<String, Object>) doc.getData()).get("count")).longValue())
+                .block();
+    }
 
-
-        StepVerifier.create(countGraphQl)
-                .expectNextMatches(doc -> checkCountIsOK(doc, 0L))
-                .expectComplete()
-                .verify();
-
+    private long getRecycleBinCount() {
         Long count = getWebTestClient().method(HttpMethod.GET).uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_RECYCLE_BIN + "/count")
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody(Long.class)
                 .returnResult().getResponseBody();
+        return count != null ? count : 0L;
+    }
 
-        Assertions.assertEquals(0L, count);
+    private void verifyBinIsEmpty(long initialInactiveCount, long initialBinCount) {
+        long currentInactiveCount = getInactiveCount();
+        Assertions.assertEquals(initialInactiveCount, currentInactiveCount,
+                "Inactive document count should return to initial value after cron cleanup");
+
+        long currentBinCount = getRecycleBinCount();
+        Assertions.assertEquals(initialBinCount, currentBinCount,
+                "Recycle bin count should return to initial value after cron cleanup");
     }
 
 

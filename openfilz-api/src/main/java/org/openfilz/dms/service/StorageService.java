@@ -105,4 +105,19 @@ public interface StorageService {
      * @return flux of storage paths under the prefix
      */
     Flux<String> listFiles(String prefix);
+
+    default Mono<String> replaceFile(String oldStoragePath, FilePart newFilePart) {
+        return saveFile(newFilePart);
+    }
+
+    /**
+     * Delete the latest version of a versioned object, effectively reverting to the previous version.
+     * No-op for non-versioned storage implementations.
+     *
+     * @param storagePath the object path
+     * @return empty Mono on success
+     */
+    default Mono<Void> deleteLatestVersion(String storagePath) {
+        return Mono.empty();
+    }
 }

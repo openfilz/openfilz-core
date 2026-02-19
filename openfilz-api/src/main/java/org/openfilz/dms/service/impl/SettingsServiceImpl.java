@@ -6,11 +6,13 @@ import org.openfilz.dms.config.RecycleBinProperties;
 import org.openfilz.dms.dto.response.Settings;
 import org.openfilz.dms.service.SettingsService;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
 @Service
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
 public class SettingsServiceImpl implements SettingsService {
 
     @Value("${openfilz.soft-delete.active:false}")
@@ -37,7 +39,7 @@ public class SettingsServiceImpl implements SettingsService {
                 }
             }
         }
-       return Mono.just(new Settings(emptyBinInterval, quotaProperties.getFileUpload(), quotaProperties.getUser()));
+       return Mono.just(Settings.builder().emptyBinInterval(emptyBinInterval).fileQuotaMB(quotaProperties.getFileUpload()).userQuotaMB(quotaProperties.getUser()).build());
 
     }
 
