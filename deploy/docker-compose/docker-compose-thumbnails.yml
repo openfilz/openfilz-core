@@ -11,8 +11,6 @@
 #   Start with thumbnail support (local mode):
 #     docker-compose -f docker-compose.yml -f docker-compose-thumbnails.yml --profile thumbnails up -d
 #
-#   Start with thumbnail support and Redis (distributed mode):
-#     docker-compose -f docker-compose.yml -f docker-compose-thumbnails.yml --profile thumbnails --profile thumbnails-redis up -d
 #
 # Configuration:
 #   Set OPENFILZ_THUMBNAIL_ACTIVE=true to enable thumbnail generation.
@@ -53,29 +51,6 @@ services:
       start_period: 30s
 
   # =============================================================================
-  # Redis - For Distributed Thumbnail Generation (Optional)
-  # Use when running multiple API instances for load distribution.
-  # =============================================================================
-  redis:
-    image: redis:7-alpine
-    container_name: openfilz-redis
-    profiles:
-      - thumbnails-redis
-    restart: unless-stopped
-    command: redis-server --appendonly yes
-    volumes:
-      - redis-data:/data
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-    networks:
-      - openfilz-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-
-  # =============================================================================
   # OpenFilz API - Extended Configuration for Thumbnails
   # =============================================================================
   openfilz-api:
@@ -85,12 +60,6 @@ services:
       OPENFILZ_THUMBNAIL_API_BASE_URL: ${OPENFILZ_THUMBNAIL_API_BASE_URL:-http://openfilz-api:8081}
       GOTENBERG_URL: ${GOTENBERG_URL:-http://gotenberg:3000}
 
-      # Thumbnail generation mode: local (default) or redis (for multi-instance)
-      OPENFILZ_THUMBNAIL_GENERATION_MODE: ${OPENFILZ_THUMBNAIL_GENERATION_MODE:-local}
-
-      # Redis configuration (only used when generation-mode=redis)
-      SPRING_REDIS_HOST: ${REDIS_HOST:-redis}
-      SPRING_REDIS_PORT: ${REDIS_PORT:-6379}
     depends_on:
       gotenberg:
         condition: service_healthy

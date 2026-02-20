@@ -60,9 +60,16 @@ KEYCLOAK_ADMIN_PASSWORD=your-strong-admin-password
 
 # Keycloak Public URL (used as frontendUrl in realm configuration)
 KEYCLOAK_PUBLIC_URL=https://auth.yourdomain.com
-# Default role and group for new users
-KEYCLOAK_DEFAULT_ROLE=READER
-KEYCLOAK_DEFAULT_GROUP=/OPENFILZ/READER
+# Default roles for new users (up to 4, set unused slots to an already-used role)
+KEYCLOAK_DEFAULT_ROLE_1=READER
+KEYCLOAK_DEFAULT_ROLE_2=READER
+KEYCLOAK_DEFAULT_ROLE_3=READER
+KEYCLOAK_DEFAULT_ROLE_4=READER
+# Default groups for new users (up to 4, set unused slots to an already-used group)
+KEYCLOAK_DEFAULT_GROUP_1=/OPENFILZ/READER
+KEYCLOAK_DEFAULT_GROUP_2=/OPENFILZ/READER
+KEYCLOAK_DEFAULT_GROUP_3=/OPENFILZ/READER
+KEYCLOAK_DEFAULT_GROUP_4=/OPENFILZ/READER
 
 # SMTP (for Keycloak emails)
 SMTP_HOST=smtp.example.com

@@ -29,9 +29,20 @@ services:
       KC_HOSTNAME_PORT: ${KEYCLOAK_PORT:-8180}
       # Public URL for Keycloak (used as frontendUrl in realm import)
       KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8180}
-      # Default role and group assigned to new users (used in realm import)
-      KEYCLOAK_DEFAULT_ROLE: ${KEYCLOAK_DEFAULT_ROLE:-READER}
-      KEYCLOAK_DEFAULT_GROUP: ${KEYCLOAK_DEFAULT_GROUP:-/OPENFILZ/READER}
+      # Client root URL for openfilz-web (used in realm import for redirectUris)
+      KEYCLOAK_CLIENT_ROOT_URL: ${KEYCLOAK_CLIENT_ROOT_URL:-http://localhost:4200}
+      # Default roles assigned to new users (used in realm import)
+      # Up to 4 role slots; set unused slots to an already-used role (duplicates are ignored)
+      KEYCLOAK_DEFAULT_ROLE_1: ${KEYCLOAK_DEFAULT_ROLE_1:-READER}
+      KEYCLOAK_DEFAULT_ROLE_2: ${KEYCLOAK_DEFAULT_ROLE_2:-READER}
+      KEYCLOAK_DEFAULT_ROLE_3: ${KEYCLOAK_DEFAULT_ROLE_3:-READER}
+      KEYCLOAK_DEFAULT_ROLE_4: ${KEYCLOAK_DEFAULT_ROLE_4:-READER}
+      # Default groups assigned to new users (used in realm import)
+      # Up to 4 group slots; set unused slots to an already-used group (duplicates are ignored)
+      KEYCLOAK_DEFAULT_GROUP_1: ${KEYCLOAK_DEFAULT_GROUP_1:-/OPENFILZ/READER}
+      KEYCLOAK_DEFAULT_GROUP_2: ${KEYCLOAK_DEFAULT_GROUP_2:-/OPENFILZ/READER}
+      KEYCLOAK_DEFAULT_GROUP_3: ${KEYCLOAK_DEFAULT_GROUP_3:-/OPENFILZ/READER}
+      KEYCLOAK_DEFAULT_GROUP_4: ${KEYCLOAK_DEFAULT_GROUP_4:-/OPENFILZ/READER}
       # SMTP configuration for Keycloak emails (used in realm import)
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT:-587}

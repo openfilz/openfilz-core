@@ -19,7 +19,10 @@
     "name": "default-roles-openfilz"
   },
   "defaultGroups": [
-    "${KEYCLOAK_DEFAULT_GROUP}"
+    "${KEYCLOAK_DEFAULT_GROUP_1}",
+    "${KEYCLOAK_DEFAULT_GROUP_2}",
+    "${KEYCLOAK_DEFAULT_GROUP_3}",
+    "${KEYCLOAK_DEFAULT_GROUP_4}"
   ],
   "requiredActions": [
     {
@@ -77,15 +80,15 @@
       "clientId": "openfilz-web",
       "name": "openfilz-web",
       "description": "OpenFilz EE Application",
-      "rootUrl": "https://app.openfilz.org",
-      "adminUrl": "https://app.openfilz.org",
-      "baseUrl": "https://app.openfilz.org",
+      "rootUrl": "${KEYCLOAK_CLIENT_ROOT_URL}",
+      "adminUrl": "${KEYCLOAK_CLIENT_ROOT_URL}",
+      "baseUrl": "${KEYCLOAK_CLIENT_ROOT_URL}",
       "surrogateAuthRequired": false,
       "enabled": true,
       "alwaysDisplayInConsole": false,
       "clientAuthenticatorType": "client-secret",
       "redirectUris": [
-        "https://app.openfilz.org/*"
+        "${KEYCLOAK_CLIENT_ROOT_URL}/*"
       ],
       "webOrigins": [
         "*"
@@ -516,7 +519,10 @@
         "composite": true,
         "composites": {
           "realm": [
-            "${KEYCLOAK_DEFAULT_ROLE}"
+            "${KEYCLOAK_DEFAULT_ROLE_1}",
+            "${KEYCLOAK_DEFAULT_ROLE_2}",
+            "${KEYCLOAK_DEFAULT_ROLE_3}",
+            "${KEYCLOAK_DEFAULT_ROLE_4}"
           ]
         }
       },
@@ -656,21 +662,75 @@
       }
     },
     {
-      "name": "hardcoded-role-idp-mapper",
+      "name": "google-default-role-1-mapper",
       "identityProviderAlias": "google",
       "identityProviderMapper": "oidc-hardcoded-role-idp-mapper",
       "config": {
         "syncMode": "INHERIT",
-        "role": "${KEYCLOAK_DEFAULT_ROLE}"
+        "role": "${KEYCLOAK_DEFAULT_ROLE_1}"
       }
     },
     {
-      "name": "google-default-group-mapper",
+      "name": "google-default-role-2-mapper",
+      "identityProviderAlias": "google",
+      "identityProviderMapper": "oidc-hardcoded-role-idp-mapper",
+      "config": {
+        "syncMode": "INHERIT",
+        "role": "${KEYCLOAK_DEFAULT_ROLE_2}"
+      }
+    },
+    {
+      "name": "google-default-role-3-mapper",
+      "identityProviderAlias": "google",
+      "identityProviderMapper": "oidc-hardcoded-role-idp-mapper",
+      "config": {
+        "syncMode": "INHERIT",
+        "role": "${KEYCLOAK_DEFAULT_ROLE_3}"
+      }
+    },
+    {
+      "name": "google-default-role-4-mapper",
+      "identityProviderAlias": "google",
+      "identityProviderMapper": "oidc-hardcoded-role-idp-mapper",
+      "config": {
+        "syncMode": "INHERIT",
+        "role": "${KEYCLOAK_DEFAULT_ROLE_4}"
+      }
+    },
+    {
+      "name": "google-default-group-1-mapper",
       "identityProviderAlias": "google",
       "identityProviderMapper": "oidc-hardcoded-group-idp-mapper",
       "config": {
         "syncMode": "INHERIT",
-        "group": "${KEYCLOAK_DEFAULT_GROUP}"
+        "group": "${KEYCLOAK_DEFAULT_GROUP_1}"
+      }
+    },
+    {
+      "name": "google-default-group-2-mapper",
+      "identityProviderAlias": "google",
+      "identityProviderMapper": "oidc-hardcoded-group-idp-mapper",
+      "config": {
+        "syncMode": "INHERIT",
+        "group": "${KEYCLOAK_DEFAULT_GROUP_2}"
+      }
+    },
+    {
+      "name": "google-default-group-3-mapper",
+      "identityProviderAlias": "google",
+      "identityProviderMapper": "oidc-hardcoded-group-idp-mapper",
+      "config": {
+        "syncMode": "INHERIT",
+        "group": "${KEYCLOAK_DEFAULT_GROUP_3}"
+      }
+    },
+    {
+      "name": "google-default-group-4-mapper",
+      "identityProviderAlias": "google",
+      "identityProviderMapper": "oidc-hardcoded-group-idp-mapper",
+      "config": {
+        "syncMode": "INHERIT",
+        "group": "${KEYCLOAK_DEFAULT_GROUP_4}"
       }
     },
     {
@@ -684,21 +744,75 @@
       }
     },
     {
-      "name": "github-default-role-mapper",
+      "name": "github-default-role-1-mapper",
       "identityProviderAlias": "github",
       "identityProviderMapper": "oidc-hardcoded-role-idp-mapper",
       "config": {
         "syncMode": "INHERIT",
-        "role": "${KEYCLOAK_DEFAULT_ROLE}"
+        "role": "${KEYCLOAK_DEFAULT_ROLE_1}"
       }
     },
     {
-      "name": "github-default-group-mapper",
+      "name": "github-default-role-2-mapper",
+      "identityProviderAlias": "github",
+      "identityProviderMapper": "oidc-hardcoded-role-idp-mapper",
+      "config": {
+        "syncMode": "INHERIT",
+        "role": "${KEYCLOAK_DEFAULT_ROLE_2}"
+      }
+    },
+    {
+      "name": "github-default-role-3-mapper",
+      "identityProviderAlias": "github",
+      "identityProviderMapper": "oidc-hardcoded-role-idp-mapper",
+      "config": {
+        "syncMode": "INHERIT",
+        "role": "${KEYCLOAK_DEFAULT_ROLE_3}"
+      }
+    },
+    {
+      "name": "github-default-role-4-mapper",
+      "identityProviderAlias": "github",
+      "identityProviderMapper": "oidc-hardcoded-role-idp-mapper",
+      "config": {
+        "syncMode": "INHERIT",
+        "role": "${KEYCLOAK_DEFAULT_ROLE_4}"
+      }
+    },
+    {
+      "name": "github-default-group-1-mapper",
       "identityProviderAlias": "github",
       "identityProviderMapper": "oidc-hardcoded-group-idp-mapper",
       "config": {
         "syncMode": "INHERIT",
-        "group": "${KEYCLOAK_DEFAULT_GROUP}"
+        "group": "${KEYCLOAK_DEFAULT_GROUP_1}"
+      }
+    },
+    {
+      "name": "github-default-group-2-mapper",
+      "identityProviderAlias": "github",
+      "identityProviderMapper": "oidc-hardcoded-group-idp-mapper",
+      "config": {
+        "syncMode": "INHERIT",
+        "group": "${KEYCLOAK_DEFAULT_GROUP_2}"
+      }
+    },
+    {
+      "name": "github-default-group-3-mapper",
+      "identityProviderAlias": "github",
+      "identityProviderMapper": "oidc-hardcoded-group-idp-mapper",
+      "config": {
+        "syncMode": "INHERIT",
+        "group": "${KEYCLOAK_DEFAULT_GROUP_3}"
+      }
+    },
+    {
+      "name": "github-default-group-4-mapper",
+      "identityProviderAlias": "github",
+      "identityProviderMapper": "oidc-hardcoded-group-idp-mapper",
+      "config": {
+        "syncMode": "INHERIT",
+        "group": "${KEYCLOAK_DEFAULT_GROUP_4}"
       }
     },
     {
@@ -712,21 +826,75 @@
       }
     },
     {
-      "name": "microsoft-default-role-mapper",
+      "name": "microsoft-default-role-1-mapper",
       "identityProviderAlias": "microsoft",
       "identityProviderMapper": "oidc-hardcoded-role-idp-mapper",
       "config": {
         "syncMode": "INHERIT",
-        "role": "${KEYCLOAK_DEFAULT_ROLE}"
+        "role": "${KEYCLOAK_DEFAULT_ROLE_1}"
       }
     },
     {
-      "name": "microsoft-default-group-mapper",
+      "name": "microsoft-default-role-2-mapper",
+      "identityProviderAlias": "microsoft",
+      "identityProviderMapper": "oidc-hardcoded-role-idp-mapper",
+      "config": {
+        "syncMode": "INHERIT",
+        "role": "${KEYCLOAK_DEFAULT_ROLE_2}"
+      }
+    },
+    {
+      "name": "microsoft-default-role-3-mapper",
+      "identityProviderAlias": "microsoft",
+      "identityProviderMapper": "oidc-hardcoded-role-idp-mapper",
+      "config": {
+        "syncMode": "INHERIT",
+        "role": "${KEYCLOAK_DEFAULT_ROLE_3}"
+      }
+    },
+    {
+      "name": "microsoft-default-role-4-mapper",
+      "identityProviderAlias": "microsoft",
+      "identityProviderMapper": "oidc-hardcoded-role-idp-mapper",
+      "config": {
+        "syncMode": "INHERIT",
+        "role": "${KEYCLOAK_DEFAULT_ROLE_4}"
+      }
+    },
+    {
+      "name": "microsoft-default-group-1-mapper",
       "identityProviderAlias": "microsoft",
       "identityProviderMapper": "oidc-hardcoded-group-idp-mapper",
       "config": {
         "syncMode": "INHERIT",
-        "group": "${KEYCLOAK_DEFAULT_GROUP}"
+        "group": "${KEYCLOAK_DEFAULT_GROUP_1}"
+      }
+    },
+    {
+      "name": "microsoft-default-group-2-mapper",
+      "identityProviderAlias": "microsoft",
+      "identityProviderMapper": "oidc-hardcoded-group-idp-mapper",
+      "config": {
+        "syncMode": "INHERIT",
+        "group": "${KEYCLOAK_DEFAULT_GROUP_2}"
+      }
+    },
+    {
+      "name": "microsoft-default-group-3-mapper",
+      "identityProviderAlias": "microsoft",
+      "identityProviderMapper": "oidc-hardcoded-group-idp-mapper",
+      "config": {
+        "syncMode": "INHERIT",
+        "group": "${KEYCLOAK_DEFAULT_GROUP_3}"
+      }
+    },
+    {
+      "name": "microsoft-default-group-4-mapper",
+      "identityProviderAlias": "microsoft",
+      "identityProviderMapper": "oidc-hardcoded-group-idp-mapper",
+      "config": {
+        "syncMode": "INHERIT",
+        "group": "${KEYCLOAK_DEFAULT_GROUP_4}"
       }
     }
   ]
