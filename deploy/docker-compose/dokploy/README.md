@@ -58,6 +58,30 @@ KEYCLOAK_DB_NAME=keycloak
 KEYCLOAK_ADMIN=admin
 KEYCLOAK_ADMIN_PASSWORD=your-strong-admin-password
 
+# Keycloak Public URL (used as frontendUrl in realm configuration)
+KEYCLOAK_PUBLIC_URL=https://auth.yourdomain.com
+# Default role and group for new users
+KEYCLOAK_DEFAULT_ROLE=READER
+KEYCLOAK_DEFAULT_GROUP=/OPENFILZ/READER
+
+# SMTP (for Keycloak emails)
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_FROM=noreply@yourdomain.com
+SMTP_SSL=false
+SMTP_STARTTLS=true
+SMTP_AUTH=true
+SMTP_USER=your-smtp-user
+SMTP_PASSWORD=your-smtp-password
+
+# Identity Providers (Social Login)
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GITHUB_CLIENT_ID=your-github-client-id
+GITHUB_CLIENT_SECRET=your-github-client-secret
+MICROSOFT_CLIENT_ID=your-microsoft-client-id
+MICROSOFT_CLIENT_SECRET=your-microsoft-client-secret
+
 # OnlyOffice JWT Secret - Change this!
 ONLYOFFICE_JWT_SECRET=your-onlyoffice-jwt-secret
 
@@ -122,27 +146,27 @@ This replaces the previous `create_db.sql` approach and avoids hardcoded credent
 ## Architecture
 
 ```
-                                   ┌─────────────┐
-                                   │   Traefik   │
-                                   │  (Dokploy)  │
-                                   └──────┬──────┘
-                                          │
-        ┌─────────────────────────────────┼─────────────────────────────────┐
-        │                                 │                                 │
-        ▼                                 ▼                                 ▼
-┌───────────────┐               ┌─────────────────┐               ┌─────────────────┐
-│ openfilz-web  │◄──────────────│  openfilz-api   │───────────────│   onlyoffice    │
-│  (Frontend)   │   REST/GraphQL│    (Backend)    │   Document    │ (Doc Server)    │
-└───────────────┘               └────────┬────────┘   Editing     └─────────────────┘
-                                         │
-                        ┌────────────────┴────────────────┐
-                        │                                 │
-                        ▼                                 ▼
-               ┌─────────────────┐               ┌─────────────────┐
-               │    postgres     │               │    keycloak     │
-               │   (Database)    │               │     (Auth)      │
-               └─────────────────┘               └─────────────────┘
+                         ┌─────────────────┐
+                         │     Traefik     │
+                         │    (Dokploy)    │
+                         └────────┬────────┘
+                                  │
+                    HTTPS (Let's Encrypt)
+                                  │
+                 ┌────────────────┼────────────────┐
+                 ▼                ▼                ▼
+          app.domain.com   api.domain.com   auth.domain.com
+          docs.domain.com
+                                  │
+                 ┌────────────────┴────────────────┐
+                 │                                 │
+                 │   OpenFilz Services             │
+                 │   (see architecture diagram)    │
+                 │                                 │
+                 └─────────────────────────────────┘
 ```
+
+For the detailed services architecture, see the [main deploy README](../../README.md#architecture).
 
 ## Volume Backups
 

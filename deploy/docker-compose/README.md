@@ -19,26 +19,7 @@ make up
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         docker-compose.yml (Base)               │
-│  ┌──────────┐    ┌──────────────┐    ┌──────────────┐          │
-│  │ postgres │◄───│ openfilz-api │◄───│ openfilz-web │          │
-│  └──────────┘    └──────────────┘    └──────────────┘          │
-└─────────────────────────────────────────────────────────────────┘
-         │                  │                   │
-         ▼                  ▼                   ▼
-┌─────────────┐    ┌───────────────┐    ┌──────────────┐
-│    auth     │    │   onlyoffice  │    │   fulltext   │
-│  (keycloak) │    │ (doc server)  │    │ (opensearch) │
-└─────────────┘    └───────────────┘    └──────────────┘
-         │
-         ▼
-┌─────────────┐
-│    minio    │
-│ (S3 storage)│
-└─────────────┘
-```
+See the [architecture diagram](../README.md#architecture) in the main deploy README.
 
 ## Compose Files
 
