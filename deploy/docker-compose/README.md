@@ -8,13 +8,20 @@ This directory contains Docker Compose configurations for running OpenFilz with 
 # Copy environment file
 cp .env.example .env
 
-# Start base services (recommended for first run)
-make up
+# Start ALL services (auth, storage, search, document editing)
+make up-full
 
 # Access the application
 # - Web UI: http://localhost:4200
 # - API: http://localhost:8081
 # - Swagger: http://localhost:8081/swagger-ui.html
+# - Keycloak: http://localhost:8180
+```
+
+To start only the base services (no auth, no extras):
+
+```bash
+make up
 ```
 
 ## Architecture
