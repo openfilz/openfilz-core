@@ -64,6 +64,38 @@ services:
       KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak}
       # Hostname configuration - set to your Keycloak domain
       KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:-keycloak.yourdomain.com}
+      # Public URL for Keycloak (used as frontendUrl in realm import)
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-https://auth.yourdomain.com}
+      # Client root URL for openfilz-web (used in realm import for redirectUris)
+      KEYCLOAK_CLIENT_ROOT_URL: ${KEYCLOAK_CLIENT_ROOT_URL:-https://app.yourdomain.com}
+      # Default roles assigned to new users (used in realm import)
+      # Up to 4 role slots; set unused slots to an already-used role (duplicates are ignored)
+      KEYCLOAK_DEFAULT_ROLE_1: ${KEYCLOAK_DEFAULT_ROLE_1:-READER}
+      KEYCLOAK_DEFAULT_ROLE_2: ${KEYCLOAK_DEFAULT_ROLE_2:-READER}
+      KEYCLOAK_DEFAULT_ROLE_3: ${KEYCLOAK_DEFAULT_ROLE_3:-READER}
+      KEYCLOAK_DEFAULT_ROLE_4: ${KEYCLOAK_DEFAULT_ROLE_4:-READER}
+      # Default groups assigned to new users (used in realm import)
+      # Up to 4 group slots; set unused slots to an already-used group (duplicates are ignored)
+      KEYCLOAK_DEFAULT_GROUP_1: ${KEYCLOAK_DEFAULT_GROUP_1:-/OPENFILZ/READER}
+      KEYCLOAK_DEFAULT_GROUP_2: ${KEYCLOAK_DEFAULT_GROUP_2:-/OPENFILZ/READER}
+      KEYCLOAK_DEFAULT_GROUP_3: ${KEYCLOAK_DEFAULT_GROUP_3:-/OPENFILZ/READER}
+      KEYCLOAK_DEFAULT_GROUP_4: ${KEYCLOAK_DEFAULT_GROUP_4:-/OPENFILZ/READER}
+      # SMTP configuration for Keycloak emails (used in realm import)
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_FROM: ${SMTP_FROM}
+      SMTP_SSL: ${SMTP_SSL:-false}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+      SMTP_AUTH: ${SMTP_AUTH:-true}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      # Identity Provider credentials (used in realm import)
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID}
+      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET}
       KC_HOSTNAME_STRICT: "false"
       KC_PROXY_HEADERS: xforwarded
       KC_HTTP_ENABLED: "true"

@@ -27,7 +27,7 @@ NG_APP_AUTHENTICATION_AUTHORITY ?= http://localhost:8180/realms/openfilz
 NG_APP_AUTHENTICATION_CLIENT_ID ?= openfilz-web
 
 # Base compose command
-COMPOSE := docker-compose -f docker-compose.yml
+COMPOSE := docker-compose -p openfilz -f docker-compose.yml
 
 # Overlay files
 AUTH := -f docker-compose.auth.yml
@@ -124,7 +124,7 @@ up-demo:
 # All services
 up-full:
 	$(call generate_config,true,true)
-	$(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) up -d
+	$(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) --profile thumbnails up -d
 
 # Management commands
 down:

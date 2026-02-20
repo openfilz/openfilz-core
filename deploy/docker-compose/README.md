@@ -8,37 +8,25 @@ This directory contains Docker Compose configurations for running OpenFilz with 
 # Copy environment file
 cp .env.example .env
 
-# Start base services (recommended for first run)
-make up
+# Start ALL services (auth, storage, search, document editing)
+make up-full
 
 # Access the application
 # - Web UI: http://localhost:4200
 # - API: http://localhost:8081
 # - Swagger: http://localhost:8081/swagger-ui.html
+# - Keycloak: http://localhost:8180
+```
+
+To start only the base services (no auth, no extras):
+
+```bash
+make up
 ```
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         docker-compose.yml (Base)               │
-│  ┌──────────┐    ┌──────────────┐    ┌──────────────┐          │
-│  │ postgres │◄───│ openfilz-api │◄───│ openfilz-web │          │
-│  └──────────┘    └──────────────┘    └──────────────┘          │
-└─────────────────────────────────────────────────────────────────┘
-         │                  │                   │
-         ▼                  ▼                   ▼
-┌─────────────┐    ┌───────────────┐    ┌──────────────┐
-│    auth     │    │   onlyoffice  │    │   fulltext   │
-│  (keycloak) │    │ (doc server)  │    │ (opensearch) │
-└─────────────┘    └───────────────┘    └──────────────┘
-         │
-         ▼
-┌─────────────┐
-│    minio    │
-│ (S3 storage)│
-└─────────────┘
-```
+See the [architecture diagram](../README.md#architecture) in the main deploy README.
 
 ## Compose Files
 
@@ -199,6 +187,7 @@ cp .env.example .env
 | `OPENFILZ_INTERNAL_API_BASE_URL` | `http://openfilz-api:8081`                  | API route for internal calls (inter-pods) |
 | `OPENFILZ_PUBLIC_API_BASE_URL` | `http://localhost:8081`                     | API route for external calls             |
 | `OPENFILZ_SOFT_DELETE` | `true or false`                             | Soft Delete feature activation           |
+| `OPENFILZ_CALCULATECHECKSUM` | `false`                                     | Enable SHA-256 checksum calculation on upload |
 
 ### Web Configuration
 
@@ -250,6 +239,28 @@ Used with `docker-compose.auth.yml`:
 | `KEYCLOAK_DB_USER` | `keycloak` | Keycloak database user |
 | `KEYCLOAK_DB_PASSWORD` | `keycloak` | Keycloak database password |
 | `KEYCLOAK_DB_NAME` | `keycloak_db` | Keycloak database name |
+| `KEYCLOAK_PUBLIC_URL` | `http://localhost:8180` | Public URL for Keycloak (used as frontendUrl in realm import) |
+| `KEYCLOAK_CLIENT_ROOT_URL` | `http://localhost:4200` | Root URL for the openfilz-web client (used in realm import for `rootUrl`, `redirectUris`, etc.) |
+| `KEYCLOAK_DEFAULT_ROLE_1` | `READER` | 1st default role assigned to new users |
+| `KEYCLOAK_DEFAULT_ROLE_2` | `READER` | 2nd default role (set to an already-used role if unused) |
+| `KEYCLOAK_DEFAULT_ROLE_3` | `READER` | 3rd default role (set to an already-used role if unused) |
+| `KEYCLOAK_DEFAULT_ROLE_4` | `READER` | 4th default role (set to an already-used role if unused) |
+| `KEYCLOAK_DEFAULT_GROUP_1` | `/OPENFILZ/READER` | 1st default group assigned to new users |
+| `KEYCLOAK_DEFAULT_GROUP_2` | `/OPENFILZ/READER` | 2nd default group (set to an already-used group if unused) |
+| `KEYCLOAK_DEFAULT_GROUP_3` | `/OPENFILZ/READER` | 3rd default group (set to an already-used group if unused) |
+| `KEYCLOAK_DEFAULT_GROUP_4` | `/OPENFILZ/READER` | 4th default group (set to an already-used group if unused) |
+
+> **Note**: Up to 4 default roles and 4 default groups can be assigned to new users. Available roles: `READER`, `CONTRIBUTOR`, `AUDITOR`, `CLEANER`. Available groups: `/OPENFILZ/READER`, `/OPENFILZ/CONTRIBUTOR`, `/OPENFILZ/AUDITOR`, `/OPENFILZ/CLEANER`. If you need fewer than 4, set unused slots to an already-used value — duplicates are ignored by Keycloak. For example, to grant all permissions:
+> ```
+> KEYCLOAK_DEFAULT_ROLE_1=CONTRIBUTOR
+> KEYCLOAK_DEFAULT_ROLE_2=AUDITOR
+> KEYCLOAK_DEFAULT_ROLE_3=CLEANER
+> KEYCLOAK_DEFAULT_ROLE_4=READER
+> KEYCLOAK_DEFAULT_GROUP_1=/OPENFILZ/CONTRIBUTOR
+> KEYCLOAK_DEFAULT_GROUP_2=/OPENFILZ/AUDITOR
+> KEYCLOAK_DEFAULT_GROUP_3=/OPENFILZ/CLEANER
+> KEYCLOAK_DEFAULT_GROUP_4=/OPENFILZ/READER
+> ```
 
 > **Note**: The API uses `KEYCLOAK_REALM_URL` with internal Docker DNS (`keycloak:8080`) for JWT validation, while the frontend uses the public URL (`localhost:8180`) for browser authentication. This avoids network issues where the API container cannot reach `localhost`.
 
@@ -258,6 +269,34 @@ Used with `docker-compose.auth.yml`:
 The Keycloak database and user are automatically created on the first PostgreSQL startup via the `init-keycloak-db.sh` script mounted into `/docker-entrypoint-initdb.d/`. The script uses the `KEYCLOAK_DB_USER`, `KEYCLOAK_DB_PASSWORD`, and `KEYCLOAK_DB_NAME` environment variables passed to the postgres service.
 
 > **Note**: This only runs when the PostgreSQL data volume is empty (first startup). If you already have a running database, create the Keycloak database manually.
+
+### SMTP Configuration (Keycloak Emails)
+
+Used with `docker-compose.auth.yml` for Keycloak email sending (password reset, email verification, etc.):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SMTP_HOST` | *(empty)* | SMTP server hostname (leave empty to disable) |
+| `SMTP_PORT` | `587` | SMTP server port |
+| `SMTP_FROM` | *(empty)* | Sender email address |
+| `SMTP_SSL` | `false` | Enable SSL |
+| `SMTP_STARTTLS` | `true` | Enable STARTTLS |
+| `SMTP_AUTH` | `true` | Enable SMTP authentication |
+| `SMTP_USER` | *(empty)* | SMTP username |
+| `SMTP_PASSWORD` | *(empty)* | SMTP password |
+
+### Identity Providers / Social Login
+
+Used with `docker-compose.auth.yml` for Keycloak social login. Leave empty to disable a provider:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GOOGLE_CLIENT_ID` | *(empty)* | Google OAuth2 client ID |
+| `GOOGLE_CLIENT_SECRET` | *(empty)* | Google OAuth2 client secret |
+| `GITHUB_CLIENT_ID` | *(empty)* | GitHub OAuth2 client ID |
+| `GITHUB_CLIENT_SECRET` | *(empty)* | GitHub OAuth2 client secret |
+| `MICROSOFT_CLIENT_ID` | *(empty)* | Microsoft OAuth2 client ID |
+| `MICROSOFT_CLIENT_SECRET` | *(empty)* | Microsoft OAuth2 client secret |
 
 ### OnlyOffice Configuration
 
