@@ -79,7 +79,7 @@ OpenFilz is a modern, reactive document management API designed for scalability,
 
 - **SHA-256 Checksums** - Optional automatic SHA-256 calculation on upload. Stored as metadata for integrity verification.
 - **WORM Mode** - Write Once Read Many ensures documents cannot be modified or deleted. Meets SEC 17a-4, FINRA, and similar retention requirements.
-- **Immutable Audit Trail** - Every operation recorded with who (user email from JWT), what (action type), when (timestamp), and which document.
+- **Immutable Chained Audit Trail** - Every operation recorded with who (user email from JWT), what (action type), when (timestamp), and which document.
 
 ### GraphQL API
 
@@ -165,6 +165,8 @@ sequenceDiagram
 
 ## Deployment
 
+All deployment configurations are located in the [`deploy/`](deploy/) directory. See the [deployment README](deploy/README.md) for architecture diagrams and details.
+
 ### Docker
 
 ```bash
@@ -177,27 +179,44 @@ mvn clean install -Pkube -pl openfilz-api -am
 
 ### Docker Compose
 
-Multiple compose files for different configurations:
+Located in [`deploy/docker-compose/`](deploy/docker-compose/). A Makefile automates service composition and frontend config generation.
+
+```bash
+cd deploy/docker-compose
+cp .env.example .env
+
+make up              # Base services (PostgreSQL, API, Web)
+make up-auth         # + Keycloak authentication
+make up-minio        # + MinIO S3 storage
+make up-onlyoffice   # + OnlyOffice document editing
+make up-fulltext     # + OpenSearch full-text search
+make up-demo         # All CE features (no auth) for demo
+make up-full         # All services (auth, MinIO, OnlyOffice, OpenSearch, thumbnails)
+```
+
+Multiple compose overlay files for different configurations:
 
 | File | Purpose |
 |------|---------|
-| `docker-compose.yml` | Core services (API + PostgreSQL) |
+| `docker-compose.yml` | Core services (PostgreSQL, API, Web) |
 | `docker-compose.auth.yml` | Keycloak authentication |
 | `docker-compose.minio.yml` | MinIO S3 storage |
 | `docker-compose.onlyoffice.yml` | OnlyOffice document editing |
 | `docker-compose.fulltext.yml` | OpenSearch full-text search |
-| `docker-compose-thumbnails.yml` | Thumbnail generation service |
-| `docker-compose-gotenberg-dev.yml` | Gotenberg PDF conversion |
+| `docker-compose-thumbnails.yml` | Gotenberg thumbnail generation (PDF, Office documents) |
+| `docker-compose-gotenberg-dev.yml` | Gotenberg standalone for local development |
+
+See the [Docker Compose README](deploy/docker-compose/README.md) for full documentation on environment variables, combinations, and troubleshooting.
 
 ### Kubernetes / Helm
 
-Helm charts available for `openfilz-api` and `openfilz-web` with templates for:
+Helm charts available in [`deploy/helm/`](deploy/helm/) for `openfilz-api` and `openfilz-web` with templates for:
 - Deployment, Service, Ingress, Secrets, PV/PVC
 - OpenShift Route support
 
 ### Dokploy
 
-Single `dokploy/compose.yaml` for Dokploy platform deployment.
+Single compose file in [`deploy/docker-compose/dokploy/`](deploy/docker-compose/dokploy/) for Dokploy platform deployment.
 
 ---
 
@@ -240,9 +259,10 @@ openfilz-core/
 │   └── src/main/resources/
 │       └── graphql/           # GraphQL schema
 ├── openfilz-gateway/          # Spring Cloud Gateway
-├── docker/                    # Docker Compose files
-├── helm/                      # Kubernetes Helm charts
-└── dokploy/                   # Dokploy deployment
+└── deploy/
+    ├── docker-compose/        # Docker Compose files & Makefile
+    │   └── dokploy/           # Dokploy deployment
+    └── helm/                  # Kubernetes Helm charts
 ```
 
 ---
