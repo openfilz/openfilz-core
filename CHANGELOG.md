@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[f3af2d34c501eab](https://github.com/openfilz/openfilz-core/commit/f3af2d34c501eab) maven-release-bot[bot] *2026-02-20 23:13:25*
+[e091148e9b8951e](https://github.com/openfilz/openfilz-core/commit/e091148e9b8951e) maven-release-bot[bot] *2026-02-21 19:46:00*
 
 
-## v1.0.60
+## v1.0.62
 ### No issue
 
-**[maven-release-plugin] prepare release v1.0.60**
+**[maven-release-plugin] prepare release v1.0.62**
 
 
-[6fe621e7a5a530e](https://github.com/openfilz/openfilz-core/commit/6fe621e7a5a530e) maven-release-bot[bot] *2026-02-20 23:13:23*
+[f064526c3b6803b](https://github.com/openfilz/openfilz-core/commit/f064526c3b6803b) maven-release-bot[bot] *2026-02-21 19:45:58*
 
-**Merge pull request #123 from openfilz/develop**
+**Merge pull request #125 from openfilz/develop**
 
- * Develop
+ * Improve documentation
 
-[f3f69cfd2f41e7b](https://github.com/openfilz/openfilz-core/commit/f3f69cfd2f41e7b) Yann Demel *2026-02-20 23:12:30*
+[2895283b6110e96](https://github.com/openfilz/openfilz-core/commit/2895283b6110e96) Yann Demel *2026-02-21 19:44:58*
 
 
