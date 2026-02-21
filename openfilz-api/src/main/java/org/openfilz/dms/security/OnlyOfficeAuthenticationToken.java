@@ -17,6 +17,9 @@ public class OnlyOfficeAuthenticationToken extends AbstractAuthenticationToken {
     private final String userName;
 
     @Getter
+    private final String userEmail;
+
+    @Getter
     private final UUID documentId;
 
     @Getter
@@ -30,6 +33,7 @@ public class OnlyOfficeAuthenticationToken extends AbstractAuthenticationToken {
         this.rawToken = rawToken;
         this.userId = null;
         this.userName = null;
+        this.userEmail = null;
         this.documentId = null;
         setAuthenticated(false);
     }
@@ -37,10 +41,11 @@ public class OnlyOfficeAuthenticationToken extends AbstractAuthenticationToken {
     /**
      * Create an authenticated token (after validation).
      */
-    public OnlyOfficeAuthenticationToken(String userId, String userName, UUID documentId, String rawToken) {
+    public OnlyOfficeAuthenticationToken(String userId, String userName, String userEmail, UUID documentId, String rawToken) {
         super(null);
         this.userId = userId;
         this.userName = userName;
+        this.userEmail = userEmail;
         this.documentId = documentId;
         this.rawToken = rawToken;
         setAuthenticated(true);

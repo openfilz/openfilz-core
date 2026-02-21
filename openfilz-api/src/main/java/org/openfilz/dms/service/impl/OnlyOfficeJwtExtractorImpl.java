@@ -23,13 +23,18 @@ public class OnlyOfficeJwtExtractorImpl implements OnlyOfficeJwtExtractor<OnlyOf
     public JwtBuilder newJwt(OnlyOfficeUserInfo userInfo) {
         return Jwts.builder()
                 .claim(USER_ID_CLAIM, userInfo.getId())
-                .claim(USER_NAME_CLAIM, userInfo.getName());
+                .claim(USER_NAME_CLAIM, userInfo.getName())
+                .claim(USER_EMAIL_CLAIM, userInfo.getEmail());
     }
 
     @Override
     public Mono<OnlyOfficeUserInfo> getUserInfo() {
         return getAuthenticationMono()
                 .switchIfEmpty(Mono.error(new RuntimeException("No authentication available")))
-                .flatMap(auth -> Mono.just(OnlyOfficeUserInfo.builder().id(getUserAttribute(auth, EMAIL)).name(getUserAttribute(auth, "name")).build()));
+                .flatMap(auth -> Mono.just(OnlyOfficeUserInfo.builder()
+                        .id(getUserAttribute(auth, EMAIL))
+                        .name(getUserAttribute(auth, "name"))
+                        .email(getUserAttribute(auth, EMAIL))
+                        .build()));
     }
 }

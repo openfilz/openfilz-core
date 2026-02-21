@@ -96,7 +96,7 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
 
 
         return jwtExtactor.getUserInfo()
-                .onErrorResume(_ -> Mono.just((T) OnlyOfficeUserInfo.builder().id(UserInfoService.ANONYMOUS_USER).name(UserInfoService.ANONYMOUS_USER).build()))
+                .onErrorResume(_ -> Mono.just((T) OnlyOfficeUserInfo.builder().id(UserInfoService.ANONYMOUS_USER).name(UserInfoService.ANONYMOUS_USER).email(UserInfoService.ANONYMOUS_USER).build()))
                 .flatMap(userInfo -> {
                     // Generate access token for document download (includes user info for authentication)
                     String accessToken = jwtService.generateAccessToken(document.getId(), userInfo);

@@ -8,6 +8,7 @@ public interface OnlyOfficeJwtExtractor<T extends IUserInfo> {
 
     String USER_ID_CLAIM = "userId";
     String USER_NAME_CLAIM = "userName";
+    String USER_EMAIL_CLAIM = "userEmail";
 
     JwtBuilder newJwt(T userInfo);
 
