@@ -67,4 +67,12 @@ public interface OnlyOfficeJwtService<T extends IUserInfo> {
      * @return User name if present, null otherwise
      */
     String extractUserName(Map<String, Object> claims);
+
+    /**
+     * Extract the user email from an access token.
+     *
+     * @param claims The access token claims
+     * @return User email if present, null otherwise
+     */
+    String extractUserEmail(Map<String, Object> claims);
 }

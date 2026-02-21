@@ -13,6 +13,7 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
+import static org.openfilz.dms.service.OnlyOfficeJwtExtractor.USER_EMAIL_CLAIM;
 import static org.openfilz.dms.service.OnlyOfficeJwtExtractor.USER_NAME_CLAIM;
 
 /**
@@ -129,5 +130,11 @@ public abstract class AbstractOnlyOfficeJwtService<T extends IUserInfo> implemen
     public String extractUserName(Map<String, Object> claims) {
         Object userNameObj = claims.get(USER_NAME_CLAIM);
         return userNameObj != null ? userNameObj.toString() : null;
+    }
+
+    @Override
+    public String extractUserEmail(Map<String, Object> claims) {
+        Object emailObj = claims.get(USER_EMAIL_CLAIM);
+        return emailObj != null ? emailObj.toString() : null;
     }
 }

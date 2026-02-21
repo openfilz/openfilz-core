@@ -46,6 +46,7 @@ public class OnlyOfficeAuthenticationManager implements ReactiveAuthenticationMa
         UUID documentId = jwtService.extractDocumentId(claims);
         String userId = jwtService.extractUserId(claims);
         String userName = jwtService.extractUserName(claims);
+        String userEmail = jwtService.extractUserEmail(claims);
 
         if (documentId == null) {
             log.warn("OnlyOffice token missing document ID");
@@ -60,6 +61,6 @@ public class OnlyOfficeAuthenticationManager implements ReactiveAuthenticationMa
         log.debug("OnlyOffice authentication successful for user {} on document {}", userId, documentId);
 
         // Return authenticated token
-        return Mono.just(new OnlyOfficeAuthenticationToken(userId, userName, documentId, rawToken));
+        return Mono.just(new OnlyOfficeAuthenticationToken(userId, userName, userEmail, documentId, rawToken));
     }
 }
