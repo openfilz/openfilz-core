@@ -8,4 +8,5 @@ import lombok.experimental.SuperBuilder;
 public class OnlyOfficeUserInfo implements IUserInfo {
     private String id;
     private String name;
+    private String email;
 }

@@ -39,7 +39,7 @@ public interface UserInfoService {
 
     private String getUserEmail(Authentication auth) {
         if(auth instanceof OnlyOfficeAuthenticationToken jwt) {
-            return jwt.getUserId();
+            return jwt.getUserEmail() != null ? jwt.getUserEmail() : jwt.getUserId();
         }
         return getUserAttribute(auth, EMAIL);
     }
