@@ -8,7 +8,7 @@ This directory contains Docker Compose configurations for running OpenFilz with 
 # Copy environment file
 cp .env.example .env
 
-# Start ALL services (auth, storage, search, document editing)
+# Start ALL services (auth, storage, search, document editing, thumbnails)
 make up-full
 
 # Access the application
@@ -37,6 +37,8 @@ See the [architecture diagram](../README.md#architecture) in the main deploy REA
 | `docker-compose.minio.yml` | MinIO S3-compatible storage |
 | `docker-compose.onlyoffice.yml` | OnlyOffice document server |
 | `docker-compose.fulltext.yml` | OpenSearch full-text search |
+| `docker-compose-thumbnails.yml` | Gotenberg for thumbnail generation (PDF, Office documents) |
+| `docker-compose-gotenberg-dev.yml` | Gotenberg standalone for local development (IDE + npm workflow) |
 
 ---
 
@@ -53,6 +55,9 @@ make up
 # Stop all services
 make down
 
+# Restart all services
+make restart
+
 # View logs
 make logs
 
@@ -61,6 +66,9 @@ make ps
 
 # Stop and remove volumes (clean reset)
 make clean
+
+# Show all available commands
+make help
 ```
 
 ### Feature-Specific Commands
@@ -78,7 +86,10 @@ make up-onlyoffice
 # Start with OpenSearch full-text search
 make up-fulltext
 
-# Start ALL services
+# Start all CE features (no auth) for demo
+make up-demo
+
+# Start ALL services (auth, MinIO, OnlyOffice, OpenSearch, thumbnails)
 make up-full
 ```
 
@@ -93,6 +104,19 @@ make up-auth-fulltext
 
 # Auth + OnlyOffice
 make up-auth-onlyoffice
+```
+
+### Utility Commands
+
+```bash
+# Build images locally
+make build
+
+# Pull latest images
+make pull
+
+# Generate ngx-env.js only (useful for debugging)
+make generate-config
 ```
 
 ---
@@ -131,6 +155,12 @@ docker-compose -f docker-compose.yml -f docker-compose.onlyoffice.yml up -d
 docker-compose -f docker-compose.yml -f docker-compose.fulltext.yml up -d
 ```
 
+### With Thumbnails
+
+```bash
+docker-compose -f docker-compose.yml -f docker-compose-thumbnails.yml --profile thumbnails up -d
+```
+
 ### Full Stack (All Features)
 
 ```bash
@@ -138,7 +168,16 @@ docker-compose -f docker-compose.yml \
   -f docker-compose.auth.yml \
   -f docker-compose.minio.yml \
   -f docker-compose.onlyoffice.yml \
-  -f docker-compose.fulltext.yml up -d
+  -f docker-compose.fulltext.yml \
+  -f docker-compose-thumbnails.yml --profile thumbnails up -d
+```
+
+### Gotenberg for Local Development
+
+When developing locally with the API running in your IDE and the web app via npm, you can start only Gotenberg for thumbnail support:
+
+```bash
+docker-compose -f docker-compose-gotenberg-dev.yml up -d
 ```
 
 ### Important Note for Direct Usage
@@ -171,6 +210,7 @@ cp .env.example .env
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `POSTGRES_IMAGE` | `postgres:17` | PostgreSQL Docker image |
 | `DB_NAME` | `dms_db` | PostgreSQL database name |
 | `DB_USER` | `dms_user` | PostgreSQL username |
 | `DB_PASSWORD` | `dms_password` | PostgreSQL password |
@@ -178,16 +218,16 @@ cp .env.example .env
 
 ### API Configuration
 
-| Variable | Default                                     | Description                              |
-|----------|---------------------------------------------|------------------------------------------|
-| `OPENFILZ_API_IMAGE` | `ghcr.io/openfilz/openfilz-api:latest`      | Docker image for the API                 |
-| `API_PORT` | `8081`                                      | API exposed port                         |
-| `JAVA_OPTS` | `-Xmx512m -Xms256m`                         | JVM memory options                       |
-| `CORS_ALLOWED_ORIGINS` | `http://localhost:4200,http://localhost:80` | Allowed CORS origins                     |
-| `OPENFILZ_INTERNAL_API_BASE_URL` | `http://openfilz-api:8081`                  | API route for internal calls (inter-pods) |
-| `OPENFILZ_PUBLIC_API_BASE_URL` | `http://localhost:8081`                     | API route for external calls             |
-| `OPENFILZ_SOFT_DELETE` | `true or false`                             | Soft Delete feature activation           |
-| `OPENFILZ_CALCULATECHECKSUM` | `false`                                     | Enable SHA-256 checksum calculation on upload |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OPENFILZ_API_IMAGE` | `ghcr.io/openfilz/openfilz-api:latest` | Docker image for the API |
+| `API_PORT` | `8081` | API exposed port |
+| `JAVA_OPTS` | `-Xmx512m -Xms256m` | JVM memory options |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:4200,http://localhost:80` | Allowed CORS origins |
+| `OPENFILZ_INTERNAL_API_BASE_URL` | `http://openfilz-api:8081` | API route for internal calls (inter-pods) |
+| `OPENFILZ_PUBLIC_API_BASE_URL` | `http://localhost:8081` | API route for external calls |
+| `OPENFILZ_SOFTDELETE_ACTIVE` | `true` | Soft Delete feature activation |
+| `OPENFILZ_CALCULATECHECKSUM` | `false` | Enable SHA-256 checksum calculation on upload |
 
 ### Web Configuration
 
@@ -306,8 +346,7 @@ Used with `docker-compose.onlyoffice.yml`:
 |----------|---------|-------------|
 | `ONLYOFFICE_ENABLED` | `false` | Enable OnlyOffice integration |
 | `ONLYOFFICE_PORT` | `8080` | OnlyOffice exposed port |
-| `ONLYOFFICE_URL` | `http://onlyoffice` | OnlyOffice internal URL |
-| `ONLYOFFICE_API_BASE_URL` | `http://openfilz-api:8081` | API URL for OnlyOffice callbacks |
+| `ONLYOFFICE_URL` | `http://localhost:8080` | OnlyOffice URL |
 | `ONLYOFFICE_JWT_SECRET` | `openfilz-onlyoffice-jwt-secret-2024` | JWT secret for OnlyOffice |
 
 ### Full-Text Search Configuration (OpenSearch)
@@ -320,6 +359,19 @@ Used with `docker-compose.fulltext.yml`:
 | `OPENSEARCH_PORT` | `9200` | OpenSearch API exposed port |
 | `OPENSEARCH_PERF_PORT` | `9600` | OpenSearch performance port |
 | `OPENSEARCH_DASHBOARDS_PORT` | `5601` | OpenSearch Dashboards exposed port |
+
+### Thumbnail Configuration (Gotenberg)
+
+Used with `docker-compose-thumbnails.yml`. Gotenberg converts PDF and Office documents (DOCX, XLSX, PPTX, ODT, ODS, ODP) to generate thumbnails.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OPENFILZ_THUMBNAIL_ACTIVE` | `true` | Enable thumbnail generation |
+| `OPENFILZ_THUMBNAIL_API_BASE_URL` | `http://openfilz-api:8081` | API base URL for thumbnail callbacks |
+| `GOTENBERG_URL` | `http://gotenberg:3000` | Gotenberg server URL (internal) |
+| `GOTENBERG_PORT` | `8083` | Gotenberg exposed port |
+
+> **Note**: Thumbnails use a Docker Compose profile. When using Docker Compose directly, add `--profile thumbnails` to include the Gotenberg service. The Makefile handles this automatically for `up-demo` and `up-full`.
 
 ---
 
@@ -337,6 +389,7 @@ After starting services, access them at:
 | MinIO Console | http://localhost:9001 | Storage admin (with `make up-minio`) |
 | OnlyOffice | http://localhost:8080 | Document server (with `make up-onlyoffice`) |
 | OpenSearch Dashboards | http://localhost:5601 | Search analytics (with `make up-fulltext`) |
+| Gotenberg | http://localhost:8083 | Thumbnail service (with `make up-demo` or `make up-full`) |
 
 ---
 
@@ -353,6 +406,14 @@ make up
 ```bash
 make up-auth
 ```
+
+### Demo (All CE Features, No Auth)
+
+```bash
+make up-demo
+```
+
+This starts all Community Edition features (OnlyOffice, OpenSearch, thumbnails, checksum) without authentication, ideal for demos and evaluations.
 
 ### Production-like Setup
 
@@ -373,6 +434,17 @@ make down
 # Start with different features
 make up-auth-minio
 ```
+
+### Local Development with Thumbnails
+
+When running the API in your IDE and the web app via `npm start`:
+
+```bash
+# Start only Gotenberg for thumbnail support
+docker-compose -f docker-compose-gotenberg-dev.yml up -d
+```
+
+Then configure your API with `GOTENBERG_URL=http://localhost:8083` (Gotenberg listens on port 3000 internally, mapped to 8083 externally).
 
 ---
 
@@ -415,4 +487,12 @@ If frontend configuration seems stale, regenerate it:
 ```bash
 make clean
 make up-auth  # or your desired configuration
+```
+
+### Debug Frontend Config
+
+To inspect the generated `ngx-env.js` without starting services:
+
+```bash
+make generate-config
 ```
