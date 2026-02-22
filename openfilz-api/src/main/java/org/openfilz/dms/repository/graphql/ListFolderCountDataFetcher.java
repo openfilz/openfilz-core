@@ -59,7 +59,6 @@ public class ListFolderCountDataFetcher  extends AbstractListDataFetcher<Long> {
             sqlQuery = prepareQuery(environment, filter, query);
         }
 
-        //log.debug("GraphQL - SQL query : {}", query);
         return sqlQuery.map(mapCount())
                 .one();
     }

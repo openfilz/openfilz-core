@@ -72,24 +72,4 @@ public class TusProperties {
         }
     }
 
-    /**
-     * Returns the max upload size in megabytes.
-     */
-    public long getMaxUploadSizeInMB() {
-        return maxUploadSize / (1024 * 1024);
-    }
-
-    /**
-     * Returns the chunk size in megabytes.
-     */
-    public long getChunkSizeInMB() {
-        return chunkSize / (1024 * 1024);
-    }
-
-    /**
-     * Returns the upload expiration period in hours.
-     */
-    public long getUploadExpirationPeriodInHours() {
-        return uploadExpirationPeriod / 3600000;
-    }
 }

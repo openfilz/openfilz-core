@@ -351,17 +351,4 @@ public class ThumbnailProperties {
                 .anyMatch(textType -> ct.startsWith(textType.toLowerCase()));
     }
 
-    /**
-     * Check if generation mode is Redis-based.
-     */
-    public boolean isRedisMode() {
-        return "redis".equalsIgnoreCase(generationMode);
-    }
-
-    /**
-     * Check if generation mode is local (in-process).
-     */
-    public boolean isLocalMode() {
-        return "local".equalsIgnoreCase(generationMode);
-    }
 }
