@@ -107,9 +107,6 @@ public abstract class AbstractSecurityService implements SecurityService {
 
     @Override
     public boolean isAuthorized(JwtAuthenticationToken auth, List<String> anyRoles) {
-        /*if(roleTokenLookup == RoleTokenLookup.AUTHORITIES) {
-            return isInAuthorities(auth, anyRoles);
-        }*/
         if(autorizationMode.areRolesBasedOnGroups()) {
             return isInOneOfGroups(auth, anyRoles);
         }
@@ -118,9 +115,6 @@ public abstract class AbstractSecurityService implements SecurityService {
 
     @Override
     public boolean isAuthorized(JwtAuthenticationToken auth, String role) {
-        /*if(roleTokenLookup == RoleTokenLookup.AUTHORITIES) {
-            return isInAuthorities(auth, anyRoles);
-        }*/
         if(autorizationMode.areRolesBasedOnGroups()) {
             return hasGroup(auth, role);
         }
@@ -168,11 +162,6 @@ public abstract class AbstractSecurityService implements SecurityService {
         }
         return false;
     }
-
-
-    /*private boolean isInAuthorities(Authentication auth, Role... requiredRoles) {
-        return auth.getAuthorities() != null && auth.getAuthorities().stream().anyMatch(role -> Arrays.stream(requiredRoles).anyMatch(r->r.toString().equals(role.getAuthority())));
-    }*/
 
     protected boolean isDeleteAccess(ServerHttpRequest request) {
         return request.getMethod().equals(HttpMethod.DELETE);

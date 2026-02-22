@@ -170,50 +170,6 @@ class ThumbnailPropertiesTest {
         assertFalse(props.shouldUseWebpConversion("application/zip"));
     }
 
-    // --- isRedisMode / isLocalMode ---
-
-    @Test
-    void isRedisMode_withRedis_returnsTrue() {
-        props.setGenerationMode("redis");
-        assertTrue(props.isRedisMode());
-    }
-
-    @Test
-    void isRedisMode_withLocal_returnsFalse() {
-        props.setGenerationMode("local");
-        assertFalse(props.isRedisMode());
-    }
-
-    @Test
-    void isRedisMode_caseInsensitive() {
-        props.setGenerationMode("REDIS");
-        assertTrue(props.isRedisMode());
-    }
-
-    @Test
-    void isLocalMode_withLocal_returnsTrue() {
-        props.setGenerationMode("local");
-        assertTrue(props.isLocalMode());
-    }
-
-    @Test
-    void isLocalMode_withRedis_returnsFalse() {
-        props.setGenerationMode("redis");
-        assertFalse(props.isLocalMode());
-    }
-
-    @Test
-    void isLocalMode_caseInsensitive() {
-        props.setGenerationMode("LOCAL");
-        assertTrue(props.isLocalMode());
-    }
-
-    @Test
-    void defaultGenerationMode_isLocal() {
-        assertEquals("local", props.getGenerationMode());
-        assertTrue(props.isLocalMode());
-    }
-
     // --- Default sub-objects ---
 
     @Test

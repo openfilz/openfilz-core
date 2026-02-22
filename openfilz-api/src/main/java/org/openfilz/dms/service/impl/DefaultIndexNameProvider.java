@@ -91,11 +91,6 @@ public class DefaultIndexNameProvider implements IndexNameProvider {
                         CreateIndexRequest createRequest = CreateIndexRequest.of(c -> c
                                         .index(indexName)
                                         .mappings(indexMappingsProvider.getIndexMappings())
-                                // Vous pouvez ajouter d'autres settings ici, par exemple :
-                                // .settings(s -> s
-                                //    .numberOfShards("1")
-                                //    .numberOfReplicas("1")
-                                // )
                         );
 
                         return Mono.fromFuture(() -> {

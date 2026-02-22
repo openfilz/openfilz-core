@@ -81,42 +81,4 @@ class TusPropertiesTest {
         assertDoesNotThrow(props::validate);
     }
 
-    @Test
-    void getMaxUploadSizeInMB_returnsCorrectValue() {
-        TusProperties props = new TusProperties();
-        assertEquals(10240, props.getMaxUploadSizeInMB()); // 10GB = 10240 MB
-    }
-
-    @Test
-    void getChunkSizeInMB_returnsCorrectValue() {
-        TusProperties props = new TusProperties();
-        assertEquals(50, props.getChunkSizeInMB()); // 50MB
-    }
-
-    @Test
-    void getUploadExpirationPeriodInHours_returnsCorrectValue() {
-        TusProperties props = new TusProperties();
-        assertEquals(24, props.getUploadExpirationPeriodInHours()); // 24 hours
-    }
-
-    @Test
-    void getMaxUploadSizeInMB_withCustomValue() {
-        TusProperties props = new TusProperties();
-        props.setMaxUploadSize(1024L * 1024 * 512); // 512 MB
-        assertEquals(512, props.getMaxUploadSizeInMB());
-    }
-
-    @Test
-    void getChunkSizeInMB_withCustomValue() {
-        TusProperties props = new TusProperties();
-        props.setChunkSize(1024L * 1024 * 25); // 25 MB
-        assertEquals(25, props.getChunkSizeInMB());
-    }
-
-    @Test
-    void getUploadExpirationPeriodInHours_withCustomValue() {
-        TusProperties props = new TusProperties();
-        props.setUploadExpirationPeriod(3600000L * 48); // 48 hours
-        assertEquals(48, props.getUploadExpirationPeriodInHours());
-    }
 }

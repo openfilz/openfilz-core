@@ -45,8 +45,6 @@ public class ImageUtils {
                 bis.mark(EXIF_BUFFER_SIZE);
                 byte[] headerBuffer = readLimitedBytes(bis);
                 int orientation = readExifOrientationFromBytes(headerBuffer);
-                //log.info("EXIF orientation detected: {}", orientation);
-
                 // Reset stream to beginning for image decoding
                 bis.reset();
 
@@ -69,11 +67,8 @@ public class ImageUtils {
                     reader.dispose();
                 }
 
-                //log.debug("Raw image size: {}x{}", raw.getWidth(), raw.getHeight());
-
                 // 3. Apply EXIF orientation correction
                 BufferedImage oriented = applyExifOrientation(raw, orientation);
-                //log.debug("Oriented image size: {}x{}", oriented.getWidth(), oriented.getHeight());
 
                 // 4. Resize to thumbnail
                 BufferedImage resized = resizeAndCrop(oriented);
@@ -117,7 +112,6 @@ public class ImageUtils {
             if (b1 != 0xFF || b2 != 0xD8) {
                 // Not a JPEG - PNG and other formats don't have EXIF orientation
                 // Return default orientation (no rotation needed)
-                //log.debug("Not a JPEG file, using default orientation");
                 return 1;
             }
 
@@ -196,7 +190,6 @@ public class ImageUtils {
                     Directory subDir = compoundDir.getDirectory(i);
                     Integer orientation = findOrientationInDirectory(subDir);
                     if (orientation != null && orientation != 1) {
-                        //log.debug("Found orientation {} in directory {}", orientation, i);
                         return orientation;
                     }
                 }
@@ -243,7 +236,6 @@ public class ImageUtils {
 
         for (float quality : qualityLevels) {
             byte[] webp = writeWebpLossy(rgbImage, quality);
-            //log.debug("WebP at quality {}: {} bytes", quality, webp.length);
             if (webp.length <= ImageUtils.TARGET_MAX_BYTES) {
                 return webp;
             }
@@ -340,7 +332,6 @@ public class ImageUtils {
         g.drawImage(src, tx, null);
         g.dispose();
 
-        //log.info("Applied EXIF orientation {}: {}x{} -> {}x{}", orientation, w, h, newW, newH);
         return dst;
     }
 
