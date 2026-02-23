@@ -20,6 +20,9 @@ volumes:
   opensearch-data1:
   opensearch-data2:
 
+networks:
+  openfilz-ce-demo-network:
+
 services:
   # =============================================================================
   # PostgreSQL Database
@@ -37,6 +40,8 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./init-keycloak-db.sh:/docker-entrypoint-initdb.d/init-keycloak-db.sh:ro
+    networks:
+      - openfilz-ce-demo-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-dms_user} -d ${DB_NAME:-dms_db}"]
       interval: 10s
@@ -97,6 +102,8 @@ services:
     command:
       - start
       - --import-realm
+    networks:
+      - openfilz-ce-demo-network
     depends_on:
       postgres:
         condition: service_healthy
@@ -129,6 +136,8 @@ services:
     volumes:
       - onlyoffice-data:/var/www/onlyoffice/Data
       - onlyoffice-logs:/var/log/onlyoffice
+    networks:
+      - openfilz-ce-demo-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/healthcheck"]
       interval: 30s
@@ -142,7 +151,6 @@ services:
       - "traefik.http.routers.openfilz-onlyoffice.middlewares=onlyoffice-headers"
       - "traefik.http.middlewares.onlyoffice-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
       - "traefik.http.middlewares.onlyoffice-headers.headers.accessControlAllowOriginList=https://${API_HOSTNAME:-api.yourdomain.com},https://${WEB_HOSTNAME:-app.yourdomain.com}"
-      
       - "traefik.http.routers.openfilz-onlyoffice.entrypoints=websecure"
       - "traefik.http.routers.openfilz-onlyoffice.tls.certResolver=letsencrypt"
       - "traefik.http.services.openfilz-onlyoffice.loadbalancer.server.port=80"
@@ -223,6 +231,8 @@ services:
 
     volumes:
       - openfilz-storage:/var/data/openfilz
+    networks:
+      - openfilz-ce-demo-network
     healthcheck:
       disable: true
       test: "false"
@@ -246,6 +256,8 @@ services:
     volumes:
       # Mount ngx-env.js configuration file - upload via Dokploy File Mounts
       - ./openfilz-web/ngx-env.js:/usr/share/nginx/html/ngx-env.js:ro
+    networks:
+      - openfilz-ce-demo-network
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.openfilz-web.service=openfilz-web"
@@ -267,6 +279,8 @@ services:
       - "--libreoffice-restart-after=100"
       - "--libreoffice-auto-start=true"
       - "--log-level=info"
+    networks:
+      - openfilz-ce-demo-network
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:3000/health" ]
       interval: 30s
@@ -298,6 +312,8 @@ services:
         hard: 65536
     volumes:
       - opensearch-data1:/usr/share/opensearch/data # Creates volume called opensearch-data1 and mounts it to the container
+    networks:
+      - openfilz-ce-demo-network # All of the containers will join the same Docker bridge network
   opensearch-node2:
     image: opensearchproject/opensearch:latest # This should be the same image used for opensearch-node1 to avoid issues
     environment:
@@ -319,11 +335,15 @@ services:
         hard: 65536
     volumes:
       - opensearch-data2:/usr/share/opensearch/data
+    networks:
+      - openfilz-ce-demo-network
   opensearch-dashboards:
     image: opensearchproject/opensearch-dashboards:latest # Make sure the version of opensearch-dashboards matches the version of opensearch installed on other nodes
     environment:
       - 'OPENSEARCH_HOSTS=["http://opensearch-node1:9200","http://opensearch-node2:9200"]' # Define the OpenSearch nodes that OpenSearch Dashboards will query
       - "DISABLE_SECURITY_DASHBOARDS_PLUGIN=true" # Must match OpenSearch nodes which have security disabled
+    networks:
+      - openfilz-ce-demo-network
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.opensearch-dashboards.service=opensearch-dashboards"
