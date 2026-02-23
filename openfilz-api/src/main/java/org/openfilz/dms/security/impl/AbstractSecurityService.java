@@ -80,7 +80,7 @@ public abstract class AbstractSecurityService implements SecurityService {
     }
 
     private boolean isThumbnail(HttpMethod method, String path) {
-        return thumbnailProperties.isActive() && method.equals(HttpMethod.GET) && path.startsWith(ENDPOINT_THUMBNAILS + "/img/");
+        return thumbnailProperties.isActive() && (method.equals(HttpMethod.GET) || method.equals(HttpMethod.HEAD)) && path.startsWith(ENDPOINT_THUMBNAILS + "/img/");
     }
 
     private boolean isOnlyOffice(HttpMethod method, String path) {

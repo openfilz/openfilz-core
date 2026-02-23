@@ -69,6 +69,7 @@ logging:
     org.openfilz: DEBUG
     io.r2dbc.postgresql.QUERY: DEBUG # for queries
     org.apache.pdfbox: ERROR
+    org.apache.pdfbox.contentstream.PDFStreamEngine: OFF  # Suppress non-critical "Operator rg has too few operands" from Gotenberg-converted PDFs
     org.apache.fontbox: ERROR
     # io.r2dbc.postgresql.PARAM: DEBUG # for parameters
     # org.springframework.security: TRACE

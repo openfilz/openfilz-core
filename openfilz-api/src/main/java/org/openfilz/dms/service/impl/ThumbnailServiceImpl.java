@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.io.RandomAccessReadBuffer;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.openfilz.dms.config.ThumbnailProperties;
 import org.openfilz.dms.entity.Document;
@@ -176,8 +177,14 @@ public class ThumbnailServiceImpl implements ThumbnailService {
                     }
 
                     PDFRenderer renderer = new PDFRenderer(pdfDocument);
-                    // Render at 72 DPI for reasonable quality/speed trade-off
-                    BufferedImage pageImage = renderer.renderImageWithDPI(0, 72);
+                    BufferedImage pageImage;
+                    try {
+                        // Render at 72 DPI for reasonable quality/speed trade-off
+                        pageImage = renderer.renderImageWithDPI(0, 72);
+                    } catch (IOException e) {
+                        log.warn("PDFBox rendering failed for storage path {}, using fallback placeholder: {}", storagePath, e.getMessage());
+                        pageImage = createPdfFallbackImage(pdfDocument);
+                    }
 
                     // Resize to thumbnail dimensions while maintaining aspect ratio
                     BufferedImage thumbnail = resizeImage(pageImage,
@@ -371,8 +378,14 @@ public class ThumbnailServiceImpl implements ThumbnailService {
 
                 PDFRenderer renderer = new PDFRenderer(document);
                 renderer.setSubsamplingAllowed(true);
-                // Render at 72 DPI for reasonable quality/speed trade-off
-                BufferedImage pageImage = renderer.renderImageWithDPI(0, 72);
+                BufferedImage pageImage;
+                try {
+                    // Render at 72 DPI for reasonable quality/speed trade-off
+                    pageImage = renderer.renderImageWithDPI(0, 72);
+                } catch (IOException e) {
+                    log.warn("PDFBox rendering failed for converted PDF ({} bytes), using fallback placeholder: {}", pdfBytes.length, e.getMessage());
+                    pageImage = createPdfFallbackImage(document);
+                }
 
                 // Resize to thumbnail dimensions while maintaining aspect ratio
                 BufferedImage thumbnail = resizeImage(pageImage,
@@ -387,6 +400,47 @@ public class ThumbnailServiceImpl implements ThumbnailService {
                 return baos.toByteArray();
             }
         }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    /**
+     * Creates a fallback placeholder image when PDFBox cannot render a malformed PDF.
+     * Uses the page dimensions from PDF metadata (which loads fine even when the
+     * content stream is broken) to produce a properly-proportioned document placeholder.
+     */
+    private BufferedImage createPdfFallbackImage(PDDocument pdfDocument) {
+        PDRectangle mediaBox = pdfDocument.getPage(0).getMediaBox();
+        int pageWidth = (int) mediaBox.getWidth();
+        int pageHeight = (int) mediaBox.getHeight();
+
+        // Use a reasonable minimum size
+        pageWidth = Math.max(pageWidth, 200);
+        pageHeight = Math.max(pageHeight, 200);
+
+        BufferedImage image = new BufferedImage(pageWidth, pageHeight, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2d = image.createGraphics();
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+        // White page background
+        g2d.setColor(Color.WHITE);
+        g2d.fillRect(0, 0, pageWidth, pageHeight);
+
+        // Light gray border
+        g2d.setColor(new Color(220, 220, 220));
+        g2d.drawRect(0, 0, pageWidth - 1, pageHeight - 1);
+
+        // Draw subtle "document" lines to suggest content
+        g2d.setColor(new Color(230, 230, 230));
+        int margin = pageWidth / 8;
+        int lineSpacing = pageHeight / 20;
+        int y = pageHeight / 6;
+        for (int i = 0; i < 12 && y < pageHeight - margin; i++) {
+            int lineWidth = (i % 3 == 2) ? pageWidth / 3 : pageWidth - 2 * margin;
+            g2d.fillRect(margin, y, lineWidth, lineSpacing / 3);
+            y += lineSpacing;
+        }
+
+        g2d.dispose();
+        return image;
     }
 
     // ========================================================================
