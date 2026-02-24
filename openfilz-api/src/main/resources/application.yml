@@ -76,6 +76,8 @@ logging:
 
 server:
   port: 8081
+  http2:
+    enabled: false
 
 # Buffer size for PipedInputStreams
 piped:
