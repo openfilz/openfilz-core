@@ -28,6 +28,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 /**
@@ -211,7 +212,7 @@ public class TusController {
 
                 String key = parts[0].trim().toLowerCase();
                 String value = parts.length == 2
-                        ? new String(java.util.Base64.getDecoder().decode(parts[1].trim()))
+                        ? new String(java.util.Base64.getDecoder().decode(parts[1].trim()), StandardCharsets.UTF_8)
                         : "";
 
                 switch (key) {

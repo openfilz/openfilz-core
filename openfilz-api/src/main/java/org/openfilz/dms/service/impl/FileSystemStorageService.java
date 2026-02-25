@@ -93,8 +93,7 @@ public class FileSystemStorageService implements StorageService {
     @Override
     public Mono<String> copyFile(String sourceStoragePath) {
         Path sourceFile = rootLocation.resolve(sourceStoragePath);
-        // Potentially make the copied file name unique or retain original based on destination prefix logic
-        String uniqueFilename = getUniqueStorageFileName(sourceFile.getFileName().toString());// Or derive from destinationStoragePathPrefix
+        String uniqueFilename = getUniqueStorageFileName(getOriginalFileName(sourceStoragePath));
         Path destinationFile = this.rootLocation.resolve(uniqueFilename).normalize();
 
         return Mono.fromRunnable(() -> {
