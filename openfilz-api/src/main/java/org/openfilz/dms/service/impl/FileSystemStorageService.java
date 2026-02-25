@@ -64,7 +64,8 @@ public class FileSystemStorageService implements StorageService {
             } else {
                 log.warn("Could not read file: {} (exists={}, readable={})",
                         file.toAbsolutePath(), resource.exists(), resource.isReadable());
-                throw new RuntimeException("Could not read file: " + storagePath);
+                throw new RuntimeException("Could not read file: " + file.toAbsolutePath()
+                        + " (exists=" + resource.exists() + ", readable=" + resource.isReadable() + ")");
             }
         }).subscribeOn(Schedulers.boundedElastic())
         .onErrorMap(e -> {
