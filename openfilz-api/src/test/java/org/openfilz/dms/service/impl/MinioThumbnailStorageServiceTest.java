@@ -267,9 +267,10 @@ class MinioThumbnailStorageServiceTest {
 
     @Test
     void thumbnailExists_errorResponseException_nonNoSuchKey_returnsFalse() throws Exception {
-        ErrorResponse errorResponse = new ErrorResponse(
-                "AccessDenied", "Access denied", null, null, null, null, null);
-        ErrorResponseException ex = new ErrorResponseException(errorResponse, null, null);
+        ErrorResponse errorResponse = mock(ErrorResponse.class);
+        when(errorResponse.code()).thenReturn("AccessDenied");
+        ErrorResponseException ex = mock(ErrorResponseException.class);
+        when(ex.errorResponse()).thenReturn(errorResponse);
 
         when(minioClient.statObject(any(StatObjectArgs.class))).thenThrow(ex);
 
