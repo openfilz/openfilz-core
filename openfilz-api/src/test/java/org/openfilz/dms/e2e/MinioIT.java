@@ -4,6 +4,7 @@ import io.minio.ListObjectsArgs;
 import io.minio.MinioClient;
 import io.minio.Result;
 import io.minio.messages.Item;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.openfilz.dms.config.RestApiVersion;
@@ -38,6 +39,7 @@ import static org.awaitility.Awaitility.await;
 
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@Slf4j
 public class MinioIT extends LocalStorageIT {
 
     @Container
@@ -204,17 +206,22 @@ public class MinioIT extends LocalStorageIT {
                 .pollInterval(Duration.ofSeconds(3))
                 .ignoreExceptions()
                 .untilAsserted(() -> {
-                    Resource resource = webTestClient.mutate().responseTimeout(Duration.ofSeconds(30)).build()
-                            .get().uri(RestApiVersion.API_PREFIX + "/documents/{id}/download", folder.id())
-                            .exchange()
-                            .expectStatus().isOk()
-                            .expectHeader().contentType(MediaType.APPLICATION_OCTET_STREAM)
-                            .expectBody(Resource.class)
-                            .returnResult().getResponseBody();
-                    Assertions.assertNotNull(resource);
-                    Assertions.assertEquals(folderName + ".zip", resource.getFilename());
+                    try {
+                        Resource resource = webTestClient.mutate().responseTimeout(Duration.ofSeconds(30)).build()
+                                .get().uri(RestApiVersion.API_PREFIX + "/documents/{id}/download", folder.id())
+                                .exchange()
+                                .expectStatus().isOk()
+                                .expectHeader().contentType(MediaType.APPLICATION_OCTET_STREAM)
+                                .expectBody(Resource.class)
+                                .returnResult().getResponseBody();
+                        Assertions.assertNotNull(resource);
+                        Assertions.assertEquals(folderName + ".zip", resource.getFilename());
 
-                    checkFilesInZip(resource, file1, file2, subfolderName);
+                        checkFilesInZip(resource, file1, file2, subfolderName);
+                    } catch (Throwable t) {
+                        log.error("Download attempt failed", t);
+                        throw t;
+                    }
                 });
     }
 

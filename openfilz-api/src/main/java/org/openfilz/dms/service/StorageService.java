@@ -7,6 +7,9 @@ import org.springframework.http.codec.multipart.FilePart;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.net.URLDecoder;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 public interface StorageService {
@@ -16,14 +19,14 @@ public interface StorageService {
 
     default String getUniqueStorageFileName(String originalFilename) {
         int i = originalFilename.lastIndexOf(FILENAME_SEPARATOR);
-        if(i < 0) {
-            return UUID.randomUUID() + FILENAME_SEPARATOR + originalFilename;
-        }
-        return UUID.randomUUID() + originalFilename.substring(i);
+        String name = i < 0 ? originalFilename : originalFilename.substring(i + 1);
+        String encodedName = URLEncoder.encode(name, StandardCharsets.UTF_8);
+        return UUID.randomUUID() + FILENAME_SEPARATOR + encodedName;
     }
 
     default String getOriginalFileName(String storagePath) {
-        return storagePath.substring(storagePath.lastIndexOf(FILENAME_SEPARATOR) + 1);
+        String encoded = storagePath.substring(storagePath.lastIndexOf(FILENAME_SEPARATOR) + 1);
+        return URLDecoder.decode(encoded, StandardCharsets.UTF_8);
     }
 
     Mono<String> saveFile(FilePart filePart); // Returns storage path/key

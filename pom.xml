@@ -58,7 +58,7 @@
         <docker.context.path>snapshots/</docker.context.path>
         <project.scm.id>github-actions@github.com</project.scm.id>
         <delombok.output>${project.build.outputDirectory}/delombok</delombok.output>
-        <logback-core.version>1.5.19</logback-core.version>
+        <logback-core.version>1.5.32</logback-core.version>
         <commons-compress.version>1.28.0</commons-compress.version>
         <commons-lang3.version>3.19.0</commons-lang3.version>
         <graphql-java.version>24.3</graphql-java.version>

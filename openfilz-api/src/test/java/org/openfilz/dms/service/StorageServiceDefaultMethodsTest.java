@@ -88,6 +88,22 @@ class StorageServiceDefaultMethodsTest {
     }
 
     @Test
+    void getUniqueStorageFileName_withNonAsciiChars_encodesFilename() {
+        String result = storageService.getUniqueStorageFileName("Glycémie Dec 2017 - Jan 2018.xlsx");
+        // Storage path must be ASCII-safe (no raw non-ASCII chars)
+        assertTrue(result.chars().allMatch(c -> c < 128), "Storage path should be ASCII-only: " + result);
+        assertTrue(result.contains("#"));
+    }
+
+    @Test
+    void getOriginalFileName_decodesUrlEncodedFilename() {
+        // Simulate a storage path created by getUniqueStorageFileName with non-ASCII filename
+        String storagePath = storageService.getUniqueStorageFileName("Glycémie Dec 2017 - Jan 2018.xlsx");
+        String originalName = storageService.getOriginalFileName(storagePath);
+        assertEquals("Glycémie Dec 2017 - Jan 2018.xlsx", originalName);
+    }
+
+    @Test
     void getTusDataPath_returnsCorrectPath() {
         assertEquals("_tus/upload-123.bin", storageService.getTusDataPath("upload-123"));
     }

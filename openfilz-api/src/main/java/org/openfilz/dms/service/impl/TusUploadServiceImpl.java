@@ -31,8 +31,10 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.HashMap;
@@ -380,18 +382,26 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
                     return storageService.loadFile(metaPath)
                             .doOnSuccess(r -> log.debug("loadFile succeeded for {}, resource={}", metaPath, r))
                             .doOnError(e -> log.error("Failed to load TUS metadata file: {} - {}", metaPath, e.getMessage(), e))
-                            .flatMap(resource -> Mono.fromCallable(() -> {
+                            .flatMap(resource -> Mono.<TusUploadMetadata>fromCallable(() -> {
                                 log.debug("Reading InputStream from resource: {}", resource);
-                                try (InputStream is = resource.getInputStream()) {
-                                    TusUploadMetadata meta = objectMapper.readValue(is, TusUploadMetadata.class);
+                                try (BufferedInputStream bis = new BufferedInputStream(resource.getInputStream(), 1)) {
+                                    bis.mark(1);
+                                    if (bis.read() == -1) {
+                                        log.warn("TUS metadata file is empty (interrupted upload?): {}", metaPath);
+                                        throw new DocumentNotFoundException("Upload metadata is empty: " + uploadId);
+                                    }
+                                    bis.reset();
+                                    TusUploadMetadata meta = objectMapper.readValue(bis, TusUploadMetadata.class);
                                     if(checkOwner && !email.equals(meta.email())) {
                                         throw new OperationForbiddenException("Upload email does not match TUS email");
                                     }
                                     log.debug("Loaded TUS metadata: uploadId={}, offset={}, length={}", uploadId, meta.offset(), meta.length());
                                     return meta;
-                                } catch (Exception e) {
-                                    log.error("Error reading/parsing TUS metadata from {}: {}", metaPath, e.getMessage(), e);
+                                } catch (DocumentNotFoundException | OperationForbiddenException e) {
                                     throw e;
+                                } catch (Exception e) {
+                                    log.warn("Corrupted TUS metadata file {}: {}", metaPath, e.getMessage());
+                                    throw new DocumentNotFoundException("Upload metadata is corrupted: " + uploadId);
                                 }
                             }).subscribeOn(Schedulers.boundedElastic()))
                             .onErrorMap(e -> {
@@ -444,7 +454,7 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
             if (parts.length == 2) {
                 String key = parts[0].trim();
                 try {
-                    String value = new String(Base64.getDecoder().decode(parts[1].trim()));
+                    String value = new String(Base64.getDecoder().decode(parts[1].trim()), StandardCharsets.UTF_8);
                     result.put(key, value);
                 } catch (IllegalArgumentException e) {
                     log.warn("Invalid base64 in TUS metadata: {}", pair);

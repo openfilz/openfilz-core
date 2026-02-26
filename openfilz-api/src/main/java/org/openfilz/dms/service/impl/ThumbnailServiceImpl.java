@@ -253,7 +253,7 @@ public class ThumbnailServiceImpl implements ThumbnailService {
                     .body(BodyInserters.fromMultipartData(builder.build()))
                     .retrieve()
                     .bodyToFlux(DataBuffer.class)
-                    .flatMap(dataBuffer -> writeDataBufferToFile(dataBuffer, tempPdfPath))
+                    .concatMap(dataBuffer -> writeDataBufferToFile(dataBuffer, tempPdfPath))
                     .then()
                     .retryWhen(Retry.backoff(retryConfig.getMaxAttempts(), Duration.ofMillis(retryConfig.getBackoffInitialDelayMs()))
                         .maxBackoff(Duration.ofMillis(retryConfig.getBackoffMaxDelayMs()))
@@ -279,8 +279,15 @@ public class ThumbnailServiceImpl implements ThumbnailService {
                             log.debug("Gotenberg conversion complete, PDF written to temp file: {} bytes", pdfSize);
                         } catch (IOException ignored) {}
 
-                        // Step 2: Stream temp file to split endpoint to extract first page
-                        return extractFirstPageFromTempFile(tempPdfPath);
+                        // Step 2: Try Gotenberg split to extract first page (memory-efficient)
+                        // Fallback: load full PDF and let PDFBox render only page 0
+                        return extractFirstPageFromTempFile(tempPdfPath)
+                            .onErrorResume(splitError -> {
+                                log.warn("Gotenberg split failed, falling back to full PDF for first-page rendering: {}",
+                                    splitError.getMessage());
+                                return Mono.fromCallable(() -> Files.readAllBytes(tempPdfPath))
+                                    .subscribeOn(Schedulers.boundedElastic());
+                            });
                     }))
                     .timeout(Duration.ofSeconds(thumbnailProperties.getGotenberg().getTimeoutSeconds() * 2)) // Allow time for both operations
                     .doFinally(signal -> {
