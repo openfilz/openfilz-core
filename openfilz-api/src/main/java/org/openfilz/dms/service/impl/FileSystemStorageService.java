@@ -64,7 +64,8 @@ public class FileSystemStorageService implements StorageService {
             } else {
                 log.warn("Could not read file: {} (exists={}, readable={})",
                         file.toAbsolutePath(), resource.exists(), resource.isReadable());
-                throw new RuntimeException("Could not read file: " + storagePath);
+                throw new RuntimeException("Could not read file: " + file.toAbsolutePath()
+                        + " (exists=" + resource.exists() + ", readable=" + resource.isReadable() + ")");
             }
         }).subscribeOn(Schedulers.boundedElastic())
         .onErrorMap(e -> {
@@ -92,8 +93,7 @@ public class FileSystemStorageService implements StorageService {
     @Override
     public Mono<String> copyFile(String sourceStoragePath) {
         Path sourceFile = rootLocation.resolve(sourceStoragePath);
-        // Potentially make the copied file name unique or retain original based on destination prefix logic
-        String uniqueFilename = getUniqueStorageFileName(sourceFile.getFileName().toString());// Or derive from destinationStoragePathPrefix
+        String uniqueFilename = getUniqueStorageFileName(getOriginalFileName(sourceStoragePath));
         Path destinationFile = this.rootLocation.resolve(uniqueFilename).normalize();
 
         return Mono.fromRunnable(() -> {
