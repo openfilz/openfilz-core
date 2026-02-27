@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 
 import javax.net.ssl.SSLContext;
 import java.security.KeyManagementException;
@@ -27,13 +28,13 @@ import java.security.NoSuchAlgorithmException;
 @ConditionalOnProperty(name = "openfilz.full-text.active", havingValue = "true")
 public class OpenSearchConfig {
 
-    @Value("${openfilz.full-text.opensearch.host}")
+    @Value("${openfilz.full-text.opensearch.host:localhost}")
     private String host;
 
-    @Value("${openfilz.full-text.opensearch.port}")
+    @Value("${openfilz.full-text.opensearch.port:9200}")
     private int port;
 
-    @Value("${openfilz.full-text.opensearch.scheme}")
+    @Value("${openfilz.full-text.opensearch.scheme:https}")
     private String scheme;
 
     @Value("${openfilz.full-text.opensearch.username:#{null}}")
@@ -42,13 +43,15 @@ public class OpenSearchConfig {
     @Value("${openfilz.full-text.opensearch.password:#{null}}")
     private String password;
 
+    @Lazy
     @Bean
     public OpenSearchAsyncClient openSearchAsyncClient() throws NoSuchAlgorithmException, KeyStoreException, KeyManagementException {
         log.debug("Creating OpenSearchAsyncClient for host: {}, port: {}", host, port);
         final HttpHost httpHost = new HttpHost(scheme, host, port);
         final BasicCredentialsProvider credentialsProvider = new BasicCredentialsProvider();
-        //Only for demo purposes. Don't specify your credentials in code.
-        credentialsProvider.setCredentials(new AuthScope(httpHost), new UsernamePasswordCredentials(username, password.toCharArray()));
+        if (username != null && password != null) {
+            credentialsProvider.setCredentials(new AuthScope(httpHost), new UsernamePasswordCredentials(username, password.toCharArray()));
+        }
 
 
         final SSLContext sslcontext = SSLContextBuilder

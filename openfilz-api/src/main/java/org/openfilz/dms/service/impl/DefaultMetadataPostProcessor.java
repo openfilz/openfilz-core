@@ -6,6 +6,7 @@ import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.service.FullTextService;
 import org.openfilz.dms.service.MetadataPostProcessor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.stereotype.Service;
 
@@ -21,17 +22,19 @@ public class DefaultMetadataPostProcessor implements MetadataPostProcessor {
     @Autowired(required = false)
     protected FullTextService fullTextService;
 
+    @Value("${openfilz.thumbnail.active:false}")
+    private boolean thumbnailsProperty;
+
+    @Value("${openfilz.full-text.active:false}")
+    private boolean fullTextProperty;
+
     private boolean thumbnails;
     private boolean fullText;
 
     @PostConstruct
     private void init() {
-        if (thumbnailPostProcessor != null) {
-            thumbnails = true;
-        }
-        if(fullTextService != null) {
-            fullText = true;
-        }
+        thumbnails = thumbnailsProperty && thumbnailPostProcessor != null;
+        fullText = fullTextProperty && fullTextService != null;
     }
 
     @Override
