@@ -54,7 +54,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
             FROM Documents d
             WHERE d.active = true and d.parent_id""";
 
-    protected static final String SELECT_CHILDREN = """
+    private static final String SELECT_CHILDREN = """
             WITH RECURSIVE folder_tree AS (
               SELECT
                  id,
