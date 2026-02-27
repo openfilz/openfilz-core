@@ -32,9 +32,8 @@ import org.openfilz.dms.utils.ContentInfo;
 import org.openfilz.dms.utils.InMemoryFilePart;
 import org.openfilz.dms.utils.JsonUtils;
 import org.openfilz.dms.utils.UserInfoService;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Service;
@@ -43,10 +42,11 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.PipedInputStream;
-import java.io.PipedOutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -75,9 +75,6 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
     protected final DocumentDeleteService documentDeleteService;
     protected final BlankDocumentGenerator blankDocumentGenerator;
     protected final QuotaProperties quotaProperties;
-
-    @Value("${piped.buffer.size:1024}")
-    private Integer pipedBufferSize;
 
     /**
      * Validates that the file size does not exceed the configured file upload quota.
@@ -308,23 +305,27 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
     }
 
     private Mono<? extends Resource> zipFolder(Flux<ChildElementInfo> children) {
-        try {
-            PipedInputStream pipedInputStream = new PipedInputStream(pipedBufferSize);
-            PipedOutputStream pipedOutputStream = new PipedOutputStream(pipedInputStream);
-            ZipArchiveOutputStream zos = new ZipArchiveOutputStream(pipedOutputStream);
-            children.concatMap(element -> addDocumentToZip(element, zos))
-                    .then(Mono.just(true))
-                    .doOnTerminate(() -> closeOutputStream(zos))
-                    .subscribeOn(Schedulers.boundedElastic())
-                    .subscribe(
-                            null,
-                            error -> log.error("Error during zip creation", error)
-                    );
-
-            return Mono.just(new InputStreamResource(pipedInputStream));
-        } catch (IOException e) {
-            return Mono.error(new StorageException("Failed to create piped stream", e));
-        }
+        return Mono.deferContextual(contextView ->
+                Mono.fromCallable(() -> Files.createTempFile("openfilz-download-", ".zip"))
+                        .subscribeOn(Schedulers.boundedElastic())
+                        .flatMap(tempFile -> {
+                            try {
+                                ZipArchiveOutputStream zos = new ZipArchiveOutputStream(
+                                        Files.newOutputStream(tempFile));
+                                return children
+                                        .concatMap(element -> addDocumentToZip(element, zos))
+                                        .then(Mono.just(true))
+                                        .doOnTerminate(() -> closeOutputStream(zos))
+                                        .then(Mono.fromCallable(() -> toCleanupResource(tempFile)))
+                                        .doOnError(_ -> deleteTempFile(tempFile))
+                                        .subscribeOn(Schedulers.boundedElastic())
+                                        .contextWrite(contextView);
+                            } catch (IOException e) {
+                                deleteTempFile(tempFile);
+                                return Mono.<Resource>error(new StorageException("Failed to create zip file", e));
+                            }
+                        })
+        );
     }
 
     private Mono<Boolean> addDocumentToZip(ChildElementInfo element, ZipArchiveOutputStream zos) {
@@ -784,38 +785,40 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
         if (documentIds == null || documentIds.isEmpty()) {
             return Mono.error(new IllegalArgumentException("Document IDs list cannot be empty."));
         }
-        return getConnectedUserEmail().flatMap(connectedUserEmail -> {
-            try {
-                PipedInputStream pipedInputStream = new PipedInputStream(pipedBufferSize);
-                PipedOutputStream pipedOutputStream = new PipedOutputStream(pipedInputStream);
-                ZipArchiveOutputStream zos = new ZipArchiveOutputStream(pipedOutputStream);
-
-                documentDAO.getElementsAndChildren(documentIds, connectedUserEmail)
-                        .collectList()
-                        .flatMap(docs -> {
-                            if (docs.isEmpty()) {
-                                return Mono.error(new DocumentNotFoundException("No valid files found for the provided IDs to zip."));
-                            }
-                            if (docs.size() != documentIds.size()) {
-                                log.warn("Some requested documents were not files or not found. Zipping available files.");
-                            }
-                            return Flux.fromIterable(docs)
-                                    .concatMap(doc ->  addDocumentToZip(doc, zos))
-                                    .then(Mono.just(true));
-                        })
-                        .doOnTerminate(() -> closeOutputStream(zos))
-                        .subscribeOn(Schedulers.boundedElastic())
-                        .subscribe(
-                                null,
-                                error -> log.error("Error during zip creation", error)
-                        );
-
-                return Mono.just(new InputStreamResource(pipedInputStream));
-            } catch (IOException e) {
-                return Mono.error(new StorageException("Failed to create piped stream", e));
-            }
-        });
-
+        return Mono.deferContextual(contextView ->
+                getConnectedUserEmail().flatMap(connectedUserEmail ->
+                        Mono.fromCallable(() -> Files.createTempFile("openfilz-download-", ".zip"))
+                                .subscribeOn(Schedulers.boundedElastic())
+                                .flatMap(tempFile -> {
+                                    try {
+                                        ZipArchiveOutputStream zos = new ZipArchiveOutputStream(
+                                                Files.newOutputStream(tempFile));
+                                        return documentDAO.getElementsAndChildren(documentIds, connectedUserEmail)
+                                                .collectList()
+                                                .flatMap(docs -> {
+                                                    if (docs.isEmpty()) {
+                                                        log.warn("No documents found for the provided IDs. Returning empty zip.");
+                                                        return Mono.just(true);
+                                                    }
+                                                    if (docs.size() != documentIds.size()) {
+                                                        log.warn("Some requested documents were not files or not found. Zipping available files.");
+                                                    }
+                                                    return Flux.fromIterable(docs)
+                                                            .concatMap(doc -> addDocumentToZip(doc, zos))
+                                                            .then(Mono.just(true));
+                                                })
+                                                .doOnTerminate(() -> closeOutputStream(zos))
+                                                .then(Mono.fromCallable(() -> toCleanupResource(tempFile)))
+                                                .doOnError(_ -> deleteTempFile(tempFile))
+                                                .subscribeOn(Schedulers.boundedElastic())
+                                                .contextWrite(contextView);
+                                    } catch (IOException e) {
+                                        deleteTempFile(tempFile);
+                                        return Mono.<Resource>error(new StorageException("Failed to create zip file", e));
+                                    }
+                                })
+                )
+        );
     }
 
     private static void closeOutputStream(ZipArchiveOutputStream zos) {
@@ -823,6 +826,40 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
             zos.close();
         } catch (IOException e) {
             log.error("Failed to close zip stream", e);
+        }
+    }
+
+    private static Resource toCleanupResource(Path tempFile) {
+        return new FileSystemResource(tempFile) {
+            @Override
+            public String getFilename() {
+                // Return null to prevent Spring's ResourceHttpMessageWriter from
+                // inferring content-type from the .zip temp file extension
+                return null;
+            }
+
+            @Override
+            public InputStream getInputStream() throws IOException {
+                InputStream delegate = super.getInputStream();
+                return new FilterInputStream(delegate) {
+                    @Override
+                    public void close() throws IOException {
+                        try {
+                            super.close();
+                        } finally {
+                            deleteTempFile(tempFile);
+                        }
+                    }
+                };
+            }
+        };
+    }
+
+    private static void deleteTempFile(Path tempFile) {
+        try {
+            Files.deleteIfExists(tempFile);
+        } catch (IOException e) {
+            log.warn("Failed to delete temp file: {}", tempFile, e);
         }
     }
 
