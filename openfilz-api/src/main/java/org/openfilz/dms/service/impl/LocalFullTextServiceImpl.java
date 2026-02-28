@@ -9,6 +9,7 @@ import org.openfilz.dms.service.IndexService;
 import org.openfilz.dms.service.StorageService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -23,6 +24,7 @@ import java.util.function.Function;
 
 @Slf4j
 @Service
+@Lazy
 @RequiredArgsConstructor
 @ConditionalOnProperties({
         @ConditionalOnProperty(name = "openfilz.full-text.active", havingValue = "true"),

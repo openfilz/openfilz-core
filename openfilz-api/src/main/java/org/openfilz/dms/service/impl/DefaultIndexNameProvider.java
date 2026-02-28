@@ -13,6 +13,7 @@ import org.opensearch.client.transport.endpoints.BooleanResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
@@ -20,6 +21,7 @@ import java.io.IOException;
 import java.util.UUID;
 
 @Service
+@Lazy
 @Slf4j
 @RequiredArgsConstructor
 @ConditionalOnProperties({
