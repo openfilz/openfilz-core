@@ -80,15 +80,15 @@
       "clientId": "openfilz-web",
       "name": "openfilz-web",
       "description": "OpenFilz EE Application",
-      "rootUrl": "${KEYCLOAK_CLIENT_ROOT_URL}",
-      "adminUrl": "${KEYCLOAK_CLIENT_ROOT_URL}",
-      "baseUrl": "${KEYCLOAK_CLIENT_ROOT_URL}",
+      "rootUrl": "${OPENFILZ_WEB_ROOT_URL}",
+      "adminUrl": "${OPENFILZ_WEB_ROOT_URL}",
+      "baseUrl": "${OPENFILZ_WEB_ROOT_URL}",
       "surrogateAuthRequired": false,
       "enabled": true,
       "alwaysDisplayInConsole": false,
       "clientAuthenticatorType": "client-secret",
       "redirectUris": [
-        "${KEYCLOAK_CLIENT_ROOT_URL}/*"
+        "${OPENFILZ_WEB_ROOT_URL}/*"
       ],
       "webOrigins": [
         "*"

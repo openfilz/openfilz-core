@@ -19,6 +19,7 @@ import org.opensearch.client.opensearch.core.IndexResponse;
 import org.opensearch.client.opensearch.core.UpdateRequest;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -30,6 +31,7 @@ import java.util.*;
 
 @Slf4j
 @Service
+@Lazy
 @RequiredArgsConstructor
 @ConditionalOnProperties({
         @ConditionalOnProperty(name = "openfilz.full-text.active", havingValue = "true"),

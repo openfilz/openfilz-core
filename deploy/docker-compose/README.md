@@ -280,7 +280,7 @@ Used with `docker-compose.auth.yml`:
 | `KEYCLOAK_DB_PASSWORD` | `keycloak` | Keycloak database password |
 | `KEYCLOAK_DB_NAME` | `keycloak_db` | Keycloak database name |
 | `KEYCLOAK_PUBLIC_URL` | `http://localhost:8180` | Public URL for Keycloak (used as frontendUrl in realm import) |
-| `KEYCLOAK_CLIENT_ROOT_URL` | `http://localhost:4200` | Root URL for the openfilz-web client (used in realm import for `rootUrl`, `redirectUris`, etc.) |
+| `OPENFILZ_WEB_ROOT_URL` | `http://localhost:4200` | Root URL for the openfilz-web client (used in realm import for `rootUrl`, `redirectUris`, etc.) |
 | `KEYCLOAK_DEFAULT_ROLE_1` | `READER` | 1st default role assigned to new users |
 | `KEYCLOAK_DEFAULT_ROLE_2` | `READER` | 2nd default role (set to an already-used role if unused) |
 | `KEYCLOAK_DEFAULT_ROLE_3` | `READER` | 3rd default role (set to an already-used role if unused) |

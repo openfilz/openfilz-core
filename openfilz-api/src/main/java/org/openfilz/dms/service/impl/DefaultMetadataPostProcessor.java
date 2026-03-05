@@ -8,11 +8,13 @@ import org.openfilz.dms.service.MetadataPostProcessor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Conditional;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
 
 @Service
+@Lazy
 @Conditional(MetadataPostProcessingCondition.class)
 public class DefaultMetadataPostProcessor implements MetadataPostProcessor {
 
