@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../openfilz-theme-standard.svg" alt="OpenFilz Logo" width="120"/>
+</p>
+
 # OpenFilz Document Management System
 
 [![Build Backend with Maven](https://github.com/openfilz/openfilz-core/actions/workflows/build-backend.yml/badge.svg)](https://github.com/openfilz/openfilz-core/actions/workflows/build-backend.yml)
