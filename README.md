@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../openfilz-theme-standard.svg" alt="OpenFilz Logo" width="120"/>
+  <img src=".github/badges/openfilz-theme-standard.svg" alt="OpenFilz Logo" width="120"/>
 </p>
 
 # OpenFilz Document Management System
