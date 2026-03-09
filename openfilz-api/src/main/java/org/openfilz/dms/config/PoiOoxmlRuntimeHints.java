@@ -114,6 +114,10 @@ public class PoiOoxmlRuntimeHints implements RuntimeHintsRegistrar {
                     MemberCategory.INVOKE_DECLARED_METHODS,
                     MemberCategory.INVOKE_PUBLIC_METHODS,
                     MemberCategory.DECLARED_FIELDS);
+            // Also register the array type — XMLBeans' _typedArray() reflectively
+            // creates arrays (e.g. CTGroupShape[]) for XPath selectPath() results
+            Class<?> arrayClass = clazz.arrayType();
+            hints.reflection().registerType(arrayClass);
         } catch (ClassNotFoundException | NoClassDefFoundError e) {
             // Skip classes that can't be loaded
         }
