@@ -9,10 +9,7 @@ import org.openfilz.dms.service.IndexNameProvider;
 import org.openfilz.dms.service.IndexService;
 import org.openfilz.dms.service.OpenSearchMetadataService;
 import org.openfilz.dms.utils.JsonUtils;
-import org.opensearch.client.json.JsonData;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
-import org.opensearch.client.opensearch._types.InlineScript;
-import org.opensearch.client.opensearch._types.Script;
 import org.opensearch.client.opensearch.core.DeleteRequest;
 import org.opensearch.client.opensearch.core.IndexRequest;
 import org.opensearch.client.opensearch.core.IndexResponse;
@@ -40,8 +37,7 @@ import java.util.*;
 public class OpenSearchIndexService implements IndexService {
 
     private static final int APPEND_RETRY_NUMBER = 3;
-    private static final String NEW_TEXT = "new_text";
-    private static final String APPEND_CONTENT_SCRIPT = "if (ctx._source.content != null) { ctx._source.content += ' ' + params.new_text; } else { ctx._source.content = params.new_text; }";
+    private static final int MAX_INDEXED_CONTENT_LENGTH = 1_000_000; // ~1MB of text per document
 
     protected final OpenSearchAsyncClient openSearchAsyncClient;
     protected final IndexNameProvider indexNameProvider;
@@ -204,7 +200,10 @@ public class OpenSearchIndexService implements IndexService {
     }
 
     /**
-     * Stream and bulk index text fragments as partial updates.
+     * Collects all text fragments in memory (up to MAX_INDEXED_CONTENT_LENGTH),
+     * then writes the content field in a single partial-doc update.
+     * This avoids N incremental Painless script appends which cause O(n²) memory
+     * pressure on OpenSearch and can trigger the circuit breaker on large documents.
      */
     public Mono<Void> indexDocumentStream(Flux<String> textFragments, UUID documentId) {
         log.debug("Indexing document stream for document {}", documentId);
@@ -212,44 +211,27 @@ public class OpenSearchIndexService implements IndexService {
                 .doOnSubscribe(s -> log.debug("Subscribed to text fragments for document {}", documentId))
                 .doOnNext(item -> log.trace("Received text fragment for document {}: {}...", documentId,
                         item.length() > 50 ? item.substring(0, 50) : item))
-                .doOnComplete(() -> log.debug("Text fragments completed for document {}", documentId))
                 .doOnError(e -> log.error("Error in text fragments for document {}", documentId, e))
-                .bufferTimeout(50, java.time.Duration.ofSeconds(2)) // combine small fragments
-                .doOnNext(batch -> log.debug("Buffered batch of {} fragments for document {}", batch.size(), documentId))
-                .flatMapSequential(batch -> appendToContent(documentId, String.join("\n", batch)))
-                .then();
-    }
-
-    public Mono<Void> appendToContent(UUID documentId, String textToAppend)  {
-        log.debug("Appending document content for document {}", documentId);
-        Script script = new Script.Builder()
-                .inline(new InlineScript.Builder()
-                        .source(APPEND_CONTENT_SCRIPT)
-                        .params(Map.of(NEW_TEXT, JsonData.of(textToAppend)))
-                        .build()
-                ).build();
-        UpdateRequest<Void, Map<String, Object>> updateRequest = new UpdateRequest.Builder<Void, Map<String, Object>>()
-                .index(indexNameProvider.getIndexName(documentId))
-                .id(documentId.toString())
-                .script(script)
-                .retryOnConflict(APPEND_RETRY_NUMBER)
-                .build();
-
-        return Mono.fromFuture(() -> {
-                    try {
-                        log.debug("Updating document {}", documentId);
-                        return openSearchAsyncClient.update(updateRequest, Void.class);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
+                .reduce(new StringBuilder(), (sb, fragment) -> {
+                    if (sb.length() < MAX_INDEXED_CONTENT_LENGTH) {
+                        if (!sb.isEmpty()) {
+                            sb.append(' ');
+                        }
+                        int remaining = MAX_INDEXED_CONTENT_LENGTH - sb.length();
+                        sb.append(fragment, 0, Math.min(fragment.length(), remaining));
                     }
+                    return sb;
                 })
-                .doOnSuccess(r -> logUpdateMetadataSuccess(documentId))
+                .filter(sb -> !sb.isEmpty())
+                .flatMap(sb -> {
+                    String content = sb.toString();
+                    log.debug("Indexing {} chars of content for document {}{}", content.length(), documentId,
+                            sb.length() >= MAX_INDEXED_CONTENT_LENGTH ? " (truncated)" : "");
+                    return doUpdateIndexField(documentId, "content", content);
+                })
                 .then();
     }
 
-    private void logUpdateMetadataSuccess(UUID documentId) {
-        log.debug("Metadata updated for document {}", documentId);
-    }
 
 
 }

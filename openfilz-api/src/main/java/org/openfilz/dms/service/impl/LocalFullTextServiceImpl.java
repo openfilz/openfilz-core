@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -31,6 +32,28 @@ import java.util.function.Function;
         @ConditionalOnProperty(name = "openfilz.full-text.indexation-mode", havingValue = "local", matchIfMissing = true)
 })
 public class LocalFullTextServiceImpl implements FullTextService {
+
+    /**
+     * MIME type prefixes for which Tika text extraction is relevant.
+     * Files with other content types (images, audio, video, fonts, etc.)
+     * still get their metadata indexed but skip Tika processing.
+     */
+    private static final Set<String> TEXT_EXTRACTABLE_PREFIXES = Set.of(
+            "text/",                                            // text/plain, text/html, text/csv, text/xml, text/markdown, ...
+            "application/pdf",
+            "application/msword",                               // .doc
+            "application/vnd.openxmlformats-officedocument.",    // .docx, .xlsx, .pptx
+            "application/vnd.ms-excel",                         // .xls
+            "application/vnd.ms-powerpoint",                    // .ppt
+            "application/vnd.oasis.opendocument.",              // .odt, .ods, .odp
+            "application/rtf",
+            "application/json",
+            "application/xml",
+            "application/xhtml+xml",
+            "application/epub+zip",
+            "application/vnd.ms-outlook",                       // .msg
+            "message/rfc822"                                    // .eml
+    );
 
     private final IndexService indexService;
     private final TikaService tikaService;
@@ -50,30 +73,47 @@ public class LocalFullTextServiceImpl implements FullTextService {
     }
 
     private void indexFile(Document document) {
+        if(document.getSize() > 0 && isTextExtractable(document.getContentType())) {
+            indexFileWithTextExtraction(document);
+        } else {
+            doIndexDocMetadataMono(document, "Retrying indexFile for document {}, attempt {}", "indexFile error for {} : {}");
+        }
+    }
+
+    private void indexFileWithTextExtraction(Document document) {
         try {
-            if(document.getSize() > 0) {
-                Path tempFile = Files.createTempFile("upload-opf", ".tmp");
-                subscribeAndRetryOnError(indexService.indexDocMetadataMono(document)
-                        .then(tikaService.processResource(tempFile, storageService.loadFile(document.getStoragePath()))
-                                .as(flux -> indexService.indexDocumentStream(flux, document.getId()))
-                        )
-                        .then(Mono.fromRunnable(() -> {
-                            try {
-                                Files.deleteIfExists(tempFile);
-                                log.info("Cleaned up stable temp file [{}].", tempFile);
-                            } catch (Exception e) {
-                                log.error("Failed to clean up stable temp file [{}].", tempFile, e);
-                            }
-                        })),
-                        document,
-                        "Retrying indexFile for document {}, attempt {}", "indexFile error for {} : {}"
-                );
-            } else {
-                doIndexDocMetadataMono(document, "Retrying indexFile for document {}, attempt {}", "indexFile error for {} : {}");
-            }
+            Path tempFile = Files.createTempFile("upload-opf", ".tmp");
+            subscribeAndRetryOnError(indexService.indexDocMetadataMono(document)
+                    .then(tikaService.processResource(tempFile, storageService.loadFile(document.getStoragePath()))
+                            .as(flux -> indexService.indexDocumentStream(flux, document.getId()))
+                    )
+                    .then(Mono.fromRunnable(() -> {
+                        try {
+                            Files.deleteIfExists(tempFile);
+                            log.info("Cleaned up stable temp file [{}].", tempFile);
+                        } catch (Exception e) {
+                            log.error("Failed to clean up stable temp file [{}].", tempFile, e);
+                        }
+                    })),
+                    document,
+                    "Retrying indexFile for document {}, attempt {}", "indexFile error for {} : {}"
+            );
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private static boolean isTextExtractable(String contentType) {
+        if (contentType == null) {
+            return false;
+        }
+        String ct = contentType.toLowerCase();
+        for (String prefix : TEXT_EXTRACTABLE_PREFIXES) {
+            if (ct.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void doIndexDocMetadataMono(Document document, String warningMessage, String errorMessage) {
