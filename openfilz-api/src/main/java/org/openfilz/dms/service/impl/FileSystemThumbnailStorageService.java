@@ -4,7 +4,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.ThumbnailProperties;
 import org.openfilz.dms.service.ThumbnailStorageService;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -21,14 +23,17 @@ import java.util.UUID;
  * Activated when:
  * - Thumbnail feature is active AND
  * - Either useMainStorage=true with storage.type=local, OR useMainStorage=false with thumbnail.storage.type=local
+ * <p>
+ * Storage path resolution:
+ * - Uses {@code openfilz.thumbnail.storage.local.base-path} if set (regardless of useMainStorage)
+ * - Falls back to main {@code storage.local.base-path} if thumbnail-specific path is not configured
+ * - Thumbnails are stored under a {@code /thumbnails} subdirectory of the resolved base path
  */
 @Slf4j
 @Service
-@ConditionalOnExpression(
-    "${openfilz.thumbnail.active:false} and " +
-    "((${openfilz.thumbnail.storage.use-main-storage:true} and '${storage.type:local}' == 'local') or " +
-    "(!${openfilz.thumbnail.storage.use-main-storage:true} and '${openfilz.thumbnail.storage.type:local}' == 'local'))"
-)
+@ConditionalOnProperty(name = "openfilz.thumbnail.active", havingValue = "true")
+@Lazy
+@Qualifier("local")
 public class FileSystemThumbnailStorageService implements ThumbnailStorageService {
 
     private static final String THUMBNAILS_FOLDER = "thumbnails";
@@ -40,14 +45,11 @@ public class FileSystemThumbnailStorageService implements ThumbnailStorageServic
             @Value("${storage.local.base-path:/tmp/dms-storage}") String mainBasePath) {
 
         // Determine base path for thumbnails
-        String basePath;
-        if (thumbnailProperties.getStorage().isUseMainStorage()) {
+        // When useMainStorage=true: same storage TYPE as main, but use thumbnail-specific path
+        // When useMainStorage=false: both type and path come from thumbnail config
+        String basePath = thumbnailProperties.getStorage().getLocal().getBasePath();
+        if (basePath == null || basePath.isBlank()) {
             basePath = mainBasePath;
-        } else {
-            basePath = thumbnailProperties.getStorage().getLocal().getBasePath();
-            if (basePath == null || basePath.isBlank()) {
-                basePath = mainBasePath;
-            }
         }
 
         this.thumbnailsPath = Paths.get(basePath, THUMBNAILS_FOLDER);

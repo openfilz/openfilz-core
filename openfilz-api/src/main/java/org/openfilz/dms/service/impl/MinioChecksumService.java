@@ -14,8 +14,9 @@ import org.openfilz.dms.config.MinioProperties;
 import org.openfilz.dms.dto.Checksum;
 import org.openfilz.dms.service.ChecksumService;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperties;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -33,10 +34,9 @@ import java.util.Map;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-@ConditionalOnProperties({
-        @ConditionalOnProperty(name = "storage.type", havingValue = "minio"),
-        @ConditionalOnProperty(name = "openfilz.calculate-checksum", havingValue = "true")
-})
+@ConditionalOnProperty(name = "openfilz.calculate-checksum", havingValue = "true")
+@Lazy
+@Qualifier("minio")
 public class MinioChecksumService implements ChecksumService {
 
     private final MinioProperties minioProperties;

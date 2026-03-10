@@ -47,7 +47,7 @@ services:
     entrypoint: >
       /bin/sh -c "
       mc alias set myminio http://minio:9000 ${MINIO_ACCESS_KEY:-minioadmin} ${MINIO_SECRET_KEY:-minioadmin};
-      mc mb myminio/${MINIO_BUCKET:-openfilz-bucket} --ignore-existing;
+      mc mb myminio/${MINIO_BUCKET_NAME:-openfilz-bucket} --ignore-existing;
       exit 0;
       "
     networks:
@@ -66,4 +66,4 @@ services:
       MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
-      MINIO_BUCKET: ${MINIO_BUCKET:-openfilz-bucket}
+      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-openfilz-bucket}

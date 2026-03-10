@@ -4,8 +4,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.dto.Checksum;
 import org.openfilz.dms.service.ChecksumService;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperties;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.stereotype.Service;
@@ -20,11 +21,9 @@ import java.util.Map;
 
 @Service
 @Slf4j
-@ConditionalOnProperties({
-        @ConditionalOnProperty(name = "storage.type", havingValue = "local"),
-        @ConditionalOnProperty(name = "openfilz.calculate-checksum", havingValue = "true")
-
-})
+@ConditionalOnProperty(name = "openfilz.calculate-checksum", havingValue = "true")
+@Lazy
+@Qualifier("local")
 public class FileSystemChecksumService implements ChecksumService {
 
     @Value("${piped.buffer.size:8192}")

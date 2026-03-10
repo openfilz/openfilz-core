@@ -157,8 +157,8 @@ openfilz:
       url: ${GOTENBERG_URL:http://localhost:8083}  # Gotenberg service URL (for PDFs and Office docs)
       timeout-seconds: 60  # Timeout for document conversion
     storage:
-      use-main-storage: true  # Use same storage as documents (storage.type)
-      type: local  # Override storage type for thumbnails (local or minio)
+      use-main-storage: true  # true: storage type follows storage.type; false: uses type below
+      type: local  # Storage type for thumbnails when use-main-storage=false (local or minio)
       local:
         base-path: ${THUMBNAIL_STORAGE_PATH:/tmp/dms-thumbnails}
       minio:

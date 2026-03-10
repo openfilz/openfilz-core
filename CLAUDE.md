@@ -68,7 +68,7 @@ All methods return Mono (reactive):
 - I/O on boundedElastic()
 
 ### MinioProperties (`@ConfigurationProperties(prefix = "storage.minio")`)
-Centralized MinIO configuration used by `MinioStorageService`, `MinioChecksumService`, and `MinioThumbnailStorageService`:
+Centralized MinIO configuration used by `MinioStorageService` and `MinioChecksumService`. Also used by `MinioThumbnailStorageService` for endpoint/credentials (but thumbnails always use their own bucket):
 - `endpoint` — MinIO server URL
 - `accessKey` — MinIO access key
 - `secretKey` — MinIO secret key
@@ -87,6 +87,18 @@ storage:
     bucket-name: dms-bucket
     versioning-enabled: false
 ```
+
+### Thumbnail Storage
+Thumbnails use a **separate** storage location from documents, controlled by `openfilz.thumbnail.storage.*`:
+
+- **`use-main-storage=true`** (default): storage **type** follows `storage.type`, but paths/buckets come from thumbnail config
+- **`use-main-storage=false`**: storage **type** follows `openfilz.thumbnail.storage.type`
+
+In both modes:
+- **Local**: path from `openfilz.thumbnail.storage.local.base-path` (fallback: `storage.local.base-path`), with `/thumbnails` subdirectory
+- **MinIO**: bucket from `openfilz.thumbnail.storage.minio.bucket-name` (default: `dms-thumbnails`), endpoint/credentials from main MinIO config (or thumbnail-specific overrides when `use-main-storage=false`)
+
+**Implementations:** `FileSystemThumbnailStorageService` (local), `MinioThumbnailStorageService` (minio) — activated via `@ConditionalOnExpression`
 
 ---
 
@@ -178,7 +190,7 @@ type Query {
 **DefaultAuthSecurityConfig:** OAuth2/JWT
 **GraphQlConfig:** GraphQL scalars
 **MinioProperties:** `@ConfigurationProperties` for `storage.minio.*` (endpoint, credentials, bucket, versioning)
-**ThumbnailProperties:** `@ConfigurationProperties` for `openfilz.thumbnail.*`
+**ThumbnailProperties:** `@ConfigurationProperties` for `openfilz.thumbnail.*` — `use-main-storage` controls whether storage type follows `storage.type` (true) or `openfilz.thumbnail.storage.type` (false); in both cases, thumbnail-specific paths/buckets (`local.base-path`, `minio.bucket-name`) are used
 **Conditional Beans:** Feature toggles
 
 ---

@@ -102,7 +102,7 @@ storage:
 # Example:
 #   extraEnv:
 #     MINIO_URL: "http://minio.svc:9000"
-#     MINIO_BUCKET: "my-bucket"
+#     MINIO_BUCKET_NAME: "my-bucket"
 # @param extraEnv A map of extra environment variables for the container.
 extraEnv: {}
 

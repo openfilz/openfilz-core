@@ -7,7 +7,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.MinioProperties;
 import org.openfilz.dms.config.ThumbnailProperties;
 import org.openfilz.dms.service.ThumbnailStorageService;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -19,19 +21,23 @@ import java.util.UUID;
 
 /**
  * MinIO/S3 implementation of ThumbnailStorageService.
- * Stores thumbnails in a MinIO bucket
+ * Stores thumbnails in a dedicated MinIO bucket (separate from the main document bucket).
  * <p>
  * Activated when:
  * - Thumbnail feature is active AND
  * - Either useMainStorage=true with storage.type=minio, OR useMainStorage=false with thumbnail.storage.type=minio
+ * <p>
+ * Bucket resolution:
+ * - When useMainStorage=true: uses main MinIO endpoint/credentials, but a separate bucket
+ *   from {@code openfilz.thumbnail.storage.minio.bucket-name} (defaults to "dms-thumbnails")
+ * - When useMainStorage=false: uses thumbnail-specific endpoint/credentials/bucket
+ *   from {@code openfilz.thumbnail.storage.minio.*}, falling back to main MinIO config
  */
 @Slf4j
 @Service
-@ConditionalOnExpression(
-        "${openfilz.thumbnail.active:false} and " +
-                "((${openfilz.thumbnail.storage.use-main-storage:true} and '${storage.type:local}' == 'minio') or " +
-                "(!${openfilz.thumbnail.storage.use-main-storage:true} and '${openfilz.thumbnail.storage.type:local}' == 'minio'))"
-)
+@ConditionalOnProperty(name = "openfilz.thumbnail.active", havingValue = "true")
+@Lazy
+@Qualifier("minio")
 public class MinioThumbnailStorageService implements ThumbnailStorageService {
 
     private static final String THUMBNAIL_PREFIX = "thumbnails/";
@@ -63,10 +69,12 @@ public class MinioThumbnailStorageService implements ThumbnailStorageService {
         String secretKey;
 
         if (thumbnailProperties.getStorage().isUseMainStorage()) {
+            // Use same MinIO server as main storage, but with a separate thumbnail bucket
             endpoint = minioProperties.getEndpoint();
             accessKey = minioProperties.getAccessKey();
             secretKey = minioProperties.getSecretKey();
-            bucketName = minioProperties.getBucketName();
+            ThumbnailProperties.Storage.Minio minioConfig = thumbnailProperties.getStorage().getMinio();
+            bucketName = minioConfig.getBucketName() != null ? minioConfig.getBucketName() : "dms-thumbnails";
         } else {
             ThumbnailProperties.Storage.Minio minioConfig = thumbnailProperties.getStorage().getMinio();
             endpoint = minioConfig.getEndpoint() != null ? minioConfig.getEndpoint() : minioProperties.getEndpoint();
