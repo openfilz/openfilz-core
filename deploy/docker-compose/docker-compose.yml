@@ -69,7 +69,7 @@ services:
       # Storage configuration (local by default)
       STORAGE_TYPE: ${STORAGE_TYPE:-local}
       STORAGE_LOCAL_BASE_PATH: /var/data/openfilz
-      THUMBNAIL_STORAGE_PATH: ${THUMBNAIL_STORAGE_PATH}
+      THUMBNAIL_STORAGE_PATH: ${THUMBNAIL_STORAGE_PATH:-/var/data/openfilz/thumbnails}
 
       # Security configuration (no-auth by default for development)
       OPENFILZ_SECURITY_NO_AUTH: ${OPENFILZ_SECURITY_NO_AUTH:-true}
