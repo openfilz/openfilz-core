@@ -242,6 +242,20 @@
                     <span class="of-separator-text">${msg("or")}</span>
                 </div>
             </#if>
+
+            <#-- Flag IdP clicks in sessionStorage so that login-update-password can auto-skip.
+                 This script MUST be inside the "socialProviders" section so the buttons exist in the DOM. -->
+            <script>
+                (function() {
+                    try {
+                        document.querySelectorAll('.of-social-btn').forEach(function(btn) {
+                            btn.addEventListener('click', function() {
+                                sessionStorage.setItem('openfilz_idp_login', 'true');
+                            });
+                        });
+                    } catch (e) {}
+                })();
+            </script>
         </#if>
 
     <#elseif section = "form">
