@@ -7,6 +7,23 @@
         ${msg("loginProfileSubtitle")}
 
     <#elseif section = "form">
+        <#-- Resolve email from User Profile attributes (Keycloak 26+ VERIFY_PROFILE) or legacy user bean -->
+        <#assign emailValue = '' />
+        <#if profile?? && profile.attributes??>
+            <#list profile.attributes as attribute>
+                <#if attribute.name == 'email'>
+                    <#assign emailValue = (attribute.value!'') />
+                    <#break>
+                </#if>
+            </#list>
+        </#if>
+        <#if emailValue == ''>
+            <#assign emailValue = (user.email!'') />
+        </#if>
+        <#if emailValue == ''>
+            <#assign emailValue = (user.username!'') />
+        </#if>
+
         <form id="kc-update-profile-form" action="${url.loginAction}" method="post" novalidate>
 
             <#-- Email (read-only, provided by the identity provider) -->
@@ -20,7 +37,7 @@
                         name="email"
                         type="email"
                         class="of-input of-input--readonly"
-                        value="${(user.email!'')}"
+                        value="${emailValue}"
                         readonly
                         tabindex="-1"
                     />
