@@ -329,13 +329,15 @@
                         </div>
                     </#if>
 
-                    <#if realm.resetPasswordAllowed>
-                        <a href="${url.loginResetCredentialsUrl}" class="of-link<#if isInvitedUser> of-link--prominent</#if>">
-                            <#if isInvitedUser>
-                                ${msg("loginInvitedSetupPasswordLink")}
-                            <#else>
-                                ${msg("doForgotPassword")}
-                            </#if>
+                    <#if isInvitedUser>
+                        <a href="#" class="of-link of-link--prominent" id="setup-password-link"
+                           onclick="event.preventDefault();document.getElementById('password').value=document.getElementById('username').value;document.getElementById('kc-form-login').submit();"
+                        >
+                            ${msg("loginInvitedSetupPasswordLink")}
+                        </a>
+                    <#elseif realm.resetPasswordAllowed>
+                        <a href="${url.loginResetCredentialsUrl}" class="of-link">
+                            ${msg("doForgotPassword")}
                         </a>
                     </#if>
                 </div>
