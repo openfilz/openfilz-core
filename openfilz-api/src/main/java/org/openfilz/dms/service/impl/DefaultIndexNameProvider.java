@@ -16,8 +16,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.UUID;
 
 @Service
@@ -38,7 +40,13 @@ public class DefaultIndexNameProvider implements IndexNameProvider {
 
     @PostConstruct
     public void init() {
-        createIndex(defaultIndexName).subscribe();
+        createIndex(defaultIndexName)
+                .retryWhen(Retry.backoff(5, Duration.ofSeconds(3))
+                        .maxBackoff(Duration.ofSeconds(30))
+                        .doBeforeRetry(signal -> log.warn("Retrying OpenSearch index creation (attempt {}): {}",
+                                signal.totalRetries() + 1, signal.failure().getMessage())))
+                .doOnError(e -> log.error("Failed to create OpenSearch index '{}' after retries: {}", defaultIndexName, e.getMessage()))
+                .subscribe();
     }
 
     @Override
