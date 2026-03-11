@@ -7,43 +7,84 @@
         ${msg("loginProfileSubtitle")}
 
     <#elseif section = "form">
-        <#-- Resolve email from User Profile attributes (Keycloak 26+ VERIFY_PROFILE) or legacy user bean -->
+        <#-- Resolve email from User Profile attributes (Keycloak 26+) or legacy user bean -->
         <#assign emailValue = '' />
+
+        <#-- Try 1: KC 26+ profile.attributes (List<ProfileBean.Attribute>) -->
         <#if profile?? && profile.attributes??>
             <#list profile.attributes as attribute>
-                <#if attribute.name == 'email'>
-                    <#assign emailValue = (attribute.value!'') />
+                <#if attribute?? && attribute.name?? && attribute.name == 'email'>
+                    <#if attribute.value?? && attribute.value?has_content>
+                        <#assign emailValue = attribute.value />
+                    <#elseif attribute.values?? && attribute.values?size gt 0 && attribute.values[0]??>
+                        <#assign emailValue = attribute.values[0] />
+                    </#if>
                     <#break>
                 </#if>
             </#list>
         </#if>
-        <#if emailValue == ''>
-            <#assign emailValue = (user.email!'') />
+
+        <#-- Try 2: user bean email -->
+        <#if emailValue == '' && user??>
+            <#assign emailValue = ((user.email)!'') />
         </#if>
-        <#if emailValue == ''>
-            <#assign emailValue = (user.username!'') />
+
+        <#-- Try 3: user bean username (often the email for IdP-created users) -->
+        <#if emailValue == '' && user??>
+            <#assign emailValue = ((user.username)!'') />
+        </#if>
+
+        <#-- Resolve firstName and lastName from profile attributes or user bean -->
+        <#assign firstNameValue = '' />
+        <#assign lastNameValue = '' />
+        <#if profile?? && profile.attributes??>
+            <#list profile.attributes as attribute>
+                <#if attribute?? && attribute.name??>
+                    <#if attribute.name == 'firstName'>
+                        <#if attribute.value?? && attribute.value?has_content>
+                            <#assign firstNameValue = attribute.value />
+                        <#elseif attribute.values?? && attribute.values?size gt 0 && attribute.values[0]??>
+                            <#assign firstNameValue = attribute.values[0] />
+                        </#if>
+                    <#elseif attribute.name == 'lastName'>
+                        <#if attribute.value?? && attribute.value?has_content>
+                            <#assign lastNameValue = attribute.value />
+                        <#elseif attribute.values?? && attribute.values?size gt 0 && attribute.values[0]??>
+                            <#assign lastNameValue = attribute.values[0] />
+                        </#if>
+                    </#if>
+                </#if>
+            </#list>
+        </#if>
+        <#if firstNameValue == '' && user??>
+            <#assign firstNameValue = ((user.firstName)!'') />
+        </#if>
+        <#if lastNameValue == '' && user??>
+            <#assign lastNameValue = ((user.lastName)!'') />
         </#if>
 
         <form id="kc-update-profile-form" action="${url.loginAction}" method="post" novalidate>
 
-            <#-- Email (read-only, provided by the identity provider) -->
-            <div class="of-form-group">
-                <label for="email" class="of-label">
-                    ${msg("email")}
-                </label>
-                <div class="of-input-wrapper">
-                    <input
-                        id="email"
-                        name="email"
-                        type="email"
-                        class="of-input of-input--readonly"
-                        value="${emailValue}"
-                        readonly
-                        tabindex="-1"
-                    />
+            <#-- Email (read-only, shown only when pre-filled by the identity provider) -->
+            <#if emailValue?has_content>
+                <div class="of-form-group">
+                    <label for="email" class="of-label">
+                        ${msg("email")}
+                    </label>
+                    <div class="of-input-wrapper">
+                        <input
+                            id="email"
+                            name="email"
+                            type="email"
+                            class="of-input of-input--readonly"
+                            value="${emailValue}"
+                            readonly
+                            tabindex="-1"
+                        />
+                    </div>
+                    <span class="of-field-hint">${msg("loginProfileEmailReadonly")}</span>
                 </div>
-                <span class="of-field-hint">${msg("loginProfileEmailReadonly")}</span>
-            </div>
+            </#if>
 
             <#-- First Name -->
             <div class="of-form-group">
@@ -56,7 +97,7 @@
                         name="firstName"
                         type="text"
                         class="of-input<#if messagesPerField.existsError('firstName')> of-input--error</#if>"
-                        value="${(user.firstName!'')}"
+                        value="${firstNameValue}"
                         autocomplete="given-name"
                         autofocus
                         required
@@ -83,7 +124,7 @@
                         name="lastName"
                         type="text"
                         class="of-input<#if messagesPerField.existsError('lastName')> of-input--error</#if>"
-                        value="${(user.lastName!'')}"
+                        value="${lastNameValue}"
                         autocomplete="family-name"
                         required
                         aria-invalid="<#if messagesPerField.existsError('lastName')>true<#else>false</#if>"
