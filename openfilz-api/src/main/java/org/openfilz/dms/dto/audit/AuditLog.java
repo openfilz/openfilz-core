@@ -17,7 +17,7 @@ public record AuditLog(
         String username,
         AuditAction action,
         DocumentType resourceType,
-        AuditLogDetails details,
+        @Schema(ref = "#/components/schemas/AuditLogDetails") AuditLogDetails details,
         String previousHash,
         String hash) {
 }
