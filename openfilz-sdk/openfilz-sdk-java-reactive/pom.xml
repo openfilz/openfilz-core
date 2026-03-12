@@ -163,6 +163,8 @@
                                 <useJakartaEe>true</useJakartaEe>
                                 <sourceFolder>src/main/java</sourceFolder>
                                 <reactive>true</reactive>
+                                <legacyDiscriminatorBehavior>false</legacyDiscriminatorBehavior>
+                                <useOneOfDiscriminatorLookup>true</useOneOfDiscriminatorLookup>
                             </configOptions>
                             <generateApiTests>false</generateApiTests>
                             <generateModelTests>false</generateModelTests>
