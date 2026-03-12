@@ -195,7 +195,6 @@ jobs:
           fail_on_unmatched_files: false
           files: |
             openfilz-api/target/*${{ steps.versions.outputs.releaseVersion }}.jar
-            openfilz-gateway/target/*${{ steps.versions.outputs.releaseVersion }}.jar
           prerelease: false
           token: ${{ secrets.GITHUB_TOKEN }}
 

@@ -54,14 +54,14 @@ storage:
 openapi:
   service:
     title: openfilz-api
-    url: ${API_ROOT_URL:http://localhost:8081/} # put http://localhost:8081/ for standalone usage & http://localhost:8888/dms-api if the openfilz-gateway is used
+    url: ${API_ROOT_URL:http://localhost:8081/}
     version: 1.0.0
 
 springdoc:
   api-docs:
-    path: /v3/api-docs # put /v3/api-docs for standalone usage & /dms-api/v3/api-docs if the openfilz-gateway is used
+    path: /v3/api-docs
   swagger-ui:
-    path: /swagger-ui.html # put /swagger-ui.html for standalone usage & /dms-api/swagger-ui.html if the openfilz-gateway is used
+    path: /swagger-ui.html
 
 # Logging for auditing (can be more sophisticated)
 logging:

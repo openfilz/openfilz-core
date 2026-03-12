@@ -12,7 +12,6 @@ OpenFilz is an Open Source Document Management System (DMS) built with Spring Bo
 
 **Key Components:**
 - openfilz-api: Core DMS service (REST + GraphQL)
-- openfilz-gateway: Spring Cloud Gateway
 
 **Tech Stack:**
 Java 25, Spring Boot 3.5.6, WebFlux, R2DBC, PostgreSQL, MinIO/S3, OAuth2/JWT, OpenSearch
@@ -332,7 +331,6 @@ server.port: 8081
 ## 14. Entry Points
 
 - API: org.openfilz.dms.DmsApiApplication
-- Gateway: org.openfilz.gateway.GatewayApplication
 
 ---
 
@@ -386,9 +384,6 @@ mvn clean install -Pkube -pl openfilz-api -am
 ```bash
 # Run API (port 8081)
 cd openfilz-api && mvn spring-boot:run
-
-# Run Gateway (port 8888, optional)
-cd openfilz-gateway && mvn spring-boot:run
 ```
 
 ### Test
