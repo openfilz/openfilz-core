@@ -4,9 +4,11 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonTypeName;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = AuditLogDetails.DISCRIMINATOR)
+@Schema(requiredProperties = {AuditLogDetails.DISCRIMINATOR})
 @JsonSubTypes({
 
         @JsonSubTypes.Type(value = CopyAudit.class, name = AuditLogDetails.COPY),
