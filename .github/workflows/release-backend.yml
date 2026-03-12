@@ -33,26 +33,25 @@ jobs:
           app-id: ${{ secrets.RELEASE_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_PRIVATE_KEY }}
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           token: ${{ steps.app-token.outputs.token }}
           persist-credentials: false
 
-
       - name: Set up JDK 25
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '25'
           distribution: 'temurin'
           cache: maven
 
       - name: Set up Node.js 18
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '18'
 
       - name: Set up Python 3
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.x'
 
@@ -60,7 +59,7 @@ jobs:
         run: pip install build twine
 
       - name: Set up .NET 8 SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '8.0.x'
 
@@ -72,13 +71,13 @@ jobs:
           echo "https://x-access-token:${{ steps.app-token.outputs.token }}@github.com" > ~/.git-credentials
 
       - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@v6
+        uses: crazy-max/ghaction-import-gpg@v7
         with:
           gpg_private_key: ${{ secrets.OSSRH_GPG_SECRET_KEY }}
           passphrase: ${{ secrets.OSSRH_GPG_SECRET_KEY_PASSWORD }}
 
       - name: Setup Maven settings.xml
-        uses: s4u/maven-settings-action@v3.1.0
+        uses: s4u/maven-settings-action@v4
         with:
           servers: |
             [{
@@ -100,7 +99,7 @@ jobs:
             }]
 
       - name: Cache Maven packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
@@ -112,12 +111,8 @@ jobs:
         id: project
 
       - name: Remove SNAPSHOT from version
-        uses: spassai/get-between-action@v1
         id: version
-        with:
-          string: ${{ steps.project.outputs.version }}"
-          start: ''
-          end: '-SNAPSHOT'
+        run: echo "substring=$(echo '${{ steps.project.outputs.version }}' | sed 's/-SNAPSHOT$//')" >> $GITHUB_OUTPUT
 
       - name: Determine bump type
         id: bump
@@ -199,12 +194,9 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Merge main -> develop
-        uses: devmasx/merge-branch@master
-        with:
-          type: now
-          from_branch: main
-          target_branch: develop
-          github_token: ${{ steps.app-token.outputs.token }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: gh api repos/${{ github.repository }}/merges -f base=develop -f head=main -f commit_message="Merge main into develop"
 
       - name: Cleanup credentials
         if: always()
