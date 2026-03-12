@@ -3,9 +3,10 @@ package org.openfilz.dms.dto.audit;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonTypeName;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
-@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = AuditLogDetails.DISCRIMINATOR)
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = AuditLogDetails.DISCRIMINATOR)
 @JsonSubTypes({
 
         @JsonSubTypes.Type(value = CopyAudit.class, name = AuditLogDetails.COPY),
@@ -32,4 +33,22 @@ public abstract class AuditLogDetails implements IAuditLogDetails {
     public static final String REPLACE = "replace";
     public static final String UPDATE_METADATA = "updateMetadata";
     public static final String UPLOAD = "upload";
+
+    @JsonInclude(JsonInclude.Include.ALWAYS)
+    private String type;
+
+    protected AuditLogDetails() {
+        JsonTypeName annotation = this.getClass().getAnnotation(JsonTypeName.class);
+        if (annotation != null) {
+            this.type = annotation.value();
+        }
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
 }

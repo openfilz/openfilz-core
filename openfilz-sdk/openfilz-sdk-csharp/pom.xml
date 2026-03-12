@@ -108,26 +108,25 @@
                 </executions>
             </plugin>
             <!-- Fix OpenAPI Generator C# bug: List<Stream> passed to StreamContent() for multi-file upload.
-                 The sed command targets only the occurrence within the upload-multiple method by using
-                 a line range between /upload-multiple/ and /\/upload"/ -->
+                 Uses maven-antrun-plugin (pure Java, cross-platform) instead of bash+sed -->
             <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>exec-maven-plugin</artifactId>
-                <version>${exec-maven-plugin.version}</version>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
                 <executions>
                     <execution>
                         <id>fix-csharp-multifile-upload</id>
                         <phase>process-sources</phase>
                         <goals>
-                            <goal>exec</goal>
+                            <goal>run</goal>
                         </goals>
                         <configuration>
-                            <executable>bash</executable>
-                            <workingDirectory>${project.basedir}</workingDirectory>
-                            <arguments>
-                                <argument>fix-multifile-upload.sh</argument>
-                                <argument>${project.build.directory}/generated-sdk/csharp/src/OpenFilz.Sdk/Api/DocumentControllerApi.cs</argument>
-                            </arguments>
+                            <target>
+                                <replaceregexp
+                                    file="${project.build.directory}/generated-sdk/csharp/src/OpenFilz.Sdk/Api/DocumentControllerApi.cs"
+                                    match="multipartContentLocalVar\.Add\(new StreamContent\(file\)\);"
+                                    replace="foreach (var fileItem in file) { multipartContentLocalVar.Add(new StreamContent(fileItem)); }"
+                                    flags="g" />
+                            </target>
                         </configuration>
                     </execution>
                 </executions>
