@@ -1,0 +1,197 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.openfilz</groupId>
+        <artifactId>openfilz-sdk</artifactId>
+        <version>1.1.5-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>openfilz-sdk-java-reactive</artifactId>
+    <packaging>jar</packaging>
+    <name>OpenFilz Java Reactive SDK</name>
+    <description>Reactive (non-blocking) Java SDK for OpenFilz REST API, based on Spring WebClient</description>
+
+    <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+    </properties>
+
+    <dependencies>
+        <!-- Reactor dependency for spec artifact ordering -->
+        <dependency>
+            <groupId>org.openfilz</groupId>
+            <artifactId>openfilz-api</artifactId>
+            <version>${project.version}</version>
+            <type>json</type>
+            <classifier>openapi</classifier>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Generated WebClient-based client runtime dependencies -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.projectreactor</groupId>
+            <artifactId>reactor-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.swagger.core.v3</groupId>
+            <artifactId>swagger-annotations</artifactId>
+            <version>2.2.22</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.code.findbugs</groupId>
+            <artifactId>jsr305</artifactId>
+            <version>3.0.2</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.openapitools</groupId>
+            <artifactId>jackson-databind-nullable</artifactId>
+            <version>0.2.6</version>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Override parent compiler settings for Java 17 compatibility -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>17</source>
+                    <target>17</target>
+                    <parameters>true</parameters>
+                    <annotationProcessorPaths /> <!-- No Lombok/MapStruct for generated code -->
+                </configuration>
+            </plugin>
+
+            <!-- Copy OpenAPI spec from openfilz-api artifact -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>unpack-openapi-spec</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>copy</goal>
+                        </goals>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>org.openfilz</groupId>
+                                    <artifactId>openfilz-api</artifactId>
+                                    <version>${project.version}</version>
+                                    <type>json</type>
+                                    <classifier>openapi</classifier>
+                                    <outputDirectory>${project.build.directory}/openapi</outputDirectory>
+                                    <destFileName>openfilz-api.json</destFileName>
+                                </artifactItem>
+                            </artifactItems>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Copy GraphQL schemas -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>copy-graphql-schemas</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/classes/graphql</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.basedir}/../../openfilz-api/src/main/resources/graphql</directory>
+                                    <includes>
+                                        <include>**/*.graphqls</include>
+                                    </includes>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Generate Reactive Java SDK from OpenAPI spec -->
+            <plugin>
+                <groupId>org.openapitools</groupId>
+                <artifactId>openapi-generator-maven-plugin</artifactId>
+                <version>${openapi-generator.version}</version>
+                <executions>
+                    <execution>
+                        <id>generate-java-reactive-sdk</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <inputSpec>${openapi.spec.uri}</inputSpec>
+                            <generatorName>java</generatorName>
+                            <output>${project.build.directory}/generated-sources/openapi</output>
+                            <apiPackage>org.openfilz.sdk.reactive.api</apiPackage>
+                            <modelPackage>org.openfilz.sdk.reactive.model</modelPackage>
+                            <invokerPackage>org.openfilz.sdk.reactive</invokerPackage>
+                            <groupId>org.openfilz</groupId>
+                            <artifactId>openfilz-sdk-java-reactive</artifactId>
+                            <artifactVersion>${project.version}</artifactVersion>
+                            <configOptions>
+                                <library>webclient</library>
+                                <dateLibrary>java8</dateLibrary>
+                                <useJakartaEe>true</useJakartaEe>
+                                <sourceFolder>src/main/java</sourceFolder>
+                                <reactive>true</reactive>
+                            </configOptions>
+                            <generateApiTests>false</generateApiTests>
+                            <generateModelTests>false</generateModelTests>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Add generated sources to compilation -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>3.6.0</version>
+                <executions>
+                    <execution>
+                        <id>add-generated-sources</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>add-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>${project.build.directory}/generated-sources/openapi/src/main/java</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

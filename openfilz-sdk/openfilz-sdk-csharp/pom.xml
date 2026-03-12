@@ -1,0 +1,194 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.openfilz</groupId>
+        <artifactId>openfilz-sdk</artifactId>
+        <version>1.1.5-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>openfilz-sdk-csharp</artifactId>
+    <packaging>pom</packaging>
+    <name>OpenFilz C# SDK</name>
+    <description>C# SDK for OpenFilz REST API</description>
+
+    <dependencies>
+        <!-- Reactor dependency for spec artifact ordering -->
+        <dependency>
+            <groupId>org.openfilz</groupId>
+            <artifactId>openfilz-api</artifactId>
+            <version>${project.version}</version>
+            <type>json</type>
+            <classifier>openapi</classifier>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Copy OpenAPI spec from openfilz-api artifact -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>unpack-openapi-spec</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>copy</goal>
+                        </goals>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>org.openfilz</groupId>
+                                    <artifactId>openfilz-api</artifactId>
+                                    <version>${project.version}</version>
+                                    <type>json</type>
+                                    <classifier>openapi</classifier>
+                                    <outputDirectory>${project.build.directory}/openapi</outputDirectory>
+                                    <destFileName>openfilz-api.json</destFileName>
+                                </artifactItem>
+                            </artifactItems>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Generate C# SDK from OpenAPI spec -->
+            <plugin>
+                <groupId>org.openapitools</groupId>
+                <artifactId>openapi-generator-maven-plugin</artifactId>
+                <version>${openapi-generator.version}</version>
+                <executions>
+                    <execution>
+                        <id>generate-csharp-sdk</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <inputSpec>${openapi.spec.uri}</inputSpec>
+                            <generatorName>csharp</generatorName>
+                            <output>${project.build.directory}/generated-sdk/csharp</output>
+                            <configOptions>
+                                <packageName>OpenFilz.Sdk</packageName>
+                                <packageVersion>${project.version}</packageVersion>
+                                <targetFramework>net8.0</targetFramework>
+                                <netCoreProjectFile>true</netCoreProjectFile>
+                            </configOptions>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Copy GraphQL schemas into generated SDK directory -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>copy-graphql-schemas</id>
+                        <phase>process-sources</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/generated-sdk/csharp/graphql</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.basedir}/../../openfilz-api/src/main/resources/graphql</directory>
+                                    <includes>
+                                        <include>**/*.graphqls</include>
+                                    </includes>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- Fix OpenAPI Generator C# bug: List<Stream> passed to StreamContent() for multi-file upload.
+                 The sed command targets only the occurrence within the upload-multiple method by using
+                 a line range between /upload-multiple/ and /\/upload"/ -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>${exec-maven-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>fix-csharp-multifile-upload</id>
+                        <phase>process-sources</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>bash</executable>
+                            <workingDirectory>${project.basedir}</workingDirectory>
+                            <arguments>
+                                <argument>fix-multifile-upload.sh</argument>
+                                <argument>${project.build.directory}/generated-sdk/csharp/src/OpenFilz.Sdk/Api/DocumentControllerApi.cs</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <profile>
+            <id>publishSdk</id>
+            <properties>
+                <maven.deploy.skip>true</maven.deploy.skip>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>${exec-maven-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>dotnet-pack</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>dotnet</executable>
+                                    <workingDirectory>${project.build.directory}/generated-sdk/csharp</workingDirectory>
+                                    <arguments>
+                                        <argument>pack</argument>
+                                        <argument>-c</argument>
+                                        <argument>Release</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>nuget-push</id>
+                                <phase>deploy</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>dotnet</executable>
+                                    <workingDirectory>${project.build.directory}/generated-sdk/csharp</workingDirectory>
+                                    <arguments>
+                                        <argument>nuget</argument>
+                                        <argument>push</argument>
+                                        <argument>**/*.nupkg</argument>
+                                        <argument>--api-key</argument>
+                                        <argument>${env.NUGET_API_KEY}</argument>
+                                        <argument>--source</argument>
+                                        <argument>https://api.nuget.org/v3/index.json</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
+</project>
