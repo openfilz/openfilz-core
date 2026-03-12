@@ -46,7 +46,7 @@ jobs:
           git config --global credential.helper store
           echo "https://x-access-token:${{ steps.app-token.outputs.token }}@github.com" > ~/.git-credentials
 
-      - uses: s4u/maven-settings-action@v4
+      - uses: s4u/maven-settings-action@v4.0.0
         with:
           servers: |
             [{
