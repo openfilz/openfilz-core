@@ -77,7 +77,7 @@ jobs:
       - name: Setup Node.js for TypeScript SDK tests
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: Setup Python for Python SDK tests
         uses: actions/setup-python@v5

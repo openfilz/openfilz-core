@@ -32,8 +32,10 @@ public class Quickstart
         var host = Host.CreateDefaultBuilder()
             .ConfigureApi((context, services, options) =>
             {
-                // For authenticated instances:
+                // For authenticated instances, supply a real OAuth2 access token:
                 // options.AddTokens(new BearerToken("your-oauth2-access-token"));
+                // For no-auth mode, a dummy token satisfies the DI requirement:
+                options.AddTokens(new BearerToken("no-auth"));
 
                 options.AddApiHttpClients(client =>
                 {

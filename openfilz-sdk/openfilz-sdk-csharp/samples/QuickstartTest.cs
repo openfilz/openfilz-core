@@ -3,6 +3,7 @@
 // Expects the OpenFilz API to be running at OPENFILZ_API_URL (default: http://localhost:18081).
 // In CI, the API is started before this test runs.
 
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OpenFilz.Sdk.Api;
@@ -10,6 +11,8 @@ using OpenFilz.Sdk.Client;
 using OpenFilz.Sdk.Extensions;
 using OpenFilz.Sdk.Model;
 using Xunit;
+using Xunit.Abstractions;
+using Xunit.Sdk;
 
 namespace OpenFilzSdkSamples;
 
@@ -22,12 +25,16 @@ public class QuickstartTest
     private static readonly IHost SdkHost = Host.CreateDefaultBuilder()
         .ConfigureApi((context, services, options) =>
         {
+            options.AddTokens(new BearerToken("no-auth"));
             options.AddApiHttpClients(client =>
             {
                 client.BaseAddress = new Uri(ApiUrl);
             });
         })
         .Build();
+
+    private static readonly JsonSerializerOptions JsonOptions =
+        SdkHost.Services.GetRequiredService<JsonSerializerOptionsProvider>().Options;
 
     private static Guid? _folderId;
     private static Guid? _targetFolderId;
@@ -41,12 +48,31 @@ public class QuickstartTest
     private IDashboardApi DashboardApiClient => SdkHost.Services.GetRequiredService<IDashboardApi>();
     private IAuditControllerApi AuditApi => SdkHost.Services.GetRequiredService<IAuditControllerApi>();
 
+    /// <summary>
+    /// Deserialize a 2xx response body. The generated SDK's Ok() only handles 200;
+    /// this helper also handles 201/204 responses from the OpenFilz API.
+    /// </summary>
+    private static T Deserialize2xx<T>(IApiResponse resp)
+    {
+        Assert.True(resp.IsSuccessStatusCode,
+            $"Expected 2xx but got {resp.StatusCode}: {resp.RawContent}");
+        return JsonSerializer.Deserialize<T>(resp.RawContent, JsonOptions)
+               ?? throw new JsonException($"Deserialization returned null for: {resp.RawContent}");
+    }
+
+    /// <summary>Assert that the response is a 2xx success.</summary>
+    private static void Assert2xx(IApiResponse resp)
+    {
+        Assert.True(resp.IsSuccessStatusCode,
+            $"Expected 2xx but got {resp.StatusCode}: {resp.RawContent}");
+    }
+
     [Fact, TestPriority(1)]
     public async Task Test01_CreateFolder()
     {
         var resp = await FolderApi.CreateFolderAsync(
-            new CreateFolderRequest(name: $"C# SDK Test {Environment.ProcessId}"));
-        var folder = resp.Ok()!;
+            new CreateFolderRequest(name: $"C# SDK Test {Guid.NewGuid().ToString("N")[..8]}"));
+        var folder = Deserialize2xx<FolderResponse>(resp);
         Assert.NotNull(folder.Id);
         _folderId = folder.Id;
     }
@@ -54,16 +80,23 @@ public class QuickstartTest
     [Fact, TestPriority(2)]
     public async Task Test02_UploadFile()
     {
+        // Use HttpClient directly because the generated SDK has a multipart boundary bug
+        // (Content-Type header set without boundary, form params added after encoding)
         var tempFile = Path.GetTempFileName() + ".txt";
         await File.WriteAllTextAsync(tempFile, "C# SDK test content");
         try
         {
+            using var httpClient = new HttpClient { BaseAddress = new Uri(ApiUrl) };
+            using var content = new MultipartFormDataContent();
             using var stream = File.OpenRead(tempFile);
-            var resp = await DocumentApi.UploadDocument1Async(
-                file: stream,
-                allowDuplicateFileNames: true,
-                parentFolderId: _folderId!.Value.ToString());
-            var uploaded = resp.Ok()!;
+            content.Add(new StreamContent(stream), "file", "test-upload.txt");
+            content.Add(new StringContent("true"), "allowDuplicateFileNames");
+            content.Add(new StringContent(_folderId!.Value.ToString()), "parentFolderId");
+
+            var httpResp = await httpClient.PostAsync("/api/v1/documents/upload", content);
+            httpResp.EnsureSuccessStatusCode();
+            var json = await httpResp.Content.ReadAsStringAsync();
+            var uploaded = JsonSerializer.Deserialize<UploadResponse>(json, JsonOptions)!;
             Assert.NotNull(uploaded.Id);
             _fileId = uploaded.Id;
         }
@@ -98,15 +131,14 @@ public class QuickstartTest
             _fileId!.Value,
             new UpdateMetadataRequest(
                 metadataToUpdate: new Dictionary<string, object> { { "project", "C# Test" } }));
-        Assert.NotNull(resp.Ok());
+        Assert2xx(resp);
     }
 
     [Fact, TestPriority(6)]
     public async Task Test06_DownloadFile()
     {
         var resp = await DocumentApi.DownloadDocumentAsync(_fileId!.Value);
-        var stream = resp.Ok();
-        Assert.NotNull(stream);
+        Assert2xx(resp);
     }
 
     [Fact, TestPriority(7)]
@@ -122,8 +154,9 @@ public class QuickstartTest
     public async Task Test08_CopyFile()
     {
         var targetResp = await FolderApi.CreateFolderAsync(
-            new CreateFolderRequest(name: $"C# SDK Target {Environment.ProcessId}"));
-        _targetFolderId = targetResp.Ok()!.Id;
+            new CreateFolderRequest(name: $"C# SDK Target {Guid.NewGuid().ToString("N")[..8]}"));
+        var targetFolder = Deserialize2xx<FolderResponse>(targetResp);
+        _targetFolderId = targetFolder.Id;
 
         var copyResp = await FileApi.CopyFilesAsync(
             new CopyRequest(
@@ -137,11 +170,12 @@ public class QuickstartTest
     [Fact, TestPriority(9)]
     public async Task Test09_MoveFile()
     {
-        await FileApi.MoveFilesAsync(
+        var resp = await FileApi.MoveFilesAsync(
             new MoveRequest(
                 documentIds: new List<Guid> { _fileId!.Value },
                 targetFolderId: _targetFolderId,
                 allowDuplicateFileNames: true));
+        Assert2xx(resp);
 
         var listResp = await FolderApi.ListFolderAsync(_targetFolderId!.Value, true, false);
         var contents = listResp.Ok()!;
@@ -152,7 +186,7 @@ public class QuickstartTest
     public async Task Test10_ToggleFavorite()
     {
         var resp = await FavApi.ToggleFavoriteAsync(_fileId!.Value);
-        Assert.True(resp.Ok());
+        Assert2xx(resp);
     }
 
     [Fact, TestPriority(11)]
@@ -174,11 +208,11 @@ public class QuickstartTest
     [Fact, TestPriority(13)]
     public async Task Test13_Cleanup()
     {
-        await FavApi.RemoveFavoriteAsync(_fileId!.Value);
-        await FileApi.DeleteFilesAsync(
-            new DeleteRequest(documentIds: new List<Guid> { _fileId!.Value, _copyFileId!.Value }));
-        await FolderApi.DeleteFoldersAsync(
-            new DeleteRequest(documentIds: new List<Guid> { _folderId!.Value, _targetFolderId!.Value }));
+        Assert2xx(await FavApi.RemoveFavoriteAsync(_fileId!.Value));
+        Assert2xx(await FileApi.DeleteFilesAsync(
+            new DeleteRequest(documentIds: new List<Guid> { _fileId!.Value, _copyFileId!.Value })));
+        Assert2xx(await FolderApi.DeleteFoldersAsync(
+            new DeleteRequest(documentIds: new List<Guid> { _folderId!.Value, _targetFolderId!.Value })));
     }
 }
 

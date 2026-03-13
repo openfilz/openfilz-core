@@ -5,8 +5,10 @@ Expects the OpenFilz API to be running at OPENFILZ_API_URL (default: http://loca
 In CI, the API is started before this test runs.
 """
 
+import json
 import os
 import tempfile
+import uuid
 
 import pytest
 
@@ -20,11 +22,13 @@ from openfilz_sdk.api import (
     audit_controller_api,
 )
 from openfilz_sdk.models.create_folder_request import CreateFolderRequest
+from openfilz_sdk.models.folder_response import FolderResponse
 from openfilz_sdk.models.rename_request import RenameRequest
 from openfilz_sdk.models.copy_request import CopyRequest
 from openfilz_sdk.models.move_request import MoveRequest
 from openfilz_sdk.models.delete_request import DeleteRequest
 from openfilz_sdk.models.update_metadata_request import UpdateMetadataRequest
+from openfilz_sdk.models.upload_response import UploadResponse
 
 API_URL = os.environ.get("OPENFILZ_API_URL", "http://localhost:18081")
 
@@ -57,9 +61,14 @@ class TestPythonSdkQuickStart:
     copy_file_id = None
 
     def test_01_create_folder(self, apis):
-        folder = apis["folder"].create_folder(
-            CreateFolderRequest(name=f"Py SDK Test {os.getpid()}")
+        # Use _with_http_info because the API returns 201 (Created) but the
+        # generated SDK only maps 200 → FolderResponse, so create_folder()
+        # returns None for 201 responses.
+        resp = apis["folder"].create_folder_with_http_info(
+            CreateFolderRequest(name=f"Py SDK Test {uuid.uuid4().hex[:8]}")
         )
+        assert 200 <= resp.status_code < 300
+        folder = FolderResponse.from_json(resp.raw_data)
         assert folder.id is not None
         assert folder.name is not None
         TestPythonSdkQuickStart.folder_id = folder.id
@@ -72,14 +81,18 @@ class TestPythonSdkQuickStart:
             tmp_path = tmp.name
 
         try:
-            resp = apis["document"].upload_document1(
+            # Use _with_http_info because the API returns 201 (Created) but the
+            # generated SDK only maps 200 → UploadResponse.
+            resp = apis["document"].upload_document1_with_http_info(
                 file=tmp_path,
                 allow_duplicate_file_names=True,
                 parent_folder_id=str(self.folder_id),
             )
-            assert resp.id is not None
-            assert resp.name is not None
-            TestPythonSdkQuickStart.file_id = resp.id
+            assert 200 <= resp.status_code < 300
+            uploaded = UploadResponse.from_json(resp.raw_data)
+            assert uploaded.id is not None
+            assert uploaded.name is not None
+            TestPythonSdkQuickStart.file_id = uploaded.id
         finally:
             os.unlink(tmp_path)
 
@@ -113,9 +126,10 @@ class TestPythonSdkQuickStart:
         assert result.name == "py-test-renamed.txt"
 
     def test_08_copy_file(self, apis):
-        target = apis["folder"].create_folder(
-            CreateFolderRequest(name=f"Py SDK Target {os.getpid()}")
+        resp = apis["folder"].create_folder_with_http_info(
+            CreateFolderRequest(name=f"Py SDK Target {uuid.uuid4().hex[:8]}")
         )
+        target = FolderResponse.from_json(resp.raw_data)
         TestPythonSdkQuickStart.target_folder_id = target.id
 
         copies = apis["file"].copy_files(
@@ -148,8 +162,15 @@ class TestPythonSdkQuickStart:
         stats = apis["dashboard"].get_dashboard_statistics()
         assert stats.total_files > 0
 
-    def test_12_audit_trail(self, apis):
-        trail = apis["audit"].get_audit_trail(self.file_id, sort="DESC")
+    def test_12_audit_trail(self, apis, api_client):
+        # Use _without_preload_content because the generated
+        # AuditLogDetailsOneOf model has a self-referential discriminator
+        # bug that causes infinite recursion during deserialization.
+        resp = apis["audit"].get_audit_trail_without_preload_content(
+            self.file_id, sort="DESC"
+        )
+        assert 200 <= resp.status < 300
+        trail = json.loads(resp.data)
         assert len(trail) > 0
 
     def test_13_cleanup(self, apis):
