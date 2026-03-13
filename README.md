@@ -13,6 +13,8 @@ OpenFilz is a modern, reactive document management API designed for scalability,
 
 **[Try the live demo](https://app.openfilz.org/)** | **[Swagger API Documentation](https://api.openfilz.org/swagger-ui/index.html)**
 
+**Quick links:** [Features](#features) | [SDKs](#sdks--integrate-in-minutes) | [Architecture](#architecture) | [Deployment](#deployment) | [Building](#building-and-running)
+
 ---
 
 ## Related Components
@@ -175,6 +177,13 @@ OpenFilz provides **5 official SDKs** auto-generated from the OpenAPI specificat
 <td align="center"><sub>Node.js 18+</sub></td>
 <td align="center"><sub>Python 3.9+</sub></td>
 <td align="center"><sub>.NET 8.0+</sub></td>
+</tr>
+<tr>
+<td align="center"><a href="https://central.sonatype.com/artifact/org.openfilz/openfilz-sdk-java"><img src="https://img.shields.io/maven-central/v/org.openfilz/openfilz-sdk-java?label=Maven%20Central" alt="Maven Central"/></a></td>
+<td align="center"><a href="https://central.sonatype.com/artifact/org.openfilz/openfilz-sdk-java-reactive"><img src="https://img.shields.io/maven-central/v/org.openfilz/openfilz-sdk-java-reactive?label=Maven%20Central" alt="Maven Central"/></a></td>
+<td align="center"><a href="https://www.npmjs.com/package/@openfilz-sdk/typescript"><img src="https://img.shields.io/npm/v/@openfilz-sdk/typescript?label=npm" alt="npm"/></a></td>
+<td align="center"><a href="https://pypi.org/project/openfilz-sdk-python/"><img src="https://img.shields.io/pypi/v/openfilz-sdk-python?label=PyPI" alt="PyPI"/></a></td>
+<td align="center"><a href="https://www.nuget.org/packages/OpenFilz.Sdk"><img src="https://img.shields.io/nuget/v/OpenFilz.Sdk?label=NuGet" alt="NuGet"/></a></td>
 </tr>
 </table>
 
