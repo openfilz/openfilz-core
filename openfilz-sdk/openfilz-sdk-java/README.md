@@ -17,7 +17,7 @@ Two Java SDKs are available. They expose the **same API operations** but differ 
 | **Thread model** | Blocks the calling thread until response arrives | Never blocks; uses event loop |
 | **Error handling** | try/catch `ApiException` | `.onErrorResume()`, `.doOnError()` |
 | **Best for** | Android, plain Java, Spring MVC, scripts, CLI tools | Spring WebFlux, high-concurrency microservices |
-| **Min Java** | 17 | 17 |
+| **Min Java** | 25 | 25 |
 | **Spring required?** | No | Yes (Spring Boot 3+ / WebFlux 6+) |
 
 **Quick rule:** If your project already uses Spring WebFlux or Project Reactor, pick `openfilz-sdk-java-reactive`. Otherwise, pick this one.
@@ -350,6 +350,6 @@ List<FolderElementInfo> items = graphQlClient.document(query)
 
 ## Requirements
 
-- Java 17+
+- Java 25+
 - OkHttp 4.12+
 - Gson 2.11+
