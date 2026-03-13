@@ -31,7 +31,7 @@
         </developer>
     </developers>
 
-    <!-- Source Control Information, Github Stuff -->
+    <!-- Source Control Information, Github Stuff  -->
     <scm>
         <!-- Should be format scm:git:git or scm:git:https -->
         <connection>scm:git:https://github.com/openfilz/openfilz-core.git</connection>
