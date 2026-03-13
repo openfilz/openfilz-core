@@ -3,6 +3,8 @@ package org.openfilz.dms.dto.audit;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import io.swagger.v3.oas.annotations.media.DiscriminatorMapping;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = AuditLogDetails.DISCRIMINATOR)
@@ -19,6 +21,20 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
         @JsonSubTypes.Type(value = UploadAudit.class, name = AuditLogDetails.UPLOAD)
 
 })
+@Schema(
+        discriminatorProperty = AuditLogDetails.DISCRIMINATOR,
+        discriminatorMapping = {
+                @DiscriminatorMapping(value = AuditLogDetails.COPY, schema = CopyAudit.class),
+                @DiscriminatorMapping(value = AuditLogDetails.CREATE_FOLDER, schema = CreateFolderAudit.class),
+                @DiscriminatorMapping(value = AuditLogDetails.DELETE, schema = DeleteAudit.class),
+                @DiscriminatorMapping(value = AuditLogDetails.DELETE_METADATA, schema = DeleteMetadataAudit.class),
+                @DiscriminatorMapping(value = AuditLogDetails.MOVE, schema = MoveAudit.class),
+                @DiscriminatorMapping(value = AuditLogDetails.RENAME, schema = RenameAudit.class),
+                @DiscriminatorMapping(value = AuditLogDetails.REPLACE, schema = ReplaceAudit.class),
+                @DiscriminatorMapping(value = AuditLogDetails.UPDATE_METADATA, schema = UpdateMetadataAudit.class),
+                @DiscriminatorMapping(value = AuditLogDetails.UPLOAD, schema = UploadAudit.class)
+        }
+)
 public abstract class AuditLogDetails implements IAuditLogDetails {
 
     public static final String DISCRIMINATOR = "type";

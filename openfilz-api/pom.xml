@@ -383,6 +383,9 @@
                             <goal>repackage</goal>
                         </goals>
                         <phase>post-integration-test</phase>
+                        <configuration>
+                            <classifier>exec</classifier>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>

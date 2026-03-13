@@ -1,0 +1,3 @@
+pytest>=7.0
+# The SDK is installed from the local generated build
+# pip install ../target/generated-sdk/python/

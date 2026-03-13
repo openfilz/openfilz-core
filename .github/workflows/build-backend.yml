@@ -73,6 +73,77 @@ jobs:
       - name: Build with Maven
         run: mvn -Dmaven.wagon.http.retryHandler.count=3 -B clean install --file pom.xml
 
+      # ──── Non-Java SDK Sample Tests ────────────────────────────────
+      - name: Setup Node.js for TypeScript SDK tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Python for Python SDK tests
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Setup .NET for C# SDK tests
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Start PostgreSQL for SDK sample tests
+        run: |
+          docker run -d --name sdk-test-pg -p 15432:5432 \
+            -e POSTGRES_DB=sdk_test_db -e POSTGRES_USER=sdk_user \
+            -e POSTGRES_PASSWORD=sdk_pass postgres:18.1
+          until docker exec sdk-test-pg pg_isready -U sdk_user; do sleep 1; done
+
+      - name: Start OpenFilz API for SDK sample tests
+        run: |
+          java -jar openfilz-api/target/openfilz-api-*-exec.jar \
+            --server.port=18081 \
+            --spring.r2dbc.url=r2dbc:postgresql://localhost:15432/sdk_test_db \
+            --spring.r2dbc.username=sdk_user \
+            --spring.r2dbc.password=sdk_pass \
+            --spring.flyway.url=jdbc:postgresql://localhost:15432/sdk_test_db \
+            --spring.flyway.user=sdk_user \
+            --spring.flyway.password=sdk_pass \
+            --openfilz.security.no-auth=true \
+            --storage.type=local \
+            --storage.local.base-path=/tmp/sdk-test-storage &
+          echo $! > /tmp/openfilz-api.pid
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:18081/actuator/health > /dev/null 2>&1; then
+              echo "API is ready"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Test TypeScript SDK samples
+        run: |
+          cd openfilz-sdk/openfilz-sdk-typescript/target/generated-sdk/typescript
+          npm install
+          cd ../../../samples
+          npm install
+          OPENFILZ_API_URL=http://localhost:18081 npm test
+
+      - name: Test Python SDK samples
+        run: |
+          cd openfilz-sdk/openfilz-sdk-python/samples
+          pip install -r requirements.txt
+          pip install ../target/generated-sdk/python/
+          OPENFILZ_API_URL=http://localhost:18081 pytest -v
+
+      - name: Test C# SDK samples
+        run: |
+          cd openfilz-sdk/openfilz-sdk-csharp/samples
+          OPENFILZ_API_URL=http://localhost:18081 dotnet test --verbosity normal
+
+      - name: Cleanup SDK test infrastructure
+        if: always()
+        run: |
+          if [ -f /tmp/openfilz-api.pid ]; then kill $(cat /tmp/openfilz-api.pid) 2>/dev/null || true; fi
+          docker rm -f sdk-test-pg 2>/dev/null || true
+
       - name: Generate JaCoCo Badge
         id: jacoco-badge
         uses: cicirello/jacoco-badge-generator@v2
