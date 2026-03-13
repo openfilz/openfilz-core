@@ -49,7 +49,7 @@ describe('TypeScript SDK Quick Start', () => {
       name: 'TS SDK Test ' + Date.now(),
     });
     expect(resp.data.id).toBeDefined();
-    folderId = resp.data.id;
+    folderId = resp.data.id!;
   });
 
   it('should upload a file', async () => {
@@ -106,7 +106,7 @@ describe('TypeScript SDK Quick Start', () => {
     const folderResp = await folderApi.createFolder({
       name: 'TS SDK Target ' + Date.now(),
     });
-    targetFolderId = folderResp.data.id;
+    targetFolderId = folderResp.data.id!;
 
     const resp = await fileApi.copyFiles({
       documentIds: [fileId],
