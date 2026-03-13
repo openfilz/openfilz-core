@@ -141,6 +141,9 @@
                             <groupId>org.openfilz</groupId>
                             <artifactId>openfilz-sdk-java</artifactId>
                             <artifactVersion>${project.version}</artifactVersion>
+                            <inlineSchemaNameMapping>
+                                <AuditLog_details>AuditLogDetailsOneOf</AuditLog_details>
+                            </inlineSchemaNameMapping>
                             <configOptions>
                                 <library>okhttp-gson</library>
                                 <dateLibrary>java8</dateLibrary>
