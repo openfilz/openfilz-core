@@ -151,5 +151,37 @@
             </div>
         </form>
 
+        <#-- Auto-skip password setup for IdP-authenticated users.
+             When a user logs in via an external IdP (Google, GitHub, Microsoft), they don't need
+             a local password. The login page sets a sessionStorage flag when an IdP button is clicked.
+             If that flag is present, we generate a random strong password and auto-submit the form.
+             This script MUST be inside the "form" section so the form elements exist in the DOM. -->
+        <script>
+            (function() {
+                try {
+                    if (sessionStorage.getItem('openfilz_idp_login') === 'true') {
+                        sessionStorage.removeItem('openfilz_idp_login');
+                        var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&*';
+                        var pwd = '';
+                        var arr = new Uint8Array(32);
+                        crypto.getRandomValues(arr);
+                        for (var i = 0; i < 32; i++) {
+                            pwd += chars.charAt(arr[i] % chars.length);
+                        }
+                        var newPwd = document.getElementById('password-new');
+                        var confirmPwd = document.getElementById('password-confirm');
+                        var form = document.getElementById('kc-passwd-update-form');
+                        if (newPwd && confirmPwd && form) {
+                            newPwd.value = pwd;
+                            confirmPwd.value = pwd;
+                            form.submit();
+                        }
+                    }
+                } catch (e) {
+                    // sessionStorage or crypto not available, fall back to normal flow
+                }
+            })();
+        </script>
+
     </#if>
 </@layout.registrationLayout>

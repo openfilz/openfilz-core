@@ -28,6 +28,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.time.OffsetDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -301,14 +302,18 @@ public class AuditChainIT extends TestContainersBaseConfig {
 
         // Re-insert genesis so subsequent tests work
         String genesisHash = auditChainService.computeGenesisHash();
+        OffsetDateTime genesisTimestamp = OffsetDateTime.now();
+        String genesisEntryHash = auditChainService.computeHash(
+                genesisTimestamp, "SYSTEM", CHAIN_GENESIS, null, null, null, genesisHash);
         databaseClient.sql("DROP TRIGGER IF EXISTS audit_log_immutable ON audit_logs").then().block();
         // Temporarily remove trigger to insert genesis
         databaseClient.sql("""
                 INSERT INTO audit_logs (timestamp, user_principal, action, resource_type, resource_id, previous_hash, hash)
-                VALUES (NOW(), 'SYSTEM', 'CHAIN_GENESIS', NULL, NULL, :ph, :h)
+                VALUES (:ts, 'SYSTEM', 'CHAIN_GENESIS', NULL, NULL, :ph, :h)
                 """)
+                .bind("ts", genesisTimestamp)
                 .bind("ph", genesisHash)
-                .bind("h", auditChainService.computeHash(null, null, null, null, null, null, null))
+                .bind("h", genesisEntryHash)
                 .then().block();
         // Recreate trigger
         databaseClient.sql("""

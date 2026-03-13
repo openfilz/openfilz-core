@@ -1,3 +1,7 @@
+<p align="center">
+  <img src=".github/badges/openfilz-theme-standard.svg" alt="OpenFilz Logo" width="120"/>
+</p>
+
 # OpenFilz Document Management System
 
 [![Build Backend with Maven](https://github.com/openfilz/openfilz-core/actions/workflows/build-backend.yml/badge.svg)](https://github.com/openfilz/openfilz-core/actions/workflows/build-backend.yml)
@@ -13,7 +17,6 @@ OpenFilz is a modern, reactive document management API designed for scalability,
 
 ## Related Components
 
-- [API Gateway](./openfilz-gateway/README.md) - Spring Cloud Gateway handling JWT authentication, rate limiting, and request routing.
 - [OpenFilz Web](https://github.com/openfilz/openfilz-web) - Angular web interface for managing documents through a Google Drive-like GUI.
 
 ---
@@ -72,7 +75,7 @@ OpenFilz is a modern, reactive document management API designed for scalability,
 - **OIDC Resource Server** - Validates JWT tokens for every request. Native Keycloak integration with pre-built configurations.
 - **Role-Based Authorization** - Built-in roles: `READER`, `CONTRIBUTOR`, `CLEANER`, `AUDITOR`. Roles extracted from JWT claims.
 - **Pluggable Authorization** - Default role-based model with support for fully custom authorization implementations.
-- **Defense in Depth** - Gateway validates JWT first, then the API re-validates, ensuring security even within the internal network.
+- **Defense in Depth** - Multiple security layers ensure protection even within the internal network.
 - **Security Toggle** - Disable security for development and testing via `openfilz.security.no-auth`.
 
 ### Compliance & Auditing
@@ -141,24 +144,21 @@ OpenFilz separates the logical folder hierarchy from physical file storage:
 ```mermaid
 sequenceDiagram
     participant C as Client
-    participant GW as Spring Cloud Gateway
     participant KC as Keycloak
     participant API as Document Mgmt API
     participant S as Storage (S3/FS)
     participant DB as PostgreSQL DB
 
-    C->>+GW: Request with JWT
-    GW->>+KC: Validate JWT
-    KC-->>-GW: Token OK
-    GW->>+API: Forward Request
+    C->>+API: Request with JWT
+    API->>+KC: Validate JWT
+    KC-->>-API: Token OK
     API->>S: 1. Perform Storage Action
     S-->>API: Success
     API->>DB: 2. Update Metadata (JSONB)
     DB-->>API: Success
     API->>DB: 3. Write Audit Trail
     DB-->>API: Success
-    API-->>-GW: Response
-    GW-->>-C: Final Response
+    API-->>-C: Response
 ```
 
 ---
@@ -237,9 +237,6 @@ mvn clean install -pl openfilz-api -am
 
 # Run API (port 8081)
 cd openfilz-api && mvn spring-boot:run
-
-# Run Gateway (port 8888, optional)
-cd openfilz-gateway && mvn spring-boot:run
 ```
 
 ---
@@ -258,7 +255,6 @@ openfilz-core/
 │   │   └── config/            # Spring configurations
 │   └── src/main/resources/
 │       └── graphql/           # GraphQL schema
-├── openfilz-gateway/          # Spring Cloud Gateway
 └── deploy/
     ├── docker-compose/        # Docker Compose files & Makefile
     │   └── dokploy/           # Dokploy deployment

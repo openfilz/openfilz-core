@@ -72,11 +72,13 @@
         <testcontainers-keycloak.version>4.1.0</testcontainers-keycloak.version>
         <opensearch-testcontainers.version>4.0.0</opensearch-testcontainers.version>
         <maven.javadoc.failOnError>false</maven.javadoc.failOnError>
+        <openapi-generator.version>7.20.0</openapi-generator.version>
+        <exec-maven-plugin.version>3.6.3</exec-maven-plugin.version>
     </properties>
 
     <modules>
         <module>openfilz-api</module>
-        <module>openfilz-gateway</module>
+        <module>openfilz-sdk</module>
     </modules>
 
     <dependencyManagement>
@@ -335,6 +337,16 @@
                     </plugin>
                 </plugins>
             </build>
+        </profile>
+        <profile>
+            <id>publishSdk</id>
+            <properties>
+                <!-- Skip tests/ITs during publishing — already validated by 'mvn clean install' -->
+                <maven.test.skip>true</maven.test.skip>
+                <!-- npm dist-tag: use 'snapshot' for SNAPSHOT versions, override with
+                     -Dnpm.publish.tag=latest for release versions -->
+                <npm.publish.tag>snapshot</npm.publish.tag>
+            </properties>
         </profile>
         <profile>
             <id>changeLog</id>

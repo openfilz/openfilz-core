@@ -187,6 +187,7 @@ class LocalFullTextServiceImplTest {
                 .id(UUID.randomUUID())
                 .type(DocumentType.FILE)
                 .name("document.pdf")
+                .contentType("application/pdf")
                 .size(1024L)
                 .storagePath("storage/doc.pdf")
                 .build();
@@ -200,6 +201,107 @@ class LocalFullTextServiceImplTest {
         service.indexDocument(doc);
 
         verify(storageService, timeout(2000)).loadFile("storage/doc.pdf");
+        verify(tikaService, timeout(2000)).processResource(any(), any());
+    }
+
+    @Test
+    void indexDocument_withNonExtractableContentType_skipsTextExtraction() {
+        Document doc = Document.builder()
+                .id(UUID.randomUUID())
+                .type(DocumentType.FILE)
+                .name("logo.svg")
+                .contentType("image/svg+xml")
+                .size(2048L)
+                .storagePath("storage/logo.svg")
+                .build();
+
+        when(indexService.indexDocMetadataMono(doc)).thenReturn(Mono.empty());
+
+        service.indexDocument(doc);
+
+        verify(indexService, timeout(2000)).indexDocMetadataMono(doc);
+        verifyNoInteractions(tikaService);
+        verifyNoInteractions(storageService);
+    }
+
+    @Test
+    void indexDocument_withImageContentType_skipsTextExtraction() {
+        Document doc = Document.builder()
+                .id(UUID.randomUUID())
+                .type(DocumentType.FILE)
+                .name("photo.jpg")
+                .contentType("image/jpeg")
+                .size(5000L)
+                .storagePath("storage/photo.jpg")
+                .build();
+
+        when(indexService.indexDocMetadataMono(doc)).thenReturn(Mono.empty());
+
+        service.indexDocument(doc);
+
+        verify(indexService, timeout(2000)).indexDocMetadataMono(doc);
+        verifyNoInteractions(tikaService);
+    }
+
+    @Test
+    void indexDocument_withNullContentType_skipsTextExtraction() {
+        Document doc = Document.builder()
+                .id(UUID.randomUUID())
+                .type(DocumentType.FILE)
+                .name("unknown.bin")
+                .size(100L)
+                .storagePath("storage/unknown.bin")
+                .build();
+
+        when(indexService.indexDocMetadataMono(doc)).thenReturn(Mono.empty());
+
+        service.indexDocument(doc);
+
+        verify(indexService, timeout(2000)).indexDocMetadataMono(doc);
+        verifyNoInteractions(tikaService);
+    }
+
+    @Test
+    void indexDocument_withDocxContentType_callsFullTextIndexing() {
+        Document doc = Document.builder()
+                .id(UUID.randomUUID())
+                .type(DocumentType.FILE)
+                .name("report.docx")
+                .contentType("application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                .size(3000L)
+                .storagePath("storage/report.docx")
+                .build();
+
+        doReturn(Mono.just(new ByteArrayResource("content".getBytes())))
+                .when(storageService).loadFile("storage/report.docx");
+        when(indexService.indexDocMetadataMono(doc)).thenReturn(Mono.empty());
+        when(tikaService.processResource(any(), any())).thenReturn(Flux.empty());
+        when(indexService.indexDocumentStream(any(), eq(doc.getId()))).thenReturn(Mono.empty());
+
+        service.indexDocument(doc);
+
+        verify(tikaService, timeout(2000)).processResource(any(), any());
+    }
+
+    @Test
+    void indexDocument_withPlainTextContentType_callsFullTextIndexing() {
+        Document doc = Document.builder()
+                .id(UUID.randomUUID())
+                .type(DocumentType.FILE)
+                .name("notes.txt")
+                .contentType("text/plain")
+                .size(500L)
+                .storagePath("storage/notes.txt")
+                .build();
+
+        doReturn(Mono.just(new ByteArrayResource("content".getBytes())))
+                .when(storageService).loadFile("storage/notes.txt");
+        when(indexService.indexDocMetadataMono(doc)).thenReturn(Mono.empty());
+        when(tikaService.processResource(any(), any())).thenReturn(Flux.empty());
+        when(indexService.indexDocumentStream(any(), eq(doc.getId()))).thenReturn(Mono.empty());
+
+        service.indexDocument(doc);
+
         verify(tikaService, timeout(2000)).processResource(any(), any());
     }
 

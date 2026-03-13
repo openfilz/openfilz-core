@@ -200,13 +200,15 @@ public class ThumbnailProperties {
     @Data
     public static class Storage {
         /**
-         * If true, use the same storage type as main document storage.
-         * If false, use separate configuration below.
+         * If true, the storage type is determined by {@code storage.type} (the main document storage type),
+         * but thumbnail-specific paths/buckets are still used ({@code local.base-path} or {@code minio.bucket-name}).
+         * If false, both the storage type and configuration come from this thumbnail storage section.
          */
         private boolean useMainStorage = true;
 
         /**
-         * Storage type when useMainStorage is false.
+         * Storage type for thumbnails. Only used when useMainStorage is false.
+         * When useMainStorage is true, this property is ignored and {@code storage.type} is used instead.
          * Values: local, minio
          */
         private String type = "local";
@@ -252,7 +254,8 @@ public class ThumbnailProperties {
 
             /**
              * Bucket name for thumbnails.
-             * If not set, defaults to main bucket with /thumbnails prefix.
+             * If not set, defaults to "dms-thumbnails".
+             * Used in both useMainStorage=true and useMainStorage=false modes.
              */
             private String bucketName;
         }

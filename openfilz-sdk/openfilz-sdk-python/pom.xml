@@ -1,0 +1,188 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.openfilz</groupId>
+        <artifactId>openfilz-sdk</artifactId>
+        <version>1.1.5-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>openfilz-sdk-python</artifactId>
+    <packaging>pom</packaging>
+    <name>OpenFilz Python SDK</name>
+    <description>Python SDK for OpenFilz REST API</description>
+
+    <dependencies>
+        <!-- Reactor dependency for spec artifact ordering -->
+        <dependency>
+            <groupId>org.openfilz</groupId>
+            <artifactId>openfilz-api</artifactId>
+            <version>${project.version}</version>
+            <type>json</type>
+            <classifier>openapi</classifier>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Convert Maven version to PEP 440 format (e.g. 1.1.5-SNAPSHOT → 1.1.5.dev0) -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>3.6.0</version>
+                <executions>
+                    <execution>
+                        <id>normalize-python-version</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>regex-property</goal>
+                        </goals>
+                        <configuration>
+                            <name>python.package.version</name>
+                            <value>${project.version}</value>
+                            <regex>-SNAPSHOT</regex>
+                            <replacement>.dev0</replacement>
+                            <failIfNoMatch>false</failIfNoMatch>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Copy OpenAPI spec from openfilz-api artifact -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>unpack-openapi-spec</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>copy</goal>
+                        </goals>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>org.openfilz</groupId>
+                                    <artifactId>openfilz-api</artifactId>
+                                    <version>${project.version}</version>
+                                    <type>json</type>
+                                    <classifier>openapi</classifier>
+                                    <outputDirectory>${project.build.directory}/openapi</outputDirectory>
+                                    <destFileName>openfilz-api.json</destFileName>
+                                </artifactItem>
+                            </artifactItems>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Generate Python SDK from OpenAPI spec -->
+            <plugin>
+                <groupId>org.openapitools</groupId>
+                <artifactId>openapi-generator-maven-plugin</artifactId>
+                <version>${openapi-generator.version}</version>
+                <executions>
+                    <execution>
+                        <id>generate-python-sdk</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <inputSpec>${openapi.spec.uri}</inputSpec>
+                            <generatorName>python</generatorName>
+                            <output>${project.build.directory}/generated-sdk/python</output>
+                            <configOptions>
+                                <packageName>openfilz_sdk</packageName>
+                                <projectName>openfilz-sdk-python</projectName>
+                                <packageVersion>${python.package.version}</packageVersion>
+                            </configOptions>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Copy GraphQL schemas into generated SDK directory -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>copy-graphql-schemas</id>
+                        <phase>process-sources</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/generated-sdk/python/openfilz_sdk/graphql</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.basedir}/../../openfilz-api/src/main/resources/graphql</directory>
+                                    <includes>
+                                        <include>**/*.graphqls</include>
+                                    </includes>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <profile>
+            <id>publishSdk</id>
+            <properties>
+                <maven.deploy.skip>true</maven.deploy.skip>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>${exec-maven-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>python-build</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>python</executable>
+                                    <workingDirectory>${project.build.directory}/generated-sdk/python</workingDirectory>
+                                    <arguments>
+                                        <argument>-m</argument>
+                                        <argument>build</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>twine-upload</id>
+                                <phase>deploy</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>python</executable>
+                                    <workingDirectory>${project.build.directory}/generated-sdk/python</workingDirectory>
+                                    <arguments>
+                                        <argument>-m</argument>
+                                        <argument>twine</argument>
+                                        <argument>upload</argument>
+                                        <argument>--skip-existing</argument>
+                                        <argument>dist/*</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
+</project>

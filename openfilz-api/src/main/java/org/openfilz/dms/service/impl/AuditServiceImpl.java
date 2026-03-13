@@ -146,6 +146,6 @@ public class AuditServiceImpl implements AuditService {
         initializeChainIfNeeded()
                 .doOnSuccess(_ -> log.info("Audit chain initialization check completed"))
                 .doOnError(e -> log.error("Failed to initialize audit chain: {}", e.getMessage()))
-                .subscribe();
+                .block();
     }
 }

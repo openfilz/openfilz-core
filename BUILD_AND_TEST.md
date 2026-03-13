@@ -18,12 +18,7 @@ The project is a multi-module Maven project. To build all modules, run the follo
 mvn clean install
 ```
 
-This will build both the `openfilz-api` and `openfilz-gateway` modules.
-
-**Note:** The `openfilz-gateway` is optional. If you do not intend to use the gateway, you can build only the API module by running the following command from the root directory:
-```bash
-mvn clean install -pl openfilz-api -am
-```
+This will build the project modules.
 
 ### Generating the Docker Image
 
@@ -61,16 +56,9 @@ The `openfilz-api` module requires the following configuration:
 *   **Storage**: The storage can be configured to use either the local filesystem or MinIO. For local testing, you can use the local filesystem by setting `storage.type` to `local`.
 *   **Keycloak** (optional): You can enable or disable the authentication by setting the value `(true|false)` to the parameter `openfilz.security.no-auth` (in `application.yml`). The Keycloak integration is configured in `application.yml`. For integration tests, Keycloak is managed by Testcontainers and configured via `realm-export.json` in `src/test/resources/keycloak`.
 
-#### `openfilz-gateway` (Optional)
-
-The `openfilz-gateway` module is optional and provides a single entry point to the application. It requires the following configuration:
-
-*   **Routes**: The gateway is configured to route requests to the `openfilz-api` service. The routes are defined in `application.yml`.
-*   **Keycloak**: The Keycloak integration is configured in `application.yml`. You will need to provide the Keycloak server URL, realm, and client credentials.
-
 ### 3. Run the Application
 
-Once the dependent services are running and the application is configured, you can run the `openfilz-api`. Running the `openfilz-gateway` is optional.
+Once the dependent services are running and the application is configured, you can run the `openfilz-api`.
 
 To run the `openfilz-api` module, navigate to the `openfilz-api` directory and run the following command:
 
@@ -78,17 +66,9 @@ To run the `openfilz-api` module, navigate to the `openfilz-api` directory and r
 mvn spring-boot:run
 ```
 
-To run the `openfilz-gateway` module (optional), navigate to the `openfilz-gateway` directory and run the following command:
-
-```bash
-mvn spring-boot:run
-```
-
 ### 4. Accessing the Application
 
-If you are running the `openfilz-gateway`, it will be available on port `8888`. You can access the API documentation through the gateway at `http://localhost:8888/dms-api/swagger-ui.html`.
-
-If you are not using the gateway, you can access the `openfilz-api` service directly on port `8081`. The API documentation will be available at `http://localhost:8081/swagger-ui.html`.
+The `openfilz-api` service is available on port `8081`. The API documentation is available at `http://localhost:8081/swagger-ui.html`.
 
 ### 5. Running Tests
 

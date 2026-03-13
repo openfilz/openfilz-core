@@ -6,7 +6,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.exception.StorageException;
 import org.openfilz.dms.service.StorageService;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.core.io.PathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.buffer.DataBuffer;
@@ -26,7 +27,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 @Service
-@ConditionalOnProperty(name = "storage.type", havingValue = "local")
+@Lazy
+@Qualifier("local")
 public class FileSystemStorageService implements StorageService {
 
     @Getter

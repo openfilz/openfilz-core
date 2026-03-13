@@ -736,3 +736,37 @@ html {
     all: unset !important;
     display: block !important;
 }
+
+/* ---------- Invited User Login ---------- */
+.of-invited-email-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 16px;
+    margin-bottom: 20px;
+    background-color: var(--of-bg-secondary);
+    border: 1px solid var(--of-border-color);
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--of-text-primary);
+}
+
+.of-invited-hint {
+    font-size: 13px;
+    color: var(--of-text-secondary);
+    text-align: center;
+    margin-bottom: 12px;
+    line-height: 1.5;
+}
+
+.of-social-btn--recommended {
+    border: 2px solid var(--of-brand-primary) !important;
+    box-shadow: 0 0 0 1px var(--of-brand-primary);
+}
+
+.of-link--prominent {
+    font-weight: 600;
+    color: var(--of-brand-primary);
+}

@@ -30,7 +30,7 @@ services:
       # Public URL for Keycloak (used as frontendUrl in realm import)
       KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8180}
       # Client root URL for openfilz-web (used in realm import for redirectUris)
-      KEYCLOAK_CLIENT_ROOT_URL: ${KEYCLOAK_CLIENT_ROOT_URL:-http://localhost:4200}
+      OPENFILZ_WEB_ROOT_URL: ${OPENFILZ_WEB_ROOT_URL:-http://localhost:4200}
       # Default roles assigned to new users (used in realm import)
       # Up to 4 role slots; set unused slots to an already-used role (duplicates are ignored)
       KEYCLOAK_DEFAULT_ROLE_1: ${KEYCLOAK_DEFAULT_ROLE_1:-READER}

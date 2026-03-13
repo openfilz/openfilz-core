@@ -54,14 +54,14 @@ storage:
 openapi:
   service:
     title: openfilz-api
-    url: ${API_ROOT_URL:http://localhost:8081/} # put http://localhost:8081/ for standalone usage & http://localhost:8888/dms-api if the openfilz-gateway is used
+    url: ${API_ROOT_URL:http://localhost:8081/}
     version: 1.0.0
 
 springdoc:
   api-docs:
-    path: /v3/api-docs # put /v3/api-docs for standalone usage & /dms-api/v3/api-docs if the openfilz-gateway is used
+    path: /v3/api-docs
   swagger-ui:
-    path: /swagger-ui.html # put /swagger-ui.html for standalone usage & /dms-api/swagger-ui.html if the openfilz-gateway is used
+    path: /swagger-ui.html
 
 # Logging for auditing (can be more sophisticated)
 logging:
@@ -157,8 +157,8 @@ openfilz:
       url: ${GOTENBERG_URL:http://localhost:8083}  # Gotenberg service URL (for PDFs and Office docs)
       timeout-seconds: 60  # Timeout for document conversion
     storage:
-      use-main-storage: true  # Use same storage as documents (storage.type)
-      type: local  # Override storage type for thumbnails (local or minio)
+      use-main-storage: true  # true: storage type follows storage.type; false: uses type below
+      type: local  # Storage type for thumbnails when use-main-storage=false (local or minio)
       local:
         base-path: ${THUMBNAIL_STORAGE_PATH:/tmp/dms-thumbnails}
       minio:
