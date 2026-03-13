@@ -129,37 +129,37 @@ Full OpenAPI documentation available at `/swagger-ui.html`.
 
 ## SDKs — Integrate in Minutes
 
-OpenFilz provides **5 official SDKs** auto-generated from the OpenAPI specification, so every SDK stays in sync with the API. Pick your language and start building immediately.
+OpenFilz provides **5 official SDKs** auto-generated from the OpenAPI specification, so every SDK stays in sync with the API. Pick your language and start building immediately. See the [SDK overview](openfilz-sdk/README.md) for build, publishing, and CI details.
 
 <table>
 <tr>
 <td align="center" width="20%">
 
-**Java**<br/>
+**[Java](openfilz-sdk/openfilz-sdk-java/README.md)**<br/>
 <sub>Blocking</sub>
 
 </td>
 <td align="center" width="20%">
 
-**Java Reactive**<br/>
+**[Java Reactive](openfilz-sdk/openfilz-sdk-java-reactive/README.md)**<br/>
 <sub>Non-blocking</sub>
 
 </td>
 <td align="center" width="20%">
 
-**TypeScript**<br/>
+**[TypeScript](openfilz-sdk/openfilz-sdk-typescript/README.md)**<br/>
 <sub>Promise-based</sub>
 
 </td>
 <td align="center" width="20%">
 
-**Python**<br/>
+**[Python](openfilz-sdk/openfilz-sdk-python/README.md)**<br/>
 <sub>Synchronous</sub>
 
 </td>
 <td align="center" width="20%">
 
-**C# / .NET**<br/>
+**[C# / .NET](openfilz-sdk/openfilz-sdk-csharp/README.md)**<br/>
 <sub>Async + DI</sub>
 
 </td>

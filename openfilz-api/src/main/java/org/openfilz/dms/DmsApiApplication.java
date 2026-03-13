@@ -1,4 +1,3 @@
-// com/example/dms/DmsApiApplication.java
 package org.openfilz.dms;
 
 import org.openfilz.dms.config.PoiOoxmlRuntimeHints;

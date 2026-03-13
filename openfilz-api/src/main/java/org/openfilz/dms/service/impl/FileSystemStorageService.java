@@ -1,4 +1,3 @@
-// com/example/dms/service/impl/LocalStorageService.java
 package org.openfilz.dms.service.impl;
 
 import lombok.Getter;

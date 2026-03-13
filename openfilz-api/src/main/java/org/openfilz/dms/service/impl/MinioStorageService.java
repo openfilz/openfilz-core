@@ -1,4 +1,3 @@
-// com/example/dms/service/impl/MinioStorageService.java
 package org.openfilz.dms.service.impl;
 
 import io.minio.*;

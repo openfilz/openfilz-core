@@ -1,4 +1,3 @@
-// com/example/dms/config/OpenApiConfig.java
 package org.openfilz.dms.config;
 
 import io.swagger.v3.oas.models.Components;

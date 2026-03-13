@@ -6,13 +6,13 @@ All SDKs are auto-generated from the OpenAPI specification produced by `openfilz
 
 ## Available SDKs
 
-| Module | Language | Package Registry | Package Name |
-|--------|----------|------------------|--------------|
-| `openfilz-sdk-java` | Java (blocking) | [Maven Central](https://central.sonatype.com/) | `org.openfilz:openfilz-sdk-java` |
-| `openfilz-sdk-java-reactive` | Java (reactive) | [Maven Central](https://central.sonatype.com/) | `org.openfilz:openfilz-sdk-java-reactive` |
-| `openfilz-sdk-typescript` | TypeScript | [npm](https://www.npmjs.com/) | `@openfilz-sdk/typescript` |
-| `openfilz-sdk-python` | Python | [PyPI](https://pypi.org/) | `openfilz-sdk-python` |
-| `openfilz-sdk-csharp` | C# / .NET 8 | [NuGet](https://www.nuget.org/) | `OpenFilz.Sdk` |
+| Module | Language | Package Name | Latest Version |
+|--------|----------|--------------|----------------|
+| `openfilz-sdk-java` | Java (blocking) | [`org.openfilz:openfilz-sdk-java`](https://central.sonatype.com/artifact/org.openfilz/openfilz-sdk-java) | [![Maven Central](https://img.shields.io/maven-central/v/org.openfilz/openfilz-sdk-java?label=Maven%20Central)](https://central.sonatype.com/artifact/org.openfilz/openfilz-sdk-java) |
+| `openfilz-sdk-java-reactive` | Java (reactive) | [`org.openfilz:openfilz-sdk-java-reactive`](https://central.sonatype.com/artifact/org.openfilz/openfilz-sdk-java-reactive) | [![Maven Central](https://img.shields.io/maven-central/v/org.openfilz/openfilz-sdk-java-reactive?label=Maven%20Central)](https://central.sonatype.com/artifact/org.openfilz/openfilz-sdk-java-reactive) |
+| `openfilz-sdk-typescript` | TypeScript | [`@openfilz-sdk/typescript`](https://www.npmjs.com/package/@openfilz-sdk/typescript) | [![npm](https://img.shields.io/npm/v/@openfilz-sdk/typescript?label=npm)](https://www.npmjs.com/package/@openfilz-sdk/typescript) |
+| `openfilz-sdk-python` | Python | [`openfilz-sdk-python`](https://pypi.org/project/openfilz-sdk-python/) | [![PyPI](https://img.shields.io/pypi/v/openfilz-sdk-python?label=PyPI)](https://pypi.org/project/openfilz-sdk-python/) |
+| `openfilz-sdk-csharp` | C# / .NET 8 | [`OpenFilz.Sdk`](https://www.nuget.org/packages/OpenFilz.Sdk) | [![NuGet](https://img.shields.io/nuget/v/OpenFilz.Sdk?label=NuGet)](https://www.nuget.org/packages/OpenFilz.Sdk) |
 
 See each module's own `README.md` for installation and usage examples.
 
