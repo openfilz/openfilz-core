@@ -2,6 +2,22 @@
 
 C# / .NET client library for the OpenFilz Document Management REST API.
 
+## Code Samples
+
+The [`samples/`](samples/) directory contains runnable C# samples:
+
+- **`Quickstart.cs`** — Complete workflow demonstrating all core operations (folder CRUD, file upload/download/rename/move/copy/delete, favorites, metadata, dashboard, audit trail)
+- **`QuickstartTest.cs`** — xUnit integration test that validates the samples against a running API
+
+To run the sample tests locally (requires a running OpenFilz API):
+
+```bash
+cd samples
+OPENFILZ_API_URL=http://localhost:8081 dotnet test
+```
+
+These samples are automatically tested in CI.
+
 ## Installation
 
 ```bash
@@ -16,17 +32,35 @@ Install-Package OpenFilz.Sdk
 
 ## Quick Start
 
+The C# SDK uses the Microsoft Generic Host pattern with dependency injection.
+All API methods return `IXxxApiResponse` wrappers — use `.Ok()` to access the response data.
+
 ### Configuration
 
 ```csharp
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using OpenFilz.Sdk.Api;
 using OpenFilz.Sdk.Client;
+using OpenFilz.Sdk.Extensions;
 
-var config = new Configuration
-{
-    BasePath = "https://your-openfilz-instance.com"
-};
-config.AccessToken = "your-oauth2-access-token";
+var host = Host.CreateDefaultBuilder()
+    .ConfigureApi((context, services, options) =>
+    {
+        // For authenticated instances:
+        // options.AddTokens(new BearerToken("your-oauth2-access-token"));
+
+        options.AddApiHttpClients(client =>
+        {
+            client.BaseAddress = new Uri("https://your-openfilz-instance.com");
+        });
+    })
+    .Build();
+
+// Resolve API instances from the DI container
+var documentApi = host.Services.GetRequiredService<IDocumentControllerApi>();
+var folderApi = host.Services.GetRequiredService<IFolderControllerApi>();
+var fileApi = host.Services.GetRequiredService<IFileControllerApi>();
 ```
 
 ### Upload a Document
@@ -35,18 +69,18 @@ config.AccessToken = "your-oauth2-access-token";
 using OpenFilz.Sdk.Api;
 using OpenFilz.Sdk.Model;
 
-var documentApi = new DocumentControllerApi(config);
+var documentApi = host.Services.GetRequiredService<IDocumentControllerApi>();
 
 using var fileStream = File.OpenRead("/path/to/report.pdf");
 
-UploadResponse response = await documentApi.UploadDocumentAsync(
+var response = await documentApi.UploadDocument1Async(
     file: fileStream,
     parentFolderId: null,           // root folder
-    metadata: null,
     allowDuplicateFileNames: true
 );
+var uploaded = response.Ok()!;
 
-Console.WriteLine($"Uploaded: {response.Id} - {response.Name}");
+Console.WriteLine($"Uploaded: {uploaded.Id} - {uploaded.Name}");
 ```
 
 ### Create a Folder
@@ -55,12 +89,12 @@ Console.WriteLine($"Uploaded: {response.Id} - {response.Name}");
 using OpenFilz.Sdk.Api;
 using OpenFilz.Sdk.Model;
 
-var folderApi = new FolderControllerApi(config);
+var folderApi = host.Services.GetRequiredService<IFolderControllerApi>();
 
-var folder = await folderApi.CreateFolderAsync(new CreateFolderRequest(
-    name: "My Project Documents",
-    parentId: null  // root folder
+var response = await folderApi.CreateFolderAsync(new CreateFolderRequest(
+    name: "My Project Documents"
 ));
+var folder = response.Ok()!;
 
 Console.WriteLine($"Created folder: {folder.Id}");
 ```
@@ -71,13 +105,14 @@ Console.WriteLine($"Created folder: {folder.Id}");
 using OpenFilz.Sdk.Api;
 using OpenFilz.Sdk.Model;
 
-var folderApi = new FolderControllerApi(config);
+var folderApi = host.Services.GetRequiredService<IFolderControllerApi>();
 
-List<FolderElementInfo> contents = await folderApi.ListFolderAsync(
-    folderId: folderId,  // null for root
+var response = await folderApi.ListFolderAsync(
+    folderId: folderId,
     onlyFiles: false,
     onlyFolders: false
 );
+var contents = response.Ok()!;
 
 foreach (var item in contents)
 {
@@ -90,9 +125,10 @@ foreach (var item in contents)
 ```csharp
 using OpenFilz.Sdk.Api;
 
-var documentApi = new DocumentControllerApi(config);
+var documentApi = host.Services.GetRequiredService<IDocumentControllerApi>();
 
-Stream fileStream = await documentApi.DownloadDocumentAsync(documentId);
+var response = await documentApi.DownloadDocumentAsync(documentId);
+Stream fileStream = response.Ok()!;
 
 using var outputFile = File.Create("/desired/path/document.pdf");
 await fileStream.CopyToAsync(outputFile);
@@ -104,7 +140,7 @@ await fileStream.CopyToAsync(outputFile);
 using OpenFilz.Sdk.Api;
 using OpenFilz.Sdk.Model;
 
-var fileApi = new FileControllerApi(config);
+var fileApi = host.Services.GetRequiredService<IFileControllerApi>();
 
 await fileApi.MoveFilesAsync(new MoveRequest(
     documentIds: new List<Guid> { fileId1, fileId2 },
@@ -119,12 +155,13 @@ await fileApi.MoveFilesAsync(new MoveRequest(
 using OpenFilz.Sdk.Api;
 using OpenFilz.Sdk.Model;
 
-var fileApi = new FileControllerApi(config);
+var fileApi = host.Services.GetRequiredService<IFileControllerApi>();
 
-List<CopyResponse> copies = await fileApi.CopyFilesAsync(new CopyRequest(
+var response = await fileApi.CopyFilesAsync(new CopyRequest(
     documentIds: new List<Guid> { fileId },
     targetFolderId: targetFolderId
 ));
+var copies = response.Ok()!;
 
 foreach (var copy in copies)
 {
@@ -138,11 +175,13 @@ foreach (var copy in copies)
 using OpenFilz.Sdk.Api;
 using OpenFilz.Sdk.Model;
 
-var fileApi = new FileControllerApi(config);
+var fileApi = host.Services.GetRequiredService<IFileControllerApi>();
 
-await fileApi.RenameFileAsync(fileId, new RenameRequest(
+var response = await fileApi.RenameFileAsync(fileId, new RenameRequest(
     newName: "renamed-document.pdf"
 ));
+var renamed = response.Ok()!;
+Console.WriteLine($"Renamed to: {renamed.Name}");
 ```
 
 ### Delete Files
@@ -151,7 +190,7 @@ await fileApi.RenameFileAsync(fileId, new RenameRequest(
 using OpenFilz.Sdk.Api;
 using OpenFilz.Sdk.Model;
 
-var fileApi = new FileControllerApi(config);
+var fileApi = host.Services.GetRequiredService<IFileControllerApi>();
 
 await fileApi.DeleteFilesAsync(new DeleteRequest(
     documentIds: new List<Guid> { fileId1, fileId2 }
@@ -163,13 +202,15 @@ await fileApi.DeleteFilesAsync(new DeleteRequest(
 ```csharp
 using OpenFilz.Sdk.Api;
 
-var favApi = new FavoriteControllerApi(config);
+var favApi = host.Services.GetRequiredService<IFavoritesApi>();
 
 // Toggle favorite
-bool isFavorite = await favApi.ToggleFavoriteAsync(documentId);
+var toggleResp = await favApi.ToggleFavoriteAsync(documentId);
+bool isFavorite = toggleResp.Ok()!.Value;
 
 // Check status
-bool status = await favApi.IsFavoriteAsync(documentId);
+var statusResp = await favApi.IsFavoriteAsync(documentId);
+bool status = statusResp.Ok()!.Value;
 ```
 
 ### Get Document Info with Metadata
@@ -178,9 +219,10 @@ bool status = await favApi.IsFavoriteAsync(documentId);
 using OpenFilz.Sdk.Api;
 using OpenFilz.Sdk.Model;
 
-var documentApi = new DocumentControllerApi(config);
+var documentApi = host.Services.GetRequiredService<IDocumentControllerApi>();
 
-DocumentInfo info = await documentApi.GetDocumentInfoAsync(documentId, withMetadata: true);
+var response = await documentApi.GetDocumentInfoAsync(documentId, withMetadata: true);
+var info = response.Ok()!;
 Console.WriteLine($"Name: {info.Name}");
 Console.WriteLine($"Size: {info.Size}");
 Console.WriteLine($"Content-Type: {info.ContentType}");
@@ -193,9 +235,9 @@ Console.WriteLine($"Metadata: {info.Metadata}");
 using OpenFilz.Sdk.Api;
 using OpenFilz.Sdk.Model;
 
-var documentApi = new DocumentControllerApi(config);
+var documentApi = host.Services.GetRequiredService<IDocumentControllerApi>();
 
-await documentApi.UpdateMetadataAsync(documentId, new UpdateMetadataRequest(
+await documentApi.UpdateDocumentMetadataAsync(documentId, new UpdateMetadataRequest(
     metadataToUpdate: new Dictionary<string, object>
     {
         { "project", "Alpha" },
@@ -211,12 +253,12 @@ await documentApi.UpdateMetadataAsync(documentId, new UpdateMetadataRequest(
 using OpenFilz.Sdk.Api;
 using OpenFilz.Sdk.Model;
 
-var dashboardApi = new DashboardControllerApi(config);
+var dashboardApi = host.Services.GetRequiredService<IDashboardApi>();
 
-DashboardStatisticsResponse stats = await dashboardApi.GetStatisticsAsync();
+var response = await dashboardApi.GetDashboardStatisticsAsync();
+var stats = response.Ok()!;
 Console.WriteLine($"Total files: {stats.TotalFiles}");
 Console.WriteLine($"Total folders: {stats.TotalFolders}");
-Console.WriteLine($"Storage used: {stats.TotalStorageUsed} bytes");
 ```
 
 ### Audit Trail
@@ -225,34 +267,15 @@ Console.WriteLine($"Storage used: {stats.TotalStorageUsed} bytes");
 using OpenFilz.Sdk.Api;
 using OpenFilz.Sdk.Model;
 
-var auditApi = new AuditControllerApi(config);
+var auditApi = host.Services.GetRequiredService<IAuditControllerApi>();
 
-List<AuditLog> trail = await auditApi.GetAuditTrailAsync(documentId, sort: "DESC");
+var response = await auditApi.GetAuditTrailAsync(documentId, sort: "DESC");
+var trail = response.Ok()!;
 
 foreach (var entry in trail)
 {
     Console.WriteLine($"{entry.Action} by {entry.Username} at {entry.Timestamp}");
 }
-```
-
-### Recycle Bin (Soft Delete)
-
-```csharp
-using OpenFilz.Sdk.Api;
-using OpenFilz.Sdk.Model;
-
-var recycleBin = new RecycleBinControllerApi(config);
-
-// List deleted items
-List<FolderElementInfo> deleted = await recycleBin.ListDeletedItemsAsync();
-
-// Restore items
-await recycleBin.RestoreItemsAsync(new DeleteRequest(
-    documentIds: new List<Guid> { deletedItemId }
-));
-
-// Empty recycle bin
-await recycleBin.EmptyRecycleBinAsync();
 ```
 
 ## GraphQL Schema
@@ -352,4 +375,4 @@ foreach (var doc in result.Data.searchDocuments.documents)
 ## Requirements
 
 - .NET 8.0+
-- Newtonsoft.Json (included by generated client)
+- Microsoft.Extensions.Hosting (included by generated client)

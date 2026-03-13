@@ -189,7 +189,7 @@ jobs:
           body: ${{ steps.changelog.outputs.changelog }}
           fail_on_unmatched_files: false
           files: |
-            openfilz-api/target/*${{ steps.versions.outputs.releaseVersion }}.jar
+            openfilz-api/target/*${{ steps.versions.outputs.releaseVersion }}-exec.jar
           prerelease: false
           token: ${{ secrets.GITHUB_TOKEN }}
 

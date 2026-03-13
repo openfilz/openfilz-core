@@ -54,6 +54,22 @@ folderApi.listFolder(folderId, false, false)
 implementation 'org.openfilz:openfilz-sdk-java-reactive:1.1.5'
 ```
 
+## Code Samples
+
+The [`samples/`](samples/) directory contains a complete, runnable **QuickStart.java** that demonstrates the full reactive document management workflow using `Mono` and `Flux`:
+
+1. Configure the reactive SDK client
+2. Create folders
+3. Upload, download, rename files (reactive composition with `flatMap`)
+4. Move, copy files between folders
+5. Manage favorites
+6. Update document metadata
+7. Retrieve dashboard statistics
+8. Query the audit trail
+9. Clean up (delete files and folders)
+
+These samples are automatically tested against a running OpenFilz API instance in CI using Testcontainers and `StepVerifier`.
+
 ## Quick Start
 
 ### Configuration
@@ -232,9 +248,9 @@ fileApi.deleteFiles(deleteRequest).subscribe();
 ### Manage Favorites
 
 ```java
-import org.openfilz.sdk.reactive.api.FavoriteControllerApi;
+import org.openfilz.sdk.reactive.api.FavoritesApi;
 
-FavoriteControllerApi favApi = new FavoriteControllerApi(apiClient);
+FavoritesApi favApi = new FavoritesApi(apiClient);
 
 // Toggle favorite
 Mono<Boolean> isFavorite = favApi.toggleFavorite(documentId);
@@ -275,22 +291,21 @@ metadata.setMetadataToUpdate(Map.of(
     "version", 2
 ));
 
-documentApi.updateMetadata(documentId, metadata).subscribe();
+documentApi.updateDocumentMetadata(documentId, metadata).subscribe();
 ```
 
 ### Dashboard Statistics
 
 ```java
-import org.openfilz.sdk.reactive.api.DashboardControllerApi;
+import org.openfilz.sdk.reactive.api.DashboardApi;
 import org.openfilz.sdk.reactive.model.DashboardStatisticsResponse;
 
-DashboardControllerApi dashboardApi = new DashboardControllerApi(apiClient);
+DashboardApi dashboardApi = new DashboardApi(apiClient);
 
-dashboardApi.getStatistics()
+dashboardApi.getDashboardStatistics()
     .subscribe(stats -> {
         System.out.println("Total files: " + stats.getTotalFiles());
         System.out.println("Total folders: " + stats.getTotalFolders());
-        System.out.println("Storage used: " + stats.getTotalStorageUsed() + " bytes");
     });
 ```
 
@@ -308,26 +323,6 @@ trail.subscribe(entry ->
     System.out.println(entry.getAction() + " by " + entry.getUsername()
         + " at " + entry.getTimestamp())
 );
-```
-
-### Recycle Bin (Soft Delete)
-
-```java
-import org.openfilz.sdk.reactive.api.RecycleBinControllerApi;
-import org.openfilz.sdk.reactive.model.DeleteRequest;
-
-RecycleBinControllerApi recycleBin = new RecycleBinControllerApi(apiClient);
-
-// List deleted items
-Flux<FolderElementInfo> deleted = recycleBin.listDeletedItems();
-
-// Restore items
-DeleteRequest restoreRequest = new DeleteRequest();
-restoreRequest.setDocumentIds(List.of(deletedItemId));
-recycleBin.restoreItems(restoreRequest).subscribe();
-
-// Empty recycle bin
-recycleBin.emptyRecycleBin().subscribe();
 ```
 
 ### Using in a Spring WebFlux Controller

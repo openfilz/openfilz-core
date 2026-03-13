@@ -1,0 +1,2 @@
+This is a sample file used by OpenFilz SDK integration tests.
+It demonstrates document upload, download, and management capabilities.

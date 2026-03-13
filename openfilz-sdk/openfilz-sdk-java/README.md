@@ -54,6 +54,22 @@ folderApi.listFolder(folderId, false, false)
 implementation 'org.openfilz:openfilz-sdk-java:1.1.5'
 ```
 
+## Code Samples
+
+The [`samples/`](samples/) directory contains a complete, runnable **QuickStart.java** that demonstrates the full document management workflow:
+
+1. Configure the SDK client
+2. Create folders
+3. Upload, download, rename files
+4. Move, copy files between folders
+5. Manage favorites
+6. Update document metadata
+7. Retrieve dashboard statistics
+8. Query the audit trail
+9. Clean up (delete files and folders)
+
+These samples are automatically tested against a running OpenFilz API instance in CI using Testcontainers.
+
 ## Quick Start
 
 ### Configuration
@@ -204,9 +220,9 @@ fileApi.deleteFiles(deleteRequest);
 ### Manage Favorites
 
 ```java
-import org.openfilz.sdk.api.FavoriteControllerApi;
+import org.openfilz.sdk.api.FavoritesApi;
 
-FavoriteControllerApi favApi = new FavoriteControllerApi(client);
+FavoritesApi favApi = new FavoritesApi(client);
 
 // Toggle favorite
 boolean isFavorite = favApi.toggleFavorite(documentId);
@@ -245,21 +261,20 @@ metadata.setMetadataToUpdate(Map.of(
     "version", 2
 ));
 
-documentApi.updateMetadata(documentId, metadata);
+documentApi.updateDocumentMetadata(documentId, metadata);
 ```
 
 ### Dashboard Statistics
 
 ```java
-import org.openfilz.sdk.api.DashboardControllerApi;
+import org.openfilz.sdk.api.DashboardApi;
 import org.openfilz.sdk.model.DashboardStatisticsResponse;
 
-DashboardControllerApi dashboardApi = new DashboardControllerApi(client);
+DashboardApi dashboardApi = new DashboardApi(client);
 
-DashboardStatisticsResponse stats = dashboardApi.getStatistics();
+DashboardStatisticsResponse stats = dashboardApi.getDashboardStatistics();
 System.out.println("Total files: " + stats.getTotalFiles());
 System.out.println("Total folders: " + stats.getTotalFolders());
-System.out.println("Storage used: " + stats.getTotalStorageUsed() + " bytes");
 ```
 
 ### Audit Trail
@@ -277,26 +292,6 @@ for (AuditLog entry : trail) {
     System.out.println(entry.getAction() + " by " + entry.getUsername()
         + " at " + entry.getTimestamp());
 }
-```
-
-### Recycle Bin (Soft Delete)
-
-```java
-import org.openfilz.sdk.api.RecycleBinControllerApi;
-import org.openfilz.sdk.model.DeleteRequest;
-
-RecycleBinControllerApi recycleBin = new RecycleBinControllerApi(client);
-
-// List deleted items
-List<FolderElementInfo> deleted = recycleBin.listDeletedItems();
-
-// Restore items
-DeleteRequest restoreRequest = new DeleteRequest();
-restoreRequest.setDocumentIds(List.of(deletedItemId));
-recycleBin.restoreItems(restoreRequest);
-
-// Empty recycle bin
-recycleBin.emptyRecycleBin();
 ```
 
 ## GraphQL Schema

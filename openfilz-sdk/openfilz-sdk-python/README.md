@@ -2,6 +2,24 @@
 
 Python client library for the OpenFilz Document Management REST API.
 
+## Code Samples
+
+The [`samples/`](samples/) directory contains runnable Python samples:
+
+- **`quickstart.py`** — Complete workflow demonstrating all core operations (folder CRUD, file upload/download/rename/move/copy/delete, favorites, metadata, dashboard, audit trail)
+- **`test_quickstart.py`** — pytest integration test that validates the samples against a running API
+
+To run the sample tests locally (requires a running OpenFilz API):
+
+```bash
+cd samples
+pip install -r requirements.txt
+pip install ../target/generated-sdk/python/
+OPENFILZ_API_URL=http://localhost:8081 pytest -v
+```
+
+These samples are automatically tested in CI.
+
 ## Installation
 
 ```bash
@@ -18,10 +36,9 @@ from openfilz_sdk.api import (
     document_controller_api,
     folder_controller_api,
     file_controller_api,
-    favorite_controller_api,
-    dashboard_controller_api,
+    favorites_api,
+    dashboard_api,
     audit_controller_api,
-    recycle_bin_controller_api,
 )
 
 configuration = openfilz_sdk.Configuration(
@@ -38,12 +55,11 @@ from openfilz_sdk.api import document_controller_api
 with openfilz_sdk.ApiClient(configuration) as api_client:
     document_api = document_controller_api.DocumentControllerApi(api_client)
 
-    with open("/path/to/report.pdf", "rb") as f:
-        response = document_api.upload_document(
-            file=f,
-            parent_folder_id=None,        # root folder
-            allow_duplicate_file_names=True
-        )
+    response = document_api.upload_document1(
+        file="/path/to/report.pdf",       # file path, bytes, or (name, bytes) tuple
+        parent_folder_id=None,            # root folder
+        allow_duplicate_file_names=True
+    )
 
     print(f"Uploaded: {response.id} - {response.name}")
 ```
@@ -52,7 +68,7 @@ with openfilz_sdk.ApiClient(configuration) as api_client:
 
 ```python
 from openfilz_sdk.api import folder_controller_api
-from openfilz_sdk.model.create_folder_request import CreateFolderRequest
+from openfilz_sdk.models.create_folder_request import CreateFolderRequest
 
 with openfilz_sdk.ApiClient(configuration) as api_client:
     folder_api = folder_controller_api.FolderControllerApi(api_client)
@@ -103,7 +119,7 @@ with openfilz_sdk.ApiClient(configuration) as api_client:
 
 ```python
 from openfilz_sdk.api import file_controller_api
-from openfilz_sdk.model.move_request import MoveRequest
+from openfilz_sdk.models.move_request import MoveRequest
 
 with openfilz_sdk.ApiClient(configuration) as api_client:
     file_api = file_controller_api.FileControllerApi(api_client)
@@ -121,7 +137,7 @@ with openfilz_sdk.ApiClient(configuration) as api_client:
 
 ```python
 from openfilz_sdk.api import file_controller_api
-from openfilz_sdk.model.copy_request import CopyRequest
+from openfilz_sdk.models.copy_request import CopyRequest
 
 with openfilz_sdk.ApiClient(configuration) as api_client:
     file_api = file_controller_api.FileControllerApi(api_client)
@@ -141,7 +157,7 @@ with openfilz_sdk.ApiClient(configuration) as api_client:
 
 ```python
 from openfilz_sdk.api import file_controller_api
-from openfilz_sdk.model.rename_request import RenameRequest
+from openfilz_sdk.models.rename_request import RenameRequest
 
 with openfilz_sdk.ApiClient(configuration) as api_client:
     file_api = file_controller_api.FileControllerApi(api_client)
@@ -156,7 +172,7 @@ with openfilz_sdk.ApiClient(configuration) as api_client:
 
 ```python
 from openfilz_sdk.api import file_controller_api
-from openfilz_sdk.model.delete_request import DeleteRequest
+from openfilz_sdk.models.delete_request import DeleteRequest
 
 with openfilz_sdk.ApiClient(configuration) as api_client:
     file_api = file_controller_api.FileControllerApi(api_client)
@@ -169,10 +185,10 @@ with openfilz_sdk.ApiClient(configuration) as api_client:
 ### Manage Favorites
 
 ```python
-from openfilz_sdk.api import favorite_controller_api
+from openfilz_sdk.api import favorites_api
 
 with openfilz_sdk.ApiClient(configuration) as api_client:
-    fav_api = favorite_controller_api.FavoriteControllerApi(api_client)
+    fav_api = favorites_api.FavoritesApi(api_client)
 
     # Toggle favorite
     is_favorite = fav_api.toggle_favorite(document_id)
@@ -200,12 +216,12 @@ with openfilz_sdk.ApiClient(configuration) as api_client:
 
 ```python
 from openfilz_sdk.api import document_controller_api
-from openfilz_sdk.model.update_metadata_request import UpdateMetadataRequest
+from openfilz_sdk.models.update_metadata_request import UpdateMetadataRequest
 
 with openfilz_sdk.ApiClient(configuration) as api_client:
     document_api = document_controller_api.DocumentControllerApi(api_client)
 
-    document_api.update_metadata(
+    document_api.update_document_metadata(
         document_id,
         UpdateMetadataRequest(
             metadata_to_update={
@@ -220,15 +236,14 @@ with openfilz_sdk.ApiClient(configuration) as api_client:
 ### Dashboard Statistics
 
 ```python
-from openfilz_sdk.api import dashboard_controller_api
+from openfilz_sdk.api import dashboard_api
 
 with openfilz_sdk.ApiClient(configuration) as api_client:
-    dashboard_api = dashboard_controller_api.DashboardControllerApi(api_client)
+    dashboard = dashboard_api.DashboardApi(api_client)
 
-    stats = dashboard_api.get_statistics()
+    stats = dashboard.get_dashboard_statistics()
     print(f"Total files: {stats.total_files}")
     print(f"Total folders: {stats.total_folders}")
-    print(f"Storage used: {stats.total_storage_used} bytes")
 ```
 
 ### Audit Trail
@@ -243,27 +258,6 @@ with openfilz_sdk.ApiClient(configuration) as api_client:
 
     for entry in trail:
         print(f"{entry.action} by {entry.username} at {entry.timestamp}")
-```
-
-### Recycle Bin (Soft Delete)
-
-```python
-from openfilz_sdk.api import recycle_bin_controller_api
-from openfilz_sdk.model.delete_request import DeleteRequest
-
-with openfilz_sdk.ApiClient(configuration) as api_client:
-    recycle_bin = recycle_bin_controller_api.RecycleBinControllerApi(api_client)
-
-    # List deleted items
-    deleted = recycle_bin.list_deleted_items()
-
-    # Restore items
-    recycle_bin.restore_items(
-        DeleteRequest(document_ids=[deleted_item_id])
-    )
-
-    # Empty recycle bin
-    recycle_bin.empty_recycle_bin()
 ```
 
 ## GraphQL Schema
@@ -351,5 +345,6 @@ for doc in result["searchDocuments"]["documents"]:
 
 ## Requirements
 
-- Python 3.8+
-- urllib3 >= 1.25.3
+- Python 3.9+
+- urllib3 >= 2.1.0
+- pydantic >= 2

@@ -18,6 +18,7 @@
         <module>openfilz-sdk-typescript</module>
         <module>openfilz-sdk-python</module>
         <module>openfilz-sdk-csharp</module>
+        <module>openfilz-sdk-samples-test</module>
     </modules>
 
     <build>

@@ -2,6 +2,23 @@
 
 TypeScript/JavaScript client library for the OpenFilz Document Management REST API.
 
+## Code Samples
+
+The [`samples/`](samples/) directory contains runnable TypeScript samples:
+
+- **`quickstart.ts`** — Complete workflow demonstrating all core operations (folder CRUD, file upload/download/rename/move/copy/delete, favorites, metadata, dashboard, audit trail)
+- **`quickstart.test.ts`** — Jest integration test that validates the samples against a running API
+
+To run the sample tests locally (requires a running OpenFilz API):
+
+```bash
+cd samples
+npm install
+OPENFILZ_API_URL=http://localhost:8081 npm test
+```
+
+These samples are automatically tested in CI.
+
 ## Installation
 
 ```bash
@@ -30,11 +47,11 @@ const documentApi = new DocumentControllerApi(config);
 
 const file = new File(['content'], 'report.pdf', { type: 'application/pdf' });
 
-const response = await documentApi.uploadDocument(
+const response = await documentApi.uploadDocument1(
   file,           // file
+  true,           // allowDuplicateFileNames
   undefined,      // parentFolderId (root if undefined)
   undefined,      // metadata
-  true            // allowDuplicateFileNames
 );
 
 console.log(`Uploaded: ${response.data.id} - ${response.data.name}`);
@@ -146,9 +163,9 @@ await fileApi.deleteFiles({
 ### Manage Favorites
 
 ```typescript
-import { FavoriteControllerApi } from '@openfilz-sdk/typescript';
+import { FavoritesApi } from '@openfilz-sdk/typescript';
 
-const favApi = new FavoriteControllerApi(config);
+const favApi = new FavoritesApi(config);
 
 // Toggle favorite
 const isFavorite = await favApi.toggleFavorite(documentId);
@@ -178,7 +195,7 @@ import { DocumentControllerApi } from '@openfilz-sdk/typescript';
 
 const documentApi = new DocumentControllerApi(config);
 
-await documentApi.updateMetadata(documentId, {
+await documentApi.updateDocumentMetadata(documentId, {
   metadataToUpdate: {
     project: 'Alpha',
     classification: 'confidential',
@@ -190,14 +207,13 @@ await documentApi.updateMetadata(documentId, {
 ### Dashboard Statistics
 
 ```typescript
-import { DashboardControllerApi } from '@openfilz-sdk/typescript';
+import { DashboardApi } from '@openfilz-sdk/typescript';
 
-const dashboardApi = new DashboardControllerApi(config);
+const dashboardApi = new DashboardApi(config);
 
-const stats = await dashboardApi.getStatistics();
+const stats = await dashboardApi.getDashboardStatistics();
 console.log(`Total files: ${stats.data.totalFiles}`);
 console.log(`Total folders: ${stats.data.totalFolders}`);
-console.log(`Storage used: ${stats.data.totalStorageUsed} bytes`);
 ```
 
 ### Audit Trail
@@ -212,25 +228,6 @@ const trail = await auditApi.getAuditTrail(documentId, 'DESC');
 trail.data.forEach(entry => {
   console.log(`${entry.action} by ${entry.username} at ${entry.timestamp}`);
 });
-```
-
-### Recycle Bin (Soft Delete)
-
-```typescript
-import { RecycleBinControllerApi } from '@openfilz-sdk/typescript';
-
-const recycleBin = new RecycleBinControllerApi(config);
-
-// List deleted items
-const deleted = await recycleBin.listDeletedItems();
-
-// Restore items
-await recycleBin.restoreItems({
-  documentIds: [deletedItemId],
-});
-
-// Empty recycle bin
-await recycleBin.emptyRecycleBin();
 ```
 
 ## GraphQL Schema

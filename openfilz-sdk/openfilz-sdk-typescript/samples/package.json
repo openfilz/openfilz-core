@@ -1,0 +1,25 @@
+{
+  "name": "openfilz-sdk-typescript-samples",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Integration tests for OpenFilz TypeScript SDK samples",
+  "scripts": {
+    "test": "jest --forceExit --detectOpenHandles"
+  },
+  "dependencies": {
+    "@openfilz-sdk/typescript": "file:../target/generated-sdk/typescript"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.0.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.3.0"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "testTimeout": 30000,
+    "testMatch": ["**/*.test.ts"]
+  }
+}
