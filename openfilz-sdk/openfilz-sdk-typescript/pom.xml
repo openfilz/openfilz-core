@@ -4,7 +4,7 @@
     <parent>
         <groupId>org.openfilz</groupId>
         <artifactId>openfilz-sdk</artifactId>
-        <version>1.1.10-SNAPSHOT</version>
+        <version>1.1.10</version>
     </parent>
 
     <artifactId>openfilz-sdk-typescript</artifactId>
@@ -100,18 +100,11 @@
                         </goals>
                         <configuration>
                             <target>
-                                <property name="oneOfFile"
-                                          value="${project.build.directory}/generated-sdk/typescript/models/audit-log-details-one-of.ts"/>
+                                <property name="oneOfFile" value="${project.build.directory}/generated-sdk/typescript/models/audit-log-details-one-of.ts" />
                                 <!-- Add missing discriminator subtype imports after the last existing import -->
-                                <replaceregexp file="${oneOfFile}" encoding="UTF-8"
-                                               match="(import type \{ CreateFolderRequest \}.*?$)"
-                                               replace="\1${line.separator}// @ts-ignore${line.separator}import type { CopyAudit } from './copy-audit';${line.separator}// @ts-ignore${line.separator}import type { CreateFolderAudit } from './create-folder-audit';${line.separator}// @ts-ignore${line.separator}import type { DeleteAudit } from './delete-audit';${line.separator}// @ts-ignore${line.separator}import type { DeleteMetadataAudit } from './delete-metadata-audit';${line.separator}// @ts-ignore${line.separator}import type { MoveAudit } from './move-audit';${line.separator}// @ts-ignore${line.separator}import type { RenameAudit } from './rename-audit';${line.separator}// @ts-ignore${line.separator}import type { ReplaceAudit } from './replace-audit';${line.separator}// @ts-ignore${line.separator}import type { UpdateMetadataAudit } from './update-metadata-audit';${line.separator}// @ts-ignore${line.separator}import type { UploadAudit } from './upload-audit';"
-                                               flags="m"/>
+                                <replaceregexp file="${oneOfFile}" encoding="UTF-8" match="(import type \{ CreateFolderRequest \}.*?$)" replace="\1${line.separator}// @ts-ignore${line.separator}import type { CopyAudit } from './copy-audit';${line.separator}// @ts-ignore${line.separator}import type { CreateFolderAudit } from './create-folder-audit';${line.separator}// @ts-ignore${line.separator}import type { DeleteAudit } from './delete-audit';${line.separator}// @ts-ignore${line.separator}import type { DeleteMetadataAudit } from './delete-metadata-audit';${line.separator}// @ts-ignore${line.separator}import type { MoveAudit } from './move-audit';${line.separator}// @ts-ignore${line.separator}import type { RenameAudit } from './rename-audit';${line.separator}// @ts-ignore${line.separator}import type { ReplaceAudit } from './replace-audit';${line.separator}// @ts-ignore${line.separator}import type { UpdateMetadataAudit } from './update-metadata-audit';${line.separator}// @ts-ignore${line.separator}import type { UploadAudit } from './upload-audit';" flags="m" />
                                 <!-- 2. Remove self-referential type entry that causes TS2456 circular reference -->
-                                <replaceregexp file="${oneOfFile}" encoding="UTF-8"
-                                               match="\{ type: 'AuditLog_details_oneOf' \} &amp; AuditLogDetailsOneOf \| "
-                                               replace=""
-                                               flags="g"/>
+                                <replaceregexp file="${oneOfFile}" encoding="UTF-8" match="\{ type: 'AuditLog_details_oneOf' \} &amp; AuditLogDetailsOneOf \| " replace="" flags="g" />
                             </target>
                         </configuration>
                     </execution>
