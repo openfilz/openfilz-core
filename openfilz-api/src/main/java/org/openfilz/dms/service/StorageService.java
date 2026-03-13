@@ -1,4 +1,3 @@
-// com/example/dms/service/StorageService.java
 package org.openfilz.dms.service;
 
 import org.springframework.core.io.Resource;

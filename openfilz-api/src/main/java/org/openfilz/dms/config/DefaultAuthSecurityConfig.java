@@ -1,4 +1,3 @@
-// com/example/dms/config/SecurityConfig.java
 package org.openfilz.dms.config;
 
 import lombok.RequiredArgsConstructor;

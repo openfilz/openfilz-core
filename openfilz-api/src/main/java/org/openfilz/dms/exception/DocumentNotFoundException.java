@@ -1,4 +1,3 @@
-// com/example/dms/exception/DocumentNotFoundException.java
 package org.openfilz.dms.exception;
 
 import org.openfilz.dms.enums.DocumentType;

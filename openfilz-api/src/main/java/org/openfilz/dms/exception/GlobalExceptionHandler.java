@@ -1,4 +1,3 @@
-// com/example/dms/exception/GlobalExceptionHandler.java
 package org.openfilz.dms.exception;
 
 import lombok.extern.slf4j.Slf4j;

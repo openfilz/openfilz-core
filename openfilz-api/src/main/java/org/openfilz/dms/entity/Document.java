@@ -1,4 +1,3 @@
-// com/example/dms/entity/Document.java
 package org.openfilz.dms.entity;
 
 import io.r2dbc.postgresql.codec.Json;
