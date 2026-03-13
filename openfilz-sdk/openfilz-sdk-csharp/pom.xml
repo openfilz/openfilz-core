@@ -124,7 +124,11 @@
                         </goals>
                         <configuration>
                             <target>
-                                <replaceregexp file="${project.build.directory}/generated-sdk/csharp/src/OpenFilz.Sdk/Api/DocumentControllerApi.cs" match="multipartContentLocalVar\.Add\(new StreamContent\(file\)\);" replace="foreach (var fileItem in file) { multipartContentLocalVar.Add(new StreamContent(fileItem)); }" flags="g" />
+                                <replaceregexp
+                                    file="${project.build.directory}/generated-sdk/csharp/src/OpenFilz.Sdk/Api/DocumentControllerApi.cs"
+                                    match="(upload-multiple[\s\S]{0,1500}?)multipartContentLocalVar\.Add\(new StreamContent\(file\)\);"
+                                    replace="\1foreach (var fileItem in file) { multipartContentLocalVar.Add(new StreamContent(fileItem)); }"
+                                    flags="s" />
                             </target>
                         </configuration>
                     </execution>
