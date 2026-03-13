@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[abb743f3833d3cc](https://github.com/openfilz/openfilz-core/commit/abb743f3833d3cc) maven-release-bot[bot] *2026-02-27 15:13:32*
+[505387c6535b2b6](https://github.com/openfilz/openfilz-core/commit/505387c6535b2b6) maven-release-bot[bot] *2026-03-13 02:28:32*
 
 
-## v1.1.4
+## v1.1.9
 ### No issue
 
-**[maven-release-plugin] prepare release v1.1.4**
+**[maven-release-plugin] prepare release v1.1.9**
 
 
-[94dd514a02ca2f4](https://github.com/openfilz/openfilz-core/commit/94dd514a02ca2f4) maven-release-bot[bot] *2026-02-27 15:13:30*
+[74046fc90fef552](https://github.com/openfilz/openfilz-core/commit/74046fc90fef552) maven-release-bot[bot] *2026-03-13 02:28:31*
 
-**Merge pull request #133 from openfilz/develop**
+**Merge pull request #142 from openfilz/develop**
 
- * Develop
+ * CI Fix - cSharp SDK
 
-[ca1c48bca7ab64a](https://github.com/openfilz/openfilz-core/commit/ca1c48bca7ab64a) Yann Demel *2026-02-27 15:11:56*
+[43f6ac65e654785](https://github.com/openfilz/openfilz-core/commit/43f6ac65e654785) Yann Demel *2026-03-13 02:25:43*
 
 
