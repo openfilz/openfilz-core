@@ -141,9 +141,9 @@
                             <groupId>org.openfilz</groupId>
                             <artifactId>openfilz-sdk-java-reactive</artifactId>
                             <artifactVersion>${project.version}</artifactVersion>
-                            <inlineSchemaNameMapping>
-                                <AuditLog_details>AuditLogDetailsOneOf</AuditLog_details>
-                            </inlineSchemaNameMapping>
+                            <inlineSchemaNameMappings>
+                                <inlineSchemaNameMapping>AuditLog_details=AuditLogDetailsOneOf</inlineSchemaNameMapping>
+                            </inlineSchemaNameMappings>
                             <configOptions>
                                 <library>webclient</library>
                                 <dateLibrary>java8</dateLibrary>
