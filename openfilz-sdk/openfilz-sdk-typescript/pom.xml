@@ -70,7 +70,11 @@
                             <inputSpec>${openapi.spec.uri}</inputSpec>
                             <generatorName>typescript-axios</generatorName>
                             <output>${project.build.directory}/generated-sdk/typescript</output>
+                            <inlineSchemaNameMappings>
+                                <inlineSchemaNameMapping>AuditLog_details=AuditLogDetailsOneOf</inlineSchemaNameMapping>
+                            </inlineSchemaNameMappings>
                             <configOptions>
+                                <legacyDiscriminatorBehavior>false</legacyDiscriminatorBehavior>
                                 <npmName>@openfilz-sdk/typescript</npmName>
                                 <npmVersion>${project.version}</npmVersion>
                                 <supportsES6>true</supportsES6>

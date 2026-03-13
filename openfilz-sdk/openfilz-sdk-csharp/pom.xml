@@ -70,7 +70,11 @@
                             <inputSpec>${openapi.spec.uri}</inputSpec>
                             <generatorName>csharp</generatorName>
                             <output>${project.build.directory}/generated-sdk/csharp</output>
+                            <inlineSchemaNameMappings>
+                                <inlineSchemaNameMapping>AuditLog_details=AuditLogDetailsOneOf</inlineSchemaNameMapping>
+                            </inlineSchemaNameMappings>
                             <configOptions>
+                                <legacyDiscriminatorBehavior>false</legacyDiscriminatorBehavior>
                                 <packageName>OpenFilz.Sdk</packageName>
                                 <packageVersion>${project.version}</packageVersion>
                                 <targetFramework>net8.0</targetFramework>

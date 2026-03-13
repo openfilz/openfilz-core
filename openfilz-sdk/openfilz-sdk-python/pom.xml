@@ -93,7 +93,11 @@
                             <inputSpec>${openapi.spec.uri}</inputSpec>
                             <generatorName>python</generatorName>
                             <output>${project.build.directory}/generated-sdk/python</output>
+                            <inlineSchemaNameMappings>
+                                <inlineSchemaNameMapping>AuditLog_details=AuditLogDetailsOneOf</inlineSchemaNameMapping>
+                            </inlineSchemaNameMappings>
                             <configOptions>
+                                <legacyDiscriminatorBehavior>false</legacyDiscriminatorBehavior>
                                 <packageName>openfilz_sdk</packageName>
                                 <projectName>openfilz-sdk-python</projectName>
                                 <packageVersion>${python.package.version}</packageVersion>
