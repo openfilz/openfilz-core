@@ -15,5 +15,9 @@
 .env.local
 .env.*.local
 
+# .NET build artifacts
+**/bin/
+**/obj/
+
 # Generated frontend config (created by Makefile)
 deploy/docker-compose/ngx-env.js

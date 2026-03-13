@@ -125,6 +125,153 @@ Full OpenAPI documentation available at `/swagger-ui.html`.
 
 ---
 
+## SDKs — Integrate in Minutes
+
+OpenFilz provides **5 official SDKs** auto-generated from the OpenAPI specification, so every SDK stays in sync with the API. Pick your language and start building immediately.
+
+<table>
+<tr>
+<td align="center" width="20%">
+
+**Java**<br/>
+<sub>Blocking</sub>
+
+</td>
+<td align="center" width="20%">
+
+**Java Reactive**<br/>
+<sub>Non-blocking</sub>
+
+</td>
+<td align="center" width="20%">
+
+**TypeScript**<br/>
+<sub>Promise-based</sub>
+
+</td>
+<td align="center" width="20%">
+
+**Python**<br/>
+<sub>Synchronous</sub>
+
+</td>
+<td align="center" width="20%">
+
+**C# / .NET**<br/>
+<sub>Async + DI</sub>
+
+</td>
+</tr>
+<tr>
+<td align="center"><sub>OkHttp + Gson</sub></td>
+<td align="center"><sub>WebClient + Reactor</sub></td>
+<td align="center"><sub>Axios</sub></td>
+<td align="center"><sub>urllib3 + Pydantic</sub></td>
+<td align="center"><sub>HttpClient + Generic Host</sub></td>
+</tr>
+<tr>
+<td align="center"><sub>Java 25+</sub></td>
+<td align="center"><sub>Java 25+ / Spring 3+</sub></td>
+<td align="center"><sub>Node.js 18+</sub></td>
+<td align="center"><sub>Python 3.9+</sub></td>
+<td align="center"><sub>.NET 8.0+</sub></td>
+</tr>
+</table>
+
+### Why use the SDKs?
+
+- **Zero boilerplate** — Pre-built, strongly-typed API clients. No manual HTTP calls or JSON parsing.
+- **Always in sync** — Auto-generated from the same OpenAPI spec that powers the server. Every endpoint, every parameter, every model.
+- **GraphQL included** — All SDKs bundle the GraphQL schema files so you can combine REST and GraphQL in the same project.
+- **Full API coverage** — Documents, Folders, Files, Favorites, Recycle Bin, Dashboard, Audit Trail, Thumbnails, TUS uploads — all accessible from day one.
+- **Battle-tested** — Integration tests run against a live OpenFilz API for both Java SDKs via Testcontainers.
+- **Idiomatic patterns** — Each SDK follows the conventions of its ecosystem: `Mono`/`Flux` for Reactive Java, `async`/`await` for C# and TypeScript, context managers for Python.
+
+### Quick Start Examples
+
+<details>
+<summary><b>Java (Blocking)</b></summary>
+
+```java
+var client = new ApiClient().setBasePath("https://api.example.com");
+client.setAccessToken("your-jwt-token");
+
+var api = new DocumentControllerApi(client);
+var response = api.uploadDocument(file, parentId, null);
+```
+
+</details>
+
+<details>
+<summary><b>Java (Reactive)</b></summary>
+
+```java
+var client = new ApiClient().setBasePath("https://api.example.com");
+client.setBearerToken("your-jwt-token");
+
+var api = new DocumentControllerApi(client);
+api.uploadDocument(file, parentId, null)
+   .flatMap(uploaded -> api.getDocumentInfo(uploaded.getId()))
+   .subscribe(doc -> System.out.println(doc.getName()));
+```
+
+</details>
+
+<details>
+<summary><b>TypeScript</b></summary>
+
+```typescript
+import { Configuration, DocumentControllerApi } from '@openfilz-sdk/typescript';
+
+const config = new Configuration({
+  basePath: 'https://api.example.com',
+  accessToken: 'your-jwt-token',
+});
+
+const api = new DocumentControllerApi(config);
+const response = await api.uploadDocument(file, parentId);
+```
+
+</details>
+
+<details>
+<summary><b>Python</b></summary>
+
+```python
+from openfilz_sdk import Configuration, ApiClient, DocumentControllerApi
+
+config = Configuration(host="https://api.example.com",
+                       access_token="your-jwt-token")
+
+with ApiClient(config) as client:
+    api = DocumentControllerApi(client)
+    response = api.upload_document(file=file, parent_id=parent_id)
+```
+
+</details>
+
+<details>
+<summary><b>C# / .NET</b></summary>
+
+```csharp
+var host = Host.CreateDefaultBuilder()
+    .ConfigureApi((ctx, services, options) =>
+    {
+        options.AddTokens(new BearerToken("your-jwt-token"));
+        options.AddApiHttpClients(c =>
+            c.BaseAddress = new Uri("https://api.example.com"));
+    })
+    .Build();
+
+var api = host.Services.GetRequiredService<IDocumentControllerApi>();
+var response = await api.UploadDocument1Async(file, parentId);
+var uploaded = response.Ok()!;
+```
+
+</details>
+
+---
+
 ## Architecture
 
 ### Reactive Core
@@ -143,22 +290,36 @@ OpenFilz separates the logical folder hierarchy from physical file storage:
 
 ```mermaid
 sequenceDiagram
-    participant C as Client
-    participant KC as Keycloak
-    participant API as Document Mgmt API
-    participant S as Storage (S3/FS)
-    participant DB as PostgreSQL DB
+    autonumber
+    participant Client as 🖥️ Client Application
+    participant Gateway as 🔐 Identity Provider<br/>(Keycloak)
+    participant API as ⚡ OpenFilz API<br/>(Spring WebFlux)
+    participant Storage as 📦 Object Storage<br/>(S3 / MinIO / Local)
+    participant DB as 🗄️ PostgreSQL<br/>(R2DBC)
 
-    C->>+API: Request with JWT
-    API->>+KC: Validate JWT
-    KC-->>-API: Token OK
-    API->>S: 1. Perform Storage Action
-    S-->>API: Success
-    API->>DB: 2. Update Metadata (JSONB)
-    DB-->>API: Success
-    API->>DB: 3. Write Audit Trail
-    DB-->>API: Success
-    API-->>-C: Response
+    rect rgb(240, 248, 255)
+        Note over Client, Gateway: Authentication
+        Client->>+Gateway: Authenticate (OIDC)
+        Gateway-->>-Client: JWT Access Token
+    end
+
+    rect rgb(245, 250, 245)
+        Note over Client, DB: API Request (Non-blocking)
+        Client->>+API: REST / GraphQL + Bearer Token
+        API->>Gateway: Validate JWT (JWKS)
+        Gateway-->>API: Token Valid
+
+        API->>+Storage: Store / Retrieve File
+        Storage-->>-API: OK
+
+        API->>+DB: Persist Document Metadata (JSONB)
+        DB-->>-API: OK
+
+        API->>+DB: Append Audit Log (Immutable)
+        DB-->>-API: OK
+
+        API-->>-Client: Response (JSON)
+    end
 ```
 
 ---
@@ -245,20 +406,27 @@ cd openfilz-api && mvn spring-boot:run
 
 ```
 openfilz-core/
-├── openfilz-api/              # Core DMS service (REST + GraphQL)
+├── openfilz-api/                  # Core DMS service (REST + GraphQL)
 │   ├── src/main/java/org/openfilz/dms/
-│   │   ├── controller/        # REST & GraphQL controllers
-│   │   ├── service/           # Business logic
-│   │   ├── repository/        # R2DBC repositories
-│   │   ├── entity/            # Database entities
-│   │   ├── dto/               # Request/Response DTOs
-│   │   └── config/            # Spring configurations
+│   │   ├── controller/            # REST & GraphQL controllers
+│   │   ├── service/               # Business logic
+│   │   ├── repository/            # R2DBC repositories
+│   │   ├── entity/                # Database entities
+│   │   ├── dto/                   # Request/Response DTOs
+│   │   └── config/                # Spring configurations
 │   └── src/main/resources/
-│       └── graphql/           # GraphQL schema
+│       └── graphql/               # GraphQL schema
+├── openfilz-sdk/                  # Official SDKs (auto-generated from OpenAPI)
+│   ├── openfilz-sdk-java/         # Java SDK (blocking, OkHttp)
+│   ├── openfilz-sdk-java-reactive/# Java Reactive SDK (WebClient, Mono/Flux)
+│   ├── openfilz-sdk-typescript/   # TypeScript SDK (Axios, Promise-based)
+│   ├── openfilz-sdk-python/       # Python SDK (urllib3, Pydantic)
+│   ├── openfilz-sdk-csharp/       # C# SDK (.NET 8+, async + DI)
+│   └── openfilz-sdk-samples-test/ # SDK integration tests
 └── deploy/
-    ├── docker-compose/        # Docker Compose files & Makefile
-    │   └── dokploy/           # Dokploy deployment
-    └── helm/                  # Kubernetes Helm charts
+    ├── docker-compose/            # Docker Compose files & Makefile
+    │   └── dokploy/               # Dokploy deployment
+    └── helm/                      # Kubernetes Helm charts
 ```
 
 ---
