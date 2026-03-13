@@ -121,7 +121,7 @@ jobs:
       - name: Test TypeScript SDK samples
         run: |
           cd openfilz-sdk/openfilz-sdk-typescript/samples
-          npm ci
+          npm install
           OPENFILZ_API_URL=http://localhost:18081 npm test
 
       - name: Test Python SDK samples
