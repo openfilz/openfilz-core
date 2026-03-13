@@ -154,7 +154,7 @@ jobs:
           echo "Release: $RELEASE_VERSION, Next dev: $DEV_VERSION (bump=$BUMP)"
 
       - name: Prepare Release
-        run: mvn -Dmaven.wagon.http.retryHandler.count=3 -B release:prepare -DtagNameFormat=v@{project.version} -DreleaseVersion=${{ steps.versions.outputs.releaseVersion }} -DdevelopmentVersion=${{ steps.versions.outputs.developmentVersion }} -Darguments="-DskipTests"
+        run: mvn -Dmaven.wagon.http.retryHandler.count=3 -B release:prepare -DtagNameFormat=v@{project.version} -DreleaseVersion=${{ steps.versions.outputs.releaseVersion }} -DdevelopmentVersion=${{ steps.versions.outputs.developmentVersion }} -Darguments="-Dsurefire.skip=true -Dit.test=OpenApiSpecExtractionIT"
 
       - name: Perform Release
         run: mvn -Dmaven.wagon.http.retryHandler.count=3 -B release:perform -Darguments="-Pkube,publishMaven,publishSdk -Dmaven.test.skip=false -Dsurefire.skip=true -Dit.test=OpenApiSpecExtractionIT -Dnpm.publish.tag=latest -Dregistry.hostname=ghcr.io -Dregistry.port=443 -Ddocker.context.path=openfilz/ -Djib.to.auth.username=${{ github.actor }} -Djib.to.auth.password=${{ secrets.GITHUB_TOKEN }}"
