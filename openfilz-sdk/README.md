@@ -46,7 +46,7 @@ The parent `openfilz-sdk/pom.xml` normalizes the OpenAPI spec path to a `file://
 
 ### Prerequisites
 
-- **Java 17+** and **Maven 3.x** (all SDKs)
+- **Java 25+** and **Maven 3.x** (all SDKs)
 - **Node.js 18+** and **npm** (TypeScript SDK)
 - **Python 3.8+** with `build` and `twine` packages (Python SDK)
 - **.NET 8 SDK** (`dotnet` CLI) (C# SDK)
