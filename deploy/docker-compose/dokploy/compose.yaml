@@ -1,16 +1,13 @@
-# OpenFilz - Dokploy Compose Configuration
+# OpenFilz Community Edition - Dokploy Compose Configuration
 #
-# This compose file is optimized for Dokploy deployment with:
-# - Local storage for documents
-# - Keycloak authentication
-# - OnlyOffice document visualization
+# Adapted for Dokploy deployment with Traefik reverse proxy
 #
 # Requirements:
-# 1. Set environment variables in Dokploy's Environment tab
-# 2. Configure domains in Dokploy for each service that needs external access
-# 3. Ensure DNS A records point to your Dokploy server
+# 1. Set environment variables in .env.dokploy-ce or Dokploy's Environment tab
+# 2. Configure DNS A records for all hostnames to point to the Dokploy server
+# 3. Mount required files in ${OPENFILZ_FILES_BASE:?Set OPENFILZ_FILES_BASE in .env}/ directory
 #
-# Documentation: https://docs.dokploy.com/docs/core/docker-compose
+# Documentation: https://docs.openfilz.com
 
 volumes:
   postgres-data:
@@ -29,22 +26,22 @@ services:
   # PostgreSQL Database
   # =============================================================================
   postgres:
-    image: ${POSTGRES_IMAGE:-postgres:16}
+    image: ${POSTGRES_IMAGE:-postgres:17-alpine}
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_NAME:-dms_db}
-      POSTGRES_USER: ${DB_USER:-dms_user}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-dms_password}
+      POSTGRES_USER: ${POSTGRES_USER:-openfilz}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-openfilz}
       KEYCLOAK_DB_USER: ${KEYCLOAK_DB_USER:-keycloak}
-      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak}
-      KEYCLOAK_DB_NAME: ${KEYCLOAK_DB_NAME:-keycloak}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KEYCLOAK_DB_NAME: ${KEYCLOAK_DB_NAME:-keycloak_db}
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./init-keycloak-db.sh:/docker-entrypoint-initdb.d/init-keycloak-db.sh:ro
+      - ${OPENFILZ_FILES_BASE:?Set OPENFILZ_FILES_BASE in .env}/db-create.sh:/docker-entrypoint-initdb.d/init-keycloak-db.sh:ro
     networks:
       - dokploy-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-dms_user} -d ${DB_NAME:-dms_db}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-openfilz}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -55,72 +52,185 @@ services:
   keycloak:
     image: ${KEYCLOAK_IMAGE:-ghcr.io/openfilz/keycloak:26.5}
     restart: unless-stopped
+    command:
+      - start
+      - --import-realm
     environment:
-      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      # Admin credentials
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+
+      # Database
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/${KEYCLOAK_DB_NAME:-keycloak}
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${KEYCLOAK_DB_NAME:-keycloak_db}
       KC_DB_USERNAME: ${KEYCLOAK_DB_USER:-keycloak}
-      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak}
-      # Hostname configuration - set to your Keycloak domain
-      KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:-keycloak.yourdomain.com}
-      # Public URL for Keycloak (used as frontendUrl in realm import)
-      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-https://auth.yourdomain.com}
-      # Client root URL for openfilz-web (used in realm import for redirectUris)
-      OPENFILZ_WEB_ROOT_URL: ${OPENFILZ_WEB_ROOT_URL:-https://app.yourdomain.com}
-      # Default roles assigned to new users (used in realm import)
-      # Up to 4 role slots; set unused slots to an already-used role (duplicates are ignored)
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+
+      # Hostname (Dokploy/Traefik proxy)
+      KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:-localhost}
+      KC_HOSTNAME_URL: https://${KEYCLOAK_HOSTNAME}
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+
+      # Realm import substitution variables
+      KEYCLOAK_PUBLIC_URL: https://${KEYCLOAK_HOSTNAME}
+      OPENFILZ_WEB_ROOT_URL: https://${WEB_HOSTNAME:-app.openfilz.com}
+
+      # Default roles for new users
       KEYCLOAK_DEFAULT_ROLE_1: ${KEYCLOAK_DEFAULT_ROLE_1:-READER}
       KEYCLOAK_DEFAULT_ROLE_2: ${KEYCLOAK_DEFAULT_ROLE_2:-READER}
       KEYCLOAK_DEFAULT_ROLE_3: ${KEYCLOAK_DEFAULT_ROLE_3:-READER}
       KEYCLOAK_DEFAULT_ROLE_4: ${KEYCLOAK_DEFAULT_ROLE_4:-READER}
-      # Default groups assigned to new users (used in realm import)
-      # Up to 4 group slots; set unused slots to an already-used group (duplicates are ignored)
       KEYCLOAK_DEFAULT_GROUP_1: ${KEYCLOAK_DEFAULT_GROUP_1:-/OPENFILZ/READER}
       KEYCLOAK_DEFAULT_GROUP_2: ${KEYCLOAK_DEFAULT_GROUP_2:-/OPENFILZ/READER}
       KEYCLOAK_DEFAULT_GROUP_3: ${KEYCLOAK_DEFAULT_GROUP_3:-/OPENFILZ/READER}
       KEYCLOAK_DEFAULT_GROUP_4: ${KEYCLOAK_DEFAULT_GROUP_4:-/OPENFILZ/READER}
-      # SMTP configuration for Keycloak emails (used in realm import)
+
+      # SMTP
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_FROM: ${SMTP_FROM}
+      SMTP_FROM: ${SMTP_FROM:-noreply@openfilz.com}
       SMTP_SSL: ${SMTP_SSL:-false}
       SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
       SMTP_AUTH: ${SMTP_AUTH:-true}
       SMTP_USER: ${SMTP_USER}
       SMTP_PASSWORD: ${SMTP_PASSWORD}
-      # Identity Provider credentials (used in realm import)
+
+      # Identity Providers / Social Login
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
       MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID}
       MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET}
-      KC_HOSTNAME_STRICT: "false"
-      KC_PROXY_HEADERS: xforwarded
-      KC_HTTP_ENABLED: "true"
-      KC_HEALTH_ENABLED: "true"
-    command:
-      - start
-      - --import-realm
+
     networks:
       - dokploy-network
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080;echo -e 'GET /health/ready HTTP/1.1\\r\\nhost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3;if [ $? -eq 0 ]; then echo 'Healthcheck Successful';exit 0;else echo 'Healthcheck Failed';exit 1;fi;"]
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000;echo -e 'GET /health/ready HTTP/1.1\\r\\nhost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3;if [ $? -eq 0 ]; then echo 'Healthcheck Successful';exit 0;else echo 'Healthcheck Failed';exit 1;fi;"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 120s
     labels:
-      - "traefik.http.routers.openfilz-keycloak.service=openfilz-keycloak"
       - "traefik.enable=true"
-      - "traefik.http.routers.openfilz-keycloak.rule=Host(`${KEYCLOAK_HOSTNAME:-keycloak.yourdomain.com}`)"
+      - "traefik.http.routers.openfilz-keycloak.service=openfilz-keycloak"
+      - "traefik.http.routers.openfilz-keycloak.rule=Host(`${KEYCLOAK_HOSTNAME}`)"
       - "traefik.http.routers.openfilz-keycloak.entrypoints=websecure"
       - "traefik.http.routers.openfilz-keycloak.tls.certResolver=letsencrypt"
       - "traefik.http.services.openfilz-keycloak.loadbalancer.server.port=8080"
+
+  # =============================================================================
+  # Storage Volume Initialization
+  # Paketo buildpack images run as UID 1000 (cnb); Docker creates named volumes
+  # as root. This init container sets correct ownership before the API starts.
+  # Only performs chown when STORAGE_TYPE=local.
+  # =============================================================================
+  storage-init:
+    image: busybox:latest
+    command: ["sh", "-c", "if [ \"$STORAGE_TYPE\" = \"local\" ]; then chown -R 1002:1000 /var/data/openfilz; else echo 'Storage type is not local, skipping chown'; fi"]
+    environment:
+      STORAGE_TYPE: ${STORAGE_TYPE:-local}
+    volumes:
+      - openfilz-storage:/var/data/openfilz
+    networks:
+      - dokploy-network
+
+  # =============================================================================
+  # OpenFilz API (Backend)
+  # =============================================================================
+  openfilz-api:
+    image: ${OPENFILZ_API_IMAGE:-ghcr.io/openfilz/openfilz-api:latest}
+    restart: unless-stopped
+    pull_policy: always
+    expose:
+      - "8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      storage-init:
+        condition: service_completed_successfully
+    environment:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+
+      # Database (R2DBC + Flyway)
+      SPRING_R2DBC_URL: r2dbc:postgresql://postgres:5432/${POSTGRES_DB:-openfilz}
+      SPRING_R2DBC_USERNAME: ${POSTGRES_USER:-openfilz}
+      SPRING_R2DBC_PASSWORD: ${POSTGRES_PASSWORD}
+      SPRING_FLYWAY_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-openfilz}
+      SPRING_FLYWAY_USER: ${POSTGRES_USER:-openfilz}
+      SPRING_FLYWAY_PASSWORD: ${POSTGRES_PASSWORD}
+      SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"
+      SPRING_FLYWAY_BASELINE_VERSION: "0"
+
+      # Security / Keycloak
+      OPENFILZ_SECURITY_NO_AUTH: "false"
+      KEYCLOAK_REALM_URL: http://keycloak:8080/realms/openfilz
+      OPENFILZ_SECURITY_CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://app.openfilz.com,https://docs.openfilz.com}
+
+      # Storage
+      STORAGE_TYPE: ${STORAGE_TYPE:-local}
+      STORAGE_LOCAL_BASE_PATH: /var/data/openfilz
+      THUMBNAIL_STORAGE_BASE_PATH: ${THUMBNAIL_STORAGE_BASE_PATH:-/var/data/openfilz}
+
+      # URLs
+      OPENFILZ_INTERNAL_API_BASE_URL: ${OPENFILZ_INTERNAL_API_BASE_URL:-http://openfilz-api:8080}
+      OPENFILZ_PUBLIC_API_BASE_URL: ${OPENFILZ_PUBLIC_API_BASE_URL:-https://api.openfilz.com}
+      OPENFILZ_COMMON_WEBPUBLICBASEURL: ${OPENFILZ_COMMON_WEBPUBLICBASEURL:-https://app.openfilz.com/}
+      API_ROOT_URL: https://${API_HOSTNAME:-api.openfilz.com}/
+
+      # Server configuration
+      SERVER_PORT: 8080
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS}
+
+      # OnlyOffice
+      ONLYOFFICE_ENABLED: "true"
+      ONLYOFFICE_URL: ${ONLYOFFICE_URL:-http://onlyoffice}
+      ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET}
+
+      # Feature toggles
+      OPENFILZ_THUMBNAIL_ACTIVE: ${OPENFILZ_THUMBNAIL_ACTIVE:-true}
+      OPENFILZ_SOFTDELETE_ACTIVE: ${OPENFILZ_SOFTDELETE_ACTIVE:-true}
+      OPENFILZ_CALCULATECHECKSUM: ${OPENFILZ_CALCULATECHECKSUM:-true}
+      GOTENBERG_URL: ${GOTENBERG_URL:-http://gotenberg:3000}
+
+      # Full-text search
+      OPENFILZ_FULLTEXT_ACTIVE: ${OPENFILZ_FULLTEXT_ACTIVE:-true}
+      OPENFILZ_FULLTEXT_OPENSEARCH_HOST: ${OPENFILZ_FULLTEXT_OPENSEARCH_HOST:-opensearch-node1}
+      OPENFILZ_FULLTEXT_OPENSEARCH_PORT: 9200
+      OPENFILZ_FULLTEXT_OPENSEARCH_SCHEME: http
+
+      # Quotas (MB)
+      OPENFILZ_QUOTA_FILE_UPLOAD: ${OPENFILZ_QUOTA_FILE_UPLOAD:-1024}
+      OPENFILZ_QUOTA_USER: ${OPENFILZ_QUOTA_USER:-2048}
+
+    volumes:
+      - openfilz-storage:/var/data/openfilz
+    networks:
+      - dokploy-network
+    healthcheck:
+      test: ["CMD-SHELL", "while read line; do case $$line in *:1F90*) exit 0;; esac; done < /proc/net/tcp6 2>/dev/null; exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.openfilz-api.service=openfilz-api"
+      - "traefik.http.routers.openfilz-api.rule=Host(`${API_HOSTNAME:-api.openfilz.com}`)"
+      - "traefik.http.routers.openfilz-api.entrypoints=websecure"
+      - "traefik.http.routers.openfilz-api.tls.certResolver=letsencrypt"
+      - "traefik.http.services.openfilz-api.loadbalancer.server.port=8080"
 
   # =============================================================================
   # OnlyOffice Document Server
@@ -130,7 +240,7 @@ services:
     restart: unless-stopped
     environment:
       JWT_ENABLED: "true"
-      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-change-this-secret-in-production}
+      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET}
       JWT_HEADER: Authorization
       ALLOW_META_IP_ADDRESS: "true"
       ALLOW_PRIVATE_IP_ADDRESS: "true"
@@ -147,104 +257,13 @@ services:
       start_period: 120s
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.openfilz-onlyoffice.rule=Host(`${ONLYOFFICE_HOSTNAME:-onlyoffice.yourdomain.com}`)"
-
+      - "traefik.http.routers.openfilz-onlyoffice.rule=Host(`${ONLYOFFICE_HOSTNAME:-docs.openfilz.com}`)"
       - "traefik.http.routers.openfilz-onlyoffice.middlewares=onlyoffice-headers"
       - "traefik.http.middlewares.onlyoffice-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
-      - "traefik.http.middlewares.onlyoffice-headers.headers.accessControlAllowOriginList=https://${API_HOSTNAME:-api.yourdomain.com},https://${WEB_HOSTNAME:-app.yourdomain.com}"
-      
+      - "traefik.http.middlewares.onlyoffice-headers.headers.accessControlAllowOriginList=https://${API_HOSTNAME:-api.openfilz.com},https://${WEB_HOSTNAME:-app.openfilz.com}"
       - "traefik.http.routers.openfilz-onlyoffice.entrypoints=websecure"
       - "traefik.http.routers.openfilz-onlyoffice.tls.certResolver=letsencrypt"
       - "traefik.http.services.openfilz-onlyoffice.loadbalancer.server.port=80"
-
-  # =============================================================================
-  # OpenFilz API (Backend)
-  # =============================================================================
-  openfilz-api:
-    image: ${OPENFILZ_API_IMAGE:-ghcr.io/openfilz/openfilz-api:latest}
-    restart: unless-stopped
-    pull_policy: always
-    expose:
-      - "8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      keycloak:
-        condition: service_healthy
-    environment:
-      # Database configuration
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: ${DB_NAME:-dms_db}
-      DB_USER: ${DB_USER:-dms_user}
-      DB_PASSWORD: ${DB_PASSWORD:-dms_password}
-
-      # Storage configuration (local)
-      STORAGE_TYPE: ${STORAGE_TYPE:-local}
-      STORAGE_LOCAL_BASEPATH: ${STORAGE_LOCAL_BASEPATH:-/var/data/openfilz}
-
-      # Security configuration - authentication enabled
-      OPENFILZ_SECURITY_NOAUTH: ${OPENFILZ_SECURITY_NOAUTH:-false}
-
-      # Keycloak realm URL (internal Docker network)
-      KEYCLOAK_REALM_URL: ${KEYCLOAK_REALM_URL:-http://keycloak:8080/realms/openfilz}
-
-      # CORS configuration - add your domains
-      OPENFILZ_SECURITY_CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://app.yourdomain.com,https://onlyoffice.yourdomain.com}
-
-      # API URL for Swagger/OpenAPI (public URL)
-      API_ROOT_URL: https://${API_HOSTNAME:-api.yourdomain.com}/
-
-      OPENFILZ_INTERNAL_API_BASE_URL: ${OPENFILZ_INTERNAL_API_BASE_URL:-http://openfilz-api:8081}
-      OPENFILZ_PUBLIC_API_BASE_URL: ${OPENFILZ_PUBLIC_API_BASE_URL:-http://localhost:8081}
-
-      # Server configuration
-      SERVER_PORT: 8080
-
-      # Java options
-      # JAVA_OPTS: ${JAVA_OPTS:--Xmx512m -Xms256m}
-      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS}
-
-      # Flyway configuration
-      SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"
-      SPRING_FLYWAY_BASELINE_VERSION: "0"
-
-      # OnlyOffice configuration
-      ONLYOFFICE_ENABLED: "true"
-      ONLYOFFICE_URL: ${ONLYOFFICE_URL:-http://onlyoffice}
-      ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-change-this-secret-in-production}
-
-      OPENFILZ_THUMBNAIL_ACTIVE: ${OPENFILZ_THUMBNAIL_ACTIVE}
-      OPENFILZ_SOFTDELETE_ACTIVE: ${OPENFILZ_SOFTDELETE_ACTIVE}
-
-      GOTENBERG_URL: ${GOTENBERG_URL}
-
-      OPENFILZ_COMMON_CALCULATECHECKSUM: ${OPENFILZ_COMMON_CALCULATECHECKSUM}
-      OPENFILZ_COMMON_WEBPUBLICBASEURL: ${OPENFILZ_COMMON_WEBPUBLICBASEURL}
-
-      OPENFILZ_FULLTEXT_ACTIVE: ${OPENFILZ_FULLTEXT_ACTIVE}
-      OPENFILZ_FULLTEXT_OPENSEARCH_HOST: ${OPENFILZ_FULLTEXT_OPENSEARCH_HOST}
-      OPENFILZ_FULLTEXT_OPENSEARCH_SCHEME: http
-
-      OPENFILZ_QUOTA_FILE_UPLOAD: ${OPENFILZ_QUOTA_FILE_UPLOAD}
-      OPENFILZ_QUOTA_USER: ${OPENFILZ_QUOTA_USER}
-
-      #LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: "TRACE"
-
-    volumes:
-      - openfilz-storage:/var/data/openfilz
-    networks:
-      - dokploy-network
-    healthcheck:
-      disable: true
-      test: "false"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.openfilz-api.service=openfilz-api"
-      - "traefik.http.routers.openfilz-api.rule=Host(`${API_HOSTNAME:-api.openfilz.org}`)"
-      - "traefik.http.routers.openfilz-api.entrypoints=websecure"
-      - "traefik.http.routers.openfilz-api.tls.certResolver=letsencrypt"
-      - "traefik.http.services.openfilz-api.loadbalancer.server.port=8080"
 
   # =============================================================================
   # OpenFilz Web (Frontend)
@@ -254,23 +273,22 @@ services:
     restart: unless-stopped
     pull_policy: always
     depends_on:
-      - openfilz-api
+      openfilz-api:
+        condition: service_healthy
     volumes:
-      # Mount ngx-env.js configuration file - upload via Dokploy File Mounts
-      - ./openfilz-web/ngx-env.js:/usr/share/nginx/html/ngx-env.js:ro
+      - ${OPENFILZ_FILES_BASE:?Set OPENFILZ_FILES_BASE in .env}/openfilz-web/ngx-env.js:/usr/share/nginx/html/ngx-env.js:ro
     networks:
       - dokploy-network
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.openfilz-web.service=openfilz-web"
-      - "traefik.http.routers.openfilz-web.rule=Host(`${WEB_HOSTNAME:-app.yourdomain.com}`)"
+      - "traefik.http.routers.openfilz-web.rule=Host(`${WEB_HOSTNAME:-app.openfilz.com}`)"
       - "traefik.http.routers.openfilz-web.entrypoints=websecure"
       - "traefik.http.routers.openfilz-web.tls.certResolver=letsencrypt"
       - "traefik.http.services.openfilz-web.loadbalancer.server.port=8080"
 
   # =============================================================================
-  # Gotenberg - For PDF and Office Document Thumbnails
-  # Converts DOCX, XLSX, PPTX, ODT, ODS, ODP to PDF using LibreOffice
+  # Gotenberg - PDF/Office Document Thumbnails
   # =============================================================================
   gotenberg:
     image: gotenberg/gotenberg:8
@@ -284,40 +302,49 @@ services:
     networks:
       - dokploy-network
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:3000/health" ]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
 
   # =============================================================================
-  # OpenSearch for Full-Text Search
+  # OpenSearch Cluster - Full-Text Search (2-node)
   # =============================================================================
-  opensearch-node1: # This is also the hostname of the container within the Docker network (i.e. http://opensearch-node1/)
-    image: opensearchproject/opensearch:latest # Specifying the latest available image - modify if you want a specific version
+  opensearch-node1:
+    image: opensearchproject/opensearch:2.19.1
+    restart: unless-stopped
     environment:
-      - cluster.name=opensearch-cluster # Name the cluster
-      - node.name=opensearch-node1 # Name the node that will run in this container
-      - discovery.seed_hosts=opensearch-node1,opensearch-node2 # Nodes to look for when discovering the cluster
-      - cluster.initial_cluster_manager_nodes=opensearch-node1,opensearch-node2 # Nodes eligible to serve as cluster manager
-      - bootstrap.memory_lock=true # Disable JVM heap memory swapping
+      - cluster.name=opensearch-cluster
+      - node.name=opensearch-node1
+      - discovery.seed_hosts=opensearch-node1,opensearch-node2
+      - cluster.initial_cluster_manager_nodes=opensearch-node1,opensearch-node2
+      - bootstrap.memory_lock=true
       - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
       - "DISABLE_INSTALL_DEMO_CONFIG=true"
       - "DISABLE_SECURITY_PLUGIN=true"
-      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD}    # Sets the demo admin user password when using demo configuration, required for OpenSearch 2.12 and later
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD}
     ulimits:
       memlock:
-        soft: -1 # Set memlock to unlimited (no soft or hard limit)
+        soft: -1
         hard: -1
       nofile:
-        soft: 65536 # Maximum number of open files for the opensearch user - set to at least 65536
+        soft: 65536
         hard: 65536
     volumes:
-      - opensearch-data1:/usr/share/opensearch/data # Creates volume called opensearch-data1 and mounts it to the container
+      - opensearch-data1:/usr/share/opensearch/data
     networks:
-      - dokploy-network # All of the containers will join the same Docker bridge network
+      - dokploy-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
   opensearch-node2:
-    image: opensearchproject/opensearch:latest # This should be the same image used for opensearch-node1 to avoid issues
+    image: opensearchproject/opensearch:2.19.1
+    restart: unless-stopped
     environment:
       - cluster.name=opensearch-cluster
       - node.name=opensearch-node2
@@ -339,21 +366,21 @@ services:
       - opensearch-data2:/usr/share/opensearch/data
     networks:
       - dokploy-network
+
   opensearch-dashboards:
-    image: opensearchproject/opensearch-dashboards:latest # Make sure the version of opensearch-dashboards matches the version of opensearch installed on other nodes
+    image: opensearchproject/opensearch-dashboards:2.19.1
+    restart: unless-stopped
     environment:
-      - 'OPENSEARCH_HOSTS=["http://opensearch-node1:9200","http://opensearch-node2:9200"]' # Define the OpenSearch nodes that OpenSearch Dashboards will query
-      - "DISABLE_SECURITY_DASHBOARDS_PLUGIN=true" # Must match OpenSearch nodes which have security disabled
+      - 'OPENSEARCH_HOSTS=["http://opensearch-node1:9200","http://opensearch-node2:9200"]'
+      - "DISABLE_SECURITY_DASHBOARDS_PLUGIN=true"
     networks:
       - dokploy-network
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.opensearch-dashboards.service=opensearch-dashboards"
-      - "traefik.http.routers.opensearch-dashboards.rule=Host(`${OPENSEARCH_DASHBOARDS_HOSTNAME:-app.yourdomain.com}`)"
+      - "traefik.http.routers.opensearch-dashboards.rule=Host(`${OPENSEARCH_DASHBOARDS_HOSTNAME:-ops.openfilz.com}`)"
       - "traefik.http.routers.opensearch-dashboards.entrypoints=websecure"
       - "traefik.http.routers.opensearch-dashboards.tls.certResolver=letsencrypt"
       - "traefik.http.routers.opensearch-dashboards.middlewares=opensearch-dashboards-auth"
       - "traefik.http.middlewares.opensearch-dashboards-auth.basicauth.users=${OPENSEARCH_DASHBOARDS_BASIC_AUTH}"
       - "traefik.http.services.opensearch-dashboards.loadbalancer.server.port=5601"
-
-
