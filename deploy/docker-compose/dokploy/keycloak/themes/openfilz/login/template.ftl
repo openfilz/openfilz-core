@@ -64,12 +64,10 @@
 
             <#-- Logo -->
             <div class="of-logo-wrapper" role="img" aria-label="${msg("logoAlt")}">
-                <svg class="of-logo" viewBox="0 0 200 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="2" y="6" width="36" height="36" rx="8" fill="currentColor" opacity="0.15"/>
-                    <rect x="6" y="10" width="28" height="28" rx="6" fill="var(--of-brand-primary)"/>
-                    <path d="M14 20h16M14 24h12M14 28h8" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
-                    <text x="48" y="33" font-family="system-ui, -apple-system, sans-serif" font-size="22" font-weight="700" fill="currentColor">OpenFilz</text>
-                </svg>
+                <div class="of-logo-lockup">
+                    <img class="of-logo-icon" src="${url.resourcesPath}/img/logo.svg" alt="OpenFilz" />
+                    <span class="of-logo-wordmark">OPENFILZ</span>
+                </div>
             </div>
 
             <#-- Page Header -->

@@ -160,7 +160,7 @@ openfilz:
       use-main-storage: true  # true: storage type follows storage.type; false: uses type below
       type: local  # Storage type for thumbnails when use-main-storage=false (local or minio)
       local:
-        base-path: ${THUMBNAIL_STORAGE_PATH:/tmp/dms-thumbnails}
+        base-path: ${THUMBNAIL_STORAGE_BASE_PATH:/tmp/dms-thumbnails}
       minio:
         bucket-name: ${THUMBNAIL_BUCKET_NAME:dms-thumbnails}
     dimensions:

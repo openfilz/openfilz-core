@@ -13,9 +13,13 @@
 <!-- Header with gradient -->
 <tr>
 <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 40px 30px 40px; text-align: center;">
-<div style="width: 64px; height: 64px; margin: 0 auto 20px auto; background-color: rgba(255,255,255,0.2); border-radius: 50%; display: inline-block; line-height: 64px;">
-<span style="font-size: 28px; color: #ffffff;">${icon?no_esc}</span>
-</div>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto 20px auto;">
+<tr>
+<td align="center" valign="middle" width="80" height="80" style="width: 80px; height: 80px; background-color: rgba(255,255,255,0.8); border-radius: 50%; text-align: center; vertical-align: middle;">
+<img src="https://openfilz.com/assets/img/logo-email-header.png" alt="OpenFilz" width="64" height="49" style="display:block;border:0;margin:0 auto;" />
+</td>
+</tr>
+</table>
 <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #ffffff; letter-spacing: -0.5px;">${title}</h1>
 </td>
 </tr>
@@ -28,8 +32,19 @@
 <!-- Footer -->
 <tr>
 <td style="padding: 30px 40px; background-color: #f8fafc; border-top: 1px solid #e5e7eb; text-align: center;">
-<p style="margin: 0 0 8px 0; font-size: 13px; color: #9ca3af;">${msg("emailFooterSentVia")}</p>
-<p style="margin: 0; font-size: 14px; font-weight: 600; color: #667eea;">OpenFilz</p>
+<p style="margin: 0 0 10px 0; font-size: 13px; color: #9ca3af;">${msg("emailFooterSentVia")}</p>
+<a href="https://openfilz.com" style="text-decoration: none;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto;">
+<tr>
+<td valign="middle" style="padding-right: 6px;">
+<img src="https://openfilz.com/assets/img/logo-email-footer.png" alt="OpenFilz" width="37" height="28" style="display:block;border:0;" />
+</td>
+<td valign="middle">
+<span style="font-size: 15px; font-weight: 700; color: #667eea; letter-spacing: 0.08em;">OPENFILZ</span>
+</td>
+</tr>
+</table>
+</a>
 </td>
 </tr>
 </table>
