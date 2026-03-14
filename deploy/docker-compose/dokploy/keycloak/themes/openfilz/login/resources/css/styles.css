@@ -53,10 +53,26 @@ body {
     margin-bottom: 8px;
 }
 
-.of-logo {
-    height: 40px;
+.of-logo-lockup {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.of-logo-icon {
+    height: 44px;
     width: auto;
+    display: block;
+    flex-shrink: 0;
+}
+
+.of-logo-wordmark {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
     color: var(--of-text-primary);
+    line-height: 1;
+    white-space: nowrap;
 }
 
 .of-card-title {
