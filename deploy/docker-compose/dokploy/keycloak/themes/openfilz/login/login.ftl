@@ -1,7 +1,10 @@
 <#import "template.ftl" as layout>
 
-<#-- Detect invited user: login_hint pre-fills login.username with an email -->
-<#assign isInvitedUser = (login.username!'')?has_content && (login.username!'')?contains('@') />
+<#-- Detect invited user: login_hint pre-fills login.username with an email.
+     When there is a login error (e.g. wrong password), the username is pre-filled from the form POST,
+     not from login_hint — so we must NOT treat this as an invited user flow. -->
+<#assign hasLoginError = messagesPerField.existsError('username','password') />
+<#assign isInvitedUser = !hasLoginError && (login.username!'')?has_content && (login.username!'')?contains('@') />
 <#assign invitedEmail = (login.username!'') />
 
 <#-- Determine the recommended IdP based on email domain -->
