@@ -76,10 +76,7 @@ services:
       KC_HEALTH_ENABLED: "true"
       KC_METRICS_ENABLED: "true"
 
-      # Enable placeholder substitution in realm-export.json
-      JAVA_OPTS_APPEND: -Dkeycloak.migration.replace-placeholders=true
-
-      # Realm import substitution variables
+      # Realm import substitution variables (resolved by entrypoint.sh envsubst)
       KEYCLOAK_PUBLIC_URL: https://${KEYCLOAK_HOSTNAME}
       OPENFILZ_WEB_ROOT_URL: https://${WEB_HOSTNAME:-app.openfilz.com}
 
