@@ -29,6 +29,18 @@
             <organization>OpenFilz</organization>
             <organizationUrl>https://openfilz.org</organizationUrl>
         </developer>
+        <developer>
+            <name>Saad Moumen</name>
+            <!-- Your organization, or Github is fine too -->
+            <organization>OpenFilz</organization>
+            <organizationUrl>https://openfilz.org</organizationUrl>
+        </developer>
+        <developer>
+            <name>Mazen Hammoud</name>
+            <!-- Your organization, or Github is fine too -->
+            <organization>OpenFilz</organization>
+            <organizationUrl>https://openfilz.org</organizationUrl>
+        </developer>
     </developers>
 
     <!-- Source Control Information, Github Stuff  -->
