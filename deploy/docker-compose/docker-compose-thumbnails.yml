@@ -16,9 +16,6 @@
 #   Set OPENFILZ_THUMBNAIL_ACTIVE=true to enable thumbnail generation.
 #   The API will call Gotenberg for documents.
 
-volumes:
-  redis-data:
-
 services:
   # =============================================================================
   # Gotenberg - For PDF and Office Document Thumbnails

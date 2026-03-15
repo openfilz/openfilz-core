@@ -14,7 +14,7 @@ services:
   # OpenSearch for Full-Text Search
   # =============================================================================
   opensearch:
-    image: opensearchproject/opensearch:latest
+    image: opensearchproject/opensearch:2.19.1
     container_name: openfilz-opensearch
     restart: unless-stopped
     environment:
@@ -50,7 +50,7 @@ services:
   # OpenSearch Dashboards (UI for OpenSearch)
   # =============================================================================
   opensearch-dashboards:
-    image: opensearchproject/opensearch-dashboards:latest
+    image: opensearchproject/opensearch-dashboards:2.19.1
     container_name: openfilz-opensearch-dashboards
     restart: unless-stopped
     environment:

@@ -248,6 +248,7 @@ These variables are used to generate `ngx-env.js` for the Angular frontend:
 | `NG_APP_AUTHENTICATION_AUTHORITY` | `http://localhost:8180/realms/openfilz` | Keycloak realm URL |
 | `NG_APP_AUTHENTICATION_CLIENT_ID` | `openfilz-web` | Keycloak client ID |
 | `NG_APP_ONLYOFFICE_ENABLED` | `false` | Enable/disable OnlyOffice integration |
+| `NG_APP_ONLYOFFICE_URL` | `http://localhost:8080` | OnlyOffice document server URL |
 
 ### Storage Configuration (MinIO)
 
@@ -259,7 +260,7 @@ Used with `docker-compose.minio.yml`:
 | `MINIO_ENDPOINT` | `http://minio:9000` | MinIO server endpoint (internal) |
 | `MINIO_ACCESS_KEY` | `minioadmin` | MinIO access key |
 | `MINIO_SECRET_KEY` | `minioadmin` | MinIO secret key |
-| `MINIO_BUCKET` | `openfilz-bucket` | MinIO bucket name |
+| `MINIO_BUCKET_NAME` | `openfilz-bucket` | MinIO bucket name |
 | `MINIO_PORT` | `9000` | MinIO API exposed port |
 | `MINIO_CONSOLE_PORT` | `9001` | MinIO console exposed port |
 
@@ -270,8 +271,8 @@ Used with `docker-compose.auth.yml`:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `OPENFILZ_SECURITY_NO_AUTH` | `true` | Disable authentication (dev only) |
-| `KEYCLOAK_ADMIN` | `admin` | Keycloak admin username |
-| `KEYCLOAK_ADMIN_PASSWORD` | `admin` | Keycloak admin password |
+| `KEYCLOAK_ADMIN` | `admin` | Keycloak bootstrap admin username (maps to `KC_BOOTSTRAP_ADMIN_USERNAME`) |
+| `KEYCLOAK_ADMIN_PASSWORD` | `admin` | Keycloak bootstrap admin password (maps to `KC_BOOTSTRAP_ADMIN_PASSWORD`) |
 | `KEYCLOAK_PORT` | `8180` | Keycloak exposed port |
 | `KEYCLOAK_IMAGE` | `ghcr.io/openfilz/keycloak:26.5` | Custom Keycloak Docker image |
 | `KEYCLOAK_MANAGEMENT_PORT` | `9000` | Keycloak management port |

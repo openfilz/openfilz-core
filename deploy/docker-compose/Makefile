@@ -25,6 +25,7 @@ NG_APP_API_URL ?= http://localhost:8081/api/v1
 NG_APP_GRAPHQL_URL ?= http://localhost:8081/graphql/v1
 NG_APP_AUTHENTICATION_AUTHORITY ?= http://localhost:8180/realms/openfilz
 NG_APP_AUTHENTICATION_CLIENT_ID ?= openfilz-web
+NG_APP_ONLYOFFICE_URL ?= http://localhost:8080
 
 # Base compose command
 COMPOSE := docker-compose -p openfilz -f docker-compose.yml
@@ -75,6 +76,7 @@ define generate_config
 	 export NG_APP_AUTHENTICATION_AUTHORITY="$(NG_APP_AUTHENTICATION_AUTHORITY)" && \
 	 export NG_APP_AUTHENTICATION_CLIENT_ID="$(NG_APP_AUTHENTICATION_CLIENT_ID)" && \
 	 export NG_APP_ONLYOFFICE_ENABLED="$(2)" && \
+	 export NG_APP_ONLYOFFICE_URL="$(NG_APP_ONLYOFFICE_URL)" && \
 	 envsubst < ngx-env.template.js > ngx-env.js
 endef
 

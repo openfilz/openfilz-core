@@ -1,6 +1,6 @@
-# OpenFilz - Dokploy Deployment
+# OpenFilz Community Edition - Dokploy Deployment
 
-Deploy OpenFilz with Keycloak authentication and OnlyOffice document visualization on [Dokploy](https://dokploy.com/).
+Deploy OpenFilz with Keycloak authentication and OnlyOffice document editing on [Dokploy](https://dokploy.com/).
 
 ## Services Included
 
@@ -10,14 +10,16 @@ Deploy OpenFilz with Keycloak authentication and OnlyOffice document visualizati
 | **openfilz-api** | Spring Boot API | `api.yourdomain.com` |
 | **keycloak** | Authentication server | `auth.yourdomain.com` |
 | **onlyoffice** | Document server | `docs.yourdomain.com` |
+| **opensearch-dashboards** | Search analytics | `ops.yourdomain.com` |
 | **postgres** | PostgreSQL database | Internal only |
 | **gotenberg** | PDF/Office thumbnail generation | Internal only |
-| **opensearch** | Full-text search cluster | Internal only |
+| **opensearch** | Full-text search cluster (2-node) | Internal only |
+| **storage-init** | Volume ownership init container | Runs once |
 
 ## Prerequisites
 
 1. A Dokploy server with Traefik configured
-2. Four domains/subdomains pointing to your Dokploy server (A records)
+2. Five domains/subdomains pointing to your Dokploy server (A records)
 3. SSL certificates will be automatically generated via Let's Encrypt
 
 ## Deployment Steps
@@ -33,21 +35,104 @@ Deploy OpenFilz with Keycloak authentication and OnlyOffice document visualizati
 1. Set the **Compose Path** to `./compose.yaml`
 2. Copy the contents of `compose.yaml` into Dokploy's editor
 
-### 3. Set Environment Variables
+### 3. Set Up `OPENFILZ_FILES_BASE` (Bind Mounts)
 
-In Dokploy's **Environment** tab, add the variables from `.env.example`. At minimum:
+The compose file uses `${OPENFILZ_FILES_BASE}` for all host-side bind mount paths. This variable points to a directory on your Dokploy server where you place configuration files that containers need at runtime.
+
+#### What goes in `OPENFILZ_FILES_BASE`?
+
+The compose file bind-mounts two files from this directory:
+
+| Container path | Host path (`${OPENFILZ_FILES_BASE}/...`) | Purpose |
+|---|---|---|
+| `/docker-entrypoint-initdb.d/init-keycloak-db.sh` | `db-create.sh` | Creates the Keycloak database on first PostgreSQL startup |
+| `/usr/share/nginx/html/ngx-env.js` | `openfilz-web/ngx-env.js` | Runtime config for the Angular frontend (API URL, Keycloak URL, etc.) |
+
+#### Setup instructions
+
+Both files are available in this repository. You just need to transfer them to your Dokploy server and edit `ngx-env.js` with your actual domains.
+
+**1. SSH into your Dokploy server and create the directory:**
+
+```bash
+sudo mkdir -p /etc/dokploy/openfilz-ce/openfilz-web
+```
+
+**2. From your local machine, transfer the files with `scp`:**
+
+> **Warning (Windows users):** Shell scripts must have Unix line endings (LF). If you edit them on Windows, make sure your editor saves with LF, not CRLF. The `.gitattributes` in this repo enforces LF for `*.sh` files via Git, but files created or edited outside Git may still get CRLF. You can fix them with `dos2unix db-create.sh` or `sed -i 's/\r$//' db-create.sh` on the server.
+
+```bash
+# From the openfilz-core/deploy/docker-compose/dokploy/ directory:
+scp db-create.sh user@your-server:/etc/dokploy/openfilz-ce/db-create.sh
+```
+
+Then create `ngx-env.js` with your actual domains. You can either edit locally and `scp`, or create it directly on the server:
+
+```bash
+# Edit ngx-env.js locally first (replace yourdomain.com with your actual domain),
+# then transfer it:
+scp openfilz-web/ngx-env.js user@your-server:/etc/dokploy/openfilz-ce/openfilz-web/ngx-env.js
+```
+
+The `ngx-env.js` file should contain (replace `yourdomain.com` with your actual domain):
+
+```javascript
+globalThis._NGX_ENV_ = {
+    "NG_APP_API_URL": "https://api.yourdomain.com/api/v1",
+    "NG_APP_GRAPHQL_URL": "https://api.yourdomain.com/graphql/v1",
+    "NG_APP_AUTHENTICATION_ENABLED": "true",
+    "NG_APP_AUTHENTICATION_AUTHORITY": "https://auth.yourdomain.com/realms/openfilz",
+    "NG_APP_AUTHENTICATION_CLIENT_ID": "openfilz-web",
+    "NG_APP_ONLYOFFICE_ENABLED": "true",
+    "NG_APP_ONLYOFFICE_URL": "https://docs.yourdomain.com"
+};
+```
+
+A ready-to-edit template is available at `openfilz-web/ngx-env.js` in this directory.
+
+**3. On the server, make the init script executable:**
+
+```bash
+sudo chmod +x /etc/dokploy/openfilz-ce/db-create.sh
+```
+
+**4. Set the environment variable** in Dokploy's Environment tab (or `.env.dokploy-ce`):
 
 ```env
+OPENFILZ_FILES_BASE=/etc/dokploy/openfilz-ce
+```
+
+Your final directory on the server should look like:
+
+```
+/etc/dokploy/openfilz-ce/
+├── db-create.sh
+└── openfilz-web/
+    └── ngx-env.js
+```
+
+> **Note:** The compose file will fail with a clear error (`Set OPENFILZ_FILES_BASE in .env`) if this variable is not set.
+
+### 4. Set Environment Variables
+
+In Dokploy's **Environment** tab, add the variables from `.env.dokploy-ce` (or `.env.example` as a template). At minimum:
+
+```env
+# Bind mounts base path (see step 3)
+OPENFILZ_FILES_BASE=/etc/dokploy/openfilz-ce
+
 # Required - Replace with your actual domains
 WEB_HOSTNAME=app.yourdomain.com
 API_HOSTNAME=api.yourdomain.com
 KEYCLOAK_HOSTNAME=auth.yourdomain.com
 ONLYOFFICE_HOSTNAME=docs.yourdomain.com
+OPENSEARCH_DASHBOARDS_HOSTNAME=ops.yourdomain.com
 
 # Database - Use strong passwords!
-DB_NAME=dms_db
-DB_USER=dms_user
-DB_PASSWORD=your-strong-db-password
+POSTGRES_USER=dms_user
+POSTGRES_PASSWORD=your-strong-db-password
+POSTGRES_DB=dms_db
 
 # Keycloak database (auto-created on first startup)
 KEYCLOAK_DB_USER=keycloak
@@ -58,13 +143,13 @@ KEYCLOAK_DB_NAME=keycloak
 KEYCLOAK_ADMIN=admin
 KEYCLOAK_ADMIN_PASSWORD=your-strong-admin-password
 
-# Keycloak Public URL (used as frontendUrl in realm configuration)
-KEYCLOAK_PUBLIC_URL=https://auth.yourdomain.com
 # Default roles for new users (up to 4, set unused slots to an already-used role)
+# Available roles: READER, CONTRIBUTOR, AUDITOR, CLEANER
 KEYCLOAK_DEFAULT_ROLE_1=READER
 KEYCLOAK_DEFAULT_ROLE_2=READER
 KEYCLOAK_DEFAULT_ROLE_3=READER
 KEYCLOAK_DEFAULT_ROLE_4=READER
+
 # Default groups for new users (up to 4, set unused slots to an already-used group)
 KEYCLOAK_DEFAULT_GROUP_1=/OPENFILZ/READER
 KEYCLOAK_DEFAULT_GROUP_2=/OPENFILZ/READER
@@ -94,14 +179,12 @@ ONLYOFFICE_JWT_SECRET=your-onlyoffice-jwt-secret
 
 # CORS Origins
 CORS_ALLOWED_ORIGINS=https://app.yourdomain.com,https://docs.yourdomain.com
+
+# OpenSearch
+OPENSEARCH_INITIAL_ADMIN_PASSWORD=yourStrongPassword123!
+# Generate with: htpasswd -nb admin yourpassword | sed -e 's/\$/\$\$/g'
+OPENSEARCH_DASHBOARDS_BASIC_AUTH=admin:$$apr1$$...hashed...
 ```
-
-### 4. Upload ngx-env.js Configuration
-
-Upload the frontend configuration file via Dokploy File Mounts:
-
-1. Go to your compose service > **Advanced** > **File Mounts**
-2. Create a file mount at `openfilz-web/ngx-env.js` with your frontend configuration (see `openfilz-web/ngx-env.js` for the template)
 
 ### 5. Deploy
 
@@ -109,13 +192,18 @@ Click **Deploy** and wait for all services to start (this may take a few minutes
 
 ## Custom Keycloak Image
 
-This deployment uses a custom Keycloak image (`ghcr.io/openfilz/keycloak:<version>`) that includes:
+This deployment uses a custom Keycloak image (`ghcr.io/openfilz/keycloak:26.5`) that includes:
 
-- **Pre-imported realm**: The OpenFilz realm configuration is baked into the image, eliminating the need for manual realm file uploads
+- **Pre-imported realm**: The OpenFilz realm configuration is baked into the image
 - **Custom themes**: OpenFilz-branded login and email themes
 - **Pre-built optimizations**: `kc.sh build` has already been executed for faster startup
 
-The image is built and pushed automatically via GitHub Actions when files in `keycloak/` are changed on the `main` branch. See the `Dockerfile` in `keycloak/` for details.
+To build and push the image manually:
+
+```bash
+cd keycloak/
+./build-push-keycloak-image.sh
+```
 
 To use a specific version, set:
 ```env
@@ -124,13 +212,13 @@ KEYCLOAK_IMAGE=ghcr.io/openfilz/keycloak:26.5
 
 ## Keycloak Database Initialization
 
-The Keycloak database and user are automatically created by PostgreSQL on first startup using the `init-keycloak-db.sh` script. This script:
+The Keycloak database and user are automatically created by PostgreSQL on first startup using the `db-create.sh` script (sourced from `init-keycloak-db.sh`). This script:
 
-1. Is mounted into PostgreSQL's `/docker-entrypoint-initdb.d/` directory
+1. Is bind-mounted from `${OPENFILZ_FILES_BASE}/db-create.sh` into PostgreSQL's `/docker-entrypoint-initdb.d/` directory
 2. Reads `KEYCLOAK_DB_USER`, `KEYCLOAK_DB_PASSWORD`, and `KEYCLOAK_DB_NAME` from environment variables
 3. Creates the database and user automatically
 
-This replaces the previous `create_db.sql` approach and avoids hardcoded credentials.
+> **Important:** This script only runs on first PostgreSQL initialization (when `postgres-data` volume is empty). If you need to change the Keycloak DB password later, you must `ALTER USER` inside PostgreSQL directly.
 
 ## Post-Deployment Configuration
 
@@ -160,20 +248,22 @@ This replaces the previous `create_db.sql` approach and avoids hardcoded credent
                                   │
                     HTTPS (Let's Encrypt)
                                   │
-                 ┌────────────────┼────────────────┐
-                 ▼                ▼                ▼
-          app.domain.com   api.domain.com   auth.domain.com
-          docs.domain.com
-                                  │
-                 ┌────────────────┴────────────────┐
-                 │                                 │
-                 │   OpenFilz Services             │
-                 │   (see architecture diagram)    │
-                 │                                 │
-                 └─────────────────────────────────┘
+            ┌──────────┬──────────┼──────────┬──────────┐
+            ▼          ▼          ▼          ▼          ▼
+       app.domain  api.domain  auth.domain  docs.domain  ops.domain
+            │          │          │          │          │
+        ┌───┘    ┌─────┘    ┌────┘    ┌─────┘    ┌────┘
+        ▼        ▼          ▼         ▼          ▼
+   openfilz   openfilz   keycloak  onlyoffice  opensearch
+     -web      -api                             -dashboards
+                 │          │
+        ┌────────┼──────────┘
+        ▼        ▼
+     postgres  opensearch (2-node cluster)
+        │
+        ▼
+   gotenberg (thumbnails)
 ```
-
-For the detailed services architecture, see the [main deploy README](../../README.md#architecture).
 
 ## Volume Backups
 
@@ -193,6 +283,19 @@ Check logs in Dokploy:
 - Go to **Logs** tab
 - Select the specific service container
 
+### `OPENFILZ_FILES_BASE` Error
+
+If you see `Set OPENFILZ_FILES_BASE in .env`, the variable is not set. Add it to the Dokploy Environment tab pointing to the directory containing your configuration files.
+
+### Keycloak DB Authentication Failed
+
+If Keycloak fails with "password authentication failed for user keycloak":
+- The `db-create.sh` init script only runs when the `postgres-data` volume is first created
+- If you changed `KEYCLOAK_DB_PASSWORD` after initial setup, reset it inside PostgreSQL:
+  ```sql
+  ALTER USER keycloak WITH PASSWORD 'new-password';
+  ```
+
 ### CORS Errors
 
 Ensure `CORS_ALLOWED_ORIGINS` includes all your domains with `https://` prefix.
@@ -200,13 +303,13 @@ Ensure `CORS_ALLOWED_ORIGINS` includes all your domains with `https://` prefix.
 ### Keycloak Connection Issues
 
 The API uses internal Docker networking (`http://keycloak:8080`) to communicate with Keycloak. Ensure:
-- Keycloak is healthy before API starts
+- Keycloak is healthy before API starts (enforced by `depends_on` with `condition: service_healthy`)
 - The `openfilz` realm exists in Keycloak
 
 ### OnlyOffice Not Loading Documents
 
 1. Verify `ONLYOFFICE_JWT_SECRET` matches in both API and OnlyOffice configs
-2. Check that OnlyOffice can reach the API at `http://openfilz-api:8081`
+2. Check that OnlyOffice can reach the API at `http://openfilz-api:8080`
 
 ## Security Notes
 
