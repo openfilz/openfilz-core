@@ -52,6 +52,7 @@ services:
   keycloak:
     image: ${KEYCLOAK_IMAGE:-ghcr.io/openfilz/keycloak:26.5}
     restart: unless-stopped
+    pull_policy: always
     command:
       - start
       - --import-realm
