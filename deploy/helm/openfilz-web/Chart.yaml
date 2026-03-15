@@ -1,8 +1,8 @@
 apiVersion: v2
 name: openfilz-web
 description: A Helm chart for deploying the Openfilz web app.
-version: 1.0.0
-appVersion: "0.0.1-SNAPSHOT"
+version: 2.0.0
+appVersion: "latest"
 
 dependencies:
   - name: common

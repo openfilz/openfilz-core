@@ -14,6 +14,18 @@ spec:
       {{- with .Values.image.pullSecrets }}
       imagePullSecrets: {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if and .Values.storageInit.enabled (eq .Values.storage.type "local") .Values.persistence.enabled }}
+      initContainers:
+        - name: storage-init
+          image: {{ .Values.storageInit.image }}
+          command:
+            - sh
+            - -c
+            - chown -R {{ .Values.storageInit.uid }}:{{ .Values.storageInit.gid }} {{ .Values.storage.basePath }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.storage.basePath }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -23,28 +35,146 @@ spec:
               containerPort: {{ .Values.api.port }}
               protocol: TCP
           env:
+            # ---------------------------------------------------------------
+            # Locale
+            # ---------------------------------------------------------------
+            - name: LANG
+              value: C.UTF-8
+            - name: LC_ALL
+              value: C.UTF-8
+
+            # ---------------------------------------------------------------
+            # Spring profile
+            # ---------------------------------------------------------------
+            {{- if .Values.spring.activeProfile }}
             - name: SPRING_PROFILES_ACTIVE
-              value: {{ .Values.spring.activeProfile }}
-            - name: DB_HOST
-              value: {{ .Values.database.host }}
-            - name: DB_PORT
-              value: {{ .Values.database.port | quote }}
-            - name: DB_NAME
-              value: {{ .Values.database.name }}
-            - name: API_ROOT_URL
-              value: {{ .Values.route.hostname }}
-            - name: DB_USER
+              value: {{ .Values.spring.activeProfile | quote }}
+            {{- end }}
+
+            # ---------------------------------------------------------------
+            # Database (R2DBC + Flyway)
+            # ---------------------------------------------------------------
+            - name: SPRING_R2DBC_URL
+              value: "r2dbc:postgresql://{{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }}"
+            - name: SPRING_R2DBC_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.database.existingSecret | default (printf "%s-db-credentials" (include "common.names.fullname" .)) }}
                   key: user
-            - name: DB_PASSWORD
+            - name: SPRING_R2DBC_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.database.existingSecret | default (printf "%s-db-credentials" (include "common.names.fullname" .)) }}
                   key: password
-            - name: JAVA_TOOL_OPTIONS
-              value: "-Dopenfilz.security.cors-allowed-origins={{ .Values.api.corsAllowedUrls }} -Dserver.port={{ .Values.api.port }} -Dstorage.type={{ .Values.storage.type }} -Dstorage.local.basePath={{ .Values.storage.basePath }}"
+            - name: SPRING_FLYWAY_URL
+              value: "jdbc:postgresql://{{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }}"
+            - name: SPRING_FLYWAY_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret | default (printf "%s-db-credentials" (include "common.names.fullname" .)) }}
+                  key: user
+            - name: SPRING_FLYWAY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret | default (printf "%s-db-credentials" (include "common.names.fullname" .)) }}
+                  key: password
+            - name: SPRING_FLYWAY_BASELINE_ON_MIGRATE
+              value: {{ .Values.database.flyway.baselineOnMigrate | quote }}
+            - name: SPRING_FLYWAY_BASELINE_VERSION
+              value: {{ .Values.database.flyway.baselineVersion | quote }}
+
+            # ---------------------------------------------------------------
+            # Security / Keycloak
+            # ---------------------------------------------------------------
+            - name: OPENFILZ_SECURITY_NO_AUTH
+              value: {{ .Values.security.noAuth | quote }}
+            {{- if not .Values.security.noAuth }}
+            - name: KEYCLOAK_REALM_URL
+              value: {{ .Values.security.keycloakRealmUrl | quote }}
+            {{- end }}
+            {{- if .Values.api.corsAllowedOrigins }}
+            - name: OPENFILZ_SECURITY_CORS_ALLOWED_ORIGINS
+              value: {{ .Values.api.corsAllowedOrigins | quote }}
+            {{- end }}
+
+            # ---------------------------------------------------------------
+            # Storage
+            # ---------------------------------------------------------------
+            - name: STORAGE_TYPE
+              value: {{ .Values.storage.type | quote }}
+            - name: STORAGE_LOCAL_BASE_PATH
+              value: {{ .Values.storage.basePath | quote }}
+            {{- if .Values.features.thumbnail.storagePath }}
+            - name: THUMBNAIL_STORAGE_BASE_PATH
+              value: {{ .Values.features.thumbnail.storagePath | quote }}
+            {{- end }}
+
+            # ---------------------------------------------------------------
+            # Server
+            # ---------------------------------------------------------------
+            - name: SERVER_PORT
+              value: {{ .Values.api.port | quote }}
+
+            # ---------------------------------------------------------------
+            # URLs
+            # ---------------------------------------------------------------
+            - name: OPENFILZ_INTERNAL_API_BASE_URL
+              value: {{ .Values.urls.internal | quote }}
+            {{- if .Values.urls.public }}
+            - name: OPENFILZ_PUBLIC_API_BASE_URL
+              value: {{ .Values.urls.public | quote }}
+            {{- end }}
+            {{- if .Values.urls.apiRoot }}
+            - name: API_ROOT_URL
+              value: {{ .Values.urls.apiRoot | quote }}
+            {{- end }}
+
+            # ---------------------------------------------------------------
+            # Feature toggles
+            # ---------------------------------------------------------------
+            - name: OPENFILZ_SOFTDELETE_ACTIVE
+              value: {{ .Values.features.softDelete | quote }}
+            - name: OPENFILZ_CALCULATECHECKSUM
+              value: {{ .Values.features.calculateChecksum | quote }}
+
+            # Thumbnails / Gotenberg
+            - name: OPENFILZ_THUMBNAIL_ACTIVE
+              value: {{ .Values.features.thumbnail.active | quote }}
+            {{- if .Values.features.thumbnail.active }}
+            - name: GOTENBERG_URL
+              value: {{ .Values.features.thumbnail.gotenbergUrl | quote }}
+            {{- end }}
+
+            # Full-text search / OpenSearch
+            - name: OPENFILZ_FULLTEXT_ACTIVE
+              value: {{ .Values.features.fulltext.active | quote }}
+            {{- if .Values.features.fulltext.active }}
+            - name: OPENFILZ_FULLTEXT_OPENSEARCH_HOST
+              value: {{ .Values.features.fulltext.opensearchHost | quote }}
+            - name: OPENFILZ_FULLTEXT_OPENSEARCH_PORT
+              value: {{ .Values.features.fulltext.opensearchPort | quote }}
+            - name: OPENFILZ_FULLTEXT_OPENSEARCH_SCHEME
+              value: {{ .Values.features.fulltext.opensearchScheme | quote }}
+            {{- end }}
+
+            # OnlyOffice
+            - name: ONLYOFFICE_ENABLED
+              value: {{ .Values.features.onlyoffice.enabled | quote }}
+            {{- if .Values.features.onlyoffice.enabled }}
+            - name: ONLYOFFICE_URL
+              value: {{ .Values.features.onlyoffice.url | quote }}
+            {{- if .Values.features.onlyoffice.jwtSecret }}
+            - name: ONLYOFFICE_JWT_SECRET
+              value: {{ .Values.features.onlyoffice.jwtSecret | quote }}
+            {{- end }}
+            {{- end }}
+
+            # Quotas
+            - name: OPENFILZ_QUOTA_FILE_UPLOAD
+              value: {{ .Values.features.quota.fileUpload | quote }}
+            - name: OPENFILZ_QUOTA_USER
+              value: {{ .Values.features.quota.user | quote }}
+
           {{- if or .Values.extraEnv .Values.extraEnvSecretRef }}
           envFrom:
             {{- if .Values.extraEnv }}

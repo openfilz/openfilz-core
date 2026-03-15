@@ -5,6 +5,11 @@ metadata:
 data:
   ngx-env.js: |
     globalThis._NGX_ENV_ = {
-      {{ printf "NG_APP_API_URL: \"%s\"," .Values.app.apiUrl }}
-      {{ printf "NG_APP_GRAPHQL_URL: \"%s\"" .Values.app.graphQlUrl }}
+      "NG_APP_API_URL": {{ .Values.app.apiUrl | quote }},
+      "NG_APP_GRAPHQL_URL": {{ .Values.app.graphQlUrl | quote }},
+      "NG_APP_AUTHENTICATION_ENABLED": {{ .Values.app.authenticationEnabled | quote }},
+      "NG_APP_AUTHENTICATION_AUTHORITY": {{ .Values.app.authenticationAuthority | quote }},
+      "NG_APP_AUTHENTICATION_CLIENT_ID": {{ .Values.app.authenticationClientId | quote }},
+      "NG_APP_ONLYOFFICE_ENABLED": {{ .Values.app.onlyofficeEnabled | quote }},
+      "NG_APP_ONLYOFFICE_URL": {{ .Values.app.onlyofficeUrl | quote }}
     };

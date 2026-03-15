@@ -1,34 +1,61 @@
-# Example values for a standard Kubernetes deployment
+# Example values for a standard Kubernetes (kind) deployment
 
-# -- Disable OpenShift-specific resources as we are on standard Kubernetes.
 openshift:
   enabled: false
   route:
     enabled: false
 
-# -- Enable and configure the Kubernetes Ingress resource.
 ingress:
   enabled: true
+
 persistence:
   enabled: true
   size: 1Gi
 
-# -- For test purposes only. Database password should be set via --set or a secret in production.
+# -- Database connection (for test/dev purposes only).
+# In production, use existingSecret or --set for credentials.
 database:
-  host: dms-postgres-postgresql
-  createUser: dms_user
-  createPassword: dms_password
-  name: dms_db
+  host: openfilz-postgres
+  name: openfilz
+  user: openfilz
+  password: openfilz
 
-# -- Remaining values can inherit from the defaults in values.yaml or be set as needed.
-# replicaCount: 1
-# image:
-#   tag: "1.2.3"
+# -- Security: set noAuth=true for local dev without Keycloak.
+security:
+  noAuth: false
+  keycloakRealmUrl: "http://keycloak:8080/realms/openfilz"
 
-# -- Extra environment variables injected via a chart-managed ConfigMap.
+# -- Storage
+storage:
+  type: local
+  basePath: /var/data/openfilz
+
+# -- URLs (adjust hostnames to match your ingress)
+urls:
+  internal: "http://openfilz-api:8080"
+  public: "http://localhost:8080"
+
+# -- Feature toggles (enable as needed)
+# features:
+#   softDelete: true
+#   calculateChecksum: false
+#   thumbnail:
+#     active: true
+#     gotenbergUrl: "http://gotenberg:3000"
+#   fulltext:
+#     active: true
+#     opensearchHost: "opensearch"
+#   onlyoffice:
+#     enabled: true
+#     url: "http://onlyoffice"
+#     jwtSecret: "my-secret"
+
+# -- Extra environment variables (e.g. for MinIO credentials)
 # extraEnv:
-#   MY_CUSTOM_VAR: "my-value"
-#   FEATURE_FLAG_X: "true"
+#   STORAGE_MINIO_ENDPOINT: "http://minio:9000"
+#   STORAGE_MINIO_ACCESS_KEY: "minioadmin"
+#   STORAGE_MINIO_SECRET_KEY: "minioadmin"
+#   STORAGE_MINIO_BUCKET_NAME: "openfilz-bucket"
 
 # -- Inject sensitive env vars from an existing Secret.
 # extraEnvSecretRef: "my-app-secrets"
