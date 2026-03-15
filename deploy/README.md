@@ -12,27 +12,48 @@ This directory contains all deployment configurations for OpenFilz.
 
 ## Architecture
 
-```
-                    ┌───────────────┐
-                    │  openfilz-web │  (Angular frontend)
-                    └──┬─────────┬──┘
-                       │         │
-                REST/GraphQL  OIDC login
-                       │         │
-                    ┌──▼──────┐  │              ┌─────────────┐
-                    │ openfilz│  └─────────────►│  Keycloak   │
-                    │   -api  │─────JWT────────►│   (auth)    │
-                    │(backend)│                 └──────┬──────┘
-                    └┬──┬──┬──┘                        │
-                     │  │  │                           │
-        ┌────────────┤  │  ├────────────┐              │
-        ▼            ▼  ▼  ▼            ▼              ▼
-  ┌──────────┐ ┌─────┐ ┌──────────┐ ┌─────────┐ ┌──────────┐
-  │OnlyOffice│ │MinIO│ │OpenSearch│ │Gotenberg│ │PostgreSQL│
-  │(editing) │ │(S3) │ │ (search) │ │(thumbs) │ │(database)│
-  └──────────┘ └─────┘ └──────────┘ └─────────┘ └──────────┘
+```mermaid
+graph TB
+    subgraph Clients["Clients"]
+        WEB["openfilz-web<br/><sub>Angular frontend</sub>"]
+    end
 
-  ─────────── optional services ─────────────   ── required ──
+    subgraph Auth["Identity Provider"]
+        KC["Keycloak<br/><sub>OIDC · JWT</sub>"]
+    end
+
+    API["openfilz-api<br/><sub>Spring WebFlux backend</sub>"]
+
+    subgraph Required["Required"]
+        PG["PostgreSQL<br/><sub>database</sub>"]
+    end
+
+    subgraph Storage["Storage <i>(choose one)</i>"]
+        FS["Local FS"]
+        S3["MinIO / S3"]
+    end
+
+    subgraph Optional["Optional Services"]
+        OO["OnlyOffice<br/><sub>editing</sub>"]
+        OS["OpenSearch<br/><sub>search</sub>"]
+        GOT["Gotenberg<br/><sub>thumbnails</sub>"]
+    end
+
+    WEB -->|"REST · GraphQL"| API
+    WEB -->|"OIDC login"| KC
+    API -->|"JWT validation"| KC
+    API --> PG
+    API --> FS
+    API --> S3
+    API --> OO
+    API --> OS
+    API --> GOT
+
+    classDef reqStyle fill:#ecfdf5,stroke:#10b981,stroke-width:2px
+    classDef optStyle fill:#f8fafc,stroke:#94a3b8,stroke-width:1px,stroke-dasharray:5 5
+
+    class PG,FS,S3 reqStyle
+    class OO,OS,GOT optStyle
 ```
 
 ## Environment Variables
