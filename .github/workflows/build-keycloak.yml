@@ -26,7 +26,7 @@ jobs:
       - name: Extract Keycloak version from Dockerfile
         id: version
         run: |
-          KC_VERSION=$(grep -oP '(?<=keycloak:)\S+' deploy/docker-compose/dokploy/keycloak/Dockerfile)
+          KC_VERSION=$(grep '^FROM' deploy/docker-compose/dokploy/keycloak/Dockerfile | grep -oP '(?<=keycloak:)\S+')
           echo "keycloak_version=$KC_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build image
