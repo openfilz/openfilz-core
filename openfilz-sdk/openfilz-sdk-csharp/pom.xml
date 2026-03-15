@@ -79,6 +79,8 @@
                                 <packageVersion>${project.version}</packageVersion>
                                 <targetFramework>net8.0</targetFramework>
                                 <netCoreProjectFile>true</netCoreProjectFile>
+                                <gitUserId>openfilz</gitUserId>
+                                <gitRepoId>openfilz-core</gitRepoId>
                             </configOptions>
                         </configuration>
                     </execution>

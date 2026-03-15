@@ -81,6 +81,8 @@
                                 <withSeparateModelsAndApi>true</withSeparateModelsAndApi>
                                 <modelPackage>models</modelPackage>
                                 <apiPackage>api</apiPackage>
+                                <gitUserId>openfilz</gitUserId>
+                                <gitRepoId>openfilz-core</gitRepoId>
                             </configOptions>
                         </configuration>
                     </execution>
