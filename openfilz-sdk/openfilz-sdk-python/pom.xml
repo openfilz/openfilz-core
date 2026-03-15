@@ -101,6 +101,8 @@
                                 <packageName>openfilz_sdk</packageName>
                                 <projectName>openfilz-sdk-python</projectName>
                                 <packageVersion>${python.package.version}</packageVersion>
+                                <gitUserId>openfilz</gitUserId>
+                                <gitRepoId>openfilz-core</gitRepoId>
                             </configOptions>
                         </configuration>
                     </execution>
