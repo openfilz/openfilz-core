@@ -17,6 +17,19 @@ OpenFilz is a modern, reactive document management API designed for scalability,
 
 ---
 
+## Documentation
+
+Pick the guide that matches your role:
+
+| I want to... | Guide |
+|--------------|-------|
+| **Use** OpenFilz (browse folders, upload files, search, favorites, etc.) | [User Guide](docs/user-guide.md) |
+| **Install & configure** OpenFilz (Docker, Helm, Keycloak, storage, feature toggles) | [Installation & Administration Guide](docs/admin-guide.md) |
+| **Integrate** with the REST / GraphQL API or use an SDK | [Developer Guide](docs/developer-guide.md) |
+| **Contribute** to the open-source codebase | [Contributor Guide](docs/contributor-guide.md) |
+
+---
+
 ## Related Components
 
 - [OpenFilz Web](https://github.com/openfilz/openfilz-web) - Angular web interface for managing documents through a Google Drive-like GUI.
@@ -283,17 +296,66 @@ var uploaded = response.Ok()!;
 
 ## Architecture
 
-### Reactive Core
+### System Architecture
 
-Built on a non-blocking, reactive stack using **Spring WebFlux** and **R2DBC** for high concurrency and scalability. The application remains responsive under heavy load with efficient resource utilization.
+```mermaid
+graph LR
+    subgraph Clients["Clients"]
+        WEB["🌐 OpenFilz Web"]
+        SDK["🔌 SDKs & APIs"]
+    end
 
-### Storage Abstraction
+    subgraph Auth["Identity"]
+        KC["🔐 Keycloak\nOIDC · JWT"]
+    end
 
-OpenFilz separates the logical folder hierarchy from physical file storage:
+    subgraph Core["OpenFilz Reactive API"]
+        direction TB
+        ENDPOINTS["REST · GraphQL · TUS"]
+        SERVICES["Document · Folder · Metadata · Audit\nSearch · WORM · Favorites · Recycle Bin"]
+        ABSTRACTION["Storage Abstraction"]
+        ENDPOINTS --> SERVICES --> ABSTRACTION
+    end
 
-- **Virtual Folders** - Represented as metadata in PostgreSQL. Only files are stored in the physical storage backend.
-- **Efficient Operations** - Moving or renaming a folder is a fast metadata update, avoiding costly filesystem operations.
-- **Pluggable Backends** - Switch between local filesystem (`storage.type=local`) and MinIO/S3 (`storage.type=minio`) without code changes.
+    subgraph Data["Data Layer"]
+        direction TB
+        PG["🗄️ PostgreSQL\nR2DBC · JSONB"]
+        FS["📁 Local FS"]
+        S3["☁️ S3 / MinIO"]
+    end
+
+    subgraph Plugins["Optional"]
+        direction TB
+        OO["📝 OnlyOffice"]
+        OS["🔍 OpenSearch"]
+        GOT["🖼️ Gotenberg"]
+    end
+
+    Clients -->|"OIDC"| Auth
+    Clients -->|"REST · GraphQL"| Core
+    Core -->|"JWT"| Auth
+    Core --> Data
+    Core -.-> Plugins
+
+    classDef clientBox fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+    classDef authBox fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95
+    classDef coreBox fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+    classDef dataBox fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
+    classDef pluginBox fill:#f1f5f9,stroke:#94a3b8,stroke-width:1px,stroke-dasharray:5 5,color:#475569
+
+    class WEB,SDK clientBox
+    class KC authBox
+    class ENDPOINTS,SERVICES,ABSTRACTION coreBox
+    class PG,FS,S3 dataBox
+    class OO,OS,GOT pluginBox
+```
+
+### Key Design Decisions
+
+- **Reactive Core** — Built on **Spring WebFlux** and **R2DBC** for non-blocking, high-concurrency performance. The API remains responsive under heavy load with efficient resource utilization.
+- **Virtual Folders** — Folders exist as metadata in PostgreSQL, not as physical directories. Moving or renaming a folder with 100K files is an instant metadata update.
+- **Pluggable Storage** — Switch between local filesystem (`storage.type=local`) and MinIO/S3 (`storage.type=minio`) via configuration, without code changes.
+- **Immutable Audit Chain** — Every operation is recorded with SHA-256 cryptographic chaining for tamper detection.
 
 ### Request Flow
 
@@ -392,7 +454,7 @@ Single compose file in [`deploy/docker-compose/dokploy/`](deploy/docker-compose/
 
 ## Building and Running
 
-See [BUILD_AND_TEST.md](BUILD_AND_TEST.md) for detailed instructions on how to build, configure, and run the application, including integration tests with Testcontainers.
+See the [Installation & Administration Guide](docs/admin-guide.md) for full deployment instructions or the [Contributor Guide](docs/contributor-guide.md) for development setup with Testcontainers.
 
 ### Quick Start
 
