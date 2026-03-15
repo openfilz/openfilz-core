@@ -70,6 +70,8 @@
                             <inputSpec>${openapi.spec.uri}</inputSpec>
                             <generatorName>typescript-axios</generatorName>
                             <output>${project.build.directory}/generated-sdk/typescript</output>
+                            <gitUserId>openfilz</gitUserId>
+                            <gitRepoId>openfilz-core</gitRepoId>
                             <inlineSchemaNameMappings>
                                 <inlineSchemaNameMapping>AuditLog_details=AuditLogDetailsOneOf</inlineSchemaNameMapping>
                             </inlineSchemaNameMappings>
@@ -81,8 +83,6 @@
                                 <withSeparateModelsAndApi>true</withSeparateModelsAndApi>
                                 <modelPackage>models</modelPackage>
                                 <apiPackage>api</apiPackage>
-                                <gitUserId>openfilz</gitUserId>
-                                <gitRepoId>openfilz-core</gitRepoId>
                             </configOptions>
                         </configuration>
                     </execution>
