@@ -70,6 +70,8 @@
                             <inputSpec>${openapi.spec.uri}</inputSpec>
                             <generatorName>csharp</generatorName>
                             <output>${project.build.directory}/generated-sdk/csharp</output>
+                            <gitUserId>openfilz</gitUserId>
+                            <gitRepoId>openfilz-core</gitRepoId>
                             <inlineSchemaNameMappings>
                                 <inlineSchemaNameMapping>AuditLog_details=AuditLogDetailsOneOf</inlineSchemaNameMapping>
                             </inlineSchemaNameMappings>
@@ -79,8 +81,6 @@
                                 <packageVersion>${project.version}</packageVersion>
                                 <targetFramework>net8.0</targetFramework>
                                 <netCoreProjectFile>true</netCoreProjectFile>
-                                <gitUserId>openfilz</gitUserId>
-                                <gitRepoId>openfilz-core</gitRepoId>
                             </configOptions>
                         </configuration>
                     </execution>

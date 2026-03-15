@@ -140,6 +140,8 @@
                             <groupId>org.openfilz</groupId>
                             <artifactId>openfilz-sdk-java-reactive</artifactId>
                             <artifactVersion>${project.version}</artifactVersion>
+                            <gitUserId>openfilz</gitUserId>
+                            <gitRepoId>openfilz-core</gitRepoId>
                             <inlineSchemaNameMappings>
                                 <inlineSchemaNameMapping>AuditLog_details=AuditLogDetailsOneOf</inlineSchemaNameMapping>
                             </inlineSchemaNameMappings>
@@ -150,8 +152,6 @@
                                 <sourceFolder>src/main/java</sourceFolder>
                                 <reactive>true</reactive>
                                 <legacyDiscriminatorBehavior>false</legacyDiscriminatorBehavior>
-                                <gitUserId>openfilz</gitUserId>
-                                <gitRepoId>openfilz-core</gitRepoId>
                             </configOptions>
                             <generateApiTests>false</generateApiTests>
                             <generateModelTests>false</generateModelTests>
