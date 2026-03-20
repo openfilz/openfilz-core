@@ -422,12 +422,16 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
     }
 
     protected Function<Readable, DocumentPosition> mapPositionQuery() {
-        return row -> new DocumentPosition(
-                row.get(DOCUMENT_ID1, UUID.class),
-                row.get( SqlColumnMapping.PARENT_ID, UUID.class),
-                row.get(POSITION, Long.class),
-                row.get(TOTAL_ITEMS, Long.class)
-        );
+        return row -> {
+            Long position = row.get(POSITION, Long.class);
+            Long totalItems = row.get(TOTAL_ITEMS, Long.class);
+            return new DocumentPosition(
+                    row.get(DOCUMENT_ID1, UUID.class),
+                    row.get(SqlColumnMapping.PARENT_ID, UUID.class),
+                    position != null ? position : 0L,
+                    totalItems != null ? totalItems : 0L
+            );
+        };
     }
 
     protected String getSafeSortOrder(String sortOrder) {
