@@ -163,6 +163,7 @@ openfilz:
         base-path: ${THUMBNAIL_STORAGE_BASE_PATH:/tmp/dms-thumbnails}
       minio:
         bucket-name: ${THUMBNAIL_BUCKET_NAME:dms-thumbnails}
+    pdf-max-size-bytes: ${THUMBNAIL_PDF_MAX_SIZE_BYTES:104857600}  # 100 MB - PDFs larger than this skip thumbnail rendering to avoid OOM
     dimensions:
       width: 100
       height: 100

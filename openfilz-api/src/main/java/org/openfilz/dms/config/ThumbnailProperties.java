@@ -47,6 +47,14 @@ public class ThumbnailProperties {
     private Dimensions dimensions = new Dimensions();
 
     /**
+     * Maximum file size in bytes for PDFBox thumbnail rendering.
+     * PDFs larger than this will get a placeholder thumbnail instead of a rendered first page,
+     * to avoid OutOfMemoryError with large image-heavy PDFs.
+     * Default: 100 MB.
+     */
+    private long pdfMaxSizeBytes = 100L * 1024 * 1024;
+
+    /**
      * Content types supported for thumbnail generation.
      * Images are processed by WebP Converter, PDFs and Office documents by Gotenberg,
      * Text files are rendered directly in Java.

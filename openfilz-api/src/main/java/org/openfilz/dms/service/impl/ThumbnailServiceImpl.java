@@ -121,6 +121,12 @@ public class ThumbnailServiceImpl implements ThumbnailService {
             extension = null;
             if (thumbnailProperties.shouldUsePdfBox(document.getContentType())) {
                 // PDFs: use PDFBox directly
+                // Skip rendering for very large PDFs to avoid OutOfMemoryError
+                if (document.getSize() != null && document.getSize() > thumbnailProperties.getPdfMaxSizeBytes()) {
+                    log.info("PDF too large for thumbnail rendering ({} bytes > {} bytes limit), skipping: {}",
+                        document.getSize(), thumbnailProperties.getPdfMaxSizeBytes(), document.getId());
+                    return Mono.empty();
+                }
                 log.debug("Using PDFBox for document: {} (type: {})", document.getId(), document.getContentType());
                 thumbnailBytes = renderPdfThumbnailFromStorage(document.getStoragePath());
             } else if (thumbnailProperties.shouldUseGotenberg(document.getContentType())) {
