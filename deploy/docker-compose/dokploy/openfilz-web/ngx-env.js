@@ -5,5 +5,6 @@ globalThis._NGX_ENV_ = {
     "NG_APP_AUTHENTICATION_AUTHORITY": "https://auth.openfilz.org/realms/openfilz",
     "NG_APP_AUTHENTICATION_CLIENT_ID": "openfilz-web",
     "NG_APP_ONLYOFFICE_ENABLED": "true",
-    "NG_APP_ONLYOFFICE_URL": "https://docs.openfilz.org"
+    "NG_APP_ONLYOFFICE_URL": "https://docs.openfilz.org",
+    "NG_APP_ONLYOFFICE_MAX_FILE_SIZE": "30"
 };
