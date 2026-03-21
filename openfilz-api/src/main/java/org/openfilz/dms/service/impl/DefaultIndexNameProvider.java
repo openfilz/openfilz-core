@@ -3,6 +3,7 @@ package org.openfilz.dms.service.impl;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.openfilz.dms.config.FullTextProperties;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.service.IndexMappingsProvider;
 import org.openfilz.dms.service.IndexNameProvider;
@@ -34,6 +35,7 @@ public class DefaultIndexNameProvider implements IndexNameProvider {
 
     private final OpenSearchAsyncClient openSearchAsyncClient;
     private final IndexMappingsProvider indexMappingsProvider;
+    private final FullTextProperties fullTextProperties;
 
     @Value("${openfilz.full-text.default-index:openfilz}")
     private String defaultIndexName;
@@ -100,6 +102,7 @@ public class DefaultIndexNameProvider implements IndexNameProvider {
 
                         CreateIndexRequest createRequest = CreateIndexRequest.of(c -> c
                                         .index(indexName)
+                                        .settings(indexMappingsProvider.getIndexSettings(fullTextProperties.getContentLanguages()))
                                         .mappings(indexMappingsProvider.getIndexMappings())
                         );
 

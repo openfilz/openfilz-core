@@ -129,6 +129,7 @@ openfilz:
   full-text:
     active: false
     default-index: openfilz
+    content-languages: fr,en # Stemmer languages for content analysis (e.g. fr,en,de,es,it,nl,pt,ar)
     indexation-mode: local # local (only choice for the moment) -> to be developed : redis | kafka | nats
     opensearch:
       host: localhost

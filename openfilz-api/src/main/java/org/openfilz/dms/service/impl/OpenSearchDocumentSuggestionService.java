@@ -14,7 +14,6 @@ import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.opensearch._types.FieldValue;
 import org.opensearch.client.opensearch._types.query_dsl.BoolQuery;
 import org.opensearch.client.opensearch._types.query_dsl.MatchQuery;
-import org.opensearch.client.opensearch._types.query_dsl.Operator;
 import org.opensearch.client.opensearch.core.SearchRequest;
 import org.opensearch.client.opensearch.core.SearchResponse;
 import org.opensearch.client.opensearch.core.search.Hit;
@@ -71,13 +70,12 @@ public class OpenSearchDocumentSuggestionService implements DocumentSuggestionSe
         // Should: match on name_suggest (existing behavior)
         boolQueryBuilder.should(openSearchQueryService.getNameSuggestQuery(trimQuery).toQuery());
 
-        // Should: match on content (NEW - full-text search inside documents)
-        // Use fuzziness to handle accent differences (e.g. "systemes" → "systèmes")
-        // and minor spelling variations (e.g. "système" → "systèmes")
+        // Should: match on content (full-text search inside documents)
+        // The content_analyzer (asciifolding + language stemmers) handles accent folding
+        // and singular/plural at index time, so no fuzziness is needed here.
         boolQueryBuilder.should(MatchQuery.of(m -> m
                 .field(CONTENT)
                 .query(FieldValue.of(trimQuery))
-                .fuzziness("AUTO")
         ).toQuery());
 
         // At least one should clause must match

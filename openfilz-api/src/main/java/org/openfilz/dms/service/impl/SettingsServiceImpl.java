@@ -18,6 +18,9 @@ public class SettingsServiceImpl implements SettingsService {
     @Value("${openfilz.soft-delete.active:false}")
     private Boolean softDelete;
 
+    @Value("${openfilz.thumbnail.active:false}")
+    private Boolean thumbnailActive;
+
     private final RecycleBinProperties recycleBinProperties;
 
     private final QuotaProperties quotaProperties;
@@ -39,7 +42,12 @@ public class SettingsServiceImpl implements SettingsService {
                 }
             }
         }
-       return Mono.just(Settings.builder().emptyBinInterval(emptyBinInterval).fileQuotaMB(quotaProperties.getFileUpload()).userQuotaMB(quotaProperties.getUser()).build());
+       return Mono.just(Settings.builder()
+               .emptyBinInterval(emptyBinInterval)
+               .fileQuotaMB(quotaProperties.getFileUpload())
+               .userQuotaMB(quotaProperties.getUser())
+               .thumbnailsActive(thumbnailActive)
+               .build());
 
     }
 
