@@ -5,6 +5,7 @@ import org.openfilz.dms.dto.request.FilterInput;
 import org.openfilz.dms.dto.request.SortInput;
 import org.openfilz.dms.dto.response.Suggest;
 import org.openfilz.dms.exception.OpenSearchException;
+import org.openfilz.dms.utils.FileUtils;
 import org.openfilz.dms.service.DocumentSuggestionService;
 import org.openfilz.dms.service.IndexNameProvider;
 import org.openfilz.dms.service.OpenSearchQueryService;
@@ -12,6 +13,8 @@ import org.openfilz.dms.service.OpenSearchService;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.opensearch._types.FieldValue;
 import org.opensearch.client.opensearch._types.query_dsl.BoolQuery;
+import org.opensearch.client.opensearch._types.query_dsl.MatchQuery;
+import org.opensearch.client.opensearch._types.query_dsl.Operator;
 import org.opensearch.client.opensearch.core.SearchRequest;
 import org.opensearch.client.opensearch.core.SearchResponse;
 import org.opensearch.client.opensearch.core.search.Hit;
@@ -55,40 +58,58 @@ public class OpenSearchDocumentSuggestionService implements DocumentSuggestionSe
 
         String trimQuery = getTrimQuery(query);
         SearchRequest.Builder requestBuilder = new SearchRequest.Builder();
-        return openSearchQueryService.getQuery(trimQuery, filters)
-                    .flatMapMany(openQuery -> {
-                        // Wrap the query in a BoolQuery to add the active filter
-                        BoolQuery.Builder activeFilterBuilder = new BoolQuery.Builder();
-                        activeFilterBuilder.must(openQuery.toQuery());
-                        activeFilterBuilder.filter(f -> f.term(t -> t
-                                .field(ACTIVE)
-                                .value(FieldValue.of(true))
-                        ));
 
-                        requestBuilder
-                                .index(indexNameProvider.getDocumentsIndexName())
-                                .query(activeFilterBuilder.build().toQuery());
-                        addSorting(sort, requestBuilder);
-                        SearchRequest searchRequest = requestBuilder
-                                // We don't need the full document source, making the request very lightweight.
-                                .source(s -> s.filter(f -> f.includes(SUGGEST_ID, SUGGEST_EXT, NAME)))
-                                // We only need a few suggestions for the UI.
-                                .size(SUGGEST_RESULTS_MAX_SIZE)
-                                // Use highlighting to get the matched parts of the name.
-                                .highlight(h -> h
-                                        .fields(NAME_SUGGEST, f -> f.preTags(EM).postTags(EM1))
-                                )
-                                .build();
+        // Build a BoolQuery that searches both name and content fields
+        BoolQuery.Builder boolQueryBuilder = new BoolQuery.Builder();
 
-                        // We use flatMapMany to transform the single response (Mono<SearchResponse>)
-                        // into a stream of multiple items (Flux<Suggest>).
-                        try {
-                            return Mono.fromFuture(client.search(searchRequest, DocumentSource.class))
-                                    .flatMapMany(this::toSuggestFlux);
-                        } catch (IOException e) {
-                            throw new OpenSearchException(e);
-                        }
-                    });
+        // Filter: only active documents
+        boolQueryBuilder.filter(f -> f.term(t -> t
+                .field(ACTIVE)
+                .value(FieldValue.of(true))
+        ));
+
+        // Should: match on name_suggest (existing behavior)
+        boolQueryBuilder.should(openSearchQueryService.getNameSuggestQuery(trimQuery).toQuery());
+
+        // Should: match on content (NEW - full-text search inside documents)
+        // Use fuzziness to handle accent differences (e.g. "systemes" → "systèmes")
+        // and minor spelling variations (e.g. "système" → "systèmes")
+        boolQueryBuilder.should(MatchQuery.of(m -> m
+                .field(CONTENT)
+                .query(FieldValue.of(trimQuery))
+                .fuzziness("AUTO")
+        ).toQuery());
+
+        // At least one should clause must match
+        boolQueryBuilder.minimumShouldMatch("1");
+
+        // Add filter clauses from user-provided filters
+        return openSearchQueryService.addFilterClauses(filters, boolQueryBuilder)
+                .flatMapMany(b -> {
+                    requestBuilder
+                            .index(indexNameProvider.getDocumentsIndexName())
+                            .query(b.build().toQuery());
+                    addSorting(sort, requestBuilder);
+                    SearchRequest searchRequest = requestBuilder
+                            .source(s -> s.filter(f -> f.includes(SUGGEST_ID, SUGGEST_EXT, NAME)))
+                            .size(SUGGEST_RESULTS_MAX_SIZE)
+                            .highlight(h -> h
+                                    .fields(NAME_SUGGEST, f -> f.preTags(EM).postTags(EM1))
+                                    .fields(CONTENT, f -> f
+                                            .preTags("<mark>").postTags("</mark>")
+                                            .fragmentSize(120)
+                                            .numberOfFragments(1)
+                                    )
+                            )
+                            .build();
+
+                    try {
+                        return Mono.fromFuture(client.search(searchRequest, DocumentSource.class))
+                                .flatMapMany(this::toSuggestFlux);
+                    } catch (IOException e) {
+                        throw new OpenSearchException(e);
+                    }
+                });
     }
 
 
@@ -114,43 +135,21 @@ public class OpenSearchDocumentSuggestionService implements DocumentSuggestionSe
      */
     private Suggest createSuggestFromHit(Hit<DocumentSource> hit) {
         DocumentSource source = hit.source();
-        if (source != null && source.id() != null) {
-            return new Suggest(source.id(), source.name(), source.extension());
+        if (source == null || source.id() == null) {
+            return null;
         }
-        return null;
-        /*List<String> highlights = hit.highlight().get(NAME_SUGGEST);
 
-        // Ensure we have both the source with an ID and at least one highlight fragment.
-        if (source != null && source.id() != null) {
-            if(highlights != null && !highlights.isEmpty()) {
-                // Take the first highlight fragment and clean the emphasis tags.
-                String suggestionText = highlights.getFirst().replaceAll(EM_EM, "");
-                return new Suggest(source.id(), suggestionText, source.extension());
+        // Extract content snippet from highlights (if the match was on content)
+        String contentSnippet = null;
+        if (hit.highlight() != null) {
+            List<String> contentHighlights = hit.highlight().get(CONTENT);
+            if (contentHighlights != null && !contentHighlights.isEmpty()) {
+                contentSnippet = "..." + contentHighlights.getFirst() + "...";
             }
-            return new Suggest(source.id(), source.name(), source.extension());
-        }*/
-
-        // Return null if we can't construct a valid Suggest object.
-        //return null;
-    }
-
-/*
-    private List<String> extractSuggestionsFromHighlights(SearchResponse<Void> response) {
-        if (response.hits() == null) {
-            return Collections.emptyList();
         }
 
-        // Using highlights gives us the exact text that matched.
-        return response.hits().hits().stream()
-                .map(hit -> hit.highlight().get(SUGGEST_MAIN))
-                .filter(highlight -> highlight != null && !highlight.isEmpty())
-                // A single hit might have multiple highlight fragments
-                .flatMap(Collection::stream)
-                // Clean the highlighting tags for the final response
-                .map(suggestion -> suggestion.replaceAll(EM_EM, ""))
-                .distinct() // Ensure unique suggestions
-                .collect(Collectors.toList());
+        String name = FileUtils.removeFileExtension(source.name());
+        return new Suggest(source.id(), name, source.extension(), contentSnippet);
     }
 
- */
 }

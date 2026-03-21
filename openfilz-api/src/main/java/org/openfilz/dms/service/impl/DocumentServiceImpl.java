@@ -29,6 +29,8 @@ import org.openfilz.dms.repository.DocumentDAO;
 import org.openfilz.dms.service.*;
 import org.openfilz.dms.utils.BlankDocumentGenerator;
 import org.openfilz.dms.utils.ContentInfo;
+import org.openfilz.dms.utils.DocumentSearchUtil;
+import org.openfilz.dms.utils.FileUtils;
 import org.openfilz.dms.utils.InMemoryFilePart;
 import org.openfilz.dms.utils.JsonUtils;
 import org.openfilz.dms.utils.UserInfoService;
@@ -618,7 +620,11 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                         new RenameAudit(request.newName()))
                         .thenReturn(renamedFile))
                 .as(tx::transactional)
-                .doOnSuccess(file -> metadataPostProcessor.updateIndexField(file, OpenSearchDocumentKey.name.toString(), file.getName()));
+                .doOnSuccess(file -> {
+                    metadataPostProcessor.updateIndexField(file, OpenSearchDocumentKey.name.toString(), file.getName());
+                    metadataPostProcessor.updateIndexField(file, OpenSearchDocumentKey.name_suggest.toString(),
+                            DocumentSearchUtil.splitWithSpaces(FileUtils.removeFileExtension(file.getName())));
+                });
     }
 
     private Mono<Document> saveFileToRename(RenameRequest request, Document fileToRename, Mono<Boolean> duplicateCheck) {
@@ -653,7 +659,11 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                 .flatMap(renamedFolder -> auditService.logAction(RENAME_FOLDER, FOLDER, renamedFolder.getId(),
                         new RenameAudit(request.newName())).thenReturn(renamedFolder))
                 .as(tx::transactional)
-                .doOnSuccess(file -> metadataPostProcessor.updateIndexField(file, OpenSearchDocumentKey.name.toString(), file.getName()));
+                .doOnSuccess(folder -> {
+                    metadataPostProcessor.updateIndexField(folder, OpenSearchDocumentKey.name.toString(), folder.getName());
+                    metadataPostProcessor.updateIndexField(folder, OpenSearchDocumentKey.name_suggest.toString(),
+                            DocumentSearchUtil.splitWithSpaces(folder.getName()));
+                });
     }
 
 
