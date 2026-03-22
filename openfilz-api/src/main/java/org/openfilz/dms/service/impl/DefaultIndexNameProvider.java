@@ -29,7 +29,8 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @ConditionalOnProperties({
         @ConditionalOnProperty(name = "openfilz.full-text.active", havingValue = "true"),
-        @ConditionalOnProperty(name = "openfilz.full-text.custom-index-name", havingValue = "false", matchIfMissing = true)
+        @ConditionalOnProperty(name = "openfilz.full-text.custom-index-name", havingValue = "false", matchIfMissing = true),
+        @ConditionalOnProperty(name = "openfilz.features.custom-access", havingValue = "false", matchIfMissing = true)
 })
 public class DefaultIndexNameProvider implements IndexNameProvider {
 
