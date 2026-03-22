@@ -377,12 +377,28 @@ If you need fewer than 4, duplicate an existing value — Keycloak ignores dupli
 |--------------------------|---------|-------------|
 | `openfilz.full-text.active` / `OPENFILZ_FULLTEXT_ACTIVE` | `false` | Enable full-text indexing |
 | `openfilz.full-text.default-index` | `openfilz` | OpenSearch index name |
+| `openfilz.full-text.content-languages` | `fr,en` | Stemmer languages for content analysis (see below) |
 | `openfilz.full-text.indexation-mode` | `local` | Indexation mode: `local`, `redis`, `kafka`, `nats` |
 | `openfilz.full-text.opensearch.host` | `localhost` | OpenSearch host |
 | `openfilz.full-text.opensearch.port` | `9200` | OpenSearch port |
 | `openfilz.full-text.opensearch.scheme` | `https` | HTTP scheme |
 | `openfilz.full-text.opensearch.username` | `admin` | OpenSearch username |
 | `openfilz.full-text.opensearch.password` | — | OpenSearch password |
+
+#### Content Language Stemmers
+
+The `content-languages` property configures which language stemmers are applied to the full-text content analyzer. Stemmers reduce words to their root form, enabling searches like "système" to match "systèmes" (plural/singular), or "running" to match "run" (verb forms). An ASCII folding filter is also applied, allowing accent-insensitive searches (e.g. "systemes" matches "systèmes").
+
+Supported language codes (OpenSearch built-in stemmers): `ar` (Arabic), `de` (German), `en` (English), `es` (Spanish), `fr` (French), `it` (Italian), `nl` (Dutch), `pt` (Portuguese), `ru` (Russian), `sv` (Swedish), and more — see the [OpenSearch documentation](https://opensearch.org/docs/latest/analyzers/token-filters/stemmer/) for the full list.
+
+Example with additional languages:
+```yaml
+openfilz:
+  full-text:
+    content-languages: fr,en,de,es
+```
+
+> **Important:** Changing `content-languages` requires recreating the OpenSearch index. Delete the existing index and restart the API — it will be recreated automatically with the new analyzer. All documents must then be re-indexed.
 
 ### Document Editing (OnlyOffice)
 

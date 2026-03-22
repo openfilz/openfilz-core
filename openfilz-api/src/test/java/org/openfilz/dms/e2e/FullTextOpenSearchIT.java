@@ -20,6 +20,7 @@ import org.openfilz.dms.dto.request.RenameRequest;
 import org.openfilz.dms.dto.request.UpdateMetadataRequest;
 import org.openfilz.dms.dto.response.CopyResponse;
 import org.openfilz.dms.dto.response.DocumentInfo;
+import org.openfilz.dms.dto.response.Suggest;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.e2e.util.PdfLoremGeneratorStreaming;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
@@ -37,6 +38,7 @@ import org.springframework.http.codec.json.Jackson2JsonEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.testcontainers.junit.jupiter.Container;
@@ -164,8 +166,10 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
                 .expectNextMatches(doc->{
                     Map<String, Object> searchDocuments = (Map<String, Object>) ((Map<String, Object>) doc.getData()).get("searchDocuments");
                     List<Map<String, String>> documents = (List<Map<String, String>>) searchDocuments.get("documents");
-                    return  searchDocuments.get("totalHits").toString().equals("1")
-                            && documents.get(0).get("id").equals(r0.id().toString());
+                    int totalHits = Integer.parseInt(searchDocuments.get("totalHits").toString());
+                    boolean containsUploadedDoc = documents.stream()
+                            .anyMatch(d -> d.get("id").equals(r0.id().toString()));
+                    return totalHits >= 1 && containsUploadedDoc;
                 })
                 .expectComplete()
                 .verify();
@@ -307,6 +311,135 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
 
         waitFor(3000);
         Assertions.assertEquals(0, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
+    }
+
+    @Test
+    void testSuggestionsWithContentSnippet() throws InterruptedException {
+        // Upload pdf-example.pdf which contains "systèmes d'exploitations" in its content
+        String f0 = "pdf-example.pdf";
+        MultipartBodyBuilder builder = newFileBuilder(f0);
+        UploadResponse r0 = getUploadResponse(builder, true);
+
+        // Wait for content indexing (PDF parsing is async)
+        waitFor(5000);
+
+        // Search by a term found in the PDF content but NOT in the filename
+        List<Suggest> suggestions = getWebTestClient().get().uri(uri ->
+                        uri.path(RestApiVersion.API_PREFIX + "/suggestions")
+                                .queryParam("q", "systèmes")
+                                .build())
+                .exchange()
+                .expectBody(new ParameterizedTypeReference<List<Suggest>>() {})
+                .returnResult().getResponseBody();
+
+        Assertions.assertNotNull(suggestions);
+        Assertions.assertFalse(suggestions.isEmpty(), "Should find at least one suggestion matching content");
+        // Find the uploaded document in the results (other tests may leave docs in the index)
+        Suggest uploadedDocSuggestion = suggestions.stream()
+                .filter(s -> s.id().equals(r0.id()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Uploaded PDF should appear in suggestions"));
+        // Content snippet should be present since the match is on content, not name
+        Assertions.assertNotNull(uploadedDocSuggestion.contentSnippet(),
+                "Content snippet should not be null for content-matched suggestions");
+        Assertions.assertTrue(uploadedDocSuggestion.contentSnippet().contains("<mark>"),
+                "Content snippet should contain highlight marks");
+
+        // Cleanup
+        DeleteRequest deleteRequest = new DeleteRequest(List.of(r0.id()));
+        getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/files")
+                .body(BodyInserters.fromValue(deleteRequest))
+                .exchange()
+                .expectStatus().isNoContent();
+
+        waitFor(3000);
+    }
+
+    @Test
+    void testSuggestionsNameMatchHasNullSnippet() throws InterruptedException {
+        // Upload a file with a distinctive name
+        MultipartBodyBuilder builder = newFileBuilder("test_file_1.sql");
+        UploadResponse r0 = getUploadResponse(builder, true);
+
+        waitFor(3000);
+
+        // Search by the filename — this should match on name, not content
+        List<Suggest> suggestions = getWebTestClient().get().uri(uri ->
+                        uri.path(RestApiVersion.API_PREFIX + "/suggestions")
+                                .queryParam("q", "test file")
+                                .build())
+                .exchange()
+                .expectBody(new ParameterizedTypeReference<List<Suggest>>() {})
+                .returnResult().getResponseBody();
+
+        Assertions.assertNotNull(suggestions);
+        Assertions.assertFalse(suggestions.isEmpty(), "Should find at least one suggestion matching name");
+        // For a name-only match, contentSnippet should be null
+        Suggest nameMatch = suggestions.stream()
+                .filter(s -> s.id().equals(r0.id()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Uploaded file should appear in suggestions"));
+        Assertions.assertNull(nameMatch.contentSnippet(),
+                "Content snippet should be null for name-only matches");
+
+        // Cleanup
+        DeleteRequest deleteRequest = new DeleteRequest(List.of(r0.id()));
+        getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/files")
+                .body(BodyInserters.fromValue(deleteRequest))
+                .exchange()
+                .expectStatus().isNoContent();
+
+        waitFor(3000);
+    }
+
+    @Test
+    void testSuggestionsReturnBothNameAndContentMatches() throws InterruptedException {
+        // Upload pdf-example.pdf (content contains "systèmes d'exploitations")
+        MultipartBodyBuilder builder1 = newFileBuilder("pdf-example.pdf");
+        UploadResponse r0 = getUploadResponse(builder1, true);
+
+        // Upload a file and rename it so its name contains "systèmes"
+        MultipartBodyBuilder builder2 = newFileBuilder("test.txt");
+        UploadResponse r1 = getUploadResponse(builder2, true);
+
+        // Rename the file to include "systèmes" in the name
+        RenameRequest renameRequest = new RenameRequest("systèmes-overview.txt");
+        getWebTestClient().put().uri(RestApiVersion.API_PREFIX + "/files/{fileId}/rename", r1.id())
+                .body(BodyInserters.fromValue(renameRequest))
+                .exchange()
+                .expectStatus().isOk();
+
+        // Wait for content indexing (PDF parsing) and rename propagation to OpenSearch
+        // Both are async fire-and-forget, so we need enough time for OpenSearch to refresh
+        waitFor(8000);
+
+        // Search for "systèmes" — should match both files
+        List<Suggest> suggestions = getWebTestClient().get().uri(uri ->
+                        uri.path(RestApiVersion.API_PREFIX + "/suggestions")
+                                .queryParam("q", "systèmes")
+                                .build())
+                .exchange()
+                .expectBody(new ParameterizedTypeReference<List<Suggest>>() {})
+                .returnResult().getResponseBody();
+
+        Assertions.assertNotNull(suggestions);
+        // The PDF should be found via content match
+        boolean hasPdfContentMatch = suggestions.stream().anyMatch(s -> s.id().equals(r0.id()));
+        Assertions.assertTrue(hasPdfContentMatch,
+                "PDF with content match should appear in suggestions");
+        // The renamed file should be found via name match
+        boolean hasNameMatch = suggestions.stream().anyMatch(s -> s.id().equals(r1.id()));
+        Assertions.assertTrue(hasNameMatch,
+                "Renamed file with name match should appear in suggestions, got: " + suggestions);
+
+        // Cleanup
+        DeleteRequest deleteRequest = new DeleteRequest(List.of(r0.id(), r1.id()));
+        getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/files")
+                .body(BodyInserters.fromValue(deleteRequest))
+                .exchange()
+                .expectStatus().isNoContent();
+
+        waitFor(3000);
     }
 
     @Disabled

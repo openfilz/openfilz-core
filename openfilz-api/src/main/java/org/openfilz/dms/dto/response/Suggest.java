@@ -9,5 +9,6 @@ import java.util.UUID;
  * @param id The UUID of the document.
  * @param s The highlighted suggestion text.
  * @param ext The extension of the file or null if it is a folder
+ * @param contentSnippet A highlighted excerpt from the document content, or null if the match was name-only
  */
-public record Suggest(UUID id, String s, String ext) {}
+public record Suggest(UUID id, String s, String ext, String contentSnippet) {}

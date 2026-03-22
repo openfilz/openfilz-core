@@ -116,7 +116,7 @@ public class DocumentSearchUtil {
         DocumentType type = DocumentType.valueOf(row.get(2, String.class));
         String ext = FileUtils.getDocumentExtension(type, name);
         String s = FileUtils.removeFileExtension(name);
-        return new Suggest(uuid, s, ext);
+        return new Suggest(uuid, s, ext, null);
     }
 
     public ListFolderRequest toListFolderRequest(String query,
