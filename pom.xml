@@ -83,6 +83,7 @@
         <httpclient.version>5.5.1</httpclient.version>
         <testcontainers-keycloak.version>4.1.0</testcontainers-keycloak.version>
         <opensearch-testcontainers.version>4.0.0</opensearch-testcontainers.version>
+        <spring-ai.version>1.0.0</spring-ai.version>
         <maven.javadoc.failOnError>false</maven.javadoc.failOnError>
         <openapi-generator.version>7.20.0</openapi-generator.version>
         <exec-maven-plugin.version>3.6.3</exec-maven-plugin.version>
@@ -106,6 +107,13 @@
                 <groupId>org.springframework.cloud</groupId>
                 <artifactId>spring-cloud-dependencies</artifactId>
                 <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
