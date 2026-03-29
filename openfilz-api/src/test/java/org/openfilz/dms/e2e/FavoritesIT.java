@@ -156,7 +156,7 @@ public class FavoritesIT extends TestContainersBaseConfig {
 
 
         ListFolderRequest listFolderRequest = new ListFolderRequest(null, null, null, null, null, null, null, null, null, null, null, null
-                , null, false, true, null);
+                , null, false, true, null, null);
         graphQlRequest = """
                 query count($request:ListFolderRequest) {
                     count(request:$request)
@@ -175,7 +175,7 @@ public class FavoritesIT extends TestContainersBaseConfig {
                 .verify();
 
         listFolderRequest = new ListFolderRequest(null, null, null, null, null, null, null, null, null, null, null, null
-                , null, true, true, null);
+                , null, true, true, null, null);
         graphQlRequest = """
                 query count($request:ListFolderRequest) {
                     count(request:$request)
@@ -194,7 +194,7 @@ public class FavoritesIT extends TestContainersBaseConfig {
                 .verify();
 
         listFolderRequest = new ListFolderRequest(null, null, null, null, null, null, null, null, null, null, null, null
-                , null, null, true, null);
+                , null, null, true, null, null);
         graphQlRequest = """
                 query count($request:ListFolderRequest) {
                     count(request:$request)
@@ -213,7 +213,7 @@ public class FavoritesIT extends TestContainersBaseConfig {
                 .verify();
 
         listFolderRequest = new ListFolderRequest(folderAndFile1.parent().id(), null, null, null, null, null, null, null, null, null, null, null
-                , null, true, true, null);
+                , null, true, true, null, null);
         graphQlRequest = """
                 query count($request:ListFolderRequest) {
                     count(request:$request)

@@ -24,6 +24,6 @@ public record FavoriteRequest(
     ) {
     public ListFolderRequest toListFolderRequest() {
         return new ListFolderRequest(null, type, contentType, name, nameLike, metadata, size, createdAtAfter,
-                createdAtBefore, updatedAtAfter, updatedAtBefore, createdBy, updatedBy, true, true, pageInfo);
+                createdAtBefore, updatedAtAfter, updatedAtBefore, createdBy, updatedBy, true, true, pageInfo, null);
     }
 }

@@ -73,6 +73,8 @@ input ListFolderRequest {
     pageInfo : PageInfo
     favorite : Boolean
     active : Boolean = true
+    "When true and id is set, search recursively in all subfolders of the given folder"
+    recursive : Boolean
 }
 
 input FavoriteRequest {

@@ -75,7 +75,7 @@ public class SecurityIT extends TestContainersKeyCloakConfig {
     void testGraphQl_ListFolders() {
 
         ListFolderRequest request = new ListFolderRequest(null, null, null, null, null, null, null, null, null, null, null, null
-                , null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                , null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
         var graphQlRequest = """
                 query listFolder($request:ListFolderRequest) {
                     listFolder(request:$request) {
