@@ -256,7 +256,7 @@ public class ImageUploadAndSearchIT extends TestContainersBaseConfig {
     void whenListFolderNonExistent_thenError() {
         ListFolderRequest request = new ListFolderRequest(
                 UUID.randomUUID(), null, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {
@@ -287,7 +287,7 @@ public class ImageUploadAndSearchIT extends TestContainersBaseConfig {
     void whenListFolderWithFavoriteFilter_thenOk() {
         ListFolderRequest request = new ListFolderRequest(
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                null, true, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, true, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {
@@ -321,7 +321,7 @@ public class ImageUploadAndSearchIT extends TestContainersBaseConfig {
 
         ListFolderRequest request = new ListFolderRequest(
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                "anonymous", null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                "anonymous", null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {
@@ -355,7 +355,7 @@ public class ImageUploadAndSearchIT extends TestContainersBaseConfig {
 
         ListFolderRequest request = new ListFolderRequest(
                 null, org.openfilz.dms.enums.DocumentType.FILE, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {
@@ -389,7 +389,7 @@ public class ImageUploadAndSearchIT extends TestContainersBaseConfig {
 
         ListFolderRequest request = new ListFolderRequest(
                 null, org.openfilz.dms.enums.DocumentType.FOLDER, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {
@@ -423,7 +423,7 @@ public class ImageUploadAndSearchIT extends TestContainersBaseConfig {
 
         ListFolderRequest request = new ListFolderRequest(
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("contentType", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("contentType", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {

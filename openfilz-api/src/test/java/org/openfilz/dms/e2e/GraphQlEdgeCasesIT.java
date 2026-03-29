@@ -61,7 +61,7 @@ public class GraphQlEdgeCasesIT extends TestContainersBaseConfig {
         // count queries reject PageCriteria (IllegalArgumentException → BAD_REQUEST)
         ListFolderRequest request = new ListFolderRequest(
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria(null, null, 1, 10));
+                null, null, true, new PageCriteria(null, null, 1, 10), null);
 
         String query = """
                 query count($request:ListFolderRequest) {
@@ -120,7 +120,7 @@ public class GraphQlEdgeCasesIT extends TestContainersBaseConfig {
 
         ListFolderRequest request = new ListFolderRequest(
                 nonExistentId, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 10));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 10), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {
@@ -158,7 +158,7 @@ public class GraphQlEdgeCasesIT extends TestContainersBaseConfig {
 
         ListFolderRequest request = new ListFolderRequest(
                 null, DocumentType.FILE, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listAllFolder($request:ListFolderRequest!) {
@@ -208,7 +208,7 @@ public class GraphQlEdgeCasesIT extends TestContainersBaseConfig {
 
         ListFolderRequest request = new ListFolderRequest(
                 null, null, null, null, "graphql-all-folder", null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listAllFolder($request:ListFolderRequest!) {
@@ -320,7 +320,7 @@ public class GraphQlEdgeCasesIT extends TestContainersBaseConfig {
         // List with DESC sort order
         ListFolderRequest request = new ListFolderRequest(
                 folder.id(), null, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.DESC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.DESC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {
@@ -361,7 +361,7 @@ public class GraphQlEdgeCasesIT extends TestContainersBaseConfig {
 
         ListFolderRequest request = new ListFolderRequest(
                 folder.id(), null, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, null);
+                null, null, true, null, null);
 
         String query = """
                 query count($request:ListFolderRequest) {
@@ -385,7 +385,7 @@ public class GraphQlEdgeCasesIT extends TestContainersBaseConfig {
         // Count root level (parentId = null)
         ListFolderRequest request = new ListFolderRequest(
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, null);
+                null, null, true, null, null);
 
         String query = """
                 query count($request:ListFolderRequest) {

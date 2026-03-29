@@ -73,7 +73,7 @@ public class GraphQlDeepFieldCoverageIT extends TestContainersBaseConfig {
 
         ListFolderRequest request = new ListFolderRequest(
                 folder.id(), null, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         // Request ALL FolderElementInfo fields to cover all DocumentEntityBuilder branches
         String query = """
@@ -131,7 +131,7 @@ public class GraphQlDeepFieldCoverageIT extends TestContainersBaseConfig {
 
         ListFolderRequest request = new ListFolderRequest(
                 parent.id(), null, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {
@@ -175,7 +175,7 @@ public class GraphQlDeepFieldCoverageIT extends TestContainersBaseConfig {
 
         ListFolderRequest request = new ListFolderRequest(
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listAllFolder($request:ListFolderRequest!) {
@@ -401,7 +401,7 @@ public class GraphQlDeepFieldCoverageIT extends TestContainersBaseConfig {
 
         ListFolderRequest request = new ListFolderRequest(
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("createdAt", SortOrder.DESC, 1, 100));
+                null, null, true, new PageCriteria("createdAt", SortOrder.DESC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {
@@ -433,7 +433,7 @@ public class GraphQlDeepFieldCoverageIT extends TestContainersBaseConfig {
 
         ListFolderRequest request = new ListFolderRequest(
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("size", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("size", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {
@@ -465,7 +465,7 @@ public class GraphQlDeepFieldCoverageIT extends TestContainersBaseConfig {
 
         ListFolderRequest request = new ListFolderRequest(
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("updatedAt", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("updatedAt", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {
@@ -498,7 +498,7 @@ public class GraphQlDeepFieldCoverageIT extends TestContainersBaseConfig {
 
         ListFolderRequest request = new ListFolderRequest(
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("type", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("type", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {
@@ -532,7 +532,7 @@ public class GraphQlDeepFieldCoverageIT extends TestContainersBaseConfig {
 
         ListFolderRequest request = new ListFolderRequest(
                 null, null, null, null, null, null, null, null, null, null, null, "anonymous",
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {

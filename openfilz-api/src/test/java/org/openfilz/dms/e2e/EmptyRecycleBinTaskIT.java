@@ -108,7 +108,7 @@ public class EmptyRecycleBinTaskIT extends TestContainersBaseConfig {
                 }
                 """.trim();
         ListFolderRequest request = new ListFolderRequest(null, null, null, null, null, null, null, null, null, null, null, null
-                , null, null, false, null);
+                , null, null, false, null, null);
 
         return httpGraphQlClient
                 .document(graphQlRequest)

@@ -39,6 +39,7 @@ openfilz:
   full-text:
     default-index: openfilz-ce
     active: false
+    content-languages: fr,en # Stemmer languages for content analysis (e.g. fr,en,de,es,it,nl,pt,ar)
     indexation-mode: local # local (only choice for the moment) -> to be developed : redis | kafka | nats
     opensearch:
       host: localhost
@@ -51,10 +52,10 @@ openfilz:
     worm-mode: false
     cors-allowed-origins: http://localhost:4200, http://localhost:4201, http://localhost:4900 # Comma-separated list of authorized origins
   thumbnail:
-    active: true
+    active: false
 
 onlyoffice:
-  enabled: true
+  enabled: false
 
 
 storage:

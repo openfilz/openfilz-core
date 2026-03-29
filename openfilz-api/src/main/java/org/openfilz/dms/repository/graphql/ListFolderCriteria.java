@@ -168,7 +168,21 @@ public class ListFolderCriteria {
 
     public boolean appendParentIdFilter(String prefix, StringBuilder query, ListFolderRequest request) {
         if(request.id() != null) {
-            sqlUtils.appendEqualsCriteria(prefix, PARENT_ID, query);
+            if(Boolean.TRUE.equals(request.recursive())) {
+                if(prefix != null) {
+                    query.append(prefix);
+                }
+                query.append(PARENT_ID).append(" IN (")
+                        .append("WITH RECURSIVE descendants AS (")
+                        .append("SELECT id FROM documents WHERE id = :").append(PARENT_ID)
+                        .append(" UNION ALL ")
+                        .append("SELECT d2.id FROM documents d2 ")
+                        .append("INNER JOIN descendants p ON d2.parent_id = p.id ")
+                        .append("WHERE d2.type = 'FOLDER'")
+                        .append(") SELECT id FROM descendants) ");
+            } else {
+                sqlUtils.appendEqualsCriteria(prefix, PARENT_ID, query);
+            }
         } else {
             sqlUtils.appendIsNullCriteria(prefix, PARENT_ID, query);
         }

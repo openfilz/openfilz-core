@@ -24,7 +24,8 @@ public record ListFolderRequest(
     String updatedBy,
     Boolean favorite,
     Boolean active,
-    @NotNull @Valid PageCriteria pageInfo
+    @NotNull @Valid PageCriteria pageInfo,
+    Boolean recursive
     ) {
 
 }
