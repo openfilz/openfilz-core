@@ -25,5 +25,6 @@ public record FullDocumentInfo(
         @Schema(description = "Whether this document is favorited by the current user") Boolean favorite,
         @Schema(description = "Whether this document is a root share") Boolean rootShare,
         @Schema(description = "Whether this document is shared in edit mode") Boolean sharedEdit,
-        @Schema(description = "Whether this document is shared in comment mode") Boolean sharedComment) {
+        @Schema(description = "Whether this document is shared in comment mode") Boolean sharedComment,
+        @Schema(description = "Team ID through which this document is shared, null if shared directly") UUID sharedTeamId) {
 }
