@@ -83,6 +83,7 @@
                                 <withSeparateModelsAndApi>true</withSeparateModelsAndApi>
                                 <modelPackage>models</modelPackage>
                                 <apiPackage>api</apiPackage>
+                                <licenseName>AGPL-3.0</licenseName>
                             </configOptions>
                         </configuration>
                     </execution>

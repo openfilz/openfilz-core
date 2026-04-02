@@ -152,6 +152,8 @@
                                 <sourceFolder>src/main/java</sourceFolder>
                                 <reactive>true</reactive>
                                 <legacyDiscriminatorBehavior>false</legacyDiscriminatorBehavior>
+                                <licenseName>AGPL-3.0</licenseName>
+                                <licenseUrl>https://www.gnu.org/licenses/agpl-3.0.html</licenseUrl>
                             </configOptions>
                             <generateApiTests>false</generateApiTests>
                             <generateModelTests>false</generateModelTests>

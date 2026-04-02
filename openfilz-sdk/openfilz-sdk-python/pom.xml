@@ -103,6 +103,7 @@
                                 <packageName>openfilz_sdk</packageName>
                                 <projectName>openfilz-sdk-python</projectName>
                                 <packageVersion>${python.package.version}</packageVersion>
+                                <licenseName>AGPL-3.0</licenseName>
                             </configOptions>
                         </configuration>
                     </execution>
