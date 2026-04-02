@@ -504,4 +504,8 @@ openfilz-core/
 
 ## License
 
-Apache License 2.0 - See [LICENSE](LICENSE) for details.
+OpenFilz Community Edition is dual-licensed:
+
+- **AGPL-3.0** (GNU Affero General Public License v3) - See [LICENSE](LICENSE) for the full text. This is a copyleft license: if you modify OpenFilz and make it available over a network, you must release your modifications under the same license.
+
+- **Commercial License** - For businesses that cannot comply with the AGPL-3.0 copyleft requirements (e.g., SaaS providers, proprietary integrations, or organizations that cannot disclose source code), a commercial license is available. Contact [license@openfilz.com](mailto:license@openfilz.com) or visit [openfilz.com/enterprise](https://openfilz.com/enterprise) for details.

@@ -43,7 +43,7 @@ public class OpenApiConfig {
                 .info(new Info().title(serviceTitle)
                         .version(serviceVersion)
                         .description("API for Document Management System")
-                        .license(new License().name("Apache 2.0").url("https://openfilz.org")))
+                        .license(new License().name("AGPL-3.0").url("https://www.gnu.org/licenses/agpl-3.0.html")))
                 .addSecurityItem(new SecurityRequirement().addList(securitySchemeName, Collections.emptyList()))
                 .components(new Components()
                         .addSecuritySchemes(securitySchemeName, new SecurityScheme()
