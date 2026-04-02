@@ -4,7 +4,7 @@
 
     <groupId>org.openfilz</groupId>
     <artifactId>openfilz-core</artifactId>
-    <version>1.1.20-SNAPSHOT</version>
+    <version>1.1.23-SNAPSHOT</version>
     <packaging>pom</packaging>
     <url>https://github.com/openfilz/openfilz-core</url>
 
@@ -14,8 +14,8 @@
 
     <licenses>
         <license>
-            <name>Apache 2.0 License</name>
-            <url>https://github.com/openfilz/openfilz-core/blob/2dbac18d1d7bd12330fd88bbbf9fb1d5fdcde90d/LICENSE</url>
+            <name>AGPL-3.0 License</name>
+            <url>https://www.gnu.org/licenses/agpl-3.0.html</url>
             <distribution>repo</distribution>
         </license>
     </licenses>

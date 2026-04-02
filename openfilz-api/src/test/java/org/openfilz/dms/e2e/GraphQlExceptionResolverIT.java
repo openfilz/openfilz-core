@@ -61,7 +61,7 @@ public class GraphQlExceptionResolverIT extends TestContainersBaseConfig {
         // count rejects PageCriteria → IllegalArgumentException → BAD_REQUEST
         ListFolderRequest request = new ListFolderRequest(
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 10));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 10), null);
 
         String query = """
                 query count($request:ListFolderRequest) {
@@ -241,7 +241,7 @@ public class GraphQlExceptionResolverIT extends TestContainersBaseConfig {
 
         ListFolderRequest request = new ListFolderRequest(
                 folder.id(), null, "application/x-sql", null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {
@@ -279,7 +279,7 @@ public class GraphQlExceptionResolverIT extends TestContainersBaseConfig {
         // Filter by exact file name (name is 4th param)
         ListFolderRequest request = new ListFolderRequest(
                 folder.id(), null, null, "test_file_1.sql", null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {
@@ -315,7 +315,7 @@ public class GraphQlExceptionResolverIT extends TestContainersBaseConfig {
 
         ListFolderRequest request = new ListFolderRequest(
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, null);
+                null, null, true, null, null);
 
         String query = """
                 query count($request:ListFolderRequest) {

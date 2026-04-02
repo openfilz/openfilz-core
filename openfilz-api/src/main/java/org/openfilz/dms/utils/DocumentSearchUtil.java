@@ -140,7 +140,8 @@ public class DocumentSearchUtil {
                     null,
                     null,
                     true,
-                    toPageCriteria(sort, page, size)
+                    toPageCriteria(sort, page, size),
+                    null
             );
         }
 
@@ -159,7 +160,8 @@ public class DocumentSearchUtil {
                 filters.get(DocumentSearchUtil.FILTER_UPDATED_BY),
                 toBoolean(filters.get(FILTER_FAVORITE)),
                 true,
-                toPageCriteria(sort, page, size)
+                toPageCriteria(sort, page, size),
+                null
         );
     }
 

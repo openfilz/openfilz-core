@@ -53,7 +53,8 @@ public class DefaultDocumentSearchService implements DocumentSearchService {
                 searchListFolderRequest.updatedBy(),
                 searchListFolderRequest.favorite(),
                 searchListFolderRequest.active(),
-                null
+                null,
+                searchListFolderRequest.recursive()
         );
         if(filterMap!=null && filterMap.containsKey(FILTER_PARENT_ID)) {
             return Mono.zip(

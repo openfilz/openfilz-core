@@ -70,7 +70,7 @@ public class GraphQlFieldCoverageIT extends TestContainersBaseConfig {
         // Query selecting ALL FolderElementInfo fields to cover every DocumentEntityBuilder switch branch
         ListFolderRequest request = new ListFolderRequest(
                 folder.id(), null, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {
@@ -128,7 +128,7 @@ public class GraphQlFieldCoverageIT extends TestContainersBaseConfig {
 
         ListFolderRequest request = new ListFolderRequest(
                 parent.id(), DocumentType.FOLDER, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {
@@ -267,7 +267,7 @@ public class GraphQlFieldCoverageIT extends TestContainersBaseConfig {
         // Filter by content type
         ListFolderRequest request = new ListFolderRequest(
                 folder.id(), null, "application/x-sql", null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {
@@ -307,7 +307,7 @@ public class GraphQlFieldCoverageIT extends TestContainersBaseConfig {
         // Use nameLike filter
         ListFolderRequest request = new ListFolderRequest(
                 folder.id(), null, null, null, "test_file", null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {
@@ -347,7 +347,7 @@ public class GraphQlFieldCoverageIT extends TestContainersBaseConfig {
         // Use name exact filter
         ListFolderRequest request = new ListFolderRequest(
                 folder.id(), null, null, "test_file_1.sql", null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {
@@ -392,7 +392,7 @@ public class GraphQlFieldCoverageIT extends TestContainersBaseConfig {
         // Count only files
         ListFolderRequest fileRequest = new ListFolderRequest(
                 folder.id(), DocumentType.FILE, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, null);
+                null, null, true, null, null);
 
         String query = """
                 query count($request:ListFolderRequest) {
@@ -413,7 +413,7 @@ public class GraphQlFieldCoverageIT extends TestContainersBaseConfig {
         // Count only folders
         ListFolderRequest folderRequest = new ListFolderRequest(
                 folder.id(), DocumentType.FOLDER, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, null);
+                null, null, true, null, null);
 
         Mono<ClientGraphQlResponse> folderCount = getClient()
                 .document(query)
@@ -435,7 +435,7 @@ public class GraphQlFieldCoverageIT extends TestContainersBaseConfig {
         // Query using the countAllFolder if available, or use count at root
         ListFolderRequest request = new ListFolderRequest(
                 null, DocumentType.FILE, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, null);
+                null, null, true, null, null);
 
         String query = """
                 query count($request:ListFolderRequest) {
@@ -464,7 +464,7 @@ public class GraphQlFieldCoverageIT extends TestContainersBaseConfig {
 
         ListFolderRequest request = new ListFolderRequest(
                 null, DocumentType.FOLDER, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listAllFolder($request:ListFolderRequest!) {
@@ -562,7 +562,7 @@ public class GraphQlFieldCoverageIT extends TestContainersBaseConfig {
         // Verify folder content is accessible via GraphQL (positive test)
         ListFolderRequest request = new ListFolderRequest(
                 folder.id(), null, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {

@@ -533,4 +533,4 @@ Releases are automated via GitHub Actions (`release-backend.yml`):
 
 ## License
 
-OpenFilz is licensed under the **Apache License 2.0**. By contributing, you agree that your contributions will be licensed under the same terms.
+OpenFilz is licensed under the **GNU Affero General Public License v3 (AGPL-3.0)**. By contributing, you agree that your contributions will be licensed under the same terms. A commercial license is also available for businesses that cannot comply with the AGPL-3.0 copyleft requirements — contact [license@openfilz.com](mailto:license@openfilz.com) for details.

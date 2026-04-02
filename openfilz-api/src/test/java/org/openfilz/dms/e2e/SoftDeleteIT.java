@@ -270,7 +270,7 @@ public class SoftDeleteIT extends TestContainersBaseConfig {
         HttpGraphQlClient httpGraphQlClient = getGraphQlHttpClient();
         //create post
         ListFolderRequest request = new ListFolderRequest(sourceFolderResponse.id(), null, null, null, null, null, null, null, null, null, null, null
-                , null, null, false, null);
+                , null, null, false, null, null);
         var graphQlRequest = """
                 query count($request:ListFolderRequest) {
                     count(request:$request)
@@ -289,7 +289,7 @@ public class SoftDeleteIT extends TestContainersBaseConfig {
                 .verify();
 
         request = new ListFolderRequest(sourceFolderResponse.id(), null, null, null, null, null, null, null, null, null, null, null
-                , null, null, true, null);
+                , null, null, true, null, null);
 
         countGraphQl = httpGraphQlClient
                 .document(graphQlRequest)
@@ -310,7 +310,7 @@ public class SoftDeleteIT extends TestContainersBaseConfig {
                 .expectStatus().isNoContent();
 
         request = new ListFolderRequest(null, null, null, createSourceFolderRequest.name(), null, null, null, null, null, null, null, null
-                , null, null, true, null);
+                , null, null, true, null, null);
 
         countGraphQl = httpGraphQlClient
                 .document(graphQlRequest)
@@ -324,7 +324,7 @@ public class SoftDeleteIT extends TestContainersBaseConfig {
                 .verify();
 
         request = new ListFolderRequest(null, null, null, createSourceFolderRequest.name(), null, null, null, null, null, null, null, null
-                , null, null, false, null);
+                , null, null, false, null, null);
 
         countGraphQl = httpGraphQlClient
                 .document(graphQlRequest)
@@ -355,7 +355,7 @@ public class SoftDeleteIT extends TestContainersBaseConfig {
                 .expectStatus().isNoContent();
 
         request = new ListFolderRequest(sourceFolderResponse.id(), null, null, null, null, null, null, null, null, null, null, null
-                , null, null, false, null);
+                , null, null, false, null, null);
 
         countGraphQl = httpGraphQlClient
                 .document(graphQlRequest)
@@ -381,7 +381,7 @@ public class SoftDeleteIT extends TestContainersBaseConfig {
                 .expectStatus().isNoContent();
 
         request = new ListFolderRequest(null, null, null, null, null, null, null, null, null, null, null, null
-                , null, null, false, null);
+                , null, null, false, null, null);
 
         countGraphQl = httpGraphQlClient
                 .document(graphQlRequest)

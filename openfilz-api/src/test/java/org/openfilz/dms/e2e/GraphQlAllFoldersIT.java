@@ -67,7 +67,7 @@ public class GraphQlAllFoldersIT extends TestContainersBaseConfig {
 
         ListFolderRequest request = new ListFolderRequest(
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listAllFolder($request:ListFolderRequest!) {
@@ -102,7 +102,7 @@ public class GraphQlAllFoldersIT extends TestContainersBaseConfig {
         // Filter by FOLDER type only
         ListFolderRequest request = new ListFolderRequest(
                 null, org.openfilz.dms.enums.DocumentType.FOLDER, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listAllFolder($request:ListFolderRequest!) {
@@ -138,7 +138,7 @@ public class GraphQlAllFoldersIT extends TestContainersBaseConfig {
 
         ListFolderRequest request = new ListFolderRequest(
                 null, null, null, null, prefix, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {
@@ -178,7 +178,7 @@ public class GraphQlAllFoldersIT extends TestContainersBaseConfig {
         Map<String, Object> metadataFilter = Map.of("env", "production");
         ListFolderRequest request = new ListFolderRequest(
                 folder.id(), null, null, null, null, metadataFilter, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {
@@ -214,7 +214,7 @@ public class GraphQlAllFoldersIT extends TestContainersBaseConfig {
                 java.time.OffsetDateTime.now().minusDays(1), null,
                 null, java.time.OffsetDateTime.now().plusDays(1),
                 null, null, null, true,
-                new PageCriteria("name", SortOrder.ASC, 1, 100));
+                new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {
@@ -247,7 +247,7 @@ public class GraphQlAllFoldersIT extends TestContainersBaseConfig {
 
         ListFolderRequest request = new ListFolderRequest(
                 null, null, null, null, null, null, 1L, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {
@@ -281,7 +281,7 @@ public class GraphQlAllFoldersIT extends TestContainersBaseConfig {
 
         ListFolderRequest request = new ListFolderRequest(
                 null, org.openfilz.dms.enums.DocumentType.FOLDER, null, null, null, null, null, null, null, null, null, null,
-                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100));
+                null, null, true, new PageCriteria("name", SortOrder.ASC, 1, 100), null);
 
         String query = """
                 query listFolder($request:ListFolderRequest!) {
