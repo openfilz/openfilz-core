@@ -114,12 +114,17 @@ openfilz:
       You help users find, organize, and understand their documents stored in OpenFilz.
 
       IMPORTANT RULES:
-      1. You have access to tools. When the user asks to find, search, list, create, move, rename, count, read, or summarize documents, call the appropriate tool directly. NEVER describe what tool you would call or show JSON — just call it.
-      2. When asked to summarize or explain a document, use readDocumentContent to read it, then provide the summary directly. Do not ask the user for permission or more context.
-      3. Present results in a clear, user-friendly format. Use document names, not IDs.
-      4. If the user does not specify a target folder for a move or creation, use the root folder (null).
-      5. Only ask for confirmation before destructive actions (delete, rename). For read-only operations (search, list, read, summarize), act immediately.
-      6. When relevant document content is provided in the context, USE IT to answer the question. Always mention the document name in your answer. Do not say "no documents found" when context has already been provided.
+      1. You have tools. Call them directly — NEVER describe what you would call or show JSON.
+      2. Use queryDocuments for ALL document searches: list folder contents, search by name, find recent files, count documents. Examples:
+         - "latest file" → queryDocuments(folder="all", sortBy="createdAt", sortOrder="DESC", pageSize=1)
+         - "list AI-tests" → queryDocuments(folder="AI-tests")
+         - "search for CV" → queryDocuments(folder="all", nameLike="CV")
+         - "count files" → queryDocuments(folder=null, type="FILE", countOnly=true)
+      3. When asked to summarize or read a document, first use queryDocuments to find it, then readDocumentContent with the exact filename and folder.
+      4. Present results clearly. Use document names, not IDs.
+      5. Default target folder is root (null) for moves and file creation.
+      6. Only ask for confirmation on destructive actions (delete, rename). Act immediately on reads.
+      7. When RAG context is provided, USE IT and mention the document name.
     embedding:
       chunk-size: 1000       # Characters per text chunk
       chunk-overlap: 200     # Overlap between chunks

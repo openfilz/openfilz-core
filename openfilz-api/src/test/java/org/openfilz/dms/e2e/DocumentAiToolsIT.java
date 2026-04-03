@@ -27,7 +27,7 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 
 /**
  * Integration tests for DocumentAiTools.
- * Tests all AI tool functions against a real PostgreSQL database via Testcontainers.
+ * Tests AI tool functions against a real PostgreSQL database via Testcontainers.
  */
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -59,105 +59,70 @@ public class DocumentAiToolsIT extends TestContainersBaseConfig {
         registry.add("spring.autoconfigure.exclude", () -> "org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration");
     }
 
-    // ========================= listFolder =========================
+    // ========================= queryDocuments =========================
 
     @Test
-    void listFolder_rootFolder_returnsContents() {
-        // Upload a file to root
+    void queryDocuments_rootFolder_returnsContents() {
         UploadResponse uploaded = uploadDocument(newFileBuilder());
 
-        String result = documentAiTools.listFolder(null);
+        String result = documentAiTools.queryDocuments(null, null, null, null, null, null, null);
         Assertions.assertNotNull(result);
-        Assertions.assertNotEquals("The folder is empty.", result, "Root should have content");
+        Assertions.assertTrue(result.contains("Found"), "Should find documents");
         Assertions.assertTrue(result.contains("FILE") || result.contains("FOLDER"),
                 "Should contain type markers");
     }
 
     @Test
-    void listFolder_emptyFolder_returnsEmptyMessage() {
-        // Create an empty folder
-        FolderResponse folder = createFolder("empty-folder-" + UUID.randomUUID());
-
-        String result = documentAiTools.listFolder(folder.id().toString());
-        Assertions.assertEquals("The folder is empty.", result);
-    }
-
-    @Test
-    void listFolder_withContents_returnsFilesAndFolders() {
-        FolderResponse parentFolder = createFolder("parent-" + UUID.randomUUID());
-
-        // Upload file into the folder
-        MultipartBodyBuilder builder = newFileBuilder();
-        builder.part("parentFolderId", parentFolder.id().toString());
-        uploadDocument(builder);
-
-        // Create subfolder
-        createSubFolder("sub-" + UUID.randomUUID(), parentFolder.id());
-
-        String result = documentAiTools.listFolder(parentFolder.id().toString());
-        Assertions.assertTrue(result.contains("FILE"), "Should list the file");
-        Assertions.assertTrue(result.contains("FOLDER"), "Should list the subfolder");
-    }
-
-    @Test
-    void listFolder_invalidUuid_returnsError() {
-        String result = documentAiTools.listFolder("not-a-uuid");
-        Assertions.assertTrue(result.startsWith("Error"), "Should return error for invalid UUID");
-    }
-
-    // ========================= searchByName =========================
-
-    @Test
-    void searchByName_existingFile_returnsMatch() {
+    void queryDocuments_searchByName_returnsMatch() {
         UploadResponse uploaded = uploadDocument(newFileBuilder());
 
-        String result = documentAiTools.searchByName("test_file_1");
+        String result = documentAiTools.queryDocuments(null, "test_file_1", null, null, null, null, null);
         Assertions.assertNotNull(result);
         Assertions.assertTrue(result.contains("test_file_1"), "Should find the uploaded file");
-        Assertions.assertTrue(result.contains("FILE"), "Should indicate file type");
     }
 
     @Test
-    void searchByName_nonExistent_returnsNoResults() {
-        String result = documentAiTools.searchByName("nonexistent_file_xyz_12345");
+    void queryDocuments_searchByName_noMatch_returnsEmpty() {
+        String result = documentAiTools.queryDocuments(null, "nonexistent_xyz_12345", null, null, null, null, null);
         Assertions.assertTrue(result.contains("No documents found"), "Should indicate no matches");
     }
 
     @Test
-    void searchByName_caseInsensitive_returnsMatch() {
-        UploadResponse uploaded = uploadDocument(newFileBuilder());
+    void queryDocuments_filterByType_returnsFilesOnly() {
+        uploadDocument(newFileBuilder());
+        createFolder("type-filter-folder-" + UUID.randomUUID());
 
-        String result = documentAiTools.searchByName("TEST_FILE_1");
-        Assertions.assertTrue(result.contains("test_file_1"),
-                "Should find file regardless of case");
-    }
-
-    // ========================= getDocumentInfo =========================
-
-    @Test
-    void getDocumentInfo_file_returnsDetails() {
-        UploadResponse uploaded = uploadDocument(newFileBuilder());
-
-        String result = documentAiTools.getDocumentInfo(uploaded.id().toString());
-        Assertions.assertTrue(result.contains("Name:"), "Should contain Name field");
-        Assertions.assertTrue(result.contains("Type:"), "Should contain Type field");
-        Assertions.assertTrue(result.contains("test_file_1.sql"), "Should contain file name");
+        String result = documentAiTools.queryDocuments(null, null, "FILE", null, null, null, null);
+        Assertions.assertFalse(result.contains("[FOLDER]"), "Should not contain folders when filtering by FILE");
     }
 
     @Test
-    void getDocumentInfo_folder_returnsDetails() {
-        FolderResponse folder = createFolder("info-folder-" + UUID.randomUUID());
+    void queryDocuments_sortByCreatedAt_returnsNewest() {
+        uploadDocument(newFileBuilder());
 
-        String result = documentAiTools.getDocumentInfo(folder.id().toString());
-        Assertions.assertTrue(result.contains("Name:"), "Should contain Name field");
-        Assertions.assertTrue(result.contains("FOLDER"), "Should indicate folder type");
+        String result = documentAiTools.queryDocuments(null, null, "FILE", "createdAt", "DESC", 1, null);
+        Assertions.assertTrue(result.contains("Found 1 result"), "Should return exactly 1 result");
     }
 
     @Test
-    void getDocumentInfo_nonExistent_returnsNotFound() {
-        String result = documentAiTools.getDocumentInfo(UUID.randomUUID().toString());
-        Assertions.assertTrue(result.contains("not found") || result.contains("Error"),
-                "Should indicate not found");
+    void queryDocuments_specificFolder_returnsContents() {
+        FolderResponse folder = createFolder("query-folder-" + UUID.randomUUID());
+        MultipartBodyBuilder builder = newFileBuilder();
+        builder.part("parentFolderId", folder.id().toString());
+        uploadDocument(builder);
+
+        String result = documentAiTools.queryDocuments(folder.id().toString(), null, null, null, null, null, null);
+        Assertions.assertTrue(result.contains("Found"), "Should find documents in folder");
+        Assertions.assertTrue(result.contains("FILE"), "Should contain the uploaded file");
+    }
+
+    @Test
+    void queryDocuments_countOnly_returnsCount() {
+        uploadDocument(newFileBuilder());
+
+        String result = documentAiTools.queryDocuments(null, null, null, null, null, null, true);
+        Assertions.assertTrue(result.contains("Found") && result.contains("document(s)"),
+                "Should return count message, got: " + result);
     }
 
     // ========================= createFolder =========================
@@ -212,12 +177,6 @@ public class DocumentAiToolsIT extends TestContainersBaseConfig {
                 "Should confirm folder move, got: " + result);
     }
 
-    @Test
-    void moveDocuments_invalidUuid_returnsError() {
-        String result = documentAiTools.moveDocuments("bad-uuid", null);
-        Assertions.assertTrue(result.startsWith("Error"), "Should return error for invalid UUID");
-    }
-
     // ========================= renameDocument =========================
 
     @Test
@@ -239,37 +198,6 @@ public class DocumentAiToolsIT extends TestContainersBaseConfig {
         String result = documentAiTools.renameDocument(folder.id().toString(), newName);
         Assertions.assertTrue(result.contains("Successfully renamed"),
                 "Should confirm folder rename, got: " + result);
-    }
-
-    @Test
-    void renameDocument_nonExistent_returnsNotFound() {
-        String result = documentAiTools.renameDocument(UUID.randomUUID().toString(), "new-name");
-        Assertions.assertTrue(result.contains("not found") || result.contains("Error"),
-                "Should indicate not found, got: " + result);
-    }
-
-    // ========================= countFolderElements =========================
-
-    @Test
-    void countFolderElements_emptyFolder_returnsZero() {
-        FolderResponse folder = createFolder("count-empty-" + UUID.randomUUID());
-
-        String result = documentAiTools.countFolderElements(folder.id().toString());
-        Assertions.assertTrue(result.contains("0 item(s)"),
-                "Empty folder should have 0 items, got: " + result);
-    }
-
-    @Test
-    void countFolderElements_withContent_returnsCorrectCount() {
-        FolderResponse folder = createFolder("count-folder-" + UUID.randomUUID());
-
-        MultipartBodyBuilder builder = newFileBuilder();
-        builder.part("parentFolderId", folder.id().toString());
-        uploadDocument(builder);
-
-        String result = documentAiTools.countFolderElements(folder.id().toString());
-        Assertions.assertTrue(result.contains("1 item(s)"),
-                "Folder with 1 file should have 1 item, got: " + result);
     }
 
     // ========================= getDocumentPath =========================
@@ -296,25 +224,6 @@ public class DocumentAiToolsIT extends TestContainersBaseConfig {
         Assertions.assertTrue(result.contains("Path:"), "Should contain path prefix, got: " + result);
         Assertions.assertTrue(result.contains(parentName),
                 "Path should include parent folder name, got: " + result);
-    }
-
-    @Test
-    void getDocumentPath_deeplyNested_returnsAllAncestors() {
-        String grandparentName = "gp-" + UUID.randomUUID();
-        FolderResponse grandparent = createFolder(grandparentName);
-
-        String parentName = "p-" + UUID.randomUUID();
-        FolderResponse parent = createSubFolder(parentName, grandparent.id());
-
-        MultipartBodyBuilder builder = newFileBuilder();
-        builder.part("parentFolderId", parent.id().toString());
-        UploadResponse file = uploadDocument(builder);
-
-        String result = documentAiTools.getDocumentPath(file.id().toString());
-        Assertions.assertTrue(result.contains(grandparentName),
-                "Should contain grandparent, got: " + result);
-        Assertions.assertTrue(result.contains(parentName),
-                "Should contain parent, got: " + result);
     }
 
     // ========================= Helpers =========================

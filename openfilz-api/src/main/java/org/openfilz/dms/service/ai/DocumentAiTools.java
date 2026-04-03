@@ -3,9 +3,14 @@ package org.openfilz.dms.service.ai;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.dto.request.CreateFolderRequest;
+import org.openfilz.dms.dto.request.ListFolderRequest;
 import org.openfilz.dms.dto.request.MoveRequest;
+import org.openfilz.dms.dto.request.PageCriteria;
 import org.openfilz.dms.dto.request.RenameRequest;
+import org.openfilz.dms.dto.response.FullDocumentInfo;
 import org.openfilz.dms.entity.Document;
+import org.openfilz.dms.enums.DocumentType;
+import org.openfilz.dms.enums.SortOrder;
 import org.openfilz.dms.repository.DocumentRepository;
 import org.openfilz.dms.service.DocumentService;
 import org.openfilz.dms.service.StorageService;
@@ -43,6 +48,7 @@ public class DocumentAiTools {
     private final DocumentService documentService;
     private final DocumentRepository documentRepository;
     private final StorageService storageService;
+    private final AiDocumentQueryService queryService;
 
     /**
      * Registry of documents discovered during tool calls in the current conversation turn.
@@ -143,118 +149,94 @@ public class DocumentAiTools {
         return result;
     }
 
-    @Tool(description = "List the contents of a folder. Pass the folder name or null for the root folder.")
-    public String listFolder(
-            @ToolParam(description = "The folder name to list contents of, or null for the root folder.") String folderId
+    @Tool(description = "Query documents with filtering, sorting, and pagination. Use this to: list folder contents, search files by name, find recent files, count documents, get document details. This is the main tool for finding documents.")
+    public String queryDocuments(
+            @ToolParam(description = "Folder name to list contents of, or null for root folder, or 'all' to search across all folders") String folder,
+            @ToolParam(description = "Filter by name (partial match, case-insensitive). Use this to search for files.") String nameLike,
+            @ToolParam(description = "Filter by type: FILE, FOLDER, or null for both") String type,
+            @ToolParam(description = "Sort by field: name, createdAt, updatedAt, size. Default: updatedAt") String sortBy,
+            @ToolParam(description = "Sort order: ASC or DESC. Default: DESC") String sortOrder,
+            @ToolParam(description = "Max results to return (1-50). Default: 10") Integer pageSize,
+            @ToolParam(description = "Set to true to only return the count, not the documents") Boolean countOnly
     ) {
-        log.debug("[AI-TOOL] listFolder called with: '{}'", folderId);
+        log.debug("[AI-TOOL] queryDocuments called: folder='{}', nameLike='{}', type='{}', sort={}:{}, pageSize={}, countOnly={}",
+                folder, nameLike, type, sortBy, sortOrder, pageSize, countOnly);
         try {
-            UUID parentId = parseUuid(folderId);
-            // If not a UUID, try to resolve by folder name
-            if (parentId == null && folderId != null && !folderId.isBlank() && !"null".equalsIgnoreCase(folderId)) {
-                var match = documentRegistry.get(folderId);
-                if (match != null && "FOLDER".equals(match.type())) {
-                    parentId = match.id();
+            // Resolve folder name to UUID
+            // Default: search across all folders unless a specific folder is named
+            UUID folderId = null;
+            boolean searchAllFolders = folder == null || folder.isBlank() || "null".equalsIgnoreCase(folder) || "all".equalsIgnoreCase(folder);
+            if (!searchAllFolders) {
+                if ("root".equalsIgnoreCase(folder)) {
+                    searchAllFolders = false; // explicit root = only root level
+                    folderId = null;
                 } else {
-                    // Search for the folder by name
-                    var found = documentRepository.findByNameContainingIgnoreCaseAndActiveTrue(folderId)
-                            .filter(d -> d.getType() == org.openfilz.dms.enums.DocumentType.FOLDER)
-                            .collectList().block();
-                    if (found != null && !found.isEmpty()) {
-                        var folder = found.getFirst();
-                        parentId = folder.getId();
-                        register(folder);
-                    } else {
-                        return "No folder named '%s' found.".formatted(folderId);
+                    folderId = resolveToId(folder);
+                    if (folderId == null) {
+                        return toolResult("queryDocuments", "No folder named '%s' found.".formatted(folder));
                     }
+                    searchAllFolders = false;
                 }
             }
-            final UUID resolvedParentId = parentId;
-            var elements = documentService.listFolderInfo(resolvedParentId, false, false)
-                    .collectList()
-                    .block();
 
-            if (elements == null || elements.isEmpty()) {
-                return "The folder is empty.";
+            // Build request
+            DocumentType docType = null;
+            if (type != null && !type.isBlank() && !"null".equalsIgnoreCase(type)) {
+                try { docType = DocumentType.valueOf(type.toUpperCase()); } catch (Exception ignored) {}
             }
 
-            elements.forEach(e -> {
-                log.debug("listFolder result: type={}, name={}, id={}", e.type(), e.name(), e.id());
-                register(e.id(), resolvedParentId, e.type().name(), e.name());
-            });
+            SortOrder order = SortOrder.DESC;
+            if (sortOrder != null && "ASC".equalsIgnoreCase(sortOrder)) order = SortOrder.ASC;
 
-            String result = elements.stream()
-                    .map(e -> "- %s %s".formatted(
-                            e.type() == org.openfilz.dms.enums.DocumentType.FOLDER ? "[FOLDER]" : "[FILE]",
-                            e.name()))
-                    .collect(Collectors.joining("\n"));
-            return toolResult("listFolder", result);
-        } catch (Exception e) {
-            log.error("Error listing folder", e);
-            return "Error listing folder: " + e.getMessage();
-        }
-    }
+            int size = (pageSize != null && pageSize > 0 && pageSize <= 50) ? pageSize : 10;
+            String sort = (sortBy != null && !sortBy.isBlank()) ? sortBy : "updatedAt";
 
-    @Tool(description = "Search for documents and folders by name. Returns matching items.")
-    public String searchByName(
-            @ToolParam(description = "The search term to look for in document/folder names") String query
-    ) {
-        log.debug("[AI-TOOL] searchByName called with: '{}'", query);
-        try {
-            var results = documentRepository.findByNameContainingIgnoreCaseAndActiveTrue(query)
-                    .collectList()
-                    .block();
-
-            if (results == null || results.isEmpty()) {
-                return "No documents found matching '" + query + "'.";
-            }
-
-            results.forEach(this::register);
-
-            return results.stream()
-                    .map(d -> "- %s %s".formatted(
-                            d.getType() == org.openfilz.dms.enums.DocumentType.FOLDER ? "[FOLDER]" : "[FILE]",
-                            d.getName()))
-                    .collect(Collectors.joining("\n"));
-        } catch (Exception e) {
-            log.error("Error searching documents", e);
-            return "Error searching: " + e.getMessage();
-        }
-    }
-
-    @Tool(description = "Get detailed information about a document or folder by name. Use searchByName first if needed.")
-    public String getDocumentInfo(
-            @ToolParam(description = "The name or internal reference of the document or folder") String documentId
-    ) {
-        log.debug("[AI-TOOL] getDocumentInfo called with: '{}'", documentId);
-        try {
-            UUID id = parseUuid(documentId);
-            if (id == null) {
-                // Try to find by name in the registry
-                var ref = documentRegistry.get(documentId);
-                if (ref != null) id = ref.id();
-            }
-            if (id == null) return "Document not found. Use searchByName to find it first.";
-
-            var info = documentService.getDocumentInfo(id, true).block();
-            if (info == null) return "Document not found.";
-
-            register(id, info.parentId(), info.type().name(), info.name());
-
-            return """
-                    Name: %s
-                    Type: %s
-                    Content Type: %s
-                    Size: %s bytes
-                    """.formatted(
-                    info.name(),
-                    info.type(),
-                    info.contentType() != null ? info.contentType() : "N/A",
-                    info.size() != null ? info.size() : "N/A"
+            var request = new ListFolderRequest(
+                    searchAllFolders ? null : folderId,  // null = root or all
+                    docType,
+                    null,           // contentType
+                    null,           // name (exact)
+                    nameLike,       // nameLike (partial)
+                    null,           // metadata
+                    null,           // size
+                    null, null,     // createdAt range
+                    null, null,     // updatedAt range
+                    null,           // createdBy
+                    null,           // updatedBy
+                    null,           // favorite
+                    true,           // active
+                    (countOnly != null && countOnly) ? null : new PageCriteria(sort, order, 1, size),
+                    searchAllFolders  // recursive — when searching all, ignore parent filter
             );
+
+            // Count only
+            if (countOnly != null && countOnly) {
+                long count = queryService.count(request);
+                return toolResult("queryDocuments", "Found %d document(s).".formatted(count));
+            }
+
+            // Query
+            var results = queryService.query(request);
+            if (results == null || results.isEmpty()) {
+                return toolResult("queryDocuments", "No documents found.");
+            }
+
+            // Register all results for doc-link enrichment
+            results.forEach(r -> register(r.id(), r.parentId(), r.type().name(), r.name()));
+
+            // Format results
+            String formatted = results.stream()
+                    .map(r -> "- [%s] %s (%s, %s)".formatted(
+                            r.type().name(),
+                            r.name(),
+                            r.contentType() != null ? r.contentType() : "unknown type",
+                            r.createdAt() != null ? r.createdAt().toLocalDate().toString() : "unknown date"))
+                    .collect(Collectors.joining("\n"));
+
+            return toolResult("queryDocuments", "Found %d result(s):\n%s".formatted(results.size(), formatted));
         } catch (Exception e) {
-            log.error("Error getting document info", e);
-            return "Error getting document info: " + e.getMessage();
+            log.error("Error querying documents", e);
+            return "Error querying documents: " + e.getMessage();
         }
     }
 
@@ -478,26 +460,24 @@ public class DocumentAiTools {
                 }
                 if (folderId != null) {
                     log.debug("[AI-TOOL] readDocumentContent: searching in folder {} for '{}'", folderId, documentName);
-                    var elements = documentService.listFolderInfo(folderId, false, false)
-                            .collectList().block();
-                    if (elements != null) {
-                        // Find the best match by name
-                        var match = elements.stream()
-                                .filter(e -> e.type() == org.openfilz.dms.enums.DocumentType.FILE)
-                                .filter(e -> e.name().toLowerCase().contains(documentName.toLowerCase()))
-                                .findFirst();
-                        if (match.isPresent()) {
-                            doc = documentRepository.findById(match.get().id()).block();
-                            log.debug("[AI-TOOL] readDocumentContent: found '{}' in folder", doc != null ? doc.getName() : "null");
-                        } else {
-                            // No match by search term — list all files for the LLM
-                            String fileList = elements.stream()
-                                    .filter(e -> e.type() == org.openfilz.dms.enums.DocumentType.FILE)
-                                    .map(e -> "- " + e.name())
-                                    .collect(Collectors.joining("\n"));
-                            return toolResult("readDocumentContent",
-                                    "No file matching '%s' found in folder '%s'. Files in this folder:\n%s".formatted(documentName, folderName, fileList));
-                        }
+                    // Use queryService to search within folder by name
+                    var request = new ListFolderRequest(folderId, DocumentType.FILE, null, null, documentName,
+                            null, null, null, null, null, null, null, null, null, true,
+                            new PageCriteria("name", SortOrder.ASC, 1, 10), false);
+                    var results = queryService.query(request);
+                    if (results != null && !results.isEmpty()) {
+                        doc = documentRepository.findById(results.getFirst().id()).block();
+                        log.debug("[AI-TOOL] readDocumentContent: found '{}' in folder", doc != null ? doc.getName() : "null");
+                    } else {
+                        // No match — list all files in folder for the LLM
+                        var allInFolder = new ListFolderRequest(folderId, DocumentType.FILE, null, null, null,
+                                null, null, null, null, null, null, null, null, null, true,
+                                new PageCriteria("name", SortOrder.ASC, 1, 20), false);
+                        var allFiles = queryService.query(allInFolder);
+                        String fileList = allFiles != null ? allFiles.stream()
+                                .map(f -> "- " + f.name()).collect(Collectors.joining("\n")) : "(empty)";
+                        return toolResult("readDocumentContent",
+                                "No file matching '%s' found in folder '%s'. Files in this folder:\n%s".formatted(documentName, folderName, fileList));
                     }
                 }
             }
@@ -561,20 +541,6 @@ public class DocumentAiTools {
             return found.getFirst().getId();
         }
         return null;
-    }
-
-    @Tool(description = "Count the number of items in a folder.")
-    public String countFolderElements(
-            @ToolParam(description = "UUID of the folder. Use null for root.") String folderId
-    ) {
-        try {
-            UUID parentId = parseUuid(folderId);
-            Long count = documentService.countFolderElements(parentId).block();
-            return "The folder contains %d item(s).".formatted(count != null ? count : 0);
-        } catch (Exception e) {
-            log.error("Error counting folder elements", e);
-            return "Error counting: " + e.getMessage();
-        }
     }
 
     @Tool(description = "Get the full path (ancestors) of a document from root to its parent folder.")
