@@ -5,6 +5,12 @@ spring:
   threads:
     virtual:
       enabled: true
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: false
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
   r2dbc:
     url: r2dbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:dms_db}
     username: ${DB_USER:dms_user}
@@ -100,6 +106,31 @@ openfilz:
     # 0 = no limit (default), > 0 = max total storage in MB per user
     user: ${OPENFILZ_QUOTA_USER:0}
 
+  # AI Document Chat Configuration
+  ai:
+    active: false  # Set to true to enable AI chat features
+    system-prompt: |
+      You are OpenFilz AI Assistant, a helpful document management assistant.
+      You help users find, organize, and understand their documents stored in OpenFilz.
+
+      IMPORTANT RULES:
+      1. You have tools. Call them directly — NEVER describe what you would call or show JSON.
+      2. Use queryDocuments for ALL document searches: list folder contents, search by name, find recent files, count documents. Examples:
+         - "latest file" → queryDocuments(folder="all", sortBy="createdAt", sortOrder="DESC", pageSize=1)
+         - "list AI-tests" → queryDocuments(folder="AI-tests")
+         - "search for CV" → queryDocuments(folder="all", nameLike="CV")
+         - "count files" → queryDocuments(folder=null, type="FILE", countOnly=true)
+      3. When asked to summarize or read a document, first use queryDocuments to find it, then readDocumentContent with the exact filename and folder.
+      4. Present results clearly. Use document names, not IDs.
+      5. Default target folder is root (null) for moves and file creation.
+      6. Only ask for confirmation on destructive actions (delete, rename). Act immediately on reads.
+      7. When RAG context is provided, USE IT and mention the document name.
+      8. You can analyze images and PDFs. When a user asks about an image file or wants to extract text from an image or scanned PDF, use the describeImage tool with the appropriate task ('describe', 'ocr', or 'answer').
+      chunk-size: 1000       # Characters per text chunk
+      chunk-overlap: 200     # Overlap between chunks
+      top-k: 5               # Number of similar chunks to retrieve
+      similarity-threshold: 0.3  # Minimum similarity score (0.0 - 1.0) — lower = more results, higher = stricter match
+
   calculate-checksum: false
   #  calculate-checksum: default false - if true : calculate checksum of each new or modified file
 
@@ -189,6 +220,48 @@ onlyoffice:
     - ods
     - odp
     - pdf
+
+# ============================================================
+# Spring AI Configuration (only used when openfilz.ai.active=true)
+# ============================================================
+# Ollama (default for local development)
+spring.ai.ollama:
+  base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+  chat:
+    enabled: ${OLLAMA_CHAT_ENABLED:false}
+    model: ${OLLAMA_CHAT_MODEL:qwen2.5}
+  embedding:
+    enabled: ${OLLAMA_EMBEDDING_ENABLED:false}
+    model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
+
+# OpenAI-compatible API (for cloud providers: OpenAI, Anthropic via proxy, etc.)
+# Note: api-key defaults to 'disabled' (not empty) to prevent OpenAI auto-configuration
+# from failing at startup. When actually using OpenAI, set OPENAI_API_KEY to your real key.
+spring.ai.openai:
+  api-key: ${OPENAI_API_KEY:disabled}
+  base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+  chat:
+    enabled: ${OPENAI_CHAT_ENABLED:false}
+    model: ${OPENAI_CHAT_MODEL:gpt-4o}
+  embedding:
+    enabled: ${OPENAI_EMBEDDING_ENABLED:false}
+    model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+  image:
+    enabled: false
+  audio:
+    speech:
+      enabled: false
+    transcription:
+      enabled: false
+  moderation:
+    enabled: false
+
+# PgVector Store (auto-configured when spring-ai-starter-vector-store-pgvector is on classpath)
+spring.ai.vectorstore.pgvector:
+  index-type: hnsw
+  distance-type: cosine_distance
+  dimensions: 768
+  initialize-schema: false  # We manage schema with Flyway
 
 # Database schema initialization (e.g., Flyway or Liquibase if preferred)
 # For simple R2DBC, you might use an InitializingBean to create tables

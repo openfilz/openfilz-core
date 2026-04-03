@@ -36,7 +36,7 @@ public abstract class TestContainersBaseConfig {
     protected String baseGraphQlHttpPath;
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.1").withReuse(true);
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("pgvector/pgvector:pg17").withReuse(true);
 
     protected WebTestClient webTestClient;
     protected final Jackson2JsonEncoder customJackson2JsonEncoder;

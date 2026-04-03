@@ -95,6 +95,32 @@ storage:
   # @param storage.basePath The path within the container where the volume is mounted.
   basePath: /var/data/ged
 
+# -- AI Document Chat configuration.
+# Set ai.active to true and configure an LLM provider to enable AI features.
+# Requires PostgreSQL with pgvector extension.
+ai:
+  # @param ai.active Enable AI document chat (RAG, function calling, SSE streaming)
+  active: false
+  # -- Ollama (local LLM)
+  ollama:
+    baseUrl: "http://ollama:11434"
+    chat:
+      enabled: false
+      model: "llama3"
+    embedding:
+      enabled: false
+      model: "nomic-embed-text"
+  # -- OpenAI-compatible API (cloud LLM)
+  openai:
+    apiKey: ""
+    baseUrl: "https://api.openai.com"
+    chat:
+      enabled: false
+      model: "gpt-4o"
+    embedding:
+      enabled: false
+      model: "text-embedding-3-small"
+
 # -- Extra environment variables.
 # These key-value pairs will be stored in a chart-managed ConfigMap and
 # injected into the container via envFrom. This lets you add arbitrary

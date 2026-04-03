@@ -1,8 +1,11 @@
 package org.openfilz.dms.service.impl;
 
 import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.MetadataPostProcessingCondition;
 import org.openfilz.dms.entity.Document;
+import org.openfilz.dms.enums.DocumentType;
+import org.openfilz.dms.service.DocumentEmbeddingService;
 import org.openfilz.dms.service.FullTextService;
 import org.openfilz.dms.service.MetadataPostProcessor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,6 +16,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.UUID;
 
+@Slf4j
 @Service
 @Lazy
 @Conditional(MetadataPostProcessingCondition.class)
@@ -24,19 +28,28 @@ public class DefaultMetadataPostProcessor implements MetadataPostProcessor {
     @Autowired(required = false)
     protected FullTextService fullTextService;
 
+    @Autowired(required = false)
+    protected DocumentEmbeddingService documentEmbeddingService;
+
     @Value("${openfilz.thumbnail.active:false}")
     private boolean thumbnailsProperty;
 
     @Value("${openfilz.full-text.active:false}")
     private boolean fullTextProperty;
 
+    @Value("${openfilz.ai.active:false}")
+    private boolean aiActiveProperty;
+
     private boolean thumbnails;
     private boolean fullText;
+    private boolean aiActive;
 
     @PostConstruct
     private void init() {
         thumbnails = thumbnailsProperty && thumbnailPostProcessor != null;
         fullText = fullTextProperty && fullTextService != null;
+        aiActive = aiActiveProperty && documentEmbeddingService != null;
+        log.info("MetadataPostProcessor: fullText={}, thumbnails={}, aiEmbedding={}", fullText, thumbnails, aiActive);
     }
 
     @Override
@@ -46,6 +59,12 @@ public class DefaultMetadataPostProcessor implements MetadataPostProcessor {
         }
         if(thumbnails) {
             thumbnailPostProcessor.processDocument(document);
+        }
+        // AI embedding: only when full-text is NOT active (otherwise, embedding
+        // is triggered from LocalFullTextServiceImpl after Tika extraction to share the work)
+        if(aiActive && !fullText && document.getType() == DocumentType.FILE) {
+            log.debug("[AI-EMBED] Triggering standalone embedding for '{}' (no full-text active)", document.getName());
+            documentEmbeddingService.embedDocument(document).subscribe();
         }
     }
 
