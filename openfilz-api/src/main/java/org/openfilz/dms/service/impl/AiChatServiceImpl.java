@@ -48,6 +48,9 @@ public class AiChatServiceImpl implements AiChatService {
     private final AiChatMessageRepository messageRepository;
     private final DocumentAiTools documentAiTools;
 
+    /** Tracks document names that came from RAG context (not tool calls). */
+    private final java.util.Set<String> ragDocumentNames = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+
     @Override
     public Flux<AiChatResponse> chat(AiChatRequest request) {
         log.debug("[AI] === New chat request ===");
@@ -64,6 +67,7 @@ public class AiChatServiceImpl implements AiChatService {
 
             // 2. Save user message and clear document registry for this turn
             documentAiTools.clearRegistry();
+            ragDocumentNames.clear();
             Mono<Void> saveUserMsg = saveMessage(conversationId, "USER", request.getMessage())
                     .doOnSuccess(v -> log.debug("[AI] User message saved to DB"));
 
@@ -285,9 +289,10 @@ public class AiChatServiceImpl implements AiChatService {
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
-    /** Register a RAG-discovered document in the tool registry for doc-link enrichment. */
+    /** Register a RAG-discovered document in the tool registry for doc-link enrichment (but not for Sources). */
     private void registerRagDocument(Document doc) {
         String docName = doc.getMetadata().getOrDefault("document_name", "Unknown").toString();
+        ragDocumentNames.add(docName);
         String docId = doc.getMetadata().getOrDefault("document_id", "").toString();
         String parentId = doc.getMetadata().getOrDefault("parent_id", "").toString();
         if (!docId.isBlank()) {
@@ -312,9 +317,10 @@ public class AiChatServiceImpl implements AiChatService {
         var registry = documentAiTools.getRegistry();
         if (registry.isEmpty()) return response;
 
-        // Find documents that are NOT already linked (no [[doc:...]] marker for them)
+        // Find documents that are NOT already linked AND not from RAG context only
         var unlinked = registry.values().stream()
                 .filter(ref -> !response.contains("[[doc:" + ref.id()))
+                .filter(ref -> !ragDocumentNames.contains(ref.name()))
                 .toList();
 
         if (unlinked.isEmpty()) return response;
