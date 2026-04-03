@@ -26,6 +26,7 @@ This guide is intended for DevOps engineers and system administrators who instal
   - [Audit and Compliance](#audit-and-compliance)
   - [Soft Delete and Recycle Bin](#soft-delete-and-recycle-bin)
   - [CORS](#cors)
+  - [AI Document Chat](#ai-document-chat)
 - [Feature Toggles](#feature-toggles)
 - [Keycloak Administration](#keycloak-administration)
 - [Monitoring and Health Checks](#monitoring-and-health-checks)
@@ -120,6 +121,7 @@ graph LR
 | **OpenSearch** | Full-text search inside documents | Optional |
 | **OnlyOffice** | In-browser Office document editing | Optional |
 | **Gotenberg** | Thumbnail generation for PDFs and Office files | Optional |
+| **Ollama / OpenAI** | AI chat and document understanding (LLM provider) | Optional |
 
 ---
 
@@ -161,10 +163,13 @@ make up-onlyoffice
 # With OpenSearch full-text search
 make up-fulltext
 
+# With AI document chat (Ollama)
+make up-ai
+
 # Demo mode (all CE features, no auth)
 make up-demo
 
-# Full production stack (auth, MinIO, OnlyOffice, OpenSearch, thumbnails)
+# Full production stack (auth, MinIO, OnlyOffice, OpenSearch, thumbnails, AI)
 make up-full
 ```
 
@@ -203,6 +208,7 @@ make logs
 | `docker-compose.onlyoffice.yml` | OnlyOffice document server |
 | `docker-compose.fulltext.yml` | OpenSearch full-text search |
 | `docker-compose-thumbnails.yml` | Gotenberg thumbnail generation |
+| `docker-compose.ai.yml` | AI document chat (Ollama LLM) |
 | `docker-compose-gotenberg-dev.yml` | Gotenberg standalone for local dev |
 
 #### Manual Compose (without Make)
@@ -462,6 +468,111 @@ openfilz:
 | `openfilz.soft-delete.recycle-bin.auto-cleanup-interval` | `30 days` | Auto-purge interval (`0` = never) |
 | `openfilz.soft-delete.recycle-bin.cleanup-cron` | `0 0 2 * * ?` | Cleanup schedule (daily at 2 AM) |
 
+### AI Document Chat
+
+OpenFilz includes an optional AI assistant that can answer questions about your documents, search and organize files, and summarize content using Retrieval-Augmented Generation (RAG). When enabled, uploaded documents are automatically chunked, embedded, and stored in a pgvector table for semantic similarity search.
+
+#### Prerequisites
+
+- **PostgreSQL with pgvector extension**: The database must have the `vector` extension available. Use the `pgvector/pgvector` Docker image instead of plain `postgres` (provided automatically by `docker-compose.ai.yml`).
+- **An LLM provider**: Either a local [Ollama](https://ollama.com) instance or an OpenAI-compatible API (OpenAI, Azure OpenAI, etc.).
+
+#### Feature Toggle
+
+| Property / Env Variable | Default | Description |
+|--------------------------|---------|-------------|
+| `openfilz.ai.active` / `OPENFILZ_AI_ACTIVE` | `false` | Master switch — set to `true` to enable all AI features |
+
+When `openfilz.ai.active=false` (default), the AI feature is completely inert: no AI beans are created, no AI REST endpoints are exposed, no embedding processing occurs, and the AI database tables (`ai_chat_conversations`, `ai_chat_messages`, `vector_store`) are **not created**. The Flyway migration for AI only runs when the feature is active.
+
+#### LLM Provider Configuration
+
+You must enable **exactly one** chat model and **exactly one** embedding model. The two can come from different providers (e.g., Ollama for embeddings + OpenAI for chat).
+
+**Ollama (local, free, recommended for development):**
+
+| Property / Env Variable | Default | Description |
+|--------------------------|---------|-------------|
+| `spring.ai.ollama.base-url` / `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
+| `spring.ai.ollama.chat.enabled` / `OLLAMA_CHAT_ENABLED` | `false` | Enable Ollama as the chat model provider |
+| `spring.ai.ollama.chat.model` / `OLLAMA_CHAT_MODEL` | `llama3` | Ollama chat model name |
+| `spring.ai.ollama.embedding.enabled` / `OLLAMA_EMBEDDING_ENABLED` | `false` | Enable Ollama as the embedding model provider |
+| `spring.ai.ollama.embedding.model` / `OLLAMA_EMBEDDING_MODEL` | `nomic-embed-text` | Ollama embedding model name |
+
+**OpenAI-compatible API (cloud, production-ready):**
+
+| Property / Env Variable | Default | Description |
+|--------------------------|---------|-------------|
+| `spring.ai.openai.api-key` / `OPENAI_API_KEY` | *(empty)* | API key (required when using OpenAI) |
+| `spring.ai.openai.base-url` / `OPENAI_BASE_URL` | `https://api.openai.com` | API base URL (change for Azure OpenAI or other providers) |
+| `spring.ai.openai.chat.enabled` / `OPENAI_CHAT_ENABLED` | `false` | Enable OpenAI as the chat model provider |
+| `spring.ai.openai.chat.model` / `OPENAI_CHAT_MODEL` | `gpt-4o` | Chat model name |
+| `spring.ai.openai.embedding.enabled` / `OPENAI_EMBEDDING_ENABLED` | `false` | Enable OpenAI as the embedding model provider |
+| `spring.ai.openai.embedding.model` / `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model name |
+
+#### RAG and Embedding Configuration
+
+| Property / Env Variable | Default | Description |
+|--------------------------|---------|-------------|
+| `openfilz.ai.system-prompt` | *(built-in)* | System prompt defining the AI assistant's behavior |
+| `openfilz.ai.embedding.chunk-size` | `1000` | Characters per text chunk when splitting documents |
+| `openfilz.ai.embedding.chunk-overlap` | `200` | Overlapping characters between adjacent chunks |
+| `openfilz.ai.embedding.top-k` | `5` | Number of most similar chunks to retrieve per query |
+| `openfilz.ai.embedding.similarity-threshold` | `0.7` | Minimum cosine similarity score (0.0–1.0) for a chunk to be included |
+
+#### Vector Store Configuration
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `spring.ai.vectorstore.pgvector.index-type` | `hnsw` | Vector index type (HNSW for fast approximate search) |
+| `spring.ai.vectorstore.pgvector.distance-type` | `cosine_distance` | Distance metric for similarity |
+| `spring.ai.vectorstore.pgvector.dimensions` | `768` | Embedding vector dimensions (must match your embedding model) |
+| `spring.ai.vectorstore.pgvector.initialize-schema` | `false` | Schema managed by Flyway — leave as `false` |
+
+> **Note on dimensions:** The default `768` matches models like `nomic-embed-text` (Ollama) and `text-embedding-3-small` (OpenAI). If you use a model with different dimensions (e.g., `text-embedding-ada-002` at 1536), you must change this value **and** update the Flyway migration or re-create the `vector_store` table.
+
+#### Quick Setup — Ollama (Local)
+
+```bash
+# 1. Install and start Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull llama3
+ollama pull nomic-embed-text
+
+# 2. Start OpenFilz with AI
+cd deploy/docker-compose
+make up-ai
+```
+
+#### Quick Setup — OpenAI (Cloud)
+
+Set the following in your `.env`:
+
+```bash
+OPENFILZ_AI_ACTIVE=true
+OPENAI_API_KEY=sk-your-key-here
+OPENAI_CHAT_ENABLED=true
+OPENAI_EMBEDDING_ENABLED=true
+```
+
+Then start normally (`make up`, `make up-auth`, etc.). No Ollama container is needed.
+
+#### How It Works
+
+1. **Document embedding**: When a file is uploaded, its text content is extracted (using Apache Tika — supports PDF, Office, text, and more), split into chunks, and stored as vector embeddings in PostgreSQL (pgvector).
+2. **Chat with RAG**: When a user sends a message, the system searches for the most relevant document chunks via cosine similarity, includes them as context in the LLM prompt alongside the conversation history, and streams the response.
+3. **Function calling**: The AI assistant can also invoke document management tools (list folders, search by name, create folders, move/rename documents) to take actions on behalf of the user.
+
+#### Database Tables
+
+The AI migration (`V1_4__add_ai_support.sql`) runs **only when `openfilz.ai.active=true`** and creates:
+
+| Table | Purpose |
+|-------|---------|
+| `ai_chat_conversations` | Conversation metadata (title, creator, timestamps) |
+| `ai_chat_messages` | Message history (user and assistant messages per conversation) |
+| `vector_store` | Document embeddings for semantic search (768-dim vectors with HNSW index) |
+
 ### CORS
 
 | Property / Env Variable | Default | Description |
@@ -504,6 +615,7 @@ Summary of all toggleable features:
 | TUS uploads | `openfilz.tus.enabled` | `true` | Resumable large file uploads |
 | Audit chain | `openfilz.audit.chain.enabled` | `true` | Cryptographic hash chain |
 | Checksums | `openfilz.calculate-checksum` | `false` | SHA-256 on upload |
+| AI chat | `openfilz.ai.active` | `false` | Requires LLM provider (Ollama or OpenAI) and pgvector |
 
 ---
 

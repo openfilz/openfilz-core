@@ -33,13 +33,14 @@ public class AiTestConfig {
     @Primary
     public EmbeddingModel testEmbeddingModel() {
         EmbeddingModel embeddingModel = mock(EmbeddingModel.class);
-        // Return a 768-dimensional zero vector for any embedding request
-        float[] zeroVector = new float[768];
-        when(embeddingModel.embed(any(String.class))).thenReturn(zeroVector);
-        when(embeddingModel.embed(any(org.springframework.ai.document.Document.class))).thenReturn(zeroVector);
+        // Return a 768-dimensional unit vector for any embedding request (non-zero to avoid norm issues)
+        float[] unitVector = new float[768];
+        java.util.Arrays.fill(unitVector, 1.0f / 768);
+        when(embeddingModel.embed(any(String.class))).thenReturn(unitVector);
+        when(embeddingModel.embed(any(org.springframework.ai.document.Document.class))).thenReturn(unitVector);
         when(embeddingModel.dimensions()).thenReturn(768);
 
-        var embedding = new Embedding(zeroVector, 0);
+        var embedding = new Embedding(unitVector, 0);
         var embeddingResponse = new EmbeddingResponse(List.of(embedding));
         when(embeddingModel.call(any(org.springframework.ai.embedding.EmbeddingRequest.class)))
                 .thenReturn(embeddingResponse);
@@ -50,7 +51,7 @@ public class AiTestConfig {
     @Bean
     @Primary
     public VectorStore testVectorStore(EmbeddingModel embeddingModel) {
-        return new SimpleVectorStore(embeddingModel);
+        return SimpleVectorStore.builder(embeddingModel).build();
     }
 
     @Bean

@@ -21,6 +21,16 @@ public interface DocumentEmbeddingService {
     Mono<Void> embedDocument(Document document);
 
     /**
+     * Embed a document from pre-extracted text content.
+     * This avoids a redundant Tika extraction when full-text search already extracted the text.
+     *
+     * @param document the document entity
+     * @param extractedText the already-extracted text content
+     * @return empty Mono on completion
+     */
+    Mono<Void> embedFromText(Document document, String extractedText);
+
+    /**
      * Remove all embeddings for a given document.
      *
      * @param documentId the document UUID

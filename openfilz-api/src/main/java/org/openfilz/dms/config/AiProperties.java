@@ -11,7 +11,6 @@ import org.springframework.context.annotation.Lazy;
  * Maps to openfilz.ai.* properties in application.yml.
  */
 @Data
-@Lazy
 @Configuration
 @ConfigurationProperties(prefix = "openfilz.ai")
 @ConditionalOnProperty(name = "openfilz.ai.active", havingValue = "true")

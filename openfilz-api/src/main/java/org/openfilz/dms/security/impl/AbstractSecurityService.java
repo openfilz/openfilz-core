@@ -44,11 +44,17 @@ public abstract class AbstractSecurityService implements SecurityService {
     public boolean authorize(Authentication auth, AuthorizationContext context) {
         ServerHttpRequest request = context.getExchange().getRequest();
         HttpMethod method = request.getMethod();
+        String fullPath = request.getPath().value();
+        int idx = getRootContextPathIndex(fullPath);
+        // AI endpoints: accessible to READER, CONTRIBUTOR, and CLEANER (for delete)
+        if (idx >= 0 && getContextPath(fullPath, idx).startsWith(RestApiVersion.ENDPOINT_AI)) {
+            return isAuthorized((JwtAuthenticationToken) auth, of(Role.READER.toString(), Role.CONTRIBUTOR.toString(), Role.CLEANER.toString()));
+        }
         if(isDeleteAccess(request)) {
             return isAuthorized((JwtAuthenticationToken) auth, Role.CLEANER.toString());
         }
-        String path = request.getPath().value();
-        int i = getRootContextPathIndex(path);
+        String path = fullPath;
+        int i = idx;
         if(i < 0) {
             return isGraphQlAuthorized((JwtAuthenticationToken) auth, path);
         }

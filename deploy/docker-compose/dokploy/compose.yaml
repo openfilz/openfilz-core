@@ -26,7 +26,7 @@ services:
   # PostgreSQL Database
   # =============================================================================
   postgres:
-    image: ${POSTGRES_IMAGE:-postgres:17-alpine}
+    image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg17}
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-openfilz}
@@ -214,6 +214,20 @@ services:
       # Quotas (MB)
       OPENFILZ_QUOTA_FILE_UPLOAD: ${OPENFILZ_QUOTA_FILE_UPLOAD:-1024}
       OPENFILZ_QUOTA_USER: ${OPENFILZ_QUOTA_USER:-2048}
+
+      # AI Document Chat (optional — set OPENFILZ_AI_ACTIVE=true to enable)
+      OPENFILZ_AI_ACTIVE: ${OPENFILZ_AI_ACTIVE:-false}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_CHAT_ENABLED: ${OLLAMA_CHAT_ENABLED:-false}
+      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-llama3}
+      OLLAMA_EMBEDDING_ENABLED: ${OLLAMA_EMBEDDING_ENABLED:-false}
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com}
+      OPENAI_CHAT_ENABLED: ${OPENAI_CHAT_ENABLED:-false}
+      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4o}
+      OPENAI_EMBEDDING_ENABLED: ${OPENAI_EMBEDDING_ENABLED:-false}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
 
     volumes:
       - openfilz-storage:/var/data/openfilz

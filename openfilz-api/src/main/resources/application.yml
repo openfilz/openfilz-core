@@ -5,6 +5,12 @@ spring:
   threads:
     virtual:
       enabled: true
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: false
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
   r2dbc:
     url: r2dbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:dms_db}
     username: ${DB_USER:dms_user}
@@ -106,14 +112,19 @@ openfilz:
     system-prompt: |
       You are OpenFilz AI Assistant, a helpful document management assistant.
       You help users find, organize, and understand their documents stored in OpenFilz.
-      You can search for documents, summarize content, reorganize folders, and answer questions about document contents.
-      Always be concise and helpful. When performing actions, confirm what you did.
-      If you are unsure about an action, ask the user to confirm before proceeding.
+
+      IMPORTANT RULES:
+      1. You have access to tools. When the user asks to find, search, list, create, move, rename, count, read, or summarize documents, call the appropriate tool directly. NEVER describe what tool you would call or show JSON — just call it.
+      2. When asked to summarize or explain a document, use readDocumentContent to read it, then provide the summary directly. Do not ask the user for permission or more context.
+      3. Present results in a clear, user-friendly format. Use document names, not IDs.
+      4. If the user does not specify a target folder for a move or creation, use the root folder (null).
+      5. Only ask for confirmation before destructive actions (delete, rename). For read-only operations (search, list, read, summarize), act immediately.
+      6. When relevant document content is provided in the context, USE IT to answer the question. Always mention the document name in your answer. Do not say "no documents found" when context has already been provided.
     embedding:
       chunk-size: 1000       # Characters per text chunk
       chunk-overlap: 200     # Overlap between chunks
       top-k: 5               # Number of similar chunks to retrieve
-      similarity-threshold: 0.7  # Minimum similarity score (0.0 - 1.0)
+      similarity-threshold: 0.3  # Minimum similarity score (0.0 - 1.0) — lower = more results, higher = stricter match
 
   calculate-checksum: false
   #  calculate-checksum: default false - if true : calculate checksum of each new or modified file
@@ -213,14 +224,16 @@ spring.ai.ollama:
   base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
   chat:
     enabled: ${OLLAMA_CHAT_ENABLED:false}
-    model: ${OLLAMA_CHAT_MODEL:llama3}
+    model: ${OLLAMA_CHAT_MODEL:qwen2.5}
   embedding:
     enabled: ${OLLAMA_EMBEDDING_ENABLED:false}
     model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
 
 # OpenAI-compatible API (for cloud providers: OpenAI, Anthropic via proxy, etc.)
+# Note: api-key defaults to 'disabled' (not empty) to prevent OpenAI auto-configuration
+# from failing at startup. When actually using OpenAI, set OPENAI_API_KEY to your real key.
 spring.ai.openai:
-  api-key: ${OPENAI_API_KEY:}
+  api-key: ${OPENAI_API_KEY:disabled}
   base-url: ${OPENAI_BASE_URL:https://api.openai.com}
   chat:
     enabled: ${OPENAI_CHAT_ENABLED:false}
@@ -228,6 +241,15 @@ spring.ai.openai:
   embedding:
     enabled: ${OPENAI_EMBEDDING_ENABLED:false}
     model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+  image:
+    enabled: false
+  audio:
+    speech:
+      enabled: false
+    transcription:
+      enabled: false
+  moderation:
+    enabled: false
 
 # PgVector Store (auto-configured when spring-ai-starter-vector-store-pgvector is on classpath)
 spring.ai.vectorstore.pgvector:

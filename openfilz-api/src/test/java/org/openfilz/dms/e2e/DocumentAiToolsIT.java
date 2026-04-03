@@ -48,9 +48,15 @@ public class DocumentAiToolsIT extends TestContainersBaseConfig {
         registry.add("openfilz.ai.active", () -> true);
         registry.add("spring.ai.ollama.chat.enabled", () -> false);
         registry.add("spring.ai.ollama.embedding.enabled", () -> false);
+        registry.add("spring.ai.openai.api-key", () -> "test-dummy-key");
         registry.add("spring.ai.openai.chat.enabled", () -> false);
         registry.add("spring.ai.openai.embedding.enabled", () -> false);
+        registry.add("spring.ai.openai.image.enabled", () -> false);
+        registry.add("spring.ai.openai.audio.speech.enabled", () -> false);
+        registry.add("spring.ai.openai.audio.transcription.enabled", () -> false);
+        registry.add("spring.ai.openai.moderation.enabled", () -> false);
         registry.add("spring.ai.vectorstore.pgvector.initialize-schema", () -> false);
+        registry.add("spring.autoconfigure.exclude", () -> "org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration");
     }
 
     // ========================= listFolder =========================
@@ -62,7 +68,7 @@ public class DocumentAiToolsIT extends TestContainersBaseConfig {
 
         String result = documentAiTools.listFolder(null);
         Assertions.assertNotNull(result);
-        Assertions.assertFalse(result.contains("empty"), "Root should have content");
+        Assertions.assertNotEquals("The folder is empty.", result, "Root should have content");
         Assertions.assertTrue(result.contains("FILE") || result.contains("FOLDER"),
                 "Should contain type markers");
     }

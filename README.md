@@ -85,6 +85,15 @@ Pick the guide that matches your role:
 - **OnlyOffice Integration** - Open and edit Word, Excel, and PowerPoint files in the browser with real-time collaboration support.
 - **Dashboard & Statistics** - Real-time dashboard API providing storage usage, document counts by type, file distribution, and system health metrics.
 
+### AI Document Chat
+
+- **AI Assistant** - Optional AI-powered chat that answers questions about your documents using Retrieval-Augmented Generation (RAG). Supports both local LLMs (Ollama) and cloud providers (OpenAI).
+- **Document Understanding** - Uploaded documents are automatically chunked and embedded in pgvector for semantic similarity search. Supports PDF, Office, text, and more via Apache Tika.
+- **Function Calling** - The AI can search, organize, create folders, move, and rename documents on behalf of the user.
+- **Conversation History** - Multi-turn conversations are persisted with full message history.
+- **Streaming Responses** - Server-Sent Events (SSE) for real-time AI response streaming.
+- **Fully Optional** - Disabled by default. When disabled, no AI beans, endpoints, or database tables are created.
+
 ### Security
 
 - **OIDC Resource Server** - Validates JWT tokens for every request. Native Keycloak integration with pre-built configurations.
@@ -119,7 +128,7 @@ type Query {
 
 ### REST API
 
-15 controllers providing 40+ endpoints:
+16 controllers providing 40+ endpoints:
 
 | Controller | Purpose |
 |------------|---------|
@@ -131,6 +140,7 @@ type Query {
 | `RecycleBinController` | Soft-delete and recovery |
 | `DashboardController` | Statistics and metrics |
 | `ThumbnailController` | Thumbnail generation and serving |
+| `AiChatController` | AI document chat (SSE streaming, conversations) |
 | `AuditController` | Audit trail queries |
 | `OnlyOfficeController` | OnlyOffice editor integration |
 | `DocumentSuggestionController` | Document suggestions |
@@ -329,6 +339,7 @@ graph LR
         OO["📝 OnlyOffice"]
         OS["🔍 OpenSearch"]
         GOT["🖼️ Gotenberg"]
+        AI["🤖 AI / LLM\nOllama · OpenAI"]
     end
 
     Clients -->|"OIDC"| Auth
@@ -347,7 +358,7 @@ graph LR
     class KC authBox
     class ENDPOINTS,SERVICES,ABSTRACTION coreBox
     class PG,FS,S3 dataBox
-    class OO,OS,GOT pluginBox
+    class OO,OS,GOT,AI pluginBox
 ```
 
 ### Key Design Decisions

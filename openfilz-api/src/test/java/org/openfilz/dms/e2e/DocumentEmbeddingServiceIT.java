@@ -54,9 +54,15 @@ public class DocumentEmbeddingServiceIT extends TestContainersBaseConfig {
         registry.add("openfilz.ai.active", () -> true);
         registry.add("spring.ai.ollama.chat.enabled", () -> false);
         registry.add("spring.ai.ollama.embedding.enabled", () -> false);
+        registry.add("spring.ai.openai.api-key", () -> "test-dummy-key");
         registry.add("spring.ai.openai.chat.enabled", () -> false);
         registry.add("spring.ai.openai.embedding.enabled", () -> false);
+        registry.add("spring.ai.openai.image.enabled", () -> false);
+        registry.add("spring.ai.openai.audio.speech.enabled", () -> false);
+        registry.add("spring.ai.openai.audio.transcription.enabled", () -> false);
+        registry.add("spring.ai.openai.moderation.enabled", () -> false);
         registry.add("spring.ai.vectorstore.pgvector.initialize-schema", () -> false);
+        registry.add("spring.autoconfigure.exclude", () -> "org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration");
     }
 
     // ========================= embedDocument =========================

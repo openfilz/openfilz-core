@@ -45,6 +45,32 @@ spec:
                   key: password
             - name: JAVA_TOOL_OPTIONS
               value: "-Dopenfilz.security.cors-allowed-origins={{ .Values.api.corsAllowedUrls }} -Dserver.port={{ .Values.api.port }} -Dstorage.type={{ .Values.storage.type }} -Dstorage.local.basePath={{ .Values.storage.basePath }}"
+            {{- if .Values.ai.active }}
+            - name: OPENFILZ_AI_ACTIVE
+              value: "true"
+            - name: OLLAMA_BASE_URL
+              value: {{ .Values.ai.ollama.baseUrl | quote }}
+            - name: OLLAMA_CHAT_ENABLED
+              value: {{ .Values.ai.ollama.chat.enabled | quote }}
+            - name: OLLAMA_CHAT_MODEL
+              value: {{ .Values.ai.ollama.chat.model | quote }}
+            - name: OLLAMA_EMBEDDING_ENABLED
+              value: {{ .Values.ai.ollama.embedding.enabled | quote }}
+            - name: OLLAMA_EMBEDDING_MODEL
+              value: {{ .Values.ai.ollama.embedding.model | quote }}
+            - name: OPENAI_API_KEY
+              value: {{ .Values.ai.openai.apiKey | quote }}
+            - name: OPENAI_BASE_URL
+              value: {{ .Values.ai.openai.baseUrl | quote }}
+            - name: OPENAI_CHAT_ENABLED
+              value: {{ .Values.ai.openai.chat.enabled | quote }}
+            - name: OPENAI_CHAT_MODEL
+              value: {{ .Values.ai.openai.chat.model | quote }}
+            - name: OPENAI_EMBEDDING_ENABLED
+              value: {{ .Values.ai.openai.embedding.enabled | quote }}
+            - name: OPENAI_EMBEDDING_MODEL
+              value: {{ .Values.ai.openai.embedding.model | quote }}
+            {{- end }}
           {{- if or .Values.extraEnv .Values.extraEnvSecretRef }}
           envFrom:
             {{- if .Values.extraEnv }}

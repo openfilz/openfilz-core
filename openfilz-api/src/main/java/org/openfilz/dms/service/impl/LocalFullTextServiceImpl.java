@@ -1,16 +1,18 @@
 package org.openfilz.dms.service.impl;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.DocumentType;
+import org.openfilz.dms.service.DocumentEmbeddingService;
 import org.openfilz.dms.service.FullTextService;
 import org.openfilz.dms.service.IndexService;
 import org.openfilz.dms.service.StorageService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.retry.Retry;
@@ -26,7 +28,6 @@ import java.util.function.Function;
 @Slf4j
 @Service
 @Lazy
-@RequiredArgsConstructor
 @ConditionalOnProperties({
         @ConditionalOnProperty(name = "openfilz.full-text.active", havingValue = "true"),
         @ConditionalOnProperty(name = "openfilz.full-text.indexation-mode", havingValue = "local", matchIfMissing = true)
@@ -59,6 +60,15 @@ public class LocalFullTextServiceImpl implements FullTextService {
     private final TikaService tikaService;
     private final StorageService storageService;
 
+    @Autowired(required = false)
+    private DocumentEmbeddingService documentEmbeddingService;
+
+    public LocalFullTextServiceImpl(IndexService indexService, TikaService tikaService, StorageService storageService) {
+        this.indexService = indexService;
+        this.tikaService = tikaService;
+        this.storageService = storageService;
+    }
+
     @Override
     public void indexDocument(Document document) {
         if(document.getType() == DocumentType.FILE) {
@@ -83,16 +93,33 @@ public class LocalFullTextServiceImpl implements FullTextService {
     private void indexFileWithTextExtraction(Document document) {
         try {
             Path tempFile = Files.createTempFile("upload-opf", ".tmp");
+
+            // When AI embedding is active, collect the Tika-extracted text to reuse it
+            // for vector embedding — avoids a second Tika pass on the same file.
+            final boolean shareWithAi = documentEmbeddingService != null;
+            final StringBuilder collectedText = shareWithAi ? new StringBuilder() : null;
+
+            Flux<String> tikaFlux = tikaService.processResource(tempFile, storageService.loadFile(document.getStoragePath()));
+
+            // If sharing with AI, tap into the stream to collect text (lightweight — just appending strings)
+            if (shareWithAi) {
+                tikaFlux = tikaFlux.doOnNext(collectedText::append);
+            }
+
             subscribeAndRetryOnError(indexService.indexDocMetadataMono(document)
-                    .then(tikaService.processResource(tempFile, storageService.loadFile(document.getStoragePath()))
-                            .as(flux -> indexService.indexDocumentStream(flux, document.getId()))
-                    )
+                    .then(tikaFlux.as(flux -> indexService.indexDocumentStream(flux, document.getId())))
                     .then(Mono.fromRunnable(() -> {
                         try {
                             Files.deleteIfExists(tempFile);
-                            log.info("Cleaned up stable temp file [{}].", tempFile);
+                            log.debug("Cleaned up stable temp file [{}].", tempFile);
                         } catch (Exception e) {
                             log.error("Failed to clean up stable temp file [{}].", tempFile, e);
+                        }
+                        // After OpenSearch indexing completes, trigger AI embedding with the collected text
+                        if (shareWithAi && collectedText.length() > 0) {
+                            log.debug("[AI-EMBED] Sharing Tika-extracted text with AI embedding for '{}' ({} chars)",
+                                    document.getName(), collectedText.length());
+                            documentEmbeddingService.embedFromText(document, collectedText.toString()).subscribe();
                         }
                     })),
                     document,
