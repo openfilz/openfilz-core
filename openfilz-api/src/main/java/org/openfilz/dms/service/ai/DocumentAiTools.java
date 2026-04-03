@@ -2,24 +2,24 @@ package org.openfilz.dms.service.ai;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.openfilz.dms.dto.request.CreateFolderRequest;
-import org.openfilz.dms.dto.request.ListFolderRequest;
-import org.openfilz.dms.dto.request.MoveRequest;
-import org.openfilz.dms.dto.request.PageCriteria;
-import org.openfilz.dms.dto.request.RenameRequest;
-import org.openfilz.dms.dto.response.FullDocumentInfo;
+import org.openfilz.dms.dto.request.*;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.enums.SortOrder;
 import org.openfilz.dms.repository.DocumentRepository;
 import org.openfilz.dms.service.DocumentService;
 import org.openfilz.dms.service.StorageService;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.content.Media;
 import org.springframework.ai.reader.tika.TikaDocumentReader;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
+import org.springframework.util.MimeType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -49,6 +49,18 @@ public class DocumentAiTools {
     private final DocumentRepository documentRepository;
     private final StorageService storageService;
     private final AiDocumentQueryService queryService;
+    private final ChatModel chatModel;
+
+    /** Image MIME types supported for direct vision analysis. */
+    private static final List<String> VISION_MIME_TYPES = List.of(
+            "image/png", "image/jpeg", "image/webp", "image/gif", "image/bmp", "image/tiff"
+    );
+
+    /** MIME types that can be analyzed (images directly, PDFs via page rendering). */
+    private static final String PDF_MIME_TYPE = "application/pdf";
+
+    /** Maximum number of PDF pages to analyze with vision (to avoid huge cost/latency). */
+    private static final int MAX_PDF_PAGES_FOR_VISION = 5;
 
     /**
      * Registry of documents discovered during tool calls in the current conversation turn.
@@ -562,6 +574,179 @@ public class DocumentAiTools {
         } catch (Exception e) {
             log.error("Error getting document path", e);
             return "Error getting path: " + e.getMessage();
+        }
+    }
+
+    @Tool(description = """
+            Analyze an image or PDF file stored in the document library using vision capabilities.
+            Use this when a user asks to describe, caption, or understand what an image or PDF contains.
+            Also use this when the user wants to extract or read text from an image or scanned PDF (OCR).
+            You can optionally specify a folder name to narrow down the search.
+            The 'task' parameter controls what the model does: 'describe' for a general description/caption,
+            'ocr' to extract all visible text from the image or PDF pages, or 'answer' to answer a specific question about it.
+            """)
+    public String describeImage(
+            @ToolParam(description = "The name (or part of the name) of the image to analyze") String imageName,
+            @ToolParam(description = "Optional: the folder name where the image is located") String folderName,
+            @ToolParam(description = "The task: 'describe' for description/caption, 'ocr' to extract text, or 'answer' to answer a specific question") String task,
+            @ToolParam(description = "Optional: the specific question to answer about the image (used when task='answer')") String question
+    ) {
+        log.debug("[AI-TOOL] describeImage called: image='{}', folder='{}', task='{}', question='{}'",
+                imageName, folderName, task, question);
+        try {
+            Document doc = null;
+
+            // If a folder is specified, search within it first
+            if (folderName != null && !folderName.isBlank() && !"null".equalsIgnoreCase(folderName)) {
+                UUID folderId = resolveToId(folderName);
+                if (folderId == null) {
+                    var folders = documentRepository.findByNameContainingIgnoreCaseAndActiveTrue(folderName)
+                            .filter(d -> d.getType() == DocumentType.FOLDER)
+                            .collectList().block();
+                    if (folders != null && !folders.isEmpty()) {
+                        folderId = folders.getFirst().getId();
+                    }
+                }
+                if (folderId != null) {
+                    var request = new ListFolderRequest(folderId, DocumentType.FILE, null, null, imageName,
+                            null, null, null, null, null, null, null, null, null, true,
+                            new PageCriteria("name", SortOrder.ASC, 1, 10), false);
+                    var results = queryService.query(request);
+                    if (results != null && !results.isEmpty()) {
+                        doc = documentRepository.findById(results.getFirst().id()).block();
+                    }
+                }
+            }
+
+            // Fallback: resolve by name globally
+            if (doc == null) {
+                UUID id = resolveAnyToId(imageName);
+                if (id == null) return toolResult("describeImage", "Image '%s' not found.".formatted(imageName));
+                doc = documentRepository.findById(id).block();
+            }
+
+            if (doc == null) return toolResult("describeImage", "Image not found.");
+            if (doc.getType() == DocumentType.FOLDER) {
+                return toolResult("describeImage", "'%s' is a folder, not an image.".formatted(imageName));
+            }
+
+            // Validate it's a supported image type or PDF
+            String contentType = doc.getContentType();
+            boolean isPdf = PDF_MIME_TYPE.equals(contentType);
+            if (contentType == null || (!VISION_MIME_TYPES.contains(contentType) && !isPdf)) {
+                return toolResult("describeImage",
+                        "'%s' is not a supported image or PDF (type: %s). Supported images: %s, and application/pdf".formatted(
+                                doc.getName(), contentType, VISION_MIME_TYPES));
+            }
+
+            register(doc);
+
+            // Load the file from storage
+            Resource resource = storageService.loadFile(doc.getStoragePath()).block();
+            if (resource == null) return toolResult("describeImage", "Could not load '%s' from storage.".formatted(doc.getName()));
+
+            // Build the prompt depending on the task
+            String promptText = switch (task != null ? task.toLowerCase() : "describe") {
+                case "ocr" -> "Extract ALL visible text from this image. Return the text exactly as it appears, preserving layout where possible. If there is no text, say so.";
+                case "answer" -> (question != null && !question.isBlank())
+                        ? question
+                        : "Describe this image in detail.";
+                default -> "Describe this image in detail. What do you see? Include relevant details about objects, text, colors, layout, and any notable features.";
+            };
+
+            String result;
+            if (isPdf) {
+                result = analyzePdfWithVision(resource, promptText, doc.getName());
+            } else {
+                MimeType mimeType = MimeType.valueOf(contentType);
+                Media imageMedia = new Media(mimeType, resource);
+
+                var userMessage = UserMessage.builder()
+                        .text(promptText)
+                        .media(imageMedia)
+                        .build();
+
+                log.debug("[AI-TOOL] describeImage: sending vision prompt for '{}' (task={})", doc.getName(), task);
+                var response = chatModel.call(new Prompt(List.of(userMessage)));
+                result = response.getResult().getOutput().getText();
+            }
+
+            if (result == null || result.isBlank()) {
+                return toolResult("describeImage", "The model could not analyze image '%s'.".formatted(doc.getName()));
+            }
+
+            String label = switch (task != null ? task.toLowerCase() : "describe") {
+                case "ocr" -> "Text extracted from '%s':\n\n%s";
+                case "answer" -> "About '%s':\n\n%s";
+                default -> "Description of '%s':\n\n%s";
+            };
+            return toolResult("describeImage", label.formatted(doc.getName(), result));
+
+        } catch (Exception e) {
+            log.error("Error analyzing image", e);
+            return toolResult("describeImage", "Error analyzing image: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Render PDF pages to images and analyze each with the vision model.
+     * Uses Apache PDFBox to convert pages to PNG, then sends them as Media.
+     */
+    private String analyzePdfWithVision(Resource resource, String promptText, String docName) throws Exception {
+        try (var inputStream = resource.getInputStream();
+             var pdfDocument = org.apache.pdfbox.Loader.loadPDF(inputStream.readAllBytes())) {
+
+            int totalPages = pdfDocument.getNumberOfPages();
+            int pagesToAnalyze = Math.min(totalPages, MAX_PDF_PAGES_FOR_VISION);
+            log.debug("[AI-TOOL] analyzePdfWithVision: '{}' has {} pages, analyzing {}", docName, totalPages, pagesToAnalyze);
+
+            var renderer = new org.apache.pdfbox.rendering.PDFRenderer(pdfDocument);
+            var pageResults = new ArrayList<String>();
+
+            for (int i = 0; i < pagesToAnalyze; i++) {
+                // Render page at 150 DPI (good balance between quality and size)
+                var bufferedImage = renderer.renderImageWithDPI(i, 150);
+
+                // Convert BufferedImage to PNG bytes
+                var baos = new java.io.ByteArrayOutputStream();
+                javax.imageio.ImageIO.write(bufferedImage, "png", baos);
+                byte[] pngBytes = baos.toByteArray();
+
+                // Wrap as a Spring Resource for Media
+                var pageResource = new org.springframework.core.io.ByteArrayResource(pngBytes);
+                var media = new Media(MimeType.valueOf("image/png"), pageResource);
+
+                String pagePrompt = pagesToAnalyze > 1
+                        ? "This is page %d of %d of a PDF document named '%s'. %s".formatted(i + 1, totalPages, docName, promptText)
+                        : promptText;
+
+                var userMessage = UserMessage.builder()
+                        .text(pagePrompt)
+                        .media(media)
+                        .build();
+
+                var response = chatModel.call(new Prompt(List.of(userMessage)));
+                String pageText = response.getResult().getOutput().getText();
+
+                if (pageText != null && !pageText.isBlank()) {
+                    if (pagesToAnalyze > 1) {
+                        pageResults.add("--- Page %d/%d ---\n%s".formatted(i + 1, totalPages, pageText));
+                    } else {
+                        pageResults.add(pageText);
+                    }
+                }
+                log.debug("[AI-TOOL] analyzePdfWithVision: page {}/{} analyzed ({} chars)", i + 1, pagesToAnalyze, pageText != null ? pageText.length() : 0);
+            }
+
+            if (pageResults.isEmpty()) {
+                return "Could not extract any content from the PDF.";
+            }
+
+            String combined = String.join("\n\n", pageResults);
+            if (totalPages > pagesToAnalyze) {
+                combined += "\n\n[... only the first %d of %d pages were analyzed ...]".formatted(pagesToAnalyze, totalPages);
+            }
+            return combined;
         }
     }
 }

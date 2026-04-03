@@ -125,7 +125,7 @@ openfilz:
       5. Default target folder is root (null) for moves and file creation.
       6. Only ask for confirmation on destructive actions (delete, rename). Act immediately on reads.
       7. When RAG context is provided, USE IT and mention the document name.
-    embedding:
+      8. You can analyze images and PDFs. When a user asks about an image file or wants to extract text from an image or scanned PDF, use the describeImage tool with the appropriate task ('describe', 'ocr', or 'answer').
       chunk-size: 1000       # Characters per text chunk
       chunk-overlap: 200     # Overlap between chunks
       top-k: 5               # Number of similar chunks to retrieve
