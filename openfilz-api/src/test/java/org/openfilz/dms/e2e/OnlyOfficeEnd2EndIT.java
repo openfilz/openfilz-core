@@ -737,35 +737,61 @@ public class OnlyOfficeEnd2EndIT extends TestContainersKeyCloakConfig {
             </head>
             <body>
                 <div id="placeholder"></div>
-                <script type="text/javascript" src="%s/web-apps/apps/api/documents/api.js"></script>
                 <script type="text/javascript">
                     window.editorReady = false;
                     window.editorError = null;
                     window.docEditor = null;
+                    window.scriptLoaded = false;
+                    window.scriptLoadFailed = false;
 
-                    var config = %s;
-                    config.token = '%s';
+                    function initEditor() {
+                        window.scriptLoaded = true;
+                        var config = %2$s;
+                        config.token = '%3$s';
 
-                    // Add event handlers
-                    config.events = config.events || {};
-                    config.events.onReady = function() {
-                        console.log('Editor ready');
-                        window.editorReady = true;
-                    };
-                    config.events.onError = function(event) {
-                        console.error('Editor error:', event);
-                        window.editorError = event;
-                    };
-                    config.events.onDocumentStateChange = function(event) {
-                        console.log('Document state changed:', event.data);
-                    };
+                        config.events = config.events || {};
+                        config.events.onReady = function() {
+                            console.log('Editor ready');
+                            window.editorReady = true;
+                        };
+                        config.events.onError = function(event) {
+                            console.error('Editor error:', event);
+                            window.editorError = event;
+                        };
+                        config.events.onDocumentStateChange = function(event) {
+                            console.log('Document state changed:', event.data);
+                        };
 
-                    try {
-                        window.docEditor = new DocsAPI.DocEditor("placeholder", config);
-                    } catch (e) {
-                        console.error('Failed to create editor:', e);
-                        window.editorError = e.message;
+                        try {
+                            window.docEditor = new DocsAPI.DocEditor("placeholder", config);
+                        } catch (e) {
+                            console.error('Failed to create editor:', e);
+                            window.editorError = e.message;
+                        }
                     }
+
+                    function loadScript(attempt) {
+                        var maxAttempts = 3;
+                        var script = document.createElement('script');
+                        script.type = 'text/javascript';
+                        script.src = '%1$s/web-apps/apps/api/documents/api.js';
+                        script.onload = function() {
+                            console.log('api.js loaded on attempt ' + attempt);
+                            initEditor();
+                        };
+                        script.onerror = function() {
+                            console.error('api.js failed to load, attempt ' + attempt + '/' + maxAttempts);
+                            if (attempt < maxAttempts) {
+                                setTimeout(function() { loadScript(attempt + 1); }, 2000);
+                            } else {
+                                window.scriptLoadFailed = true;
+                                window.editorError = 'Failed to load api.js after ' + maxAttempts + ' attempts';
+                            }
+                        };
+                        document.body.appendChild(script);
+                    }
+
+                    loadScript(1);
                 </script>
             </body>
             </html>
@@ -838,27 +864,28 @@ public class OnlyOfficeEnd2EndIT extends TestContainersKeyCloakConfig {
             log.info("Loading OnlyOffice editor in browser using URL: {}", onlyOfficeUrlForBrowser);
             driver.get(dataUrl);
 
-            // Step 5: Wait for editor to initialize
-            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(60));
+            // Step 5: Wait for editor to initialize (with retry-aware script loading)
+            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(90));
 
             // Wait for either editor ready or error
             wait.until(d -> {
                 JavascriptExecutor js = (JavascriptExecutor) d;
                 Boolean ready = (Boolean) js.executeScript("return window.editorReady === true");
                 Object error = js.executeScript("return window.editorError");
-                return ready || error != null;
+                return (ready != null && ready) || error != null;
             });
 
             // Check result
             JavascriptExecutor js = (JavascriptExecutor) driver;
             Boolean editorReady = (Boolean) js.executeScript("return window.editorReady");
             Object editorError = js.executeScript("return window.editorError");
+            Boolean scriptLoaded = (Boolean) js.executeScript("return window.scriptLoaded");
 
             if (editorError != null) {
                 log.warn("Editor error (may be expected for community edition): {}", editorError);
             }
 
-            log.info("Editor ready: {}, Error: {}", editorReady, editorError);
+            log.info("Editor ready: {}, Error: {}, Script loaded: {}", editorReady, editorError, scriptLoaded);
 
             // The editor should have loaded (even if there might be an error from community edition)
             // The important thing is the DocsAPI script loaded and attempted to create the editor
@@ -944,20 +971,22 @@ public class OnlyOfficeEnd2EndIT extends TestContainersKeyCloakConfig {
             log.info("Loading OnlyOffice editor for editing using URL: {}", onlyOfficeUrlForBrowser);
             driver.get(dataUrl);
 
-            // Step 5: Wait for editor to be ready or error
-            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(60));
+            // Step 5: Wait for editor to be ready or error (with retry-aware script loading)
+            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(90));
             JavascriptExecutor js = (JavascriptExecutor) driver;
 
             wait.until(d -> {
-                Boolean ready = (Boolean) ((JavascriptExecutor) d).executeScript("return window.editorReady === true");
-                Object error = ((JavascriptExecutor) d).executeScript("return window.editorError");
+                JavascriptExecutor jsExec = (JavascriptExecutor) d;
+                Boolean ready = (Boolean) jsExec.executeScript("return window.editorReady === true");
+                Object error = jsExec.executeScript("return window.editorError");
                 // Accept either ready or error as a valid outcome (community edition may error)
                 return (ready != null && ready) || error != null;
             });
 
             Boolean editorReady = (Boolean) js.executeScript("return window.editorReady");
             Object editorError = js.executeScript("return window.editorError");
-            log.info("Editor ready: {}, Error: {}", editorReady, editorError);
+            Boolean scriptLoaded = (Boolean) js.executeScript("return window.scriptLoaded");
+            log.info("Editor ready: {}, Error: {}, Script loaded: {}", editorReady, editorError, scriptLoaded);
 
             if (editorReady == null || !editorReady) {
                 log.warn("Editor not fully ready - may be due to community edition limits");
@@ -1056,20 +1085,25 @@ public class OnlyOfficeEnd2EndIT extends TestContainersKeyCloakConfig {
             log.info("Loading editor to verify document content using URL: {}", onlyOfficeUrlForBrowser);
             driver.get(dataUrl);
 
-            // Step 5: Wait for editor
-            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(60));
+            // Step 5: Wait for editor (with retry-aware script loading)
+            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(90));
             JavascriptExecutor js = (JavascriptExecutor) driver;
 
             wait.until(d -> {
-                Boolean ready = (Boolean) ((JavascriptExecutor) d).executeScript("return window.editorReady === true");
-                Object error = ((JavascriptExecutor) d).executeScript("return window.editorError");
+                JavascriptExecutor jsExec = (JavascriptExecutor) d;
+                Boolean ready = (Boolean) jsExec.executeScript("return window.editorReady === true");
+                Object error = jsExec.executeScript("return window.editorError");
+                if (Boolean.TRUE.equals(jsExec.executeScript("return window.scriptLoadFailed === true"))) {
+                    log.warn("api.js script failed to load after all retries");
+                }
                 return (ready != null && ready) || error != null;
             });
 
             Boolean editorReady = (Boolean) js.executeScript("return window.editorReady");
             Object editorError = js.executeScript("return window.editorError");
+            Boolean scriptLoaded = (Boolean) js.executeScript("return window.scriptLoaded");
 
-            log.info("Editor ready: {}, Error: {}", editorReady, editorError);
+            log.info("Editor ready: {}, Error: {}, Script loaded: {}", editorReady, editorError, scriptLoaded);
 
             // Step 6: Wait for content to load
             Thread.sleep(5000);
