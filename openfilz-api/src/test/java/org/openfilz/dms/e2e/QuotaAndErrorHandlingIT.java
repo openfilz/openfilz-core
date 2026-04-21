@@ -86,13 +86,13 @@ public class QuotaAndErrorHandlingIT extends TestContainersBaseConfig {
 
     @Test
     void whenInvalidJsonBody_thenError() {
-        // Malformed JSON causes server error
+        // Malformed JSON should be rejected as a client error
         getWebTestClient().post()
                 .uri(RestApiVersion.API_PREFIX + "/folders")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue("{invalid json}")
                 .exchange()
-                .expectStatus().is5xxServerError();
+                .expectStatus().isBadRequest();
     }
 
     // ==================== listFolder error paths ====================
