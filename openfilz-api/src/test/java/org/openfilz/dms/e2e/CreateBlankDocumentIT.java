@@ -434,7 +434,7 @@ public class CreateBlankDocumentIT extends TestContainersBaseConfig {
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(jsonRequest)
                 .exchange()
-                .expectStatus().is5xxServerError();
+                .expectStatus().isBadRequest();
     }
 
     @Test
