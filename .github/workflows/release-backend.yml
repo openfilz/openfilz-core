@@ -23,6 +23,10 @@ jobs:
   build:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    permissions:
+      contents: write      # create tags, releases, push changelog
+      packages: write      # jib push to ghcr.io
+      id-token: write      # OIDC for npm Trusted Publishing
     steps:
       - run: |
           echo The PR was merged to main....
@@ -45,10 +49,13 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      - name: Set up Node.js 18
+      - name: Set up Node.js 24
         uses: actions/setup-node@v6
         with:
-          node-version: '18'
+          node-version: '24'
+
+      - name: Upgrade npm for OIDC Trusted Publishing
+        run: npm install -g npm@latest   # OIDC publishing requires npm >= 11.5.1
 
       - name: Set up Python 3
         uses: actions/setup-python@v6
@@ -159,7 +166,7 @@ jobs:
       - name: Perform Release
         run: mvn -Dmaven.wagon.http.retryHandler.count=3 -B release:perform -Darguments="-Pkube,publishMaven,publishSdk -Dmaven.test.skip=false -Dsurefire.skip=true -Dit.test=OpenApiSpecExtractionIT -Dfailsafe.failIfNoSpecifiedTests=false -Dnpm.publish.tag=latest -Dregistry.hostname=ghcr.io -Dregistry.port=443 -Ddocker.context.path=openfilz/ -Djib.to.auth.username=${{ github.actor }} -Djib.to.auth.password=${{ secrets.GITHUB_TOKEN }}"
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # npm publish authenticates via OIDC Trusted Publishing (no token) — see .npmrc
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
