@@ -86,7 +86,10 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
         return onlyOfficeProperties.isEnabled();
     }
 
-    private Mono<OnlyOfficeConfigResponse> buildEditorConfig(Document document, boolean canEdit) {
+    private Mono<OnlyOfficeConfigResponse> buildEditorConfig(Document document, boolean requestedEdit) {
+        // Subclasses may force a document into read-only mode regardless of the caller's access
+        // level (see isDocumentReadOnly). The base implementation never restricts.
+        final boolean canEdit = requestedEdit && !isDocumentReadOnly(document);
         String documentServerUrl = onlyOfficeProperties.getDocumentServer().getUrl();
         String apiJsUrl = onlyOfficeProperties.getDocumentServer().getApiUrl();
 
@@ -149,6 +152,16 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
                 });
 
 
+    }
+
+    /**
+     * Hook for subclasses to force a document into OnlyOffice read-only (view) mode regardless of
+     * the caller's access level. The base implementation never restricts editing; subclasses may
+     * override it to lock specific documents — returning {@code true} opens the editor in "view"
+     * mode with {@code permissions.edit=false}.
+     */
+    protected boolean isDocumentReadOnly(Document document) {
+        return false;
     }
 
     private String generateDocumentKey(Document document) {
