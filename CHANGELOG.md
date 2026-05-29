@@ -4,21 +4,20 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[75ed0aecde478e8](https://github.com/openfilz/openfilz-core/commit/75ed0aecde478e8) maven-release-bot[bot] *2026-04-30 16:16:58*
+[0e1def9b324f587](https://github.com/openfilz/openfilz-core/commit/0e1def9b324f587) maven-release-bot[bot] *2026-05-29 16:21:20*
 
 
-## v1.1.26
+## v1.2.0
 ### No issue
 
-**[maven-release-plugin] prepare release v1.1.26**
+**[maven-release-plugin] prepare release v1.2.0**
 
 
-[e5b55b1e779e52b](https://github.com/openfilz/openfilz-core/commit/e5b55b1e779e52b) maven-release-bot[bot] *2026-04-30 16:16:56*
+[4f258adce3b7c87](https://github.com/openfilz/openfilz-core/commit/4f258adce3b7c87) maven-release-bot[bot] *2026-05-29 16:21:17*
 
-**Merge pull request #164 from openfilz/develop**
+**Merge develop: npm OIDC Trusted Publishing fix for release CI**
 
- * Develop
 
-[b925dc5599f1812](https://github.com/openfilz/openfilz-core/commit/b925dc5599f1812) Yann Demel *2026-04-30 16:14:13*
+[55d36b4a967681e](https://github.com/openfilz/openfilz-core/commit/55d36b4a967681e) yanndemel *2026-05-29 16:16:34*
 
 
