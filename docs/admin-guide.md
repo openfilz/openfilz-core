@@ -214,16 +214,13 @@ docker-compose -f docker-compose.yml \
   -f docker-compose.minio.yml up -d
 ```
 
-When not using Make, you must manually generate the frontend config (`ngx-env.js`):
+When not using Make, set the `NG_APP_*` variables in `.env` (see `.env.example`).
+`docker-compose.yml` passes them to the `openfilz-web` container, which writes
+`ngx-env.js` at startup. To override the auth/OnlyOffice toggles for one run:
 
 ```bash
-export NG_APP_API_URL="http://localhost:8081/api/v1"
-export NG_APP_GRAPHQL_URL="http://localhost:8081/graphql/v1"
-export NG_APP_AUTHENTICATION_ENABLED="true"
-export NG_APP_AUTHENTICATION_AUTHORITY="http://localhost:8180/realms/openfilz"
-export NG_APP_AUTHENTICATION_CLIENT_ID="openfilz-web"
-export NG_APP_ONLYOFFICE_ENABLED="false"
-envsubst < ngx-env.template.js > ngx-env.js
+NG_APP_AUTHENTICATION_ENABLED=true NG_APP_ONLYOFFICE_ENABLED=false \
+  docker-compose -f docker-compose.yml -f docker-compose.auth.yml up -d
 ```
 
 ### Kubernetes / Helm
@@ -619,7 +616,9 @@ This verifies the SHA-256 hash chain has not been tampered with.
 - Verify MinIO credentials and endpoint
 
 **Frontend configuration not updating**
-- Regenerate `ngx-env.js`: `make generate-config` or `make clean && make up-auth`
+- The web container writes `ngx-env.js` at startup from `NG_APP_*`. Update the values in
+  `.env` and recreate the web container (`docker-compose up -d --force-recreate openfilz-web`).
+  `/ngx-env.js` is served with no-cache headers, so a browser refresh picks up the change.
 
 ### Reset Everything
 

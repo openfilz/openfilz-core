@@ -276,8 +276,16 @@ services:
     depends_on:
       openfilz-api:
         condition: service_healthy
-    volumes:
-      - ${OPENFILZ_FILES_BASE:?Set OPENFILZ_FILES_BASE in .env}/openfilz-web/ngx-env.js:/usr/share/nginx/html/ngx-env.js:ro
+    environment:
+      # Angular runtime config → the container writes ngx-env.js at startup from these
+      # NG_APP_* values (no mounted file). All derived from the hostnames in .env.
+      NG_APP_API_URL: https://${API_HOSTNAME:-api.openfilz.com}/api/v1
+      NG_APP_GRAPHQL_URL: https://${API_HOSTNAME:-api.openfilz.com}/graphql/v1
+      NG_APP_AUTHENTICATION_ENABLED: "true"
+      NG_APP_AUTHENTICATION_AUTHORITY: https://${KEYCLOAK_HOSTNAME:-auth.openfilz.com}/realms/openfilz
+      NG_APP_AUTHENTICATION_CLIENT_ID: openfilz-web
+      NG_APP_ONLYOFFICE_ENABLED: "true"
+      NG_APP_ONLYOFFICE_URL: https://${ONLYOFFICE_HOSTNAME:-docs.openfilz.com}
     networks:
       - dokploy-network
     labels:

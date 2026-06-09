@@ -66,67 +66,49 @@ help:
 	@echo "  Without auth: API on :8081, Web on :4200"
 	@echo "  With auth:    API on :8081, Web on :4200, Keycloak on :8180"
 
-# Generate frontend config
-define generate_config
-	@echo "Generating ngx-env.js (auth=$(1), onlyoffice=$(2))..."
-	@rm -f ngx-env.js
-	@export NG_APP_API_URL="$(NG_APP_API_URL)" && \
-	 export NG_APP_GRAPHQL_URL="$(NG_APP_GRAPHQL_URL)" && \
-	 export NG_APP_AUTHENTICATION_ENABLED="$(1)" && \
-	 export NG_APP_AUTHENTICATION_AUTHORITY="$(NG_APP_AUTHENTICATION_AUTHORITY)" && \
-	 export NG_APP_AUTHENTICATION_CLIENT_ID="$(NG_APP_AUTHENTICATION_CLIENT_ID)" && \
-	 export NG_APP_ONLYOFFICE_ENABLED="$(2)" && \
-	 export NG_APP_ONLYOFFICE_URL="$(NG_APP_ONLYOFFICE_URL)" && \
-	 envsubst < ngx-env.template.js > ngx-env.js
-endef
+# Frontend feature toggles passed to the web container, which writes ngx-env.js at
+# startup from the NG_APP_* env. $(1)=auth enabled, $(2)=onlyoffice enabled. The other
+# NG_APP_* values are exported from .env (see `export` above) and read by the web
+# service's compose `environment:` block.
+web_toggles = NG_APP_AUTHENTICATION_ENABLED=$(1) NG_APP_ONLYOFFICE_ENABLED=$(2)
 
 # Base services only (no auth, no onlyoffice)
 up:
-	$(call generate_config,false,false)
-	$(COMPOSE) up -d
+	$(call web_toggles,false,false) $(COMPOSE) up -d
 
 # With Keycloak authentication
 up-auth:
-	$(call generate_config,true,false)
-	$(COMPOSE) $(AUTH) up -d
+	$(call web_toggles,true,false) $(COMPOSE) $(AUTH) up -d
 
 # With MinIO storage
 up-minio:
-	$(call generate_config,false,false)
-	$(COMPOSE) $(MINIO) up -d
+	$(call web_toggles,false,false) $(COMPOSE) $(MINIO) up -d
 
 # With OnlyOffice
 up-onlyoffice:
-	$(call generate_config,false,true)
-	$(COMPOSE) $(ONLYOFFICE) up -d
+	$(call web_toggles,false,true) $(COMPOSE) $(ONLYOFFICE) up -d
 
 # With OpenSearch full-text search
 up-fulltext:
-	$(call generate_config,false,false)
-	$(COMPOSE) $(FULLTEXT) up -d
+	$(call web_toggles,false,false) $(COMPOSE) $(FULLTEXT) up -d
 
 # Common combinations
 up-auth-minio:
-	$(call generate_config,true,false)
-	$(COMPOSE) $(AUTH) $(MINIO) up -d
+	$(call web_toggles,true,false) $(COMPOSE) $(AUTH) $(MINIO) up -d
 
 up-auth-fulltext:
-	$(call generate_config,true,false)
-	$(COMPOSE) $(AUTH) $(FULLTEXT) up -d
+	$(call web_toggles,true,false) $(COMPOSE) $(AUTH) $(FULLTEXT) up -d
 
 up-auth-onlyoffice:
-	$(call generate_config,true,true)
-	$(COMPOSE) $(AUTH) $(ONLYOFFICE) up -d
+	$(call web_toggles,true,true) $(COMPOSE) $(AUTH) $(ONLYOFFICE) up -d
 
 # Community Edition demo (all features, no auth)
 up-demo:
-	$(call generate_config,false,true)
-	OPENFILZ_CALCULATECHECKSUM=true $(COMPOSE) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) --profile thumbnails up -d
+	$(call web_toggles,false,true) OPENFILZ_CALCULATECHECKSUM=true $(COMPOSE) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) --profile thumbnails up -d
 
 # All services
 up-full:
-	$(call generate_config,true,true)
-	$(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) --profile thumbnails up -d
+	$(call web_toggles,true,true) $(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) --profile thumbnails up -d
 
 # Management commands
 down:
@@ -142,7 +124,6 @@ restart: down up
 
 clean:
 	$(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) --profile thumbnails down -v
-	@rm -f ngx-env.js
 
 # Build images locally (if needed)
 build:
@@ -152,8 +133,12 @@ build:
 pull:
 	$(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) --profile thumbnails pull
 
-# Generate config only (useful for debugging)
+# Show the frontend config the web container will generate (auth/onlyoffice off here)
 generate-config:
-	$(call generate_config,false,false)
-	@echo "Generated ngx-env.js:"
-	@cat ngx-env.js
+	@echo "ngx-env.js is generated inside the web container at startup from the NG_APP_*"
+	@echo "environment (see .env / .env.example). Effective base values:"
+	@echo "  NG_APP_API_URL=$(NG_APP_API_URL)"
+	@echo "  NG_APP_GRAPHQL_URL=$(NG_APP_GRAPHQL_URL)"
+	@echo "  NG_APP_AUTHENTICATION_AUTHORITY=$(NG_APP_AUTHENTICATION_AUTHORITY)"
+	@echo "  NG_APP_AUTHENTICATION_CLIENT_ID=$(NG_APP_AUTHENTICATION_CLIENT_ID)"
+	@echo "  NG_APP_ONLYOFFICE_URL=$(NG_APP_ONLYOFFICE_URL)"

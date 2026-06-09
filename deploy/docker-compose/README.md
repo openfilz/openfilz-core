@@ -44,7 +44,7 @@ See the [architecture diagram](../README.md#architecture) in the main deploy REA
 
 ## Using Makefile (Recommended)
 
-The Makefile automatically generates the frontend configuration (`ngx-env.js`) based on the selected features.
+The Makefile passes the frontend configuration (`NG_APP_*`) to the web container based on the selected features; the container writes `ngx-env.js` at startup from those values.
 
 ### Basic Commands
 
@@ -115,7 +115,7 @@ make build
 # Pull latest images
 make pull
 
-# Generate ngx-env.js only (useful for debugging)
+# Show the frontend config the web container will generate (useful for debugging)
 make generate-config
 ```
 
@@ -182,18 +182,14 @@ docker-compose -f docker-compose-gotenberg-dev.yml up -d
 
 ### Important Note for Direct Usage
 
-When not using the Makefile, you must manually generate `ngx-env.js`:
+When not using the Makefile, set the `NG_APP_*` variables in `.env` (see `.env.example`).
+`docker-compose.yml` passes them to the `openfilz-web` service, which writes `ngx-env.js`
+at container startup — there is no file to generate by hand. To override the auth/OnlyOffice
+toggles for a single run, prefix the command:
 
 ```bash
-# Set environment variables and generate config
-export NG_APP_API_URL="http://localhost:8081/api/v1"
-export NG_APP_GRAPHQL_URL="http://localhost:8081/graphql/v1"
-export NG_APP_AUTHENTICATION_ENABLED="true"  # or "false"
-export NG_APP_AUTHENTICATION_AUTHORITY="http://localhost:8180/realms/openfilz"
-export NG_APP_AUTHENTICATION_CLIENT_ID="openfilz-web"
-export NG_APP_ONLYOFFICE_ENABLED="false"  # or "true"
-
-envsubst < ngx-env.template.js > ngx-env.js
+NG_APP_AUTHENTICATION_ENABLED=true NG_APP_ONLYOFFICE_ENABLED=false \
+  docker-compose -f docker-compose.yml up -d
 ```
 
 ---
@@ -238,7 +234,7 @@ cp .env.example .env
 
 ### Frontend Configuration
 
-These variables are used to generate `ngx-env.js` for the Angular frontend:
+These variables are passed to the `openfilz-web` container, which writes `ngx-env.js` at startup:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -492,7 +488,7 @@ make up-auth  # or your desired configuration
 
 ### Debug Frontend Config
 
-To inspect the generated `ngx-env.js` without starting services:
+To print the effective `NG_APP_*` base values the web container will use:
 
 ```bash
 make generate-config

@@ -203,8 +203,8 @@ echo ""
 echo -e "${YELLOW}9. Template and Config Files${NC}"
 echo "----------------------------------------"
 
-echo -n "ngx-env.template.js exists... "
-if [ -f "ngx-env.template.js" ]; then
+echo -n "web service injects NG_APP_* env... "
+if grep -q "NG_APP_API_URL" docker-compose.yml; then
     echo -e "${GREEN}PASSED${NC}"
     ((PASSED++))
 else
@@ -256,36 +256,15 @@ else
     ((FAILED++))
 fi
 
-# Test envsubst for template
-echo -n "envsubst available... "
-if command -v envsubst &> /dev/null; then
+# The web container generates ngx-env.js at startup from the NG_APP_* env, so the
+# compose file must pass those vars to the web service.
+echo -n "web service passes NG_APP_AUTHENTICATION_AUTHORITY... "
+if grep -q "NG_APP_AUTHENTICATION_AUTHORITY" docker-compose.yml; then
     echo -e "${GREEN}PASSED${NC}"
     ((PASSED++))
-
-    # Test actual template generation
-    echo -n "Template generation works... "
-    export NG_APP_API_URL="http://test:8081/api/v1"
-    export NG_APP_GRAPHQL_URL="http://test:8081/graphql/v1"
-    export NG_APP_AUTHENTICATION_ENABLED="true"
-    export NG_APP_AUTHENTICATION_AUTHORITY="http://test:8180/realms/test"
-    export NG_APP_AUTHENTICATION_CLIENT_ID="test-client"
-    export NG_APP_ONLYOFFICE_ENABLED="false"
-
-    if envsubst < ngx-env.template.js > /tmp/ngx-env-test.js 2>/dev/null; then
-        if grep -q '"NG_APP_AUTHENTICATION_ENABLED": "true"' /tmp/ngx-env-test.js; then
-            echo -e "${GREEN}PASSED${NC}"
-            ((PASSED++))
-        else
-            echo -e "${RED}FAILED${NC} (substitution not working)"
-            ((FAILED++))
-        fi
-        rm -f /tmp/ngx-env-test.js
-    else
-        echo -e "${RED}FAILED${NC}"
-        ((FAILED++))
-    fi
 else
-    echo -e "${YELLOW}SKIPPED${NC} (envsubst not available)"
+    echo -e "${RED}FAILED${NC}"
+    ((FAILED++))
 fi
 echo ""
 

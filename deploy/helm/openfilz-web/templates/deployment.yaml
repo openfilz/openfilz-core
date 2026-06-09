@@ -22,14 +22,10 @@ spec:
             - name: http
               containerPort: 8080
               protocol: TCP
-          volumeMounts:
-            - name: ngx-env-volume
-              mountPath: /usr/share/nginx/html/ngx-env.js
-              subPath: ngx-env.js
-      volumes:
-        - name: ngx-env-volume
-          configMap:
-            name: {{ include "common.names.fullname" . }}
-            items:
-              - key: ngx-env.js
-                path: ngx-env.js
+          # Angular runtime config → the container writes ngx-env.js at startup from
+          # these NG_APP_* values (no mounted ConfigMap). Add more NG_APP_* as needed.
+          env:
+            - name: NG_APP_API_URL
+              value: {{ .Values.app.apiUrl | quote }}
+            - name: NG_APP_GRAPHQL_URL
+              value: {{ .Values.app.graphQlUrl | quote }}
