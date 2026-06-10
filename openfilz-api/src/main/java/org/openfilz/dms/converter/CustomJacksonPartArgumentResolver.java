@@ -1,11 +1,11 @@
 package org.openfilz.dms.converter;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.springframework.core.MethodParameter;
 import org.springframework.core.ResolvableType;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.MediaType;
-import org.springframework.http.codec.json.Jackson2JsonDecoder;
+import org.springframework.http.codec.json.JacksonJsonDecoder;
 import org.springframework.http.codec.multipart.Part;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.BindingContext;
@@ -18,10 +18,10 @@ import java.util.List;
 @Component
 public class CustomJacksonPartArgumentResolver implements HandlerMethodArgumentResolver {
 
-    private final Jackson2JsonDecoder customDecoder;
+    private final JacksonJsonDecoder customDecoder;
     
-    public CustomJacksonPartArgumentResolver(ObjectMapper objectMapper) {
-        this.customDecoder = new Jackson2JsonDecoder(objectMapper);
+    public CustomJacksonPartArgumentResolver(JsonMapper objectMapper) {
+        this.customDecoder = new JacksonJsonDecoder(objectMapper);
     }
     
     @Override

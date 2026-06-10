@@ -23,7 +23,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
-import org.springframework.http.codec.json.Jackson2JsonEncoder;
+import org.springframework.http.codec.json.JacksonJsonEncoder;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.test.web.reactive.server.WebTestClient;
@@ -83,8 +83,8 @@ public class LocalStorageIT extends TestContainersBaseConfig {
         }
     }
 
-    public LocalStorageIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
-        super(webTestClient, customJackson2JsonEncoder);
+    public LocalStorageIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
+        super(webTestClient, customJacksonJsonEncoder);
     }
 
     private static String calculateSha256ChecksumNIO(Path filePath) throws NoSuchAlgorithmException, IOException {

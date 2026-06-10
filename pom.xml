@@ -54,14 +54,15 @@
 
     <properties>
         <java.version>25</java.version>
-        <spring-boot.version>3.5.8</spring-boot.version> <!-- Or latest stable -->
-        <spring-cloud.version>2025.0.0</spring-cloud.version> <!-- Or latest stable -->
-        <org.projectlombok.version>1.18.42</org.projectlombok.version>
+        <spring-boot.version>4.0.6</spring-boot.version> <!-- Or latest stable -->
+        <spring-cloud.version>2025.1.1</spring-cloud.version> <!-- Or latest stable -->
+        <org.projectlombok.version>1.18.46</org.projectlombok.version>
         <org.mapstruct.version>1.6.3</org.mapstruct.version>
-        <springdoc-openapi.version>2.8.9</springdoc-openapi.version>
-        <r2dbc-postgresql.version>1.1.0.RELEASE</r2dbc-postgresql.version>
+        <springdoc-openapi.version>3.0.3</springdoc-openapi.version>
+        <r2dbc-postgresql.version>1.1.1.RELEASE</r2dbc-postgresql.version>
+        <!-- MinIO kept on the 8.x line: 9.0.0 is a full client rewrite ("Refactor entire code") -->
         <minio.version>8.6.0</minio.version>
-        <jjwt.version>0.12.6</jjwt.version> <!-- For manual JWT parsing if needed -->
+        <jjwt.version>0.13.0</jjwt.version> <!-- For manual JWT parsing if needed -->
         <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <registry.hostname>localhost</registry.hostname>
@@ -72,19 +73,18 @@
         <delombok.output>${project.build.outputDirectory}/delombok</delombok.output>
         <logback-core.version>1.5.32</logback-core.version>
         <commons-compress.version>1.28.0</commons-compress.version>
-        <commons-lang3.version>3.19.0</commons-lang3.version>
-        <graphql-java.version>24.3</graphql-java.version>
+        <commons-lang3.version>3.20.0</commons-lang3.version>
+        <!-- graphql-java itself is managed by Spring Boot 4 (25.0) -->
         <graphql-java-scalars.version>24.0</graphql-java-scalars.version>
-        <jackson.version>3.0.0</jackson.version>
-        <tika.version>3.2.3</tika.version>
-        <commons-io.version>2.20.0</commons-io.version>
-        <opensearch.version>3.3.0</opensearch.version>
-        <httpcore.version>5.3.6</httpcore.version>
-        <httpclient.version>5.5.1</httpclient.version>
-        <testcontainers-keycloak.version>4.1.0</testcontainers-keycloak.version>
-        <opensearch-testcontainers.version>4.0.0</opensearch-testcontainers.version>
+        <tika.version>3.3.1</tika.version>
+        <commons-io.version>2.22.0</commons-io.version>
+        <opensearch.version>3.9.0</opensearch.version>
+        <httpcore.version>5.4.2</httpcore.version>
+        <httpclient.version>5.6.1</httpclient.version>
+        <testcontainers-keycloak.version>4.2.1</testcontainers-keycloak.version>
+        <opensearch-testcontainers.version>4.1.0</opensearch-testcontainers.version>
         <maven.javadoc.failOnError>false</maven.javadoc.failOnError>
-        <openapi-generator.version>7.20.0</openapi-generator.version>
+        <openapi-generator.version>7.23.0</openapi-generator.version>
         <exec-maven-plugin.version>3.6.3</exec-maven-plugin.version>
     </properties>
 
@@ -139,11 +139,6 @@
                 <groupId>commons-io</groupId>
                 <artifactId>commons-io</artifactId>
                 <version>${commons-io.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>tools.jackson.core</groupId>
-                <artifactId>jackson-core</artifactId>
-                <version>${jackson.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.graphql-java</groupId>

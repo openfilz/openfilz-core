@@ -14,7 +14,7 @@ import org.springframework.graphql.client.ClientGraphQlResponse;
 import org.springframework.graphql.client.HttpGraphQlClient;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.client.MultipartBodyBuilder;
-import org.springframework.http.codec.json.Jackson2JsonEncoder;
+import org.springframework.http.codec.json.JacksonJsonEncoder;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.BodyInserters;
@@ -61,8 +61,8 @@ public class SearchScopeIT extends TestContainersBaseConfig {
     private UUID subContractId;
     private UUID deepContractId;
 
-    public SearchScopeIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
-        super(webTestClient, customJackson2JsonEncoder);
+    public SearchScopeIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
+        super(webTestClient, customJacksonJsonEncoder);
     }
 
     @BeforeEach

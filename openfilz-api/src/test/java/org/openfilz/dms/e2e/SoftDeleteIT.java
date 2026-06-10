@@ -20,7 +20,7 @@ import org.springframework.graphql.client.HttpGraphQlClient;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
-import org.springframework.http.codec.json.Jackson2JsonEncoder;
+import org.springframework.http.codec.json.JacksonJsonEncoder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -61,9 +61,9 @@ public class SoftDeleteIT extends TestContainersBaseConfig {
         registry.add("openfilz.soft-delete.active", () -> true);
     }
 
-    public SoftDeleteIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder,
+    public SoftDeleteIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder,
                         DocumentRepository documentRepository) {
-        super(webTestClient, customJackson2JsonEncoder);
+        super(webTestClient, customJacksonJsonEncoder);
         this.documentRepository = documentRepository;
     }
 

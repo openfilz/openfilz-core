@@ -13,7 +13,7 @@ import org.springframework.graphql.client.HttpGraphQlClient;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
-import org.springframework.http.codec.json.Jackson2JsonEncoder;
+import org.springframework.http.codec.json.JacksonJsonEncoder;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -39,11 +39,11 @@ public abstract class TestContainersBaseConfig {
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.1").withReuse(true);
 
     protected WebTestClient webTestClient;
-    protected final Jackson2JsonEncoder customJackson2JsonEncoder;
+    protected final JacksonJsonEncoder customJacksonJsonEncoder;
 
-    protected TestContainersBaseConfig(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
+    protected TestContainersBaseConfig(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
         this.webTestClient = webTestClient;
-        this.customJackson2JsonEncoder = customJackson2JsonEncoder;
+        this.customJacksonJsonEncoder = customJacksonJsonEncoder;
     }
 
     @DynamicPropertySource
@@ -71,7 +71,7 @@ public abstract class TestContainersBaseConfig {
                 .codecs(configurer -> {
 
                     // Add the default String/Resource/Form data encoders
-                    configurer.defaultCodecs().jackson2JsonEncoder(customJackson2JsonEncoder);
+                    configurer.defaultCodecs().jacksonJsonEncoder(customJacksonJsonEncoder);
 
                     // You might need to re-add other required codecs here,
                     // or better: selectively replace just the encoder.
@@ -82,7 +82,7 @@ public abstract class TestContainersBaseConfig {
                             maxInMemorySize(-1); // Or some other max size
 
                     configurer.defaultCodecs().
-                            jackson2JsonEncoder(customJackson2JsonEncoder);
+                            jacksonJsonEncoder(customJacksonJsonEncoder);
 
                 })
                 .build();

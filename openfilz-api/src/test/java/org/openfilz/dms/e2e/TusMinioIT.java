@@ -1,8 +1,8 @@
 package org.openfilz.dms.e2e;
 
-import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
+import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.codec.json.Jackson2JsonEncoder;
+import org.springframework.http.codec.json.JacksonJsonEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
@@ -26,8 +26,8 @@ public class TusMinioIT extends AbstractTusIT {
     @Container
     static MinIOContainer minio = new MinIOContainer("minio/minio:latest");
 
-    public TusMinioIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
-        super(webTestClient, customJackson2JsonEncoder);
+    public TusMinioIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
+        super(webTestClient, customJacksonJsonEncoder);
     }
 
     @DynamicPropertySource

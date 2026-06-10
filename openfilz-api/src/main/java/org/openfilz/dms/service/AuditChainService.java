@@ -1,8 +1,9 @@
 package org.openfilz.dms.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.SerializationFeature;
+import tools.jackson.databind.json.JsonMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.AuditChainProperties;
 import org.openfilz.dms.dto.audit.IAuditLogDetails;
@@ -28,8 +29,10 @@ public class AuditChainService {
 
     public AuditChainService(AuditChainProperties properties) {
         this.algorithm = properties.getAlgorithm();
-        this.sortedKeyMapper = new ObjectMapper();
-        this.sortedKeyMapper.configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
+        // Jackson 3: mappers are immutable, features are enabled via the builder
+        this.sortedKeyMapper = JsonMapper.builder()
+                .enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS)
+                .build();
     }
 
     public String computeGenesisHash() {
@@ -63,7 +66,7 @@ public class AuditChainService {
         }
         try {
             return sortedKeyMapper.writeValueAsString(details);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             log.error("Failed to serialize audit details: {}", e.getMessage());
             return "";
         }

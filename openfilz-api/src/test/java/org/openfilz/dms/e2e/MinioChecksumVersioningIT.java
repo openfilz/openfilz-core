@@ -19,7 +19,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
-import org.springframework.http.codec.json.Jackson2JsonEncoder;
+import org.springframework.http.codec.json.JacksonJsonEncoder;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -58,8 +58,8 @@ public class MinioChecksumVersioningIT extends TestContainersBaseConfig {
     @Autowired
     private DatabaseClient databaseClient;
 
-    public MinioChecksumVersioningIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
-        super(webTestClient, customJackson2JsonEncoder);
+    public MinioChecksumVersioningIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
+        super(webTestClient, customJacksonJsonEncoder);
     }
 
     @DynamicPropertySource

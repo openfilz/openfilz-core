@@ -12,17 +12,7 @@
     <url>https://github.com/openfilz/openfilz-core/tree/main/openfilz-api</url>
     <description>Document Management Service providing REST APIs</description>
 
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>org.testcontainers</groupId>
-                <artifactId>testcontainers-bom</artifactId>
-                <version>1.19.7</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
+    <!-- Testcontainers (2.x) is managed by spring-boot-dependencies -->
 
     <dependencies>
         <!-- Spring Boot -->
@@ -44,12 +34,13 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+            <artifactId>spring-boot-starter-security-oauth2-resource-server</artifactId>
         </dependency>
 
+        <!-- Spring Boot 4: Flyway auto-configuration now requires the dedicated starter -->
         <dependency>
-            <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-core</artifactId>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-flyway</artifactId>
         </dependency>
 
         <!-- PostgreSQL JDBC Driver -->
@@ -186,11 +177,11 @@
         </dependency>
 
         <!-- Apache PDFBox for PDF thumbnail generation -->
-        <!-- Version must match what Tika 3.2.3 expects (3.0.5) to avoid NoSuchMethodError -->
+        <!-- Version must match what Tika 3.3.1 expects (3.0.7) to avoid NoSuchMethodError -->
         <dependency>
             <groupId>org.apache.pdfbox</groupId>
             <artifactId>pdfbox</artifactId>
-            <version>3.0.5</version>
+            <version>3.0.7</version>
         </dependency>
 
         <!-- Lecture étendue des formats (jpeg, png, tiff, etc.) -->
@@ -270,22 +261,20 @@
 
 
 
-        <!-- JWT Library for OnlyOffice tokens -->
+        <!-- JWT Library for OnlyOffice tokens (versions managed in the parent pom) -->
+        <!-- jjwt has no Jackson 3 adapter yet: jjwt-jackson uses Jackson 2, which Spring Boot 4 still manages -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-api</artifactId>
-            <version>0.12.6</version>
         </dependency>
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-impl</artifactId>
-            <version>0.12.6</version>
             <scope>runtime</scope>
         </dependency>
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-jackson</artifactId>
-            <version>0.12.6</version>
             <scope>runtime</scope>
         </dependency>
 
@@ -293,6 +282,13 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Spring Boot 4: WebTestClient support is a dedicated module (provides
+             @AutoConfigureWebTestClient and the bound-to-server WebTestClient bean) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-webtestclient</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -305,9 +301,10 @@
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Testcontainers 2.x renamed its modules with a testcontainers- prefix -->
         <dependency>
             <groupId>org.testcontainers</groupId>
-            <artifactId>junit-jupiter</artifactId>
+            <artifactId>testcontainers-junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -323,22 +320,22 @@
 
         <dependency>
             <groupId>org.testcontainers</groupId>
-            <artifactId>postgresql</artifactId>
+            <artifactId>testcontainers-postgresql</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
-            <artifactId>minio</artifactId>
+            <artifactId>testcontainers-minio</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
-            <artifactId>r2dbc</artifactId>
+            <artifactId>testcontainers-r2dbc</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
-            <artifactId>selenium</artifactId>
+            <artifactId>testcontainers-selenium</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -354,7 +351,7 @@
         <dependency>
             <groupId>com.itextpdf</groupId>
             <artifactId>itext-core</artifactId>
-            <version>9.3.0</version>
+            <version>9.6.0</version>
             <type>pom</type>
             <scope>test</scope>
         </dependency>

@@ -1,6 +1,6 @@
 package org.openfilz.dms.service.impl;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import io.r2dbc.postgresql.codec.Json;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.QuotaProperties;

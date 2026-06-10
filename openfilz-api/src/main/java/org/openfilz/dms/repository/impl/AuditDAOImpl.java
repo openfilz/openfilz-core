@@ -1,7 +1,7 @@
 package org.openfilz.dms.repository.impl;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import io.r2dbc.postgresql.codec.Json;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -105,7 +105,7 @@ public class AuditDAOImpl implements AuditDAO, UserInfoService {
             try {
                 String criteriaJson = objectMapper.writeValueAsString(request.details());
                 query = query.bind("details", criteriaJson);
-            } catch (JsonProcessingException e) {
+            } catch (JacksonException e) {
                 throw new RuntimeException(e);
             }
         }

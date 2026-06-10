@@ -1,33 +1,32 @@
 package org.openfilz.dms.e2e;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
-import org.springframework.http.codec.json.Jackson2JsonEncoder;
+import org.springframework.http.codec.json.JacksonJsonEncoder;
+import tools.jackson.databind.cfg.DateTimeFeature;
+import tools.jackson.databind.json.JsonMapper;
 
 @TestConfiguration
 public class GraphQlTestConfig {
 
     /**
-     * Creates a custom ObjectMapper to serialize OffsetDateTime as ISO-8601 strings.
+     * Creates a custom JsonMapper to serialize OffsetDateTime as ISO-8601 strings.
      */
     @Bean
-    public ObjectMapper customGraphQlObjectMapper() {
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.registerModule(new JavaTimeModule());
-        // The key setting: disable writing dates as epoch timestamps
-        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        return mapper;
+    public JsonMapper customGraphQlObjectMapper() {
+        // Jackson 3: java.time support is built-in; the key setting is to
+        // disable writing dates as epoch timestamps
+        return JsonMapper.builder()
+                .disable(DateTimeFeature.WRITE_DATES_AS_TIMESTAMPS)
+                .build();
     }
 
     /**
-     * Creates a custom encoder using the configured ObjectMapper.
+     * Creates a custom encoder using the configured JsonMapper.
      */
     @Bean
-    public Jackson2JsonEncoder customJackson2JsonEncoder(ObjectMapper customGraphQlObjectMapper) {
-        // Pass the custom ObjectMapper to the encoder
-        return new Jackson2JsonEncoder(customGraphQlObjectMapper);
+    public JacksonJsonEncoder customJacksonJsonEncoder(JsonMapper customGraphQlObjectMapper) {
+        // Pass the custom JsonMapper to the encoder
+        return new JacksonJsonEncoder(customGraphQlObjectMapper);
     }
 }

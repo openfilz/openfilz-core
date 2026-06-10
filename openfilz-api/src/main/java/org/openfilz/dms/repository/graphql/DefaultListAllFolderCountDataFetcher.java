@@ -1,6 +1,6 @@
 package org.openfilz.dms.repository.graphql;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import graphql.schema.DataFetchingEnvironment;
 import org.openfilz.dms.mapper.DocumentMapper;
 import org.openfilz.dms.repository.ListAllFolderCountDataFetcher;

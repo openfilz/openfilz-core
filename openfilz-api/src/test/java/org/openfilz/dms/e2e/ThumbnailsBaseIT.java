@@ -9,7 +9,7 @@ import org.openfilz.dms.dto.response.UploadResponse;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
-import org.springframework.http.codec.json.Jackson2JsonEncoder;
+import org.springframework.http.codec.json.JacksonJsonEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
@@ -70,8 +70,8 @@ public abstract class ThumbnailsBaseIT extends TestContainersBaseConfig {
             .waitingFor(Wait.forHttp("/health").forPort(3000).forStatusCode(200))
             .withStartupTimeout(Duration.ofSeconds(120));
 
-    public ThumbnailsBaseIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
-        super(webTestClient, customJackson2JsonEncoder);
+    public ThumbnailsBaseIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
+        super(webTestClient, customJacksonJsonEncoder);
     }
 
     @BeforeAll

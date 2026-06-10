@@ -1,8 +1,8 @@
 package org.openfilz.dms.service.impl;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import io.r2dbc.postgresql.codec.Json;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -743,7 +743,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                     if (currentMetadata == null || currentMetadata.isNull() || !currentMetadata.isObject()) {
                         updatedMetadataNode = objectMapper.createObjectNode();
                     } else {
-                        updatedMetadataNode = currentMetadata.deepCopy();
+                        updatedMetadataNode = ((ObjectNode) currentMetadata).deepCopy();
                     }
 
                     for (Map.Entry<String, Object> entry : request.metadataToUpdate().entrySet()) {

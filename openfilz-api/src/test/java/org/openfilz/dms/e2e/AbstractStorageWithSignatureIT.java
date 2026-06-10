@@ -5,7 +5,7 @@ import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.MultipleUploadFileParameter;
 import org.openfilz.dms.dto.response.DocumentInfo;
 import org.openfilz.dms.dto.response.UploadResponse;
-import org.springframework.http.codec.json.Jackson2JsonEncoder;
+import org.springframework.http.codec.json.JacksonJsonEncoder;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
 import java.util.Map;
@@ -13,8 +13,8 @@ import java.util.Map;
 public abstract class AbstractStorageWithSignatureIT extends LocalStorageIT {
 
 
-    public AbstractStorageWithSignatureIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
-        super(webTestClient, customJackson2JsonEncoder);
+    public AbstractStorageWithSignatureIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
+        super(webTestClient, customJacksonJsonEncoder);
     }
 
     protected void checkFileInfo(UploadResponse uploadResponse, MultipleUploadFileParameter param, Map<String, Object> metadata, String checksum) {

@@ -71,7 +71,7 @@ public class GraphQlIntrospectionFilter implements WebFilter, Ordered {
         // Introspection queries from GraphiQL are unauthenticated.
         // Skip body consumption for authenticated requests to avoid
         // breaking context propagation through the ServerWebExchangeDecorator.
-        if (request.getHeaders().containsKey("Authorization")) {
+        if (request.getHeaders().containsHeader("Authorization")) {
             return chain.filter(exchange);
         }
 

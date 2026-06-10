@@ -11,7 +11,7 @@ import org.openfilz.dms.scheduler.TusUploadCleanupScheduler;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.codec.json.Jackson2JsonEncoder;
+import org.springframework.http.codec.json.JacksonJsonEncoder;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
 import java.io.IOException;
@@ -50,8 +50,8 @@ public abstract class AbstractTusIT extends TestContainersKeyCloakConfig {
     @Autowired
     private TusUploadCleanupScheduler tusUploadCleanupScheduler;
 
-    public AbstractTusIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
-        super(webTestClient, customJackson2JsonEncoder);
+    public AbstractTusIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
+        super(webTestClient, customJacksonJsonEncoder);
     }
 
     @BeforeAll
