@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-OpenFilz is an Open Source Document Management System (DMS) built with Spring Boot 3.5+, Spring WebFlux (reactive), and R2DBC.
+OpenFilz is an Open Source Document Management System (DMS) built with Spring Boot 4, Spring WebFlux (reactive), and R2DBC.
 
 **Version:** 1.1.23-SNAPSHOT
 **License:** AGPL-3.0
@@ -18,7 +18,7 @@ OpenFilz is an Open Source Document Management System (DMS) built with Spring Bo
 - `openfilz-sdk` — Multi-language SDKs (Java, Java Reactive, Python, TypeScript, C#)
 
 **Tech Stack:**
-Java 25, Spring Boot 3.5.8, WebFlux, R2DBC, PostgreSQL, MinIO/S3, OAuth2/JWT, OpenSearch
+Java 25, Spring Boot 4.0.6 (Spring Framework 7, Jackson 3), WebFlux, R2DBC, PostgreSQL, MinIO/S3, OAuth2/JWT, OpenSearch
 
 ---
 
