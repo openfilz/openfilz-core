@@ -90,7 +90,7 @@ public class QuotaIT extends TestContainersBaseConfig {
     // ============================================
 
     /**
-     * Test that uploading a file larger than the file upload quota returns HTTP 413 PAYLOAD_TOO_LARGE.
+     * Test that uploading a file larger than the file upload quota returns HTTP 413 CONTENT_TOO_LARGE.
      * No cleanup needed as upload fails.
      */
     @Test
@@ -106,12 +106,12 @@ public class QuotaIT extends TestContainersBaseConfig {
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(BodyInserters.fromMultipartData(builder.build()))
                 .exchange()
-                .expectStatus().isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE)
+                .expectStatus().isEqualTo(HttpStatus.CONTENT_TOO_LARGE)
                 .expectBody(ErrorResponse.class)
                 .returnResult().getResponseBody();
 
         assertNotNull(errorResponse);
-        assertEquals(HttpStatus.PAYLOAD_TOO_LARGE.value(), errorResponse.status());
+        assertEquals(HttpStatus.CONTENT_TOO_LARGE.value(), errorResponse.status());
         assertTrue(errorResponse.message().contains("exceeds the maximum allowed size"));
     }
 
@@ -349,12 +349,12 @@ public class QuotaIT extends TestContainersBaseConfig {
                     .contentType(MediaType.MULTIPART_FORM_DATA)
                     .body(BodyInserters.fromMultipartData(replaceBuilder.build()))
                     .exchange()
-                    .expectStatus().isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE)
+                    .expectStatus().isEqualTo(HttpStatus.CONTENT_TOO_LARGE)
                     .expectBody(ErrorResponse.class)
                     .returnResult().getResponseBody();
 
             assertNotNull(errorResponse);
-            assertEquals(HttpStatus.PAYLOAD_TOO_LARGE.value(), errorResponse.status());
+            assertEquals(HttpStatus.CONTENT_TOO_LARGE.value(), errorResponse.status());
         } finally {
             cleanupTestData(uploadedIds, null);
         }
@@ -400,12 +400,12 @@ public class QuotaIT extends TestContainersBaseConfig {
                     .contentType(MediaType.MULTIPART_FORM_DATA)
                     .body(BodyInserters.fromMultipartData(builder2.build()))
                     .exchange()
-                    .expectStatus().isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE)
+                    .expectStatus().isEqualTo(HttpStatus.CONTENT_TOO_LARGE)
                     .expectBody(ErrorResponse.class)
                     .returnResult().getResponseBody();
 
             assertNotNull(errorResponse);
-            assertEquals(HttpStatus.PAYLOAD_TOO_LARGE.value(), errorResponse.status());
+            assertEquals(HttpStatus.CONTENT_TOO_LARGE.value(), errorResponse.status());
         } finally {
             cleanupTestData(uploadedIds, null);
         }

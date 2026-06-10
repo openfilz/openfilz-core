@@ -32,7 +32,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(FileSizeExceededException.class)
     public Mono<ResponseEntity<ErrorResponse>> handleFileSizeExceeded(FileSizeExceededException ex) {
         log.warn("File size exceeded: {}", ex.getMessage());
-        return Mono.just(ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(new ErrorResponse(HttpStatus.PAYLOAD_TOO_LARGE.value(), ex.getMessage())));
+        return Mono.just(ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE).body(new ErrorResponse(HttpStatus.CONTENT_TOO_LARGE.value(), ex.getMessage())));
     }
 
     @ExceptionHandler(UserQuotaExceededException.class)

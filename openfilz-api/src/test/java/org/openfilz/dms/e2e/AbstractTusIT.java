@@ -224,7 +224,7 @@ public abstract class AbstractTusIT extends TestContainersKeyCloakConfig {
         long tooLarge = 11L * 1024 * 1024 * 1024; // 11GB, exceeds default 10GB max
         String metadata = buildUploadMetadata("huge-file.bin", null, true);
         createUpload(tooLarge, metadata)
-                .expectStatus().isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE)
+                .expectStatus().isEqualTo(HttpStatus.CONTENT_TOO_LARGE)
                 .expectHeader().valueEquals("Tus-Resumable", "1.0.0");
     }
 

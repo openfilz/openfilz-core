@@ -178,7 +178,7 @@ public class DocumentController {
                 case DOCUMENT_NOT_FOUND -> HttpStatus.NOT_FOUND;
                 case DUPLICATE_NAME -> HttpStatus.CONFLICT;
                 case OPERATION_FORBIDDEN -> HttpStatus.FORBIDDEN;
-                case FILE_SIZE_EXCEEDED -> HttpStatus.PAYLOAD_TOO_LARGE;
+                case FILE_SIZE_EXCEEDED -> HttpStatus.CONTENT_TOO_LARGE;
                 case USER_QUOTA_EXCEEDED -> HttpStatus.INSUFFICIENT_STORAGE;
                 default -> HttpStatus.INTERNAL_SERVER_ERROR;
             };
