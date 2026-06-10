@@ -28,6 +28,8 @@ import org.testcontainers.junit.jupiter.Container;
 import java.net.URI;
 import java.util.*;
 
+// The server-bound WebTestClient bean comes from GraphQlTestConfig (Spring Boot 4
+// no longer auto-configures one for RANDOM_PORT/DEFINED_PORT tests)
 @Import(GraphQlTestConfig.class)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public abstract class TestContainersBaseConfig {

@@ -93,6 +93,9 @@
                     <includes>
                         <include>**/*IT.java</include>
                     </includes>
+                    <!-- Netty 4.2 FFM direct buffers break JDK AsynchronousFileChannel on Windows
+                         (netty/netty#16071) which hangs multipart uploads in tests -->
+                    <argLine>-Dio.netty.noPreferDirect=true</argLine>
                 </configuration>
                 <executions>
                     <execution>

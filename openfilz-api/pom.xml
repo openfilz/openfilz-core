@@ -12,6 +12,12 @@
     <url>https://github.com/openfilz/openfilz-core/tree/main/openfilz-api</url>
     <description>Document Management Service providing REST APIs</description>
 
+    <properties>
+        <!-- Default for the @{argLine} placeholder in surefire/failsafe; overwritten
+             at runtime by the jacoco prepare-agent goals unless -Djacoco.skip=true -->
+        <argLine></argLine>
+    </properties>
+
     <!-- Testcontainers (2.x) is managed by spring-boot-dependencies -->
 
     <dependencies>
@@ -414,6 +420,13 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.3</version>
+                <configuration>
+                    <!-- Netty 4.2 FFM direct buffers break JDK AsynchronousFileChannel on Windows
+                         (UnsupportedOperationException: "ByteBuffer derived from closeable shared
+                         sessions not supported", netty/netty#16071) which hangs multipart uploads.
+                         Heap buffers avoid the broken code path. Linux is unaffected. -->
+                    <argLine>@{argLine} -Dio.netty.noPreferDirect=true</argLine>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -425,6 +438,8 @@
                     </includes>
                     <parallel>classes</parallel>
                     <threadCount>10</threadCount>
+                    <!-- See surefire argLine comment (netty/netty#16071) -->
+                    <argLine>@{argLine} -Dio.netty.noPreferDirect=true</argLine>
                 </configuration>
                 <executions>
                     <execution>

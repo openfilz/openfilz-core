@@ -3,7 +3,6 @@ package org.openfilz.dms.e2e;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.codec.json.JacksonJsonEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -34,7 +33,6 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
  */
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT)
-@AutoConfigureWebTestClient(timeout = "30000")
 @Slf4j
 @TestConstructor(autowireMode = ALL)
 @DisplayName("Thumbnails E2E Tests - MinIO Storage")

@@ -28,7 +28,6 @@ import org.opensearch.client.opensearch._types.query_dsl.MatchQuery;
 import org.opensearch.client.opensearch.core.SearchRequest;
 import org.opensearch.client.transport.httpclient5.ApacheHttpClient5TransportBuilder;
 import org.opensearch.testcontainers.OpenSearchContainer;
-import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.graphql.client.ClientGraphQlResponse;
 import org.springframework.graphql.client.HttpGraphQlClient;
@@ -63,7 +62,6 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Slf4j
 @TestConstructor(autowireMode = ALL)
-@AutoConfigureWebTestClient(timeout = "30000")//10 seconds
 public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
 
 

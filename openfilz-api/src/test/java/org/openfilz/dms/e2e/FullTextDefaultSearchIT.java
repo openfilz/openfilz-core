@@ -10,7 +10,6 @@ import org.openfilz.dms.dto.response.FolderResponse;
 import org.openfilz.dms.dto.response.Suggest;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.e2e.util.PdfLoremGeneratorStreaming;
-import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.graphql.client.ClientGraphQlResponse;
@@ -37,7 +36,6 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Slf4j
 @TestConstructor(autowireMode = ALL)
-@AutoConfigureWebTestClient(timeout = "30000")//10 seconds
 public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
 
 
