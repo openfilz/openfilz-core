@@ -4,7 +4,7 @@
     <parent>
         <groupId>org.openfilz</groupId>
         <artifactId>openfilz-core</artifactId>
-        <version>1.2.2-SNAPSHOT</version>
+        <version>1.2.2</version>
     </parent>
 
     <artifactId>openfilz-api</artifactId>
@@ -15,7 +15,7 @@
     <properties>
         <!-- Default for the @{argLine} placeholder in surefire/failsafe; overwritten
              at runtime by the jacoco prepare-agent goals unless -Djacoco.skip=true -->
-        <argLine></argLine>
+        <argLine />
     </properties>
 
     <!-- Testcontainers (2.x) is managed by spring-boot-dependencies -->
