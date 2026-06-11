@@ -9,6 +9,8 @@ import org.apache.hc.client5.http.impl.nio.PoolingAsyncClientConnectionManagerBu
 import org.apache.hc.client5.http.ssl.ClientTlsStrategyBuilder;
 import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.ssl.SSLContextBuilder;
+import org.awaitility.Awaitility;
+import org.awaitility.core.ThrowingRunnable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
@@ -50,6 +52,7 @@ import javax.net.ssl.SSLContext;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.security.KeyManagementException;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
@@ -67,6 +70,12 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
 
     public static final String DEFAULT_INDEX_NAME = "openfilz";
     private static OpenSearchAsyncClient openSearchAsyncClient;
+
+    /** Upper bound for any single index-visibility assertion (see TeamSharingSearchOpenSearchIT). */
+    private static final Duration AWAIT_TIMEOUT = Duration.ofSeconds(45);
+
+    /** Poll cadence — fine-grained so we don't oversleep past a state change. */
+    private static final Duration AWAIT_INTERVAL = Duration.ofMillis(500);
 
     @Container
     static OpenSearchContainer<?> openSearch = new OpenSearchContainer<>(DockerImageName.parse("opensearchproject/opensearch:3"));
@@ -129,6 +138,25 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
         return "wonderful day";
     }
 
+    /**
+     * Polls the read-only assertion until it passes, capped at {@link #AWAIT_TIMEOUT}.
+     * We poll rather than {@code Thread.sleep} a fixed time because OpenSearch indexing
+     * is async with an unbounded settle time — polling resolves in well under a second
+     * on a quiet machine while still tolerating a slow CI.
+     */
+    private void awaitIndexed(String message, ThrowingRunnable assertion) {
+        Awaitility.await(message)
+                .atMost(AWAIT_TIMEOUT)
+                .pollInterval(AWAIT_INTERVAL)
+                .untilAsserted(assertion);
+    }
+
+    /** Polls until the given OpenSearch query returns exactly {@code expected} hits. */
+    private void awaitHitCount(String message, SearchRequest searchRequest, long expected) {
+        awaitIndexed(message, () -> Assertions.assertEquals(expected,
+                Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value()));
+    }
+
     @Test
     void testFullTextInPdf() throws InterruptedException {
 
@@ -137,8 +165,6 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
         MultipartBodyBuilder builder = newFileBuilder(f0);
         builder.part("metadata", Map.of("owner", "OpenFilz"));
         UploadResponse r0 = getUploadResponse(builder, true);
-
-        waitFor(3000);
 
         HttpGraphQlClient httpGraphQlClient = getGraphQlHttpClient();
 
@@ -156,21 +182,23 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
                   }
                 }""".trim();
 
-        Mono<ClientGraphQlResponse> response = httpGraphQlClient
-                .document(graphQlRequest)
-                .execute();
+        awaitIndexed("uploaded PDF should be searchable via GraphQL full-text search", () -> {
+            Mono<ClientGraphQlResponse> response = httpGraphQlClient
+                    .document(graphQlRequest)
+                    .execute();
 
-        StepVerifier.create(response)
-                .expectNextMatches(doc->{
-                    Map<String, Object> searchDocuments = (Map<String, Object>) ((Map<String, Object>) doc.getData()).get("searchDocuments");
-                    List<Map<String, String>> documents = (List<Map<String, String>>) searchDocuments.get("documents");
-                    int totalHits = Integer.parseInt(searchDocuments.get("totalHits").toString());
-                    boolean containsUploadedDoc = documents.stream()
-                            .anyMatch(d -> d.get("id").equals(r0.id().toString()));
-                    return totalHits >= 1 && containsUploadedDoc;
-                })
-                .expectComplete()
-                .verify();
+            StepVerifier.create(response)
+                    .expectNextMatches(doc->{
+                        Map<String, Object> searchDocuments = (Map<String, Object>) ((Map<String, Object>) doc.getData()).get("searchDocuments");
+                        List<Map<String, String>> documents = (List<Map<String, String>>) searchDocuments.get("documents");
+                        int totalHits = Integer.parseInt(searchDocuments.get("totalHits").toString());
+                        boolean containsUploadedDoc = documents.stream()
+                                .anyMatch(d -> d.get("id").equals(r0.id().toString()));
+                        return totalHits >= 1 && containsUploadedDoc;
+                    })
+                    .expectComplete()
+                    .verify();
+        });
 
         DeleteRequest deleteRequest = new DeleteRequest(List.of(r0.id()));
         getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/files")
@@ -196,9 +224,8 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
                         .field("metadata.owner")
                         .query(fv -> fv.stringValue("OpenFilz1")).build()))
                 .build();
-        waitFor(3000);
 
-        Assertions.assertEquals(1, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
+        awaitHitCount("uploaded file should be indexed with metadata.owner=OpenFilz1", searchRequest, 1);
 
 
         UpdateMetadataRequest updateMetadataRequest = new UpdateMetadataRequest(Map.of("owner", "Joe"));
@@ -221,9 +248,7 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
         Assertions.assertEquals("Joe", info.metadata().get("owner"));
 
 
-        waitFor(3000);
-
-        Assertions.assertEquals(0, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
+        awaitHitCount("metadata update should remove the old owner value from the index", searchRequest, 0);
 
         searchRequest = new SearchRequest.Builder()
                 .index(DEFAULT_INDEX_NAME)
@@ -243,15 +268,13 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
                 .expectBody()
                 .jsonPath("$.name").isEqualTo("new-name.sql");
 
-        waitFor(3000);
-
         searchRequest = new SearchRequest.Builder()
                 .index(DEFAULT_INDEX_NAME)
                 .query(q -> q.match(MatchQuery.builder()
                         .field("name")
                         .query(fv -> fv.stringValue("new-name.sql")).build()))
                 .build();
-        Assertions.assertEquals(1, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
+        awaitHitCount("renamed file should be indexed under its new name", searchRequest, 1);
 
 
         CopyRequest copyRequest = new CopyRequest(Collections.singletonList(response.id()), null, true);
@@ -269,8 +292,7 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
                         .query(fv -> fv.stringValue(appId)).build()))
                 .build();
 
-        waitFor(3000);
-        Assertions.assertEquals(2, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
+        awaitHitCount("copied file should be indexed alongside the original", searchRequest, 2);
 
         DeleteRequest deleteRequest = new DeleteRequest(Collections.singletonList(response.id()));
 
@@ -279,8 +301,7 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
                 .exchange()
                 .expectStatus().isNoContent();
 
-        waitFor(3000);
-        Assertions.assertEquals(1, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
+        awaitHitCount("deleting the original should leave only the copy in the index", searchRequest, 1);
 
     }
 
@@ -297,8 +318,7 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
                         .query(fv -> fv.stringValue("systèmes d'exploitations")).build()))
                 .build();
         // PDF parsing with Tika happens asynchronously and can take longer
-        waitFor(3000);
-        Assertions.assertEquals(1, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
+        awaitHitCount("PDF content should be extracted and indexed", searchRequest, 1);
 
         DeleteRequest deleteRequest = new DeleteRequest(Collections.singletonList(response.id()));
 
@@ -307,8 +327,7 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
                 .exchange()
                 .expectStatus().isNoContent();
 
-        waitFor(3000);
-        Assertions.assertEquals(0, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
+        awaitHitCount("deleted PDF should disappear from the index", searchRequest, 0);
     }
 
     @Test
@@ -318,30 +337,30 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
         MultipartBodyBuilder builder = newFileBuilder(f0);
         UploadResponse r0 = getUploadResponse(builder, true);
 
-        // Wait for content indexing (PDF parsing is async)
-        waitFor(5000);
+        // Poll for content indexing (PDF parsing is async)
+        awaitIndexed("content-matched suggestion should carry a highlighted snippet", () -> {
+            // Search by a term found in the PDF content but NOT in the filename
+            List<Suggest> suggestions = getWebTestClient().get().uri(uri ->
+                            uri.path(RestApiVersion.API_PREFIX + "/suggestions")
+                                    .queryParam("q", "systèmes")
+                                    .build())
+                    .exchange()
+                    .expectBody(new ParameterizedTypeReference<List<Suggest>>() {})
+                    .returnResult().getResponseBody();
 
-        // Search by a term found in the PDF content but NOT in the filename
-        List<Suggest> suggestions = getWebTestClient().get().uri(uri ->
-                        uri.path(RestApiVersion.API_PREFIX + "/suggestions")
-                                .queryParam("q", "systèmes")
-                                .build())
-                .exchange()
-                .expectBody(new ParameterizedTypeReference<List<Suggest>>() {})
-                .returnResult().getResponseBody();
-
-        Assertions.assertNotNull(suggestions);
-        Assertions.assertFalse(suggestions.isEmpty(), "Should find at least one suggestion matching content");
-        // Find the uploaded document in the results (other tests may leave docs in the index)
-        Suggest uploadedDocSuggestion = suggestions.stream()
-                .filter(s -> s.id().equals(r0.id()))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("Uploaded PDF should appear in suggestions"));
-        // Content snippet should be present since the match is on content, not name
-        Assertions.assertNotNull(uploadedDocSuggestion.contentSnippet(),
-                "Content snippet should not be null for content-matched suggestions");
-        Assertions.assertTrue(uploadedDocSuggestion.contentSnippet().contains("<mark>"),
-                "Content snippet should contain highlight marks");
+            Assertions.assertNotNull(suggestions);
+            Assertions.assertFalse(suggestions.isEmpty(), "Should find at least one suggestion matching content");
+            // Find the uploaded document in the results (other tests may leave docs in the index)
+            Suggest uploadedDocSuggestion = suggestions.stream()
+                    .filter(s -> s.id().equals(r0.id()))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("Uploaded PDF should appear in suggestions"));
+            // Content snippet should be present since the match is on content, not name
+            Assertions.assertNotNull(uploadedDocSuggestion.contentSnippet(),
+                    "Content snippet should not be null for content-matched suggestions");
+            Assertions.assertTrue(uploadedDocSuggestion.contentSnippet().contains("<mark>"),
+                    "Content snippet should contain highlight marks");
+        });
 
         // Cleanup
         DeleteRequest deleteRequest = new DeleteRequest(List.of(r0.id()));
@@ -359,26 +378,26 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
         MultipartBodyBuilder builder = newFileBuilder("test_file_1.sql");
         UploadResponse r0 = getUploadResponse(builder, true);
 
-        waitFor(3000);
+        awaitIndexed("name-matched suggestion should have no content snippet", () -> {
+            // Search by the filename — this should match on name, not content
+            List<Suggest> suggestions = getWebTestClient().get().uri(uri ->
+                            uri.path(RestApiVersion.API_PREFIX + "/suggestions")
+                                    .queryParam("q", "test file")
+                                    .build())
+                    .exchange()
+                    .expectBody(new ParameterizedTypeReference<List<Suggest>>() {})
+                    .returnResult().getResponseBody();
 
-        // Search by the filename — this should match on name, not content
-        List<Suggest> suggestions = getWebTestClient().get().uri(uri ->
-                        uri.path(RestApiVersion.API_PREFIX + "/suggestions")
-                                .queryParam("q", "test file")
-                                .build())
-                .exchange()
-                .expectBody(new ParameterizedTypeReference<List<Suggest>>() {})
-                .returnResult().getResponseBody();
-
-        Assertions.assertNotNull(suggestions);
-        Assertions.assertFalse(suggestions.isEmpty(), "Should find at least one suggestion matching name");
-        // For a name-only match, contentSnippet should be null
-        Suggest nameMatch = suggestions.stream()
-                .filter(s -> s.id().equals(r0.id()))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("Uploaded file should appear in suggestions"));
-        Assertions.assertNull(nameMatch.contentSnippet(),
-                "Content snippet should be null for name-only matches");
+            Assertions.assertNotNull(suggestions);
+            Assertions.assertFalse(suggestions.isEmpty(), "Should find at least one suggestion matching name");
+            // For a name-only match, contentSnippet should be null
+            Suggest nameMatch = suggestions.stream()
+                    .filter(s -> s.id().equals(r0.id()))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("Uploaded file should appear in suggestions"));
+            Assertions.assertNull(nameMatch.contentSnippet(),
+                    "Content snippet should be null for name-only matches");
+        });
 
         // Cleanup
         DeleteRequest deleteRequest = new DeleteRequest(List.of(r0.id()));
@@ -407,28 +426,28 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
                 .exchange()
                 .expectStatus().isOk();
 
-        // Wait for content indexing (PDF parsing) and rename propagation to OpenSearch
-        // Both are async fire-and-forget, so we need enough time for OpenSearch to refresh
-        waitFor(8000);
+        // Poll for content indexing (PDF parsing) and rename propagation to OpenSearch
+        // Both are async fire-and-forget, so we poll until the index refresh catches up
+        awaitIndexed("suggestions should return both the content match and the name match", () -> {
+            // Search for "systèmes" — should match both files
+            List<Suggest> suggestions = getWebTestClient().get().uri(uri ->
+                            uri.path(RestApiVersion.API_PREFIX + "/suggestions")
+                                    .queryParam("q", "systèmes")
+                                    .build())
+                    .exchange()
+                    .expectBody(new ParameterizedTypeReference<List<Suggest>>() {})
+                    .returnResult().getResponseBody();
 
-        // Search for "systèmes" — should match both files
-        List<Suggest> suggestions = getWebTestClient().get().uri(uri ->
-                        uri.path(RestApiVersion.API_PREFIX + "/suggestions")
-                                .queryParam("q", "systèmes")
-                                .build())
-                .exchange()
-                .expectBody(new ParameterizedTypeReference<List<Suggest>>() {})
-                .returnResult().getResponseBody();
-
-        Assertions.assertNotNull(suggestions);
-        // The PDF should be found via content match
-        boolean hasPdfContentMatch = suggestions.stream().anyMatch(s -> s.id().equals(r0.id()));
-        Assertions.assertTrue(hasPdfContentMatch,
-                "PDF with content match should appear in suggestions");
-        // The renamed file should be found via name match
-        boolean hasNameMatch = suggestions.stream().anyMatch(s -> s.id().equals(r1.id()));
-        Assertions.assertTrue(hasNameMatch,
-                "Renamed file with name match should appear in suggestions, got: " + suggestions);
+            Assertions.assertNotNull(suggestions);
+            // The PDF should be found via content match
+            boolean hasPdfContentMatch = suggestions.stream().anyMatch(s -> s.id().equals(r0.id()));
+            Assertions.assertTrue(hasPdfContentMatch,
+                    "PDF with content match should appear in suggestions");
+            // The renamed file should be found via name match
+            boolean hasNameMatch = suggestions.stream().anyMatch(s -> s.id().equals(r1.id()));
+            Assertions.assertTrue(hasNameMatch,
+                    "Renamed file with name match should appear in suggestions, got: " + suggestions);
+        });
 
         // Cleanup
         DeleteRequest deleteRequest = new DeleteRequest(List.of(r0.id(), r1.id()));
@@ -454,9 +473,8 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
                         .field("content")
                         .query(fv -> fv.stringValue("vestibulum")).build()))
                 .build();
-        waitFor(3000);
         Files.delete(Paths.get("target/test-classes/test-pdf.pdf"));
-        Assertions.assertEquals(1, Objects.requireNonNull(openSearchAsyncClient.search(searchRequest, Map.class).get().hits().total()).value());
+        awaitHitCount("big PDF content should be extracted and indexed", searchRequest, 1);
     }
 
 

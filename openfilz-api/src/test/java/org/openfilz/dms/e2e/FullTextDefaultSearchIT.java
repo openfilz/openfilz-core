@@ -75,21 +75,25 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
         builder = newFileBuilder(f3);
         UploadResponse r3 = getUploadResponse(builder);
 
-        waitFor(3000);
+        // Poll instead of a fixed sleep: full-text indexing is async with an unbounded
+        // settle time — polling resolves fast on a quiet machine and tolerates a slow CI.
+        await().atMost(Duration.ofSeconds(45))
+                .pollInterval(Duration.ofMillis(500))
+                .untilAsserted(() -> {
+                    List<Suggest> indexedSuggestions = getWebTestClient().get().uri(uri ->
+                                    uri.path(RestApiVersion.API_PREFIX + "/suggestions")
+                                            .queryParam("q", getSuggestionQuery1())
+                                            .build())
+                            .exchange()
+                            .expectBody(new ParameterizedTypeReference<List<Suggest>>() {
+                            })
+                            .returnResult().getResponseBody();
+
+                    Assertions.assertNotNull(indexedSuggestions);
+                    Assertions.assertEquals(3, indexedSuggestions.size());
+                });
 
         List<Suggest> suggestions = getWebTestClient().get().uri(uri ->
-                        uri.path(RestApiVersion.API_PREFIX + "/suggestions")
-                                .queryParam("q", getSuggestionQuery1())
-                                .build())
-                .exchange()
-                .expectBody(new ParameterizedTypeReference<List<Suggest>>() {
-                })
-                .returnResult().getResponseBody();
-
-        Assertions.assertNotNull(suggestions);
-        Assertions.assertEquals(3, suggestions.size());
-
-        suggestions = getWebTestClient().get().uri(uri ->
                         uri.path(RestApiVersion.API_PREFIX + "/suggestions")
                                 .queryParam("q", getSuggestionQuery2())
                                 .build())
@@ -179,8 +183,6 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
         builder.part("metadata", Map.of("owner", "Nobody"));
         UploadResponse r3 = getUploadResponse(builder);
 
-        waitFor(3000);
-
         HttpGraphQlClient httpGraphQlClient = getGraphQlHttpClient();
 
         var graphQlRequest = """
@@ -205,26 +207,32 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
                   }
                 }""".replace("$$QUERY$$", getSearchQuery()).trim();
 
-        Mono<ClientGraphQlResponse> response = httpGraphQlClient
-                .document(graphQlRequest)
-                .execute();
+        // Poll instead of a fixed sleep: full-text indexing is async with an unbounded
+        // settle time — the GraphQL query is read-only so re-running it is safe.
+        await().atMost(Duration.ofSeconds(45))
+                .pollInterval(Duration.ofMillis(500))
+                .untilAsserted(() -> {
+                    Mono<ClientGraphQlResponse> response = httpGraphQlClient
+                            .document(graphQlRequest)
+                            .execute();
 
-        StepVerifier.create(response)
-                .expectNextMatches(doc->{
-                    Map<String, Object> searchDocuments = (Map<String, Object>) ((Map<String, Object>) doc.getData()).get("searchDocuments");
-                    List<Map<String, String>> documents = (List<Map<String, String>>) searchDocuments.get("documents");
-                    return  searchDocuments.get("totalHits").toString().equals("2")
-                            && documents.get(0).get("id").equals(r2.id().toString())
-                            && documents.get(1).get("id").equals(r1.id().toString())
-                            && documents.get(0).get("extension").equals("pdf")
-                            && documents.get(1).get("extension").equals("pdf")
-                            && documents.get(0).get("updatedBy").equals(getUsername())
-                            && documents.get(1).get("updatedBy").equals(getUsername())
-                            && documents.get(0).get("name").equals(f2)
-                            && documents.get(1).get("name").equals(f1);
-                })
-                .expectComplete()
-                .verify();
+                    StepVerifier.create(response)
+                            .expectNextMatches(doc->{
+                                Map<String, Object> searchDocuments = (Map<String, Object>) ((Map<String, Object>) doc.getData()).get("searchDocuments");
+                                List<Map<String, String>> documents = (List<Map<String, String>>) searchDocuments.get("documents");
+                                return  searchDocuments.get("totalHits").toString().equals("2")
+                                        && documents.get(0).get("id").equals(r2.id().toString())
+                                        && documents.get(1).get("id").equals(r1.id().toString())
+                                        && documents.get(0).get("extension").equals("pdf")
+                                        && documents.get(1).get("extension").equals("pdf")
+                                        && documents.get(0).get("updatedBy").equals(getUsername())
+                                        && documents.get(1).get("updatedBy").equals(getUsername())
+                                        && documents.get(0).get("name").equals(f2)
+                                        && documents.get(1).get("name").equals(f1);
+                            })
+                            .expectComplete()
+                            .verify();
+                });
 
 
 

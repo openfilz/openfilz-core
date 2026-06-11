@@ -18,7 +18,7 @@ Two Java SDKs are available. They expose the **same API operations** but differ 
 | **Error handling** | try/catch `ApiException` | `.onErrorResume()`, `.doOnError()` |
 | **Best for** | Android, plain Java, Spring MVC, scripts, CLI tools | Spring WebFlux, high-concurrency microservices |
 | **Min Java** | 25 | 25 |
-| **Spring required?** | No | Yes (Spring Boot 3+ / WebFlux 6+) |
+| **Spring required?** | No | Yes (Spring Boot 4+ / WebFlux 7+) |
 
 **Quick rule:** If your project already uses Spring WebFlux or Project Reactor, pick this SDK. Otherwise, pick `openfilz-sdk-java`.
 
@@ -402,5 +402,5 @@ items.subscribe(list ->
 ## Requirements
 
 - Java 25+
-- Spring WebFlux 6+ / Spring Boot 3+
+- Spring WebFlux 7+ / Spring Boot 4+
 - Project Reactor
