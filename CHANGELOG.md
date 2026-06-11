@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[1e6453f03008a39](https://github.com/openfilz/openfilz-core/commit/1e6453f03008a39) maven-release-bot[bot] *2026-06-11 20:51:11*
+[0091439b381f45c](https://github.com/openfilz/openfilz-core/commit/0091439b381f45c) maven-release-bot[bot] *2026-06-11 23:03:38*
 
 
-## v1.2.2
+## v1.2.3
 ### No issue
 
-**[maven-release-plugin] prepare release v1.2.2**
+**[maven-release-plugin] prepare release v1.2.3**
 
 
-[50c8a9256388b8d](https://github.com/openfilz/openfilz-core/commit/50c8a9256388b8d) maven-release-bot[bot] *2026-06-11 20:51:09*
+[20c51acb1cd183a](https://github.com/openfilz/openfilz-core/commit/20c51acb1cd183a) maven-release-bot[bot] *2026-06-11 23:03:36*
 
-**Merge pull request #166 from openfilz/develop**
+**Merge pull request #167 from openfilz/develop**
 
- * fix(sdk-csharp): wrap upload stream in FileParameter in Quickstart sa…
+ * Develop
 
-[bf2d63314a6afdb](https://github.com/openfilz/openfilz-core/commit/bf2d63314a6afdb) Yann Demel *2026-06-11 20:48:48*
+[5d7e65293d7c95e](https://github.com/openfilz/openfilz-core/commit/5d7e65293d7c95e) Yann Demel *2026-06-11 23:01:28*
 
 
