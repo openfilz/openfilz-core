@@ -66,7 +66,7 @@ public class Quickstart
         {
             using var fileStream = File.OpenRead(tempFile);
             var uploadResp = await documentApi.UploadDocument1Async(
-                file: fileStream,
+                file: new FileParameter(fileStream, Path.GetFileName(tempFile)),
                 allowDuplicateFileNames: true,
                 parentFolderId: folderId.ToString());
             var uploaded = uploadResp.Ok()!;
