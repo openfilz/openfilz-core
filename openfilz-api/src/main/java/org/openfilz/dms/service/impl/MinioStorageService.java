@@ -80,6 +80,12 @@ public class MinioStorageService implements StorageService {
                 if(minioProperties.isVersioningEnabled()) {
                     VersioningConfiguration bucketVersioning = minioClient.getBucketVersioning(GetBucketVersioningArgs.builder().bucket(minioProperties.getBucketName()).build());
                     log.debug("Bucket Versioning: {}", bucketVersioning.status());
+                    if (bucketVersioning.status() != VersioningConfiguration.Status.ENABLED) {
+                        // bucket created before the flag was turned on: enable versioning now,
+                        // otherwise replace-content silently keeps no history
+                        minioClient.setBucketVersioning(SetBucketVersioningArgs.builder().bucket(minioProperties.getBucketName()).config(new VersioningConfiguration(VersioningConfiguration.Status.ENABLED, false)).build());
+                        log.info("Bucket versioning enabled on existing bucket '{}'.", minioProperties.getBucketName());
+                    }
                 }
                 if(wormMode) {
                     try {
