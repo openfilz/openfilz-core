@@ -9,7 +9,7 @@
 ![Branches Coverage](./.github/badges/branches.svg)
 ![Maven Central Version](https://img.shields.io/maven-central/v/org.openfilz/openfilz-api?link=https%3A%2F%2Fcentral.sonatype.com%2Fnamespace%2Forg.openfilz)
 
-OpenFilz is a modern, reactive document management API designed for scalability, security, and performance. Built on **Spring Boot 4.0+ / WebFlux**, it provides a centralized solution for handling document and folder-related operations through comprehensive REST and GraphQL APIs.
+OpenFilz is a modern, reactive document management API designed for scalability, security, and performance. Built on **Spring Boot 4+ / WebFlux**, it provides a centralized solution for handling document and folder-related operations through comprehensive REST and GraphQL APIs.
 
 **[Try the live demo](https://app.openfilz.org/)** | **[Swagger API Documentation](https://api.openfilz.org/swagger-ui/index.html)**
 
@@ -41,7 +41,7 @@ Pick the guide that matches your role:
 | Component | Technology |
 |-----------|------------|
 | Language | Java 25 |
-| Framework | Spring Boot 4.0.6, Spring WebFlux |
+| Framework | Spring Boot 4+, Spring WebFlux |
 | Database | PostgreSQL (R2DBC, non-blocking) |
 | Migrations | Flyway |
 | Storage | Local filesystem or S3/MinIO (pluggable) |
