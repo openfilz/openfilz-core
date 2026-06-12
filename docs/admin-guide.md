@@ -287,7 +287,7 @@ Database schema is managed automatically by **Flyway**. Migrations run on startu
 | `storage.minio.access-key` / `MINIO_ACCESS_KEY` | `minioadmin` | S3 access key |
 | `storage.minio.secret-key` / `MINIO_SECRET_KEY` | `minioadmin` | S3 secret key |
 | `storage.minio.bucket-name` / `MINIO_BUCKET_NAME` | `dms-bucket` | S3 bucket name |
-| `storage.minio.versioning-enabled` | `false` | Enable S3 bucket versioning (preserves old versions on replace) |
+| `storage.minio.versioning-enabled` / `STORAGE_MINIO_VERSIONING_ENABLED` | `false` | Enable S3 bucket versioning (preserves old versions on replace) and the document version endpoints (`GET .../versions`, `GET .../versions/{versionId}/download`, `POST .../versions/{versionId}/restore`). Pair with `NG_APP_STORAGE_MINIO_VERSIONING_ENABLED=true` on the frontend to show the version history UI. Restore is history-preserving (server-side copy creating a new latest version, single-copy limit 5 GiB). Versions accumulate in the bucket — consider MinIO lifecycle rules to cap version count/age. |
 
 **Choosing a storage backend:**
 

@@ -259,6 +259,7 @@ Used with `docker-compose.minio.yml`:
 | `MINIO_BUCKET_NAME` | `openfilz-bucket` | MinIO bucket name |
 | `MINIO_PORT` | `9000` | MinIO API exposed port |
 | `MINIO_CONSOLE_PORT` | `9001` | MinIO console exposed port |
+| `STORAGE_MINIO_VERSIONING_ENABLED` | `false` | Enable S3 bucket versioning: replace-content keeps previous versions and the version endpoints (list/download/restore) become available. Set `NG_APP_STORAGE_MINIO_VERSIONING_ENABLED=true` on the web container to show the version history UI (both flags must be set in tandem) |
 
 ### Security Configuration (Keycloak)
 

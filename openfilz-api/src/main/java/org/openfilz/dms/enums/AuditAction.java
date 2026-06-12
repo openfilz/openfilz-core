@@ -14,6 +14,7 @@ public enum AuditAction {
     MOVE_FOLDER,
     UPLOAD_DOCUMENT,
     REPLACE_DOCUMENT_CONTENT,
+    RESTORE_DOCUMENT_VERSION, // Restore a previous version of a versioned file (history-preserving)
     REPLACE_DOCUMENT_METADATA,
     UPDATE_DOCUMENT_METADATA,
     DOWNLOAD_DOCUMENT,

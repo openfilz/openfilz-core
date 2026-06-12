@@ -65,6 +65,19 @@ public class GlobalExceptionHandler {
         return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse(HttpStatus.BAD_REQUEST.value(), "Validation failed: " + errors)));
     }
 
+    @ExceptionHandler(VersioningDisabledException.class)
+    public Mono<ResponseEntity<ErrorResponse>> handleVersioningDisabled(VersioningDisabledException ex) {
+        log.warn("Versioning disabled: {}", ex.getMessage());
+        // 409 (not 404) so clients can distinguish "feature off" from "version not found"
+        return Mono.just(ResponseEntity.status(HttpStatus.CONFLICT).body(new ErrorResponse(HttpStatus.CONFLICT.value(), ex.getMessage())));
+    }
+
+    @ExceptionHandler(CannotRestoreLatestVersionException.class)
+    public Mono<ResponseEntity<ErrorResponse>> handleCannotRestoreLatestVersion(CannotRestoreLatestVersionException ex) {
+        log.warn("Cannot restore latest version: {}", ex.getMessage());
+        return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse(HttpStatus.BAD_REQUEST.value(), ex.getMessage())));
+    }
+
     @ExceptionHandler(AuditException.class)
     public Mono<ResponseEntity<ErrorResponse>> handleAuditException(AuditException ex) {
         log.error("AuditException", ex);
