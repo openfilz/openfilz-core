@@ -50,10 +50,22 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
 
    public Mono<UploadResponse> doSaveFile(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, Mono<String> storagePathMono) {
         return storagePathMono.flatMap(storagePath -> saveDocumentInDatabase(filePart, contentLength, parentFolderId, metadata, originalFilename, storagePath))
-                .flatMap(savedDoc -> auditService.logAction(AuditAction.UPLOAD_DOCUMENT, FILE, savedDoc.getId(), new UploadAudit(savedDoc.getName(), parentFolderId, metadata)).thenReturn(savedDoc))
+                .flatMap(savedDoc -> logUploadAction(savedDoc, parentFolderId, metadata).thenReturn(savedDoc))
                 .as(tx::transactional)
                 .flatMap(savedDoc -> Mono.just(new UploadResponse(savedDoc.getId(), savedDoc.getName(), savedDoc.getContentType(), savedDoc.getSize()))
                         .doOnSuccess(_ -> postProcessDocument(savedDoc)));
+    }
+
+    /**
+     * Logs the UPLOAD_DOCUMENT audit entry, enriched with the storage versionId of the
+     * newly created object when versioning is active (empty otherwise — see
+     * {@link StorageService#getLatestVersionId(String)}).
+     */
+    protected Mono<Void> logUploadAction(Document savedDoc, UUID parentFolderId, Map<String, Object> metadata) {
+        return storageService.getLatestVersionId(savedDoc.getStoragePath())
+                .map(versionId -> new UploadAudit(savedDoc.getName(), parentFolderId, metadata, versionId))
+                .defaultIfEmpty(new UploadAudit(savedDoc.getName(), parentFolderId, metadata))
+                .flatMap(details -> auditService.logAction(AuditAction.UPLOAD_DOCUMENT, FILE, savedDoc.getId(), details));
     }
 
     protected void postProcessDocument(Document document) {
@@ -182,8 +194,10 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
                     }
                     return Mono.just(savedDoc);
                 })
-                .flatMap(updatedDoc -> auditService.logAction(REPLACE_DOCUMENT_CONTENT, FILE, updatedDoc.getId(),
-                        new ReplaceAudit(newFilePart.filename())))
+                .flatMap(updatedDoc -> storageService.getLatestVersionId(updatedDoc.getStoragePath())
+                        .map(versionId -> new ReplaceAudit(newFilePart.filename(), versionId))
+                        .defaultIfEmpty(new ReplaceAudit(newFilePart.filename()))
+                        .flatMap(details -> auditService.logAction(REPLACE_DOCUMENT_CONTENT, FILE, updatedDoc.getId(), details)))
                 .as(tx::transactional)
                 .thenReturn(document);
 

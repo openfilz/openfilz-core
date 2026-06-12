@@ -1,5 +1,7 @@
 package org.openfilz.dms.service;
 
+import org.openfilz.dms.dto.response.DocumentVersionInfo;
+import org.openfilz.dms.exception.VersioningDisabledException;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.codec.multipart.FilePart;
@@ -120,6 +122,56 @@ public interface StorageService {
      * @return empty Mono on success
      */
     default Mono<Void> deleteLatestVersion(String storagePath) {
+        return Mono.empty();
+    }
+
+    // ==================== Versioning Support Methods ====================
+
+    /**
+     * List all surviving versions of a versioned object (delete markers excluded).
+     * Empty for non-versioned storage implementations or when versioning is disabled.
+     *
+     * @param storagePath the object path
+     * @return flux of version information, in storage order
+     */
+    default Flux<DocumentVersionInfo> listFileVersions(String storagePath) {
+        return Flux.empty();
+    }
+
+    /**
+     * Load the content of a specific version of a versioned object.
+     *
+     * @param storagePath the object path
+     * @param versionId   the version identifier
+     * @return the version content
+     */
+    default Mono<? extends Resource> loadFileVersion(String storagePath, String versionId) {
+        return Mono.error(new VersioningDisabledException());
+    }
+
+    /**
+     * Restore a previous version by server-side copying it on top of the object,
+     * creating a NEW latest version. History-preserving: no version is deleted
+     * (unlike {@link #deleteLatestVersion(String)}).
+     * <p>
+     * Limitation: single-operation server-side copy is capped at 5 GiB (S3 semantics).
+     *
+     * @param storagePath the object path
+     * @param versionId   the version to restore
+     * @return the versionId of the NEW latest version created by the copy
+     */
+    default Mono<String> restoreFileVersion(String storagePath, String versionId) {
+        return Mono.error(new VersioningDisabledException());
+    }
+
+    /**
+     * Version identifier of the object's current latest version.
+     * Empty for non-versioned storage implementations or when versioning is disabled.
+     *
+     * @param storagePath the object path
+     * @return the latest versionId, or empty when unsupported/disabled
+     */
+    default Mono<String> getLatestVersionId(String storagePath) {
         return Mono.empty();
     }
 }

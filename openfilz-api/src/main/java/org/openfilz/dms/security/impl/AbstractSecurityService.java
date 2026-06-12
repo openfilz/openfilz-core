@@ -176,8 +176,18 @@ public abstract class AbstractSecurityService implements SecurityService {
                                 path.equals(RestApiVersion.ENDPOINT_FOLDERS) ||
                                 path.equals("/folders/move") ||
                                 path.equals("/folders/copy") ||
-                                path.equals("/documents/create-blank")
+                                path.equals("/documents/create-blank") ||
+                                isVersionRestore(path)
                         ));
+    }
+
+    /**
+     * POST /documents/{id}/versions/{versionId}/restore — a content write, CONTRIBUTOR only.
+     * Not whitelisted in WORM mode (WormSecurityServiceImpl overrides isInsertOrUpdateAccess).
+     */
+    protected final boolean isVersionRestore(String path) {
+        return path.startsWith(RestApiVersion.ENDPOINT_DOCUMENTS + FileConstants.SLASH)
+                && path.contains("/versions/") && path.endsWith("/restore");
     }
 
     protected final boolean isAudit(String path) {

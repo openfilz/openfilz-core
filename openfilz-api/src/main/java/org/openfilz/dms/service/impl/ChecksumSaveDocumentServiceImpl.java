@@ -4,10 +4,8 @@ import tools.jackson.databind.ObjectMapper;
 import io.r2dbc.postgresql.codec.Json;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.QuotaProperties;
-import org.openfilz.dms.dto.audit.UploadAudit;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.entity.Document;
-import org.openfilz.dms.enums.AuditAction;
 import org.openfilz.dms.repository.DocumentDAO;
 import org.openfilz.dms.dto.Checksum;
 import org.openfilz.dms.service.AuditService;
@@ -26,7 +24,6 @@ import reactor.core.publisher.Mono;
 import java.util.Map;
 import java.util.UUID;
 
-import static org.openfilz.dms.enums.DocumentType.FILE;
 import static org.openfilz.dms.service.ChecksumService.HASH_SHA256_KEY;
 
 @Service
@@ -46,7 +43,7 @@ public class ChecksumSaveDocumentServiceImpl extends SaveDocumentServiceImpl {
         return storagePathMono
                 .flatMap(storagePath -> checksumService.calculateChecksum(storagePath, metadata))
                 .flatMap(checksum -> saveDocumentInDatabase(filePart, contentLength, parentFolderId, checksum.metadataWithChecksum(), originalFilename, checksum.storagePath()))
-                .flatMap(savedDoc -> auditService.logAction(AuditAction.UPLOAD_DOCUMENT, FILE, savedDoc.getId(), new UploadAudit(savedDoc.getName(), parentFolderId, metadata)).thenReturn(savedDoc))
+                .flatMap(savedDoc -> logUploadAction(savedDoc, parentFolderId, metadata).thenReturn(savedDoc))
                 .as(tx::transactional)
                 .flatMap(savedDoc -> Mono.just(new UploadResponse(savedDoc.getId(), savedDoc.getName(), savedDoc.getContentType(), savedDoc.getSize()))
                         .doOnSuccess(_ -> postProcessDocument(savedDoc)));

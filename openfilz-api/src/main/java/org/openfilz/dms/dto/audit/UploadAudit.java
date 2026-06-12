@@ -18,8 +18,15 @@ import java.util.UUID;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @Schema(description = AuditLogDetails.DISCRIMINATOR + "=" + AuditLogDetails.UPLOAD)
 public class UploadAudit extends AuditLogDetails {
+
+    public UploadAudit(String filename, UUID parentFolderId, Map<String, Object> metadata) {
+        this(filename, parentFolderId, metadata, null);
+    }
+
     private String filename;
     private UUID parentFolderId;
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     private Map<String, Object> metadata;
+    @Schema(description = "Storage version identifier created by this upload (only when versioning is enabled)")
+    private String versionId;
 }
