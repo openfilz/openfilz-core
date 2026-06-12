@@ -3,7 +3,9 @@ package org.openfilz.dms.e2e;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.openfilz.dms.config.RestApiVersion;
+import org.openfilz.dms.dto.request.CopyRequest;
 import org.openfilz.dms.dto.request.CreateFolderRequest;
+import org.openfilz.dms.dto.response.CopyResponse;
 import org.openfilz.dms.dto.response.DocumentVersionInfo;
 import org.openfilz.dms.dto.response.FolderResponse;
 import org.openfilz.dms.dto.response.RestoreVersionResponse;
@@ -211,6 +213,64 @@ public class DocumentVersioningIT extends TestContainersBaseConfig {
                 .uri(RestApiVersion.API_PREFIX + "/documents/{id}/versions/{versionId}/restore", id, "00000000-0000-0000-0000-000000000000")
                 .exchange()
                 .expectStatus().isNotFound();
+    }
+
+    @Test
+    void whenCreateBlankDocument_thenUploadAuditCarriesVersionId() {
+        UploadResponse blank = getWebTestClient().post()
+                .uri(RestApiVersion.API_PREFIX + "/documents/create-blank")
+                .body(BodyInserters.fromValue(Map.of(
+                        "name", "blank-" + UUID.randomUUID() + ".txt",
+                        "documentType", "TEXT")))
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(UploadResponse.class)
+                .returnResult().getResponseBody();
+        Assertions.assertNotNull(blank);
+
+        List<DocumentVersionInfo> versions = listVersions(blank.id());
+        Assertions.assertEquals(1, versions.size(), "Blank document must have its initial version");
+
+        Map<String, Object> uploadEntry = getAuditTrail(blank.id()).stream()
+                .filter(log -> "UPLOAD_DOCUMENT".equals(log.get("action")))
+                .findFirst().orElse(null);
+        Assertions.assertNotNull(uploadEntry, "Blank creation must log an UPLOAD_DOCUMENT entry");
+        Assertions.assertEquals(versions.getFirst().versionId(), detailsVersionId(uploadEntry),
+                "The blank document's UPLOAD_DOCUMENT audit entry must carry the initial versionId");
+    }
+
+    @Test
+    void whenCopyFile_thenCopyAuditCarriesVersionId() {
+        UUID sourceId = uploadThenReplace();
+
+        CreateFolderRequest folderRequest = new CreateFolderRequest("copy-target-" + UUID.randomUUID(), null);
+        FolderResponse folder = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/folders")
+                .body(BodyInserters.fromValue(folderRequest))
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(FolderResponse.class)
+                .returnResult().getResponseBody();
+
+        List<CopyResponse> copies = getWebTestClient().post()
+                .uri(RestApiVersion.API_PREFIX + "/files/copy")
+                .body(BodyInserters.fromValue(new CopyRequest(List.of(sourceId), folder.id(), true)))
+                .exchange()
+                .expectStatus().isOk()
+                .expectBodyList(CopyResponse.class)
+                .returnResult().getResponseBody();
+        Assertions.assertNotNull(copies);
+        Assertions.assertEquals(1, copies.size());
+        UUID copyId = copies.getFirst().copyId();
+
+        List<DocumentVersionInfo> versions = listVersions(copyId);
+        Assertions.assertEquals(1, versions.size(), "Copied file must have its initial version");
+
+        Map<String, Object> copyEntry = getAuditTrail(copyId).stream()
+                .filter(log -> "COPY_FILE".equals(log.get("action")))
+                .findFirst().orElse(null);
+        Assertions.assertNotNull(copyEntry, "Copy must log a COPY_FILE entry on the new document");
+        Assertions.assertEquals(versions.getFirst().versionId(), detailsVersionId(copyEntry),
+                "The copied file's COPY_FILE audit entry must carry the initial versionId");
     }
 
     @Test
