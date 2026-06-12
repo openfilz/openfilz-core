@@ -129,5 +129,8 @@ services:
       NG_APP_AUTHENTICATION_CLIENT_ID: ${NG_APP_AUTHENTICATION_CLIENT_ID:-openfilz-web}
       NG_APP_ONLYOFFICE_ENABLED: ${NG_APP_ONLYOFFICE_ENABLED:-false}
       NG_APP_ONLYOFFICE_URL: ${NG_APP_ONLYOFFICE_URL:-http://localhost:8080}
+      # Must be set in tandem with STORAGE_MINIO_VERSIONING_ENABLED on the API
+      # (frontend flag without the backend flag yields HTTP 409 on version actions)
+      NG_APP_STORAGE_MINIO_VERSIONING_ENABLED: ${NG_APP_STORAGE_MINIO_VERSIONING_ENABLED:-false}
     networks:
       - openfilz-network

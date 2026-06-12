@@ -8,6 +8,7 @@ import io.minio.messages.VersioningConfiguration;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.MinioProperties;
+import org.openfilz.dms.dto.response.DocumentVersionInfo;
 import org.openfilz.dms.exception.StorageException;
 import org.openfilz.dms.service.StorageService;
 import org.openfilz.dms.utils.FileUtils;
@@ -79,6 +80,12 @@ public class MinioStorageService implements StorageService {
                 if(minioProperties.isVersioningEnabled()) {
                     VersioningConfiguration bucketVersioning = minioClient.getBucketVersioning(GetBucketVersioningArgs.builder().bucket(minioProperties.getBucketName()).build());
                     log.debug("Bucket Versioning: {}", bucketVersioning.status());
+                    if (bucketVersioning.status() != VersioningConfiguration.Status.ENABLED) {
+                        // bucket created before the flag was turned on: enable versioning now,
+                        // otherwise replace-content silently keeps no history
+                        minioClient.setBucketVersioning(SetBucketVersioningArgs.builder().bucket(minioProperties.getBucketName()).config(new VersioningConfiguration(VersioningConfiguration.Status.ENABLED, false)).build());
+                        log.info("Bucket versioning enabled on existing bucket '{}'.", minioProperties.getBucketName());
+                    }
                 }
                 if(wormMode) {
                     try {
@@ -493,6 +500,106 @@ public class MinioStorageService implements StorageService {
                 log.warn("Could not revert latest version of '{}': {}", storagePath, e.getMessage());
             }
         }).subscribeOn(Schedulers.boundedElastic()).then();
+    }
+
+    // ==================== Versioning Support Methods ====================
+
+    @Override
+    public Flux<DocumentVersionInfo> listFileVersions(String storagePath) {
+        if (!minioProperties.isVersioningEnabled()) {
+            return Flux.empty();
+        }
+        return Flux.<DocumentVersionInfo>create(sink -> {
+            try {
+                Iterable<Result<Item>> results = minioClient.listObjects(
+                        ListObjectsArgs.builder()
+                                .bucket(minioProperties.getBucketName())
+                                .prefix(storagePath)
+                                .includeVersions(true)
+                                .build());
+                for (Result<Item> result : results) {
+                    Item item = result.get();
+                    // prefix-listing can over-match; skip delete markers (no content to act on)
+                    if (!item.objectName().equals(storagePath) || item.isDeleteMarker()) {
+                        continue;
+                    }
+                    sink.next(new DocumentVersionInfo(item.versionId(),
+                            item.lastModified() != null ? item.lastModified().toOffsetDateTime() : null,
+                            item.size(), item.isLatest()));
+                }
+                sink.complete();
+            } catch (Exception e) {
+                sink.error(new StorageException("MinIO listFileVersions failed for " + storagePath, e));
+            }
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @Override
+    public Mono<? extends Resource> loadFileVersion(String storagePath, String versionId) {
+        return Mono.fromCallable(() -> {
+            try {
+                InputStream stream = minioClient.getObject(
+                        GetObjectArgs.builder()
+                                .bucket(minioProperties.getBucketName())
+                                .object(storagePath)
+                                .versionId(versionId)
+                                .build()
+                );
+                // InputStreamResource will close the stream when the resource is consumed
+                return new InputStreamResource(stream);
+            } catch (Exception e) {
+                log.error("Error loading version {} of file {} from MinIO", versionId, storagePath, e);
+                throw new StorageException("MinIO load file version failed for " + storagePath, e);
+            }
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @Override
+    public Mono<String> restoreFileVersion(String storagePath, String versionId) {
+        return Mono.fromCallable(() -> {
+            try {
+                // Server-side copy of the given version onto the same key: MinIO creates a
+                // new latest version, nothing is deleted (history-preserving restore).
+                ObjectWriteResponse response = minioClient.copyObject(
+                        CopyObjectArgs.builder()
+                                .bucket(minioProperties.getBucketName())
+                                .object(storagePath)
+                                .legalHold(wormMode)
+                                .source(CopySource.builder()
+                                        .bucket(minioProperties.getBucketName())
+                                        .object(storagePath)
+                                        .versionId(versionId)
+                                        .build())
+                                .build());
+                log.info("Restored version {} of '{}' as new version {} in MinIO bucket '{}'",
+                        versionId, storagePath, response.versionId(), minioProperties.getBucketName());
+                return response.versionId();
+            } catch (Exception e) {
+                log.error("Error restoring version {} of file {} in MinIO", versionId, storagePath, e);
+                throw new StorageException("MinIO restore file version failed for " + storagePath, e);
+            }
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @Override
+    public Mono<String> getLatestVersionId(String storagePath) {
+        if (!minioProperties.isVersioningEnabled()) {
+            return Mono.empty();
+        }
+        return Mono.fromCallable(() -> {
+                    StatObjectResponse stat = minioClient.statObject(
+                            StatObjectArgs.builder()
+                                    .bucket(minioProperties.getBucketName())
+                                    .object(storagePath)
+                                    .build());
+                    return stat.versionId(); // null (-> empty Mono) when bucket is unversioned
+                })
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorResume(e -> {
+                    // audit enrichment must never fail the main operation
+                    log.warn("Could not stat latest versionId of '{}': {}", storagePath, e.getMessage());
+                    return Mono.empty();
+                });
     }
 
     @Override

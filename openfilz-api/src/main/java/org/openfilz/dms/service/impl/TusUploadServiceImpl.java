@@ -272,12 +272,11 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
                             .build();
 
                     return documentDAO.create(document)
-                            .flatMap(savedDoc -> auditService.logAction(
-                                    AuditAction.UPLOAD_DOCUMENT,
-                                    FILE,
-                                    savedDoc.getId(),
-                                    new UploadAudit(savedDoc.getName(), request.parentFolderId(), request.metadata())
-                            ).thenReturn(savedDoc))
+                            .flatMap(savedDoc -> storageService.getLatestVersionId(savedDoc.getStoragePath())
+                                    .map(versionId -> new UploadAudit(savedDoc.getName(), request.parentFolderId(), request.metadata(), versionId))
+                                    .defaultIfEmpty(new UploadAudit(savedDoc.getName(), request.parentFolderId(), request.metadata()))
+                                    .flatMap(details -> auditService.logAction(AuditAction.UPLOAD_DOCUMENT, FILE, savedDoc.getId(), details))
+                                    .thenReturn(savedDoc))
                             .as(tx::transactional)
                             .doOnSuccess(this::postProcessDocument)
                             .doOnSuccess(doc -> cleanupTusMetadata(uploadId).subscribe())

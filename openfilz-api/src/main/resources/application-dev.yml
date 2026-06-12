@@ -59,7 +59,7 @@ onlyoffice:
 
 
 storage:
-  type: local # local or minio
+  type: minio # local or minio
   minio:
     bucket-name: dms-ce-bucket
     versioning-enabled: true
