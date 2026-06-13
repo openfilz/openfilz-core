@@ -274,6 +274,51 @@ class FileSystemStorageServiceTest {
                 .verifyComplete();
     }
 
+    @Test
+    void constructor_whenLocationCannotBeCreated_throwsRuntimeException() throws IOException {
+        // A regular file in the path makes createDirectories fail.
+        Path blocker = Files.createTempFile("fs-blocker", ".txt");
+        try {
+            String badPath = blocker.resolve("sub").toString();
+            assertThrows(RuntimeException.class, () -> new FileSystemStorageService(badPath));
+        } finally {
+            Files.deleteIfExists(blocker);
+        }
+    }
+
+    @Test
+    void createEmptyFile_whenParentPathTraversesAFile_emitsStorageException() throws IOException {
+        // "blocker" is a regular file; creating "blocker/sub" as a directory fails with a
+        // generic IOException (not FileAlreadyExistsException), hitting the error branch.
+        Files.write(tempDir.resolve("blocker"), "x".getBytes());
+
+        StepVerifier.create(service.createEmptyFile("blocker/sub/child.bin"))
+                .expectError(StorageException.class)
+                .verify();
+    }
+
+    @Test
+    void saveData_whenParentDirCannotBeCreated_emitsStorageException() throws IOException {
+        Files.write(tempDir.resolve("blocker2"), "x".getBytes());
+        DataBuffer buffer = new DefaultDataBufferFactory().wrap("data".getBytes());
+
+        StepVerifier.create(service.saveData("blocker2/child.bin", Flux.just(buffer)))
+                .expectError(StorageException.class)
+                .verify();
+    }
+
+    @Test
+    void closeChannel_whenCloseFails_completesWithoutError() throws IOException {
+        java.nio.channels.AsynchronousFileChannel channel =
+                mock(java.nio.channels.AsynchronousFileChannel.class);
+        org.mockito.Mockito.doThrow(new IOException("close fail")).when(channel).close();
+
+        Mono<Void> result = org.springframework.test.util.ReflectionTestUtils.invokeMethod(
+                service, "closeChannel", channel);
+
+        StepVerifier.create(result).verifyComplete();
+    }
+
     private FilePart mockFilePart(String filename, String content) {
         FilePart filePart = mock(FilePart.class);
         when(filePart.filename()).thenReturn(filename);
