@@ -13,13 +13,30 @@ import java.util.UUID;
 public interface OnlyOfficeService {
 
     /**
-     * Generate the configuration needed to initialize the OnlyOffice editor.
+     * Generate the configuration needed to initialize the OnlyOffice editor for the
+     * current (latest) content of a document.
      *
      * @param documentId The document ID to edit
      * @param canEdit    Whether the user can edit the document
      * @return Editor configuration including JWT token
      */
-    Mono<OnlyOfficeConfigResponse> generateEditorConfig(UUID documentId, boolean canEdit);
+    default Mono<OnlyOfficeConfigResponse> generateEditorConfig(UUID documentId, boolean canEdit) {
+        return generateEditorConfig(documentId, canEdit, null);
+    }
+
+    /**
+     * Generate the configuration needed to initialize the OnlyOffice editor.
+     * <p>
+     * When {@code versionId} is non-null the editor is opened on that specific stored
+     * version (MinIO/S3 object version) and is always forced read-only — viewing history
+     * must never overwrite the current content.
+     *
+     * @param documentId The document ID to edit
+     * @param canEdit    Whether the user can edit the document (ignored when versionId is set)
+     * @param versionId  The storage version to view, or {@code null} for the latest content
+     * @return Editor configuration including JWT token
+     */
+    Mono<OnlyOfficeConfigResponse> generateEditorConfig(UUID documentId, boolean canEdit, String versionId);
 
     /**
      * Handle a callback from OnlyOffice DocumentServer.

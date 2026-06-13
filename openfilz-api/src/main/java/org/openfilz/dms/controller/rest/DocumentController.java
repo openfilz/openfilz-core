@@ -17,6 +17,7 @@ import org.openfilz.dms.dto.request.*;
 import org.openfilz.dms.dto.response.*;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.service.DocumentService;
+import org.openfilz.dms.service.DocumentVersionService;
 import org.openfilz.dms.service.OnlyOfficeJwtService;
 import org.openfilz.dms.utils.ContentInfo;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,6 +58,11 @@ public class DocumentController {
     // Optional: Only available when OnlyOffice is enabled
     @Autowired(required = false)
     private OnlyOfficeJwtService<? extends OnlyOfficeUserInfo> onlyOfficeJwtService;
+
+    // Used to stream a specific stored version to OnlyOffice (read-only history view).
+    // Always present (DocumentVersionConfig provides a disabled impl when versioning is off).
+    @Autowired(required = false)
+    private DocumentVersionService documentVersionService;
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Upload a single document",
@@ -265,7 +271,8 @@ public class DocumentController {
             description = "Internal endpoint for OnlyOffice DocumentServer to fetch document content. Uses token-based authentication.")
     public Mono<ResponseEntity<Resource>> downloadForOnlyOffice(
             @PathVariable UUID documentId,
-            @RequestParam("token") String accessToken) {
+            @RequestParam("token") String accessToken,
+            @RequestParam(name = "versionId", required = false) String versionId) {
 
         // Validate access token
         if (onlyOfficeJwtService == null) {
@@ -280,6 +287,20 @@ public class DocumentController {
         if (tokenDocumentId == null || !tokenDocumentId.equals(documentId)) {
             log.warn("Invalid or mismatched OnlyOffice access token for document {}", documentId);
             return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
+        }
+
+        // Viewing a specific stored version (read-only history). The access token already
+        // authorizes this documentId; any of its versions is the same authorization scope.
+        if (versionId != null && !versionId.isBlank()) {
+            if (documentVersionService == null) {
+                return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build());
+            }
+            return documentVersionService.downloadVersion(documentId, versionId)
+                    .map(version -> ResponseEntity.ok()
+                            .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + version.fileName() + "\"")
+                            .contentType(version.contentType() != null ? MediaType.parseMediaType(version.contentType()) : MediaType.APPLICATION_OCTET_STREAM)
+                            .body(version.resource()))
+                    .defaultIfEmpty(ResponseEntity.notFound().build());
         }
 
         return documentService.findDocumentToDownloadById(documentId)

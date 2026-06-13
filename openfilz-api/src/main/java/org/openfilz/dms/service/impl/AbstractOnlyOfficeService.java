@@ -24,6 +24,8 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.DigestOutputStream;
@@ -51,10 +53,12 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
     private final WebClient.Builder webClientBuilder;
 
     @Override
-    public Mono<OnlyOfficeConfigResponse> generateEditorConfig(UUID documentId, boolean canEdit) {
-        return documentDAO.findById(documentId, canEdit ? AccessType.RW : AccessType.RO)
+    public Mono<OnlyOfficeConfigResponse> generateEditorConfig(UUID documentId, boolean canEdit, String versionId) {
+        // Viewing a historical version is always read-only, so request RO access for it.
+        boolean wantsEdit = canEdit && versionId == null;
+        return documentDAO.findById(documentId, wantsEdit ? AccessType.RW : AccessType.RO)
                 .switchIfEmpty(Mono.error(new IllegalArgumentException("Document not found: " + documentId)))
-                .flatMap(document -> buildEditorConfig(document, canEdit));
+                .flatMap(document -> buildEditorConfig(document, canEdit, versionId));
     }
 
     @Override
@@ -86,15 +90,17 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
         return onlyOfficeProperties.isEnabled();
     }
 
-    private Mono<OnlyOfficeConfigResponse> buildEditorConfig(Document document, boolean requestedEdit) {
-        // Subclasses may force a document into read-only mode regardless of the caller's access
-        // level (see isDocumentReadOnly). The base implementation never restricts.
-        final boolean canEdit = requestedEdit && !isDocumentReadOnly(document);
+    private Mono<OnlyOfficeConfigResponse> buildEditorConfig(Document document, boolean requestedEdit, String versionId) {
+        // Viewing a historical version is always read-only. Otherwise subclasses may force a
+        // document into read-only mode regardless of the caller's access (see isDocumentReadOnly);
+        // the base implementation never restricts.
+        final boolean canEdit = versionId == null && requestedEdit && !isDocumentReadOnly(document);
         String documentServerUrl = onlyOfficeProperties.getDocumentServer().getUrl();
         String apiJsUrl = onlyOfficeProperties.getDocumentServer().getApiUrl();
 
-        // Generate document key (unique per version)
-        String documentKey = generateDocumentKey(document);
+        // Generate document key (unique per version — OnlyOffice caches content by key, so a
+        // historical version must get a key distinct from the latest, or it serves stale content)
+        String documentKey = generateDocumentKey(document, versionId);
 
 
 
@@ -104,8 +110,8 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
                     // Generate access token for document download (includes user info for authentication)
                     String accessToken = jwtService.generateAccessToken(document.getId(), userInfo);
 
-                    // Build document URL that OnlyOffice can fetch
-                    String documentUrl = buildDocumentUrl(document.getId(), accessToken);
+                    // Build document URL that OnlyOffice can fetch (pinned to versionId when viewing history)
+                    String documentUrl = buildDocumentUrl(document.getId(), accessToken, versionId);
 
                     // Build callback URL for save events
                     String callbackUrl = buildCallbackUrl(document.getId());
@@ -164,7 +170,15 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
         return false;
     }
 
-    private String generateDocumentKey(Document document) {
+    private String generateDocumentKey(Document document, String versionId) {
+        // OnlyOffice caches document content by key; a distinct key means a distinct instance.
+        // For a specific stored version use a stable version-scoped key so OnlyOffice never
+        // serves the latest content in its place. Keys allow [0-9a-zA-Z.=_-], max 128 chars.
+        if (versionId != null && !versionId.isBlank()) {
+            String safeVersion = versionId.replaceAll("[^0-9a-zA-Z.=_-]", "-");
+            String key = document.getId().toString() + "_v_" + safeVersion;
+            return key.length() > 128 ? key.substring(0, 128) : key;
+        }
         // Key format: documentId_timestamp
         // This ensures a new key after each save, invalidating OnlyOffice cache
         long timestamp = document.getUpdatedAt() != null
@@ -173,14 +187,18 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
         return document.getId().toString() + "_" + timestamp;
     }
 
-    private String buildDocumentUrl(UUID documentId, String accessToken) {
+    private String buildDocumentUrl(UUID documentId, String accessToken, String versionId) {
         // URL for OnlyOffice to download the document
         // Use apiBaseUrl which can be configured to host.docker.internal for Docker setups
         String baseUrl = commonProperties.getApiInternalBaseUrl();
         if (!baseUrl.endsWith("/")) {
             baseUrl += "/";
         }
-        return baseUrl + "api/v1/documents/" + documentId + "/onlyoffice-download?token=" + accessToken;
+        String url = baseUrl + "api/v1/documents/" + documentId + "/onlyoffice-download?token=" + accessToken;
+        if (versionId != null && !versionId.isBlank()) {
+            url += "&versionId=" + URLEncoder.encode(versionId, StandardCharsets.UTF_8);
+        }
+        return url;
     }
 
     private String buildCallbackUrl(UUID documentId) {
