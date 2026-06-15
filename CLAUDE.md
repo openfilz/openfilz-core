@@ -44,6 +44,8 @@ org/openfilz/dms/
 - Template Method: AbstractSecurityService
 - DAO: DocumentDAO for complex queries
 
+**Extensibility convention (open-core boundary):** the core provides `protected`, overridable **hooks** (Template Method) with safe defaults so downstream/extension layers can vary behaviour without core knowing about them. Do **not** bake variant-specific logic, fields, imports, or wording into core base classes — keep base classes free of concepts the core doesn't ship. When an external layer needs to influence core behaviour, add the minimal overridable seam to the base class and implement the real logic in the subclass (e.g. `AbstractOnlyOfficeService.isDocumentReadOnly(Document)` returns `false` by default and is consulted in `buildEditorConfig`). The only acceptable change to a core base class is the seam needed to enable the override.
+
 ---
 
 ## 2. Storage Abstraction
@@ -457,7 +459,23 @@ server.port: 8081
 
 ---
 
-## 14. SDK Modules
+## 14. GraalVM Native Image
+
+Native images are built via the `spring-boot-maven-plugin` (Paketo Buildpacks).
+
+**Conditional beans are evaluated at AOT (build) time.** `@ConditionalOnProperty` / `@Profile` are resolved when the image is built, not at runtime. Two patterns:
+- **Build-time choice (fixed per image):** set the property in `process-aot`.
+- **Runtime toggle (must flip per deployment without rebuilding):** drop `@ConditionalOnProperty`; mark both implementations `@Service @Lazy`; add a `@Configuration` factory with `@Bean @Primary` that reads the property via `@Value` and returns one impl via `ObjectProvider`. The unused impl is in the binary but never instantiated (its `@PostConstruct` never runs). Reference: `config/StorageConfig.java` (storage local vs minio). Note: `storage.type` defaults to `local`; if minio is needed in native, set `storage.type=minio` in AOT.
+
+**Bean Validation needs reflection registration.** Hibernate Validator binds constraints to type-specific validators loaded reflectively, so they need `allDeclaredConstructors` in `reflect-config.json`, or the first request to a validated endpoint crashes with `No default constructor found`. `@Positive`/`@Negative` and friends are not registered by default — prefer `@Min(1)`/`@Max(-1)` (which use the already-registered `MinValidatorForNumber`) for integers. `@Min`/`@Max` are themselves type-specific: a constraint on a `Double`/`BigDecimal` binds to `Min/MaxValidatorForDouble` etc., which must be registered separately. The JVM never hits this (reflection works there) — only the native build does.
+
+**Charsets & filesystem encoding (native-image.properties):** add `-H:+AddAllCharsets` (some libraries call `Charset.forName("windows-1252")`, absent from GraalVM's default subset) and `-Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8` (the builder defaults to a POSIX/US-ASCII locale → `InvalidPathException` for non-ASCII filenames like `é`, `ç`, `ü`). Base64-decoding bytes to a String (e.g. TUS metadata) must pass `StandardCharsets.UTF_8` explicitly.
+
+**Other native fixes:** Flyway migration scanning must use `ClassLoader.getResources()` (plural) instead of Spring's `PathMatchingResourcePatternResolver` to find migrations across multiple JARs (`NativeFlywayMigrationConfig`). Records/DTOs deserialized by Jackson (e.g. `TusUploadMetadata`) need `allDeclaredConstructors/Methods/Fields` in `reflect-config.json`. The global `*.json` `.gitignore` rule is negated by `!native-image-config/**/*.json` so native config JSON stays tracked. Native builds use ~5.6 GB heap each — build sequentially on machines with < 16 GB RAM.
+
+---
+
+## 15. SDK Modules
 
 ```
 openfilz-sdk/
@@ -471,7 +489,7 @@ openfilz-sdk/
 
 ---
 
-## 15. Entry Points & APIs
+## 16. Entry Points & APIs
 
 - **API:** `org.openfilz.dms.DmsApiApplication`
 - **REST:** `/api/v1/*` (Swagger: `/swagger-ui.html`)
@@ -481,7 +499,7 @@ openfilz-sdk/
 
 ---
 
-## 16. Build & Test Commands
+## 17. Build & Test Commands
 
 ### Build
 ```bash
@@ -499,7 +517,27 @@ cd openfilz-api && mvn spring-boot:run              # Run API (port 8081)
 ```bash
 mvn test                                            # All tests (Testcontainers auto-starts PostgreSQL/Keycloak)
 mvn test -pl openfilz-api                           # API tests only
+$env:CI='true'; mvn -q clean verify                # CI-equivalent green build (PowerShell)
 ```
+
+**OnlyOffice E2E is CI-gated — build with `CI=true` for a clean local run.** `OnlyOfficeEnd2EndIT` boots an `onlyoffice/documentserver` container plus a Chrome/Selenium `BrowserWebDriverContainer`. Its browser tests are annotated `@DisabledIfEnvironmentVariable(named="CI", matches="true")` because they need container-to-host networking that CI doesn't provide, so **CI never runs them** — the authoritative green baseline excludes them. Run locally without that flag and a couple of them flake (Chrome can't reliably fetch `api.js` from the OnlyOffice container); this is orthogonal to anything Spring-side, not a regression signal. Set `CI=true` (PowerShell: `$env:CI='true'`) to skip exactly those tests; nothing is `@EnabledIfEnvironmentVariable`, so `CI=true` never turns tests on.
+
+### Coverage
+The merged JaCoCo report (unit + integration via failsafe) is produced by `verify` at `openfilz-api/target/jacoco/jacoco.csv`. Measure locally with `$env:CI='true'; mvn -q clean verify` (CI=true gates the flaky OnlyOffice ITs above; ensure `JAVA_HOME` points at a real JDK 25). A full run is ~12 min across the Postgres/Keycloak/MinIO/OpenSearch/Gotenberg testcontainers. JaCoCo line-missed counts only lines with zero instructions (partially-covered lines count as covered), so to find cheap wins target fully-uncovered lines (`ci==0 and mi>0` in `jacoco.xml`) — typically error/edge branches in `service.impl`, reachable with Mockito (stub async clients to throw to hit catch blocks) + `ReflectionTestUtils.invokeMethod` for private helpers. Use `doReturn(...).when(...)` for methods returning `Mono<? extends X>` (wildcard capture breaks `thenReturn`). Note: the committed coverage badge under `.github/badges/` can read low/misleading versus real merged coverage — trust the merged CSV, not the badge.
+
+### Spring Boot 4 / Jackson 3 notes
+The codebase targets Spring Boot 4 (Spring Framework 7, Jackson 3, Testcontainers 2). Non-obvious points when bumping deps or adding tests:
+- **Test client:** `@SpringBootTest(RANDOM_PORT)` no longer auto-provides a server-bound `WebTestClient`; `@AutoConfigureWebTestClient` (relocated to `org.springframework.boot.webtestclient.autoconfigure`) only builds a mock-bound client. Provide a `@Lazy WebTestClient.bindToServer().baseUrl("http://localhost:" + env.getProperty("local.server.port"))` bean in the shared test config (see `GraphQlTestConfig`).
+- **Windows-only upload hang:** Netty 4.2 FFM buffers break the JDK `AsynchronousFileChannel` on Windows (netty#16071), silently hanging multipart upload/download tests. Run tests with `-Dio.netty.noPreferDirect=true` (surefire/failsafe argLine) AND avoid `DataBufferUtils.write(flux, Path)` (async channel) for received network buffers — use the `WritableByteChannel` overload. Linux is unaffected, so CI can pass while Windows dev hangs.
+- **Module splits (beans silently missing):** `WebClient.Builder` → add `spring-boot-webclient`; Flyway → `spring-boot-starter-flyway` (not `flyway-core`); OAuth2 → `spring-boot-starter-security-oauth2-resource-server`. Auto-config relocations: `o.s.b.autoconfigure.r2dbc.*` → `o.s.b.r2dbc.autoconfigure.*` (data-r2dbc classes also renamed: `R2dbcDataAutoConfiguration` → `DataR2dbcAutoConfiguration`); `FlywayConfigurationCustomizer` → `o.s.b.flyway.autoconfigure.*`; `o.s.b.web.reactive.error.DefaultErrorAttributes` → `o.s.b.webflux.error.*`.
+- **Testcontainers 2:** modules renamed with `testcontainers-` prefix (`testcontainers-postgresql`, `-junit-jupiter`, `-minio`, `-r2dbc`, `-selenium`); drop any pinned 1.x `testcontainers-bom`.
+- **Jackson 3 (`tools.jackson`):** annotations stay `com.fasterxml.jackson.annotation`; `JsonProcessingException` → unchecked `tools.jackson.core.JacksonException` (drop now-impossible `catch (IOException)`). Mappers are immutable: build via `JsonMapper.builder()...build()`; declare the `@Primary` codec bean as `JsonMapper`; java-time support is built in (drop `JavaTimeModule`/`jackson-datatype-jsr310`). Immutable mappers kill runtime `registerSubtypes()` — core exposes a `JsonMapperCustomizer` hook for that. `JsonNode.fields()` → `properties()`, `asText()` → `asString()`. The `spring.jackson.serialization.write-dates-as-timestamps` property fails binding in Boot 4 — it moved to `spring.jackson.datatype.datetime.write-dates-as-timestamps` (don't leave an empty `serialization:` key — it crashes startup). For optional numeric request fields, set `spring.jackson.deserialization.fail-on-null-for-primitives=false` (Jackson 3 fails null→primitive by default). Library modules with explicit `com.fasterxml.jackson.core:jackson-databind` → `tools.jackson.core:jackson-databind`; generated openapi SDKs stay on Jackson 2.
+- **Spring 7 API breaks:** `HttpHeaders.containsKey` → `containsHeader`; reactive `access()` lambdas must return `Mono<AuthorizationResult>`; `HttpStatus.resolve(413)` is now `CONTENT_TOO_LARGE` (not `PAYLOAD_TOO_LARGE`); `jackson2JsonEncoder()` → `jacksonJsonEncoder()`.
+- **Versions known good:** springdoc 3.0.3, graphql-java-extended-scalars 24.0 (with managed graphql-java 25), tika 3.3.1 + pdfbox 3.0.7 (must match), opensearch-java 3.9.0, jjwt 0.13.0. MinIO kept at 8.6.0 (9.x is a full client rewrite — a separate migration). jjwt has no Jackson 3 adapter and stays on Spring-managed Jackson 2.
+
+### Release / publish CI
+The TypeScript SDK (`@openfilz-sdk/typescript`) publishes to npm via **OIDC Trusted Publishing** (no `NPM_TOKEN`): the publish job needs `permissions: id-token: write` (plus `contents: write` / `packages: write`, since declaring permissions zeroes the rest), Node 24 with `npm@latest` (OIDC auto-detection needs npm ≥ 11.5.1), and no `_authToken` line in `.npmrc`. The npmjs Trusted Publisher config must match the repo + workflow **filename** exactly — renaming the release workflow file requires updating it on npmjs too. The Python (twine) and C# (NuGet) SDKs still publish via API tokens.
+- `npm publish` failing with **`E404 ... PUT ... Not found`** is misleading: a 404 on PUT during publish is npm's disguised "not authorized" — it almost always means an expired/invalid/under-scoped credential, NOT a missing package.
 
 ### Local Setup
 ```bash
