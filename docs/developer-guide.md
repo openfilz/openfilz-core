@@ -591,7 +591,7 @@ OpenFilz provides 5 official SDKs auto-generated from the OpenAPI specification.
 | **Java** (blocking) | Java 25+ | [`org.openfilz:openfilz-sdk-java`](https://central.sonatype.com/artifact/org.openfilz/openfilz-sdk-java) | OkHttp + Gson |
 | **Java** (reactive) | Java 25+ / Spring 3+ | [`org.openfilz:openfilz-sdk-java-reactive`](https://central.sonatype.com/artifact/org.openfilz/openfilz-sdk-java-reactive) | WebClient + Reactor |
 | **TypeScript** | Node.js 18+ | [`@openfilz-sdk/typescript`](https://www.npmjs.com/package/@openfilz-sdk/typescript) | Axios |
-| **Python** | Python 3.9+ | [`openfilz-sdk-python`](https://pypi.org/project/openfilz-sdk-python/) | urllib3 + Pydantic |
+| **Python** | Python 3.9+ | [`openfilz-sdk`](https://pypi.org/project/openfilz-sdk/) | urllib3 + Pydantic |
 | **C# / .NET** | .NET 8.0+ | [`OpenFilz.Sdk`](https://www.nuget.org/packages/OpenFilz.Sdk) | HttpClient + Generic Host |
 
 ### Installation
@@ -625,7 +625,7 @@ npm install @openfilz-sdk/typescript
 **Python (pip)**
 
 ```bash
-pip install openfilz-sdk-python
+pip install openfilz-sdk
 ```
 
 **C# (.NET CLI)**

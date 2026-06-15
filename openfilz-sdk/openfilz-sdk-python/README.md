@@ -23,7 +23,7 @@ These samples are automatically tested in CI.
 ## Installation
 
 ```bash
-pip install openfilz-sdk-python
+pip install openfilz-sdk
 ```
 
 ## Quick Start
