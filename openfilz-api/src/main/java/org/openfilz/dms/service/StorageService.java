@@ -174,4 +174,16 @@ public interface StorageService {
     default Mono<String> getLatestVersionId(String storagePath) {
         return Mono.empty();
     }
+
+    /**
+     * Delete noncurrent (non-latest) object versions older than {@code retention}, bucket-wide.
+     * The current/latest version of every object is always kept. No-op for non-versioned storage
+     * implementations or when versioning is disabled.
+     *
+     * @param retention age threshold — versions whose last-modified time is older than this are removed
+     * @return the number of versions deleted
+     */
+    default Mono<Long> cleanupExpiredVersions(java.time.Duration retention) {
+        return Mono.just(0L);
+    }
 }

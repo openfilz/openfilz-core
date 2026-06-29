@@ -30,6 +30,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
+import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -621,6 +623,62 @@ public class MinioStorageService implements StorageService {
                 sink.error(new StorageException("MinIO listFiles failed", e));
             }
         });
+    }
+
+    @Override
+    public Mono<Long> cleanupExpiredVersions(Duration retention) {
+        if (!minioProperties.isVersioningEnabled()) {
+            return Mono.just(0L);
+        }
+        if (Boolean.TRUE.equals(wormMode)) {
+            // WORM / object-lock makes versions immutable — retention cleanup must never run.
+            log.info("WORM mode active — skipping version retention cleanup");
+            return Mono.just(0L);
+        }
+        if (retention == null || retention.isZero() || retention.isNegative()) {
+            // Unlimited retention: keep every version forever.
+            return Mono.just(0L);
+        }
+        return Mono.fromCallable(() -> {
+            OffsetDateTime cutoff = OffsetDateTime.now().minus(retention);
+            long deleted = 0L;
+            Iterable<Result<Item>> results = minioClient.listObjects(
+                    ListObjectsArgs.builder()
+                            .bucket(minioProperties.getBucketName())
+                            .recursive(true)
+                            .includeVersions(true)
+                            .build());
+            for (Result<Item> result : results) {
+                Item item = result.get();
+                // Never touch the current version or delete markers — only prune OLD noncurrent versions.
+                if (item.isLatest() || item.isDeleteMarker() || item.versionId() == null) {
+                    continue;
+                }
+                OffsetDateTime lastModified = item.lastModified() != null
+                        ? item.lastModified().toOffsetDateTime() : null;
+                if (lastModified == null || !lastModified.isBefore(cutoff)) {
+                    continue;
+                }
+                try {
+                    minioClient.removeObject(
+                            RemoveObjectArgs.builder()
+                                    .bucket(minioProperties.getBucketName())
+                                    .object(item.objectName())
+                                    .versionId(item.versionId())
+                                    .build());
+                    deleted++;
+                } catch (Exception e) {
+                    log.warn("Could not delete expired version {} of '{}': {}",
+                            item.versionId(), item.objectName(), e.getMessage());
+                }
+            }
+            log.info("Version retention cleanup: deleted {} expired version(s) older than {}", deleted, retention);
+            return deleted;
+        }).subscribeOn(Schedulers.boundedElastic())
+          .onErrorResume(e -> {
+              log.error("Version retention cleanup failed for bucket '{}'", minioProperties.getBucketName(), e);
+              return Mono.just(0L);
+          });
     }
 
 }

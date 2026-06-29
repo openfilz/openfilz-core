@@ -17,8 +17,12 @@ import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.mockito.ArgumentCaptor;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
+
+import java.time.Duration;
+import java.time.ZonedDateTime;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -538,5 +542,98 @@ class MinioStorageServiceTest {
         ReflectionTestUtils.invokeMethod(service, "ensureBucketExists");
 
         verify(minioClient).getObjectLockConfiguration(any(GetObjectLockConfigurationArgs.class));
+    }
+
+    // ==================== Version retention cleanup ====================
+
+    @Test
+    void cleanupExpiredVersions_disabled_returnsZero() {
+        when(minioProperties.isVersioningEnabled()).thenReturn(false);
+
+        StepVerifier.create(service.cleanupExpiredVersions(Duration.ofDays(30)))
+                .expectNext(0L)
+                .verifyComplete();
+        verifyNoInteractions(minioClient);
+    }
+
+    @Test
+    void cleanupExpiredVersions_wormMode_returnsZeroAndDoesNotTouchStorage() {
+        when(minioProperties.isVersioningEnabled()).thenReturn(true);
+        ReflectionTestUtils.setField(service, "wormMode", true);
+
+        StepVerifier.create(service.cleanupExpiredVersions(Duration.ofDays(30)))
+                .expectNext(0L)
+                .verifyComplete();
+        verifyNoInteractions(minioClient);
+    }
+
+    @Test
+    void cleanupExpiredVersions_unlimitedRetention_returnsZero() {
+        when(minioProperties.isVersioningEnabled()).thenReturn(true);
+
+        StepVerifier.create(service.cleanupExpiredVersions(Duration.ZERO))
+                .expectNext(0L)
+                .verifyComplete();
+        verifyNoInteractions(minioClient);
+    }
+
+    @Test
+    void cleanupExpiredVersions_deletesOnlyOldNoncurrentVersions() throws Exception {
+        when(minioProperties.isVersioningEnabled()).thenReturn(true);
+
+        // current version (recent) — must be kept (guard short-circuits at isLatest)
+        Item latest = mock(Item.class);
+        when(latest.isLatest()).thenReturn(true);
+        Result<Item> rLatest = mock(Result.class);
+        when(rLatest.get()).thenReturn(latest);
+
+        // old noncurrent version — must be DELETED
+        Item old = mock(Item.class);
+        when(old.isLatest()).thenReturn(false);
+        when(old.isDeleteMarker()).thenReturn(false);
+        when(old.versionId()).thenReturn("old-v");
+        when(old.objectName()).thenReturn("docA");
+        when(old.lastModified()).thenReturn(ZonedDateTime.now().minusDays(60));
+        Result<Item> rOld = mock(Result.class);
+        when(rOld.get()).thenReturn(old);
+
+        // recent noncurrent version — within retention, must be kept
+        Item recent = mock(Item.class);
+        when(recent.isLatest()).thenReturn(false);
+        when(recent.isDeleteMarker()).thenReturn(false);
+        when(recent.versionId()).thenReturn("recent-v");
+        when(recent.lastModified()).thenReturn(ZonedDateTime.now().minusDays(5));
+        Result<Item> rRecent = mock(Result.class);
+        when(rRecent.get()).thenReturn(recent);
+
+        // delete marker — must be skipped
+        Item marker = mock(Item.class);
+        when(marker.isLatest()).thenReturn(false);
+        when(marker.isDeleteMarker()).thenReturn(true);
+        Result<Item> rMarker = mock(Result.class);
+        when(rMarker.get()).thenReturn(marker);
+
+        when(minioClient.listObjects(any(ListObjectsArgs.class)))
+                .thenReturn(java.util.List.of(rLatest, rOld, rRecent, rMarker));
+
+        StepVerifier.create(service.cleanupExpiredVersions(Duration.ofDays(30)))
+                .expectNext(1L)
+                .verifyComplete();
+
+        ArgumentCaptor<RemoveObjectArgs> captor = ArgumentCaptor.forClass(RemoveObjectArgs.class);
+        verify(minioClient, times(1)).removeObject(captor.capture());
+        assertEquals("old-v", captor.getValue().versionId());
+        assertEquals("docA", captor.getValue().object());
+    }
+
+    @Test
+    void cleanupExpiredVersions_listFails_returnsZeroGracefully() throws Exception {
+        when(minioProperties.isVersioningEnabled()).thenReturn(true);
+        when(minioClient.listObjects(any(ListObjectsArgs.class)))
+                .thenThrow(new RuntimeException("list failed"));
+
+        StepVerifier.create(service.cleanupExpiredVersions(Duration.ofDays(30)))
+                .expectNext(0L)
+                .verifyComplete();
     }
 }
