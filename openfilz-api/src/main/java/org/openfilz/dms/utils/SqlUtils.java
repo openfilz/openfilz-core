@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Map;
 
 @RequiredArgsConstructor
@@ -65,6 +66,31 @@ public class SqlUtils {
 
     public void appendLikeCriteria(String prefix, String criteria, StringBuilder sql) {
         sql.append("UPPER(").append(prefix == null ? criteria : prefix + criteria).append(") LIKE :").append(criteria).append(SPACE);
+    }
+
+    /**
+     * Appends an OR-group of case-insensitive LIKE clauses on the same column, one per bound pattern:
+     * {@code (LOWER(col) LIKE :criteria_0 OR LOWER(col) LIKE :criteria_1 ) }. A pattern with no
+     * {@code %} wildcard behaves as an exact (case-insensitive) match. Bind the values with
+     * {@link #bindLikeAnyCriteria(String, List, DatabaseClient.GenericExecuteSpec)}.
+     */
+    public void appendLikeAnyCriteria(String prefix, String criteria, int count, StringBuilder sql) {
+        String column = prefix == null ? criteria : prefix + criteria;
+        sql.append("(");
+        for (int i = 0; i < count; i++) {
+            if (i > 0) {
+                sql.append("OR ");
+            }
+            sql.append("LOWER(").append(column).append(") LIKE :").append(criteria).append(UNDERSCORE).append(i).append(SPACE);
+        }
+        sql.append(") ");
+    }
+
+    public DatabaseClient.GenericExecuteSpec bindLikeAnyCriteria(String criteria, List<String> patterns, DatabaseClient.GenericExecuteSpec query) {
+        for (int i = 0; i < patterns.size(); i++) {
+            query = query.bind(criteria + UNDERSCORE + i, patterns.get(i).toLowerCase());
+        }
+        return query;
     }
 
     public void appendLessThanCriteria(String prefix, String criteria, StringBuilder sql) {
