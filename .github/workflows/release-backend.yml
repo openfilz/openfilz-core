@@ -53,9 +53,11 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: '24'
-
-      - name: Upgrade npm for OIDC Trusted Publishing
-        run: npm install -g npm@latest   # OIDC publishing requires npm >= 11.5.1
+      # Node 24.18+ bundles npm 11.16+, which already satisfies OIDC Trusted Publishing
+      # (needs npm >= 11.5.1). We intentionally do NOT run `npm install -g npm@latest`:
+      # its self-upgrade currently ships a tree whose bundled `sigstore` is missing, so
+      # `npm publish` provenance dies with "Cannot find module 'sigstore'" (npm/cli#9722).
+      # Rely on the pristine Node-bundled npm instead.
 
       - name: Set up Python 3
         uses: actions/setup-python@v6
