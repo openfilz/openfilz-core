@@ -49,7 +49,7 @@ class DocumentSearchGraphQlControllerTest {
     void thumbnailUrl_forFolder_usesFolderTypeAndNullContentType() {
         UUID id = UUID.randomUUID();
         DocumentSearchInfo folder = new DocumentSearchInfo(id, "dir", null, null, null, null, null, null, null, null);
-        when(thumbnailUrlResolver.resolveThumbnailUrl(id, DocumentType.FOLDER, null))
+        when(thumbnailUrlResolver.resolveThumbnailUrl(id, DocumentType.FOLDER, null, null))
                 .thenReturn(Mono.just("folder-url"));
 
         StepVerifier.create(controller.documentSearchInfoThumbnailUrl(folder))
@@ -61,7 +61,7 @@ class DocumentSearchGraphQlControllerTest {
     void thumbnailUrl_forFile_derivesContentTypeFromExtensionWhenMissing() {
         UUID id = UUID.randomUUID();
         DocumentSearchInfo file = new DocumentSearchInfo(id, "report", "pdf", null, 1L, null, null, null, null, null);
-        when(thumbnailUrlResolver.resolveThumbnailUrl(id, DocumentType.FILE, "application/pdf"))
+        when(thumbnailUrlResolver.resolveThumbnailUrl(id, DocumentType.FILE, "application/pdf", null))
                 .thenReturn(Mono.just("file-url"));
 
         StepVerifier.create(controller.documentSearchInfoThumbnailUrl(file))
@@ -73,7 +73,7 @@ class DocumentSearchGraphQlControllerTest {
     void thumbnailUrl_forFile_keepsExplicitContentType() {
         UUID id = UUID.randomUUID();
         DocumentSearchInfo file = new DocumentSearchInfo(id, "img", "png", "image/png", 1L, null, null, null, null, null);
-        when(thumbnailUrlResolver.resolveThumbnailUrl(id, DocumentType.FILE, "image/png"))
+        when(thumbnailUrlResolver.resolveThumbnailUrl(id, DocumentType.FILE, "image/png", null))
                 .thenReturn(Mono.just("img-url"));
 
         StepVerifier.create(controller.documentSearchInfoThumbnailUrl(file))

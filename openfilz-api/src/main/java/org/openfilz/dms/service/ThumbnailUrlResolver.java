@@ -7,6 +7,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 import static org.openfilz.dms.config.RestApiVersion.API_PREFIX;
@@ -46,6 +48,26 @@ public class ThumbnailUrlResolver {
      * @return a Mono containing the thumbnail URL, or empty if not available
      */
     public Mono<String> resolveThumbnailUrl(UUID id, DocumentType type, String contentType) {
+        return resolveThumbnailUrl(id, type, contentType, null);
+    }
+
+    /**
+     * Resolves the thumbnail URL for a document, adding a cache-busting version token.
+     * <p>
+     * The thumbnail endpoint is keyed only by document id and served with a long
+     * {@code Cache-Control} max-age, so replacing/restoring a document's content would
+     * otherwise keep serving the stale cached image (the URL never changes). Appending a
+     * {@code ?v=<version>} token that changes whenever the content changes (e.g. the
+     * document's {@code updatedAt}) forces both the browser cache and the frontend image
+     * directive to fetch the freshly generated thumbnail.
+     *
+     * @param id          the document ID
+     * @param type        the document type (FILE or FOLDER)
+     * @param contentType the content type of the document
+     * @param version     a token that changes when the content changes (nullable)
+     * @return a Mono containing the thumbnail URL, or empty if not available
+     */
+    public Mono<String> resolveThumbnailUrl(UUID id, DocumentType type, String contentType, String version) {
         // Feature not active
         if (thumbnailProperties == null || thumbnailStorageService == null) {
             return Mono.empty();
@@ -66,6 +88,9 @@ public class ThumbnailUrlResolver {
                 .flatMap(exists -> {
                     if (exists) {
                         String url = commonProperties.getApiPublicBaseUrl() + API_PREFIX + ENDPOINT_THUMBNAILS + "/img/" + id;
+                        if (version != null && !version.isBlank()) {
+                            url += "?v=" + URLEncoder.encode(version, StandardCharsets.UTF_8);
+                        }
                         return Mono.just(url);
                     }
                     return Mono.empty();
