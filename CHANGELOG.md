@@ -4,29 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[2a92156b8494952](https://github.com/openfilz/openfilz-core/commit/2a92156b8494952) maven-release-bot[bot] *2026-07-09 18:58:06*
+[5ca0d0616d58bb2](https://github.com/openfilz/openfilz-core/commit/5ca0d0616d58bb2) maven-release-bot[bot] *2026-07-28 23:09:00*
 
 
-## v1.2.14
+## v1.2.15
 ### No issue
 
-**[maven-release-plugin] prepare release v1.2.14**
+**[maven-release-plugin] prepare release v1.2.15**
 
 
-[77b47499de94792](https://github.com/openfilz/openfilz-core/commit/77b47499de94792) maven-release-bot[bot] *2026-07-09 18:58:03*
+[528ecb6b2ce86ad](https://github.com/openfilz/openfilz-core/commit/528ecb6b2ce86ad) maven-release-bot[bot] *2026-07-28 23:08:57*
 
-**ci(release): stop upgrading npm — bundled npm 11.16 has sigstore, self-upgrade doesn't**
+**Merge pull request #176 from openfilz/develop**
 
- * The release-backend.yml &#x60;npm install -g npm@latest&#x60; step ships a broken npm
- * whose bundled &#x60;sigstore&#x60; is missing, so the TypeScript SDK&#x27;s &#x60;npm publish&#x60;
- * (provenance auto-enabled under OIDC Trusted Publishing) fails with
- * &#x60;Cannot find module &#x27;sigstore&#x27;&#x60; in libnpmpublish/lib/provenance.js (npm/cli#9722).
- * Node 24.18 already bundles npm 11.16, which is &gt;&#x3D; 11.5.1 (the OIDC minimum) and
- * has an intact sigstore. Remove the self-upgrade and rely on the pristine
- * Node-bundled npm.
- * Co-Authored-By: Claude Opus 4.8 &lt;noreply@anthropic.com&gt;
- * (cherry picked from commit 10620ff17e0229b8ff6e874828c3b06344d9c6d1)
+ * Develop
 
-[2680b6125deb952](https://github.com/openfilz/openfilz-core/commit/2680b6125deb952) yanndemel *2026-07-09 18:54:11*
+[f9459762dd9f5c7](https://github.com/openfilz/openfilz-core/commit/f9459762dd9f5c7) Yann Demel *2026-07-28 23:06:15*
 
 
