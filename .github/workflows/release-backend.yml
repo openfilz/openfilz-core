@@ -23,6 +23,8 @@ jobs:
   build:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    outputs:
+      releaseVersion: ${{ steps.versions.outputs.releaseVersion }}
     permissions:
       contents: write      # create tags, releases, push changelog
       packages: write      # jib push to ghcr.io
@@ -212,3 +214,64 @@ jobs:
         run: |
           rm -f ~/.git-credentials
           git config --global --unset credential.helper || true
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Helm charts ride the same release train as the images: once the tag exists
+  # and the jib images are pushed (release:perform above), package deploy/helm/*
+  # at the release version and push them as OCI artifacts to
+  # oci://ghcr.io/openfilz/charts/<name>:<version> (same registry family, same
+  # GITHUB_TOKEN). Kept as a SEPARATE job so a chart-publish failure never
+  # blocks the release itself and can be re-run alone.
+  # NOTE: the first publish of each chart creates a PRIVATE ghcr package —
+  # flip charts/openfilz-* to public once in the ghcr UI (like the images).
+  # ──────────────────────────────────────────────────────────────────────────
+  publish-helm-charts:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write      # helm push to ghcr.io
+    env:
+      VERSION: ${{ needs.build.outputs.releaseVersion }}
+      CHARTS_REGISTRY: oci://ghcr.io/${{ github.repository_owner }}/charts
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: v${{ needs.build.outputs.releaseVersion }}   # the tag release:prepare pushed
+
+      - uses: azure/setup-helm@v4
+
+      - name: Helm registry login (ghcr)
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Stamp chart versions
+        # `helm package --version/--app-version` stamps the chart being
+        # packaged, but the openfilz-ce umbrella vendors its file://
+        # dependencies from the on-disk directories — so also stamp the
+        # Chart.yaml files themselves (version + appVersion, and openfilz-ce's
+        # dependency constraints: the 4-space-indented `version:` lines). The
+        # subcharts' appVersion matters: it is the image-tag default.
+        # Workspace-only edits; nothing is committed.
+        run: |
+          for f in deploy/helm/openfilz-api/Chart.yaml \
+                   deploy/helm/openfilz-web/Chart.yaml \
+                   deploy/helm/openfilz-shared/Chart.yaml \
+                   deploy/helm/openfilz-ce/Chart.yaml; do
+            sed -i -E \
+              -e "s/^(version:).*/\1 $VERSION/" \
+              -e "s/^(appVersion:).*/\1 \"$VERSION\"/" \
+              -e "s/^(    version: ).*/\1\"$VERSION\"/" \
+              "$f"
+          done
+
+      - name: Package and push charts
+        run: |
+          set -euo pipefail
+          helm dependency update deploy/helm/openfilz-ce
+          mkdir -p target/charts-dist
+          for c in openfilz-api openfilz-web openfilz-shared openfilz-ce; do
+            helm lint "deploy/helm/$c"
+            helm package "deploy/helm/$c" --version "$VERSION" --app-version "$VERSION" -d target/charts-dist
+            helm push "target/charts-dist/$c-$VERSION.tgz" "$CHARTS_REGISTRY"
+          done
+          echo "Published $CHARTS_REGISTRY/{openfilz-api,openfilz-web,openfilz-shared,openfilz-ce}:$VERSION"

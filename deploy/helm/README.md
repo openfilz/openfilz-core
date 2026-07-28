@@ -77,6 +77,18 @@ chart's README and values.yaml.
 
 ## Releases
 
-Released charts are published as OCI artifacts:
-`oci://ghcr.io/openfilz/charts/<name>:<version>` (version stamped at package
-time); `openfilz-ce` and `openfilz-shared` are public.
+Every backend release publishes all four charts as OCI artifacts —
+`oci://ghcr.io/openfilz/charts/<name>:<version>` — from the
+`publish-helm-charts` job in `.github/workflows/release-backend.yml`. The
+chart version and appVersion are stamped with the release version at package
+time (appVersion is the default image tag, so chart X.Y.Z runs images X.Y.Z),
+alongside the images pushed by the same pipeline. Install directly from the
+registry, e.g.:
+
+```bash
+helm install openfilz oci://ghcr.io/openfilz/charts/openfilz-ce --version <X.Y.Z> \
+  -n openfilz --create-namespace [ --set ... ]
+```
+
+(OCI packages embed their dependencies — no `helm dependency build` needed;
+that step is only for installs from a source checkout.)
