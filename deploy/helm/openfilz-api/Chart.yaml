@@ -1,15 +1,16 @@
-# kube-deploy/helm-openfilz-api/Chart.yaml
 apiVersion: v2
 name: openfilz-api
-description: A Helm chart for deploying the Document Management API.
-version: 1.0.0
-appVersion: "0.0.1-SNAPSHOT"
-
-dependencies:
-  - name: common
-    version: "2.x.x"
-    repository: "https://charts.bitnami.com/bitnami"
-    # The 'common' chart is used for standardized helpers and labels.
-
+description: >-
+  OpenFilz Community Edition API (REST + GraphQL). Deployable standalone
+  (bring your own PostgreSQL / Keycloak) or as a subchart of the openfilz-ce
+  umbrella chart, which wires the database/host/auth conventions through the
+  `global:` values block.
+type: application
+version: 1.1.0
+appVersion: "latest"
+keywords:
+  - openfilz
+  - dms
+home: https://openfilz.com
 sources:
   - https://github.com/openfilz/openfilz-core

@@ -188,3 +188,40 @@ jobs:
         run: |
           rm -f ~/.git-credentials
           git config --global --unset credential.helper || true
+
+  # Fast guard-rail for the Helm charts published by the release workflow:
+  # lint every chart and render the meaningful variants so template/values
+  # drift is caught on develop, not on release day.
+  helm-charts:
+    runs-on: ubuntu-latest
+    if: github.actor != 'maven-release-bot' && github.actor != 'maven-release-bot[bot]'
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: azure/setup-helm@v4
+
+      - name: Lint and render charts
+        run: |
+          set -euo pipefail
+          helm dependency build deploy/helm/openfilz-ce
+          for c in openfilz-api openfilz-web openfilz-shared openfilz-ce; do
+            helm lint "deploy/helm/$c"
+          done
+          # umbrella: default + minio/onlyoffice/fulltext/backup variant
+          helm template ce deploy/helm/openfilz-ce --set db.password=x >/dev/null
+          helm template ce deploy/helm/openfilz-ce --set db.password=x \
+            --set openfilz-api.storage.type=minio \
+            --set openfilz-api.storage.minio.bucketName=b \
+            --set global.onlyoffice.enabled=true --set global.onlyoffice.jwtSecret=j \
+            --set openfilz-api.features.fulltext=true \
+            --set backup.enabled=true --set backup.s3.bucket=b \
+            --set backup.s3.accessKey=a --set backup.s3.secretKey=s >/dev/null
+          # components: standalone example values
+          helm template api deploy/helm/openfilz-api -f deploy/helm/openfilz-api/example-values/values-kind.yaml >/dev/null
+          helm template api deploy/helm/openfilz-api -f deploy/helm/openfilz-api/example-values/values-oc.yaml >/dev/null
+          helm template web deploy/helm/openfilz-web -f deploy/helm/openfilz-web/example-values/values-kind.yaml >/dev/null
+          helm template web deploy/helm/openfilz-web -f deploy/helm/openfilz-web/example-values/values-oc.yaml >/dev/null
+          # shared services
+          helm template shared deploy/helm/openfilz-shared \
+            --set keycloak.adminPassword=x --set keycloak.db.password=y >/dev/null
+          echo "All charts lint + render clean"

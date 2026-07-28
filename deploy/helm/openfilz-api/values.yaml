@@ -1,175 +1,174 @@
-# helm-openfilz-api/values.yaml
+# Default values for the openfilz-api chart.
+#
+# Env names mirror openfilz-core/deploy/docker-compose/dokploy/compose.yaml (the
+# authoritative CE deployment); keep them in sync when the compose evolves.
+#
+# The chart works standalone (bring your own PostgreSQL / Keycloak) and as a
+# subchart of the openfilz-ce umbrella chart. Cross-cutting settings can come
+# from the `global:` block (set by the umbrella); every global key has a
+# chart-local equivalent below that wins when set.
 
-# -- Global settings that are passed to all sub-charts.
-# @param global Namespace to deploy the chart. It's recommended to use `helm install --namespace` instead.
+# Shared values injected by the openfilz-ce umbrella chart — leave empty for a
+# standalone install (set the chart-local keys instead).
 global: {}
+  # ce:
+  #   enabled: true          # umbrella wiring: DB host defaults to <release>-postgres,
+  #                          # DB secret to <release>-db (key `postgres-password`)
+  # imageTag: ""             # pin one image tag for every OpenFilz subchart
+  # hosts: { web: "", api: "" }
+  # ingress: { enabled: true, className: "", tlsSecretName: "" }
+  # auth: { enabled: true, realmInternalUrl: "" }
+  # db: { name: "", user: "", existingSecret: "" }   # existingSecret key: postgres-password
+  # onlyoffice: { enabled: false, internalUrl: "", jwtSecret: "" }
+  # nodeSelector: {}
+  # tolerations: []
 
-route:
-  hostname: &route-hostname ""
+nameOverride: ""
+fullnameOverride: ""
 
-# -- Common labels and annotations to apply to all resources.
-# @param common.labels Custom labels to add to all resources.
-# @param common.annotations Custom annotations to add to all resources.
-common: {}
-
-# -- Set to true if deploying on OpenShift.
-# @param openshift.enabled Enables OpenShift-specific resources and deployment logic.
-openshift:
-  enabled: false
-  # -- Configuration for the OpenShift Route.
-  # This section is only used when `openshift.enabled` is true.
-  route:
-    enabled: false
-    # @param openshift.route.hostname The hostname for the Route (e.g., api.example.com). If empty, OpenShift will generate one.
-    hostname: *route-hostname
-    # -- TLS configuration for the Route.
-    # For more info, see: https://docs.openshift.com/container-platform/latest/networking/routes/secured-routes.html
-    tls:
-      # @param openshift.route.tls.enabled Enable TLS termination for the Route.
-      enabled: true
-      # @param openshift.route.tls.termination TLS termination policy. Valid values: 'edge', 'passthrough', 'reencrypt'.
-      termination: "edge"
-      # @param openshift.route.tls.insecureEdgeTerminationPolicy Policy for handling insecure traffic. Valid values: 'Allow', 'Disable', 'Redirect'.
-      insecureEdgeTerminationPolicy: "Redirect"
-      # -- IMPORTANT: Do not commit plain-text keys or certificates to Git.
-      # Use Helm secrets or --set for production values.
-      # @param openshift.route.tls.key The private key for the TLS certificate.
-      key: ""
-      # @param openshift.route.tls.certificate The public TLS certificate.
-      certificate: ""
-      # @param openshift.route.tls.caCertificate The CA certificate for the chain.
-      caCertificate: ""
-      # @param openshift.route.tls.destinationCACertificate The CA cert to validate the destination server in 'reencrypt' deployments.
-      destinationCACertificate: ""
-
-# -- Number of application pods to run.
-# @param replicaCount The number of replicas for the Deployment.
 replicaCount: 1
 
-# -- Image configuration.
-# @param image.registry The container image registry.
-# @param image.repository The container image repository.
-# @param image.tag The container image tag.
-# @param image.pullPolicy The image pull policy.
-# @param image.pullSecrets Secrets for pulling images from a private registry.
 image:
   registry: ghcr.io
   repository: openfilz/openfilz-api
-  tag: latest
+  tag: ""                    # default: global.imageTag, then the chart appVersion
   pullPolicy: Always
   pullSecrets: []
 
-# -- Application and server settings.
-# @param api.port The container port the application listens on.
 api:
-  port: 9984
-  # Comma-separated list of authorized origins
-  corsAllowedUrls: ""
+  port: 8080
 
-# -- Spring Boot profile settings.
-# @param spring.activeProfile The active Spring profile (e.g., kube, dev).
-spring:
-  activeProfile: ""
+# Public hostnames (no scheme). Fall back to global.hosts.* when empty. Used
+# for the ingress host, the public URLs below and the CORS default.
+hosts:
+  api: ""
+  web: ""
 
-# -- Database connection configuration.
+# Public base URLs default to https://<host>. Override for http or non-443
+# ports (e.g. kind / port-forward setups).
+urls:
+  publicApiBaseUrl: ""
+  publicWebBaseUrl: ""
+
+auth:
+  # null → global.auth.enabled → true. When false the API runs with
+  # OPENFILZ_SECURITY_NO_AUTH=true (no Keycloak needed — dev/eval only).
+  enabled: null
+  # KEYCLOAK_REALM_URL — in-cluster realm URL used for JWT validation.
+  realmInternalUrl: ""
+  # Comma-separated allowed origins; default: the public web base URL.
+  corsAllowedOrigins: ""
+
 database:
-  # @param database.host The hostname of the database server.
-  host: "localhost"
-  # @param database.port The port of the database server.
+  # Empty host → <release>-postgres when installed under openfilz-ce, else localhost.
+  host: ""
   port: 5432
-  # @param database.name The name of the database.
-  name: "dms-db"
-  # @param database.existingSecret Name of an existing Secret with DB credentials (keys: `user`, `password`).
-  # If provided, `createUser` and `createPassword` are ignored.
+  name: ""                   # → global.db.name → dms_db
+  user: ""                   # → global.db.user → dms_user
+  # Standalone only: password stored in the chart-created secret
+  # <fullname>-db-credentials. Set it explicitly — when empty a random one is
+  # generated at EVERY upgrade.
+  password: ""
+  # Bring-your-own secret (wins over the chart-created one and the umbrella's).
   existingSecret: ""
-  # @param database.createUser The database username to create in the new Secret.
-  createUser: "app"
-  # @param database.createPassword The database password to create. If empty, a random one is generated.
-  createPassword: ""
+  secretKeys:
+    user: ""                 # if set, DB_USER is read from the secret too
+    password: "password"
 
-# -- Storage configuration for the application.
-# These values are used to construct the JAVA_TOOL_OPTIONS environment variable.
 storage:
-  # @param storage.type The type of storage backend (e.g., 'local' or 'minio').
-  type: local
-  # @param storage.basePath The path within the container where the volume is mounted.
-  basePath: /var/data/ged
+  type: local                # local | minio
+  local:
+    basePath: /var/data/openfilz
+  # PVC for storage.type=local (documents + thumbnails)
+  persistence:
+    size: 10Gi
+    storageClassName: ""
+    accessModes: ["ReadWriteOnce"]
+    existingClaim: ""
+    # If set (and no existingClaim), a hostPath PersistentVolume is also
+    # created — local kind/dev clusters only.
+    hostPath: ""
+  # Used only when type: minio
+  minio:
+    endpoint: ""
+    accessKey: ""
+    secretKey: ""
+    existingSecret: ""       # keys: access-key, secret-key
+    bucketName: ""
+    region: ""
 
-# -- Extra environment variables.
-# These key-value pairs will be stored in a chart-managed ConfigMap and
-# injected into the container via envFrom. This lets you add arbitrary
-# environment variables without modifying the chart templates.
-# Example:
-#   extraEnv:
-#     MINIO_URL: "http://minio.svc:9000"
-#     MINIO_BUCKET_NAME: "my-bucket"
-# @param extraEnv A map of extra environment variables for the container.
+features:
+  thumbnails: false          # needs gotenberg.url
+  softDelete: true
+  checksum: false
+  fulltext: false            # needs opensearch.*
+
+gotenberg:
+  url: ""                    # e.g. http://shared-gotenberg.openfilz-shared.svc.cluster.local:3000
+
+opensearch:
+  host: ""
+  port: 9200
+  scheme: http
+
+onlyoffice:
+  # null → global.onlyoffice.enabled → false
+  enabled: null
+  internalUrl: ""            # → global.onlyoffice.internalUrl
+  jwtSecret: ""              # → global.onlyoffice.jwtSecret
+
+# Quotas (MB, 0 = no limit)
+quotas:
+  fileUploadMb: 1024
+  userMb: 2048
+
+# Extra environment variables injected via a chart-managed ConfigMap (envFrom).
 extraEnv: {}
-
-# -- Reference to an existing Secret whose data will be injected as
-# environment variables via envFrom. Useful for sensitive values like
-# API keys or third-party credentials.
-# @param extraEnvSecretRef Name of an existing Secret to load env vars from.
+# Existing Secret injected as environment variables via envFrom.
 extraEnvSecretRef: ""
 
-# -- Service resource configuration.
-# @param service.type The type of Kubernetes Service.
-# @param service.port The port the Service will expose.
 service:
   type: ClusterIP
-  port: 80
+  port: 8080
 
-# -- Ingress resource configuration (used only when `openshift.enabled` is false).
-# @param ingress.enabled Enables the Ingress resource.
-# @param ingress.ingressClassName The class of the Ingress controller.
-# @param ingress.annotations Annotations for the Ingress resource.
 ingress:
-  enabled: true
-  # @param ingress.ingressClassName The class of the Ingress controller.
-  ingressClassName: "nginx"
-  # @param ingress.path The path for the Ingress rule.
-  swagger:
-    enabled: true
+  # null → global.ingress.enabled → true
+  enabled: null
+  className: ""              # → global.ingress.className
+  tlsSecretName: ""          # → global.ingress.tlsSecretName; empty = no TLS block
+  annotations: {}
   paths:
-    - /api
-    - /graphql
-  # @param ingress.annotations Annotations for the Ingress resource.
-  # The rewrite-target is set to '/$1' or '/$2' depending on the path's regex.
-  # For a simple path like '/', no rewrite is typically needed unless stripping the path.
-  # For a path like '/api(/|$)(.*)', a rewrite to '/$2' would be appropriate.
-  annotations:
-    # kubernetes.io/ingress.class: nginx
-    nginx.ingress.kubernetes.io/proxy-buffering: "on"
-    nginx.ingress.kubernetes.io/proxy-buffers-number: "16"
-    nginx.ingress.kubernetes.io/proxy-buffer-size: "256k"
-    nginx.ingress.kubernetes.io/proxy-max-temp-file-size: "2048m"
-    nginx.ingress.kubernetes.io/proxy-body-size: "1024m"
-    nginx.org/client-max-body-size: "1024m"
-    # rest of nginx config #
-  labels: {}
+    - /
+  # Extra Ingress exposing the Swagger/OpenAPI endpoints (off by default).
+  swagger:
+    enabled: false
 
-# -- Persistence configuration.
-persistence:
-  # @param persistence.enabled Enable persistence using a PersistentVolumeClaim.
-  enabled: true
-  # @param persistence.accessModes PVC access modes.
-  accessModes:
-    - ReadWriteOnce
-  # @param persistence.size PVC storage size.
-  size: 10Mi
-  # @param persistence.storageClass PVC StorageClass. For OpenShift, use a dynamic provisioner like 'thin-csi'.
-  # For manual PV on non-OpenShift, set to a matching class (e.g., 'manual').
-  storageClass: ""
-  # @param persistence.hostPath The host path for the manual PV. Used only when `openshift.enabled` is false.
-  hostPath: /tmp/kube-storage
-  # @param persistence.existingClaim Use an existing PVC instead of creating a new one.
-  existingClaim: ""
+# OpenShift: use a Route instead of an Ingress.
+openshift:
+  enabled: false
+  route:
+    enabled: false
+    hostname: ""             # default: hosts.api (empty = OpenShift generates one)
+    tls:
+      enabled: true
+      termination: "edge"
+      insecureEdgeTerminationPolicy: "Redirect"
+      # Do not commit plain-text keys/certs — use --set or helm secrets.
+      key: ""
+      certificate: ""
+      caCertificate: ""
+      destinationCACertificate: ""
 
-# -- Resources
+# Paketo buildpack image runs as uid 1002 / gid 1000; fsGroup makes the PVC
+# group-writable so no chown init container is needed.
+podSecurityContext:
+  runAsUser: 1002
+  runAsGroup: 1000
+  fsGroup: 1000
+
 resources:
-  requests:
-    cpu: 100m
-    memory: 256Mi
-  limits:
-    cpu: 1
-    memory: 1024Mi
+  requests: { cpu: 100m, memory: 512Mi }
+  limits: { memory: 1Gi }
+
+nodeSelector: {}             # → global.nodeSelector
+tolerations: []              # → global.tolerations

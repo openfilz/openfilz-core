@@ -1,0 +1,160 @@
+# Default values — shared services for the openfilz-shared namespace.
+# Env names mirror the authoritative compose
+# (deploy/docker-compose/dokploy/compose.yaml) — keep them in sync when it
+# evolves.
+
+hosts:
+  auth: auth-demo.openfilz.com
+  # OnlyOffice public hostname — only used when onlyoffice.enabled
+  docs: docs-demo.openfilz.com
+
+ingress:
+  enabled: true
+  className: traefik
+  # Wildcard *.openfilz.com cert (cert-manager DNS-01) — secret must exist in this
+  # namespace (or be synced into it, e.g. with reflector).
+  tlsSecretName: wildcard-openfilz-com-tls
+  annotations: {}
+
+images:
+  # The OpenFilz Keycloak image (public) — built from deploy/docker-compose/
+  # dokploy/keycloak/: bakes the realm export (the initial load on first start)
+  # + the OpenFilz login/email themes; the entrypoint envsubst's
+  # KEYCLOAK_PUBLIC_URL / OPENFILZ_WEB_ROOT_URL / default role+group vars into
+  # the realm at import. A customized image (different baked realm, extra
+  # providers) can be swapped in via this value + images.pullSecrets +
+  # keycloak.extraEnv below — see "Replacing the Keycloak image" in the README.
+  keycloak: ghcr.io/openfilz/keycloak:26.5
+  keycloakDb: postgres:17-alpine
+  opensearch: opensearchproject/opensearch:2.19.1
+  gotenberg: gotenberg/gotenberg:8
+  onlyoffice: onlyoffice/documentserver:latest
+  pullPolicy: Always
+  # Pull secrets for the Keycloak pod (needed when images.keycloak is replaced
+  # by an image from a private registry). List of {name: <secret>}.
+  pullSecrets: []
+
+# =============================================================================
+# Keycloak — one realm per tenant/demo; the image bakes the realm export
+# (template realm) + the OpenFilz login/email themes.
+# =============================================================================
+keycloak:
+  enabled: true
+  adminUser: admin
+  # Required unless existingSecret is set (secret keys: admin-password, db-password).
+  adminPassword: ""
+  existingSecret: ""
+  # OPENFILZ_WEB_ROOT_URL — substituted into the baked realm export at import time
+  # (entrypoint.sh envsubst). Only affects the template realm; per-tenant realms are
+  # created afterwards via the Keycloak Admin API with their own URLs.
+  webRootUrl: https://ce-demo.openfilz.com
+  # Default role/group for new users — applied to the 4 realm-substitution slots
+  # (KEYCLOAK_DEFAULT_ROLE_1..4 / KEYCLOAK_DEFAULT_GROUP_1..4).
+  defaultRole: READER
+  defaultGroup: /OPENFILZ/READER
+  smtp:
+    host: ""
+    port: "587"
+    from: noreply@openfilz.com
+    ssl: "false"
+    starttls: "true"
+    auth: "true"
+    user: ""
+    password: ""
+  # Identity providers / social login (empty = provider stays unconfigured)
+  idp:
+    googleClientId: ""
+    googleClientSecret: ""
+    githubClientId: ""
+    githubClientSecret: ""
+    microsoftClientId: ""
+    microsoftClientSecret: ""
+  # Extra environment variables for the Keycloak container (map name: value) —
+  # the seam for image-specific settings a replacement image needs (webhook
+  # providers, truststores, ...).
+  extraEnv: {}
+  # Existing Secret injected via envFrom — for sensitive extras.
+  extraEnvSecretRef: ""
+  # Dedicated small PostgreSQL for Keycloak only ({{ .Release.Name }}-keycloak-db)
+  db:
+    name: keycloak_db
+    user: keycloak
+    # Required unless keycloak.existingSecret is set.
+    password: ""
+    storage: 10Gi                # hcloud CSI minimum is 10Gi
+    storageClassName: hcloud-volumes
+
+# =============================================================================
+# OpenSearch — single node, security plugin disabled (in-cluster access only,
+# guarded by NetworkPolicy). No ulimits in k8s: memory_lock is disabled via env.
+# =============================================================================
+opensearch:
+  enabled: true
+  javaOpts: -Xms512m -Xmx512m
+  storage: 10Gi
+  storageClassName: hcloud-volumes
+
+# =============================================================================
+# Gotenberg — stateless document conversion (thumbnails, PDF)
+# =============================================================================
+gotenberg:
+  enabled: true
+  # Container args — mirror the CE compose command flags.
+  args:
+    - "gotenberg"
+    - "--api-timeout=60s"
+    - "--libreoffice-restart-after=100"
+    - "--libreoffice-auto-start=true"
+    - "--log-level=info"
+
+# =============================================================================
+# OnlyOffice document server (disabled by default — enable when a tenant needs
+# collaborative editing; JWT secret is per-installation, shared with the APIs).
+# =============================================================================
+onlyoffice:
+  enabled: false
+  # Required when enabled, unless existingSecret is set (secret key: jwt-secret).
+  jwtSecret: ""
+  existingSecret: ""
+  persistence:
+    data:
+      enabled: false
+      size: 10Gi
+      storageClassName: hcloud-volumes
+    logs:
+      enabled: false
+      size: 10Gi
+      storageClassName: hcloud-volumes
+
+# Schedule on the tenant pool (mgmt pool is tainted anyway).
+nodeSelector:
+  openfilz.com/pool: tenant
+tolerations: []
+
+networkPolicy:
+  enabled: true
+  # Namespace that runs the Traefik ingress controller (k3s default: kube-system)
+  ingressControllerNamespace: kube-system
+  # Namespaces carrying this label may reach the shared services (keycloak 8080,
+  # opensearch 9200, gotenberg 3000, onlyoffice 80). The provisioner labels every
+  # tenant/demo namespace with it.
+  tenantAccessLabel:
+    key: openfilz.com/tenant-access
+    value: "true"
+
+resources:
+  keycloak:
+    requests: { cpu: 200m, memory: 1Gi }
+    limits: { memory: 2Gi }
+  keycloakDb:
+    requests: { cpu: 50m, memory: 256Mi }
+    limits: { memory: 512Mi }
+  opensearch:
+    requests: { cpu: 200m, memory: 1Gi }
+    limits: { memory: 1536Mi }
+  gotenberg:
+    requests: { cpu: 100m, memory: 512Mi }
+    limits: { memory: 1Gi }
+  onlyoffice:
+    requests: { cpu: 500m, memory: 2Gi }
+    limits: { memory: 4Gi }

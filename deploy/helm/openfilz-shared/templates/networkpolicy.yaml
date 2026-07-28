@@ -1,0 +1,92 @@
+{{- if .Values.networkPolicy.enabled }}
+# Default-deny ingress for the whole namespace, then explicit allows.
+# Egress is left open — tighten later if needed.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-default-deny-ingress
+  labels:
+    {{- include "openfilz-shared.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+{{- if or .Values.keycloak.enabled .Values.onlyoffice.enabled }}
+---
+# Traefik (ingress controller) → keycloak (8080) + onlyoffice (80)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-allow-ingress-controller
+  labels:
+    {{- include "openfilz-shared.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values: ["keycloak", "onlyoffice"]
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressControllerNamespace }}
+      ports:
+        - port: 8080
+        - port: 80
+{{- end }}
+---
+# Tenant/demo namespaces (labelled by the provisioner with the tenant-access key)
+# → shared services: keycloak 8080, opensearch 9200, gotenberg 3000, onlyoffice 80.
+# One combined policy: a port only admits traffic to the component actually
+# listening on it, so the port/component cross-product is harmless.
+# (Add-on charts installed into this same namespace ship their own allow
+# policies for the extra services they deploy.)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-allow-tenant-namespaces
+  labels:
+    {{- include "openfilz-shared.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values: ["keycloak", "opensearch", "gotenberg", "onlyoffice"]
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{ .Values.networkPolicy.tenantAccessLabel.key }}: {{ .Values.networkPolicy.tenantAccessLabel.value | quote }}
+      ports:
+        - port: 8080
+        - port: 9200
+        - port: 3000
+        - port: 80
+{{- if .Values.keycloak.enabled }}
+---
+# keycloak → keycloak-db (only Keycloak may reach its database)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-allow-keycloak-to-db
+  labels:
+    {{- include "openfilz-shared.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: keycloak-db
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: keycloak
+      ports:
+        - port: 5432
+{{- end }}
+{{- end }}

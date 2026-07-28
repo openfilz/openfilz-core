@@ -1,31 +1,64 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "common.names.fullname" . }}
-  labels: {{- include "common.labels.standard" . | nindent 4 }}
+  name: {{ include "openfilz-web.fullname" . }}
+  labels: {{- include "openfilz-web.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
-    matchLabels: {{- include "common.labels.matchLabels" . | nindent 6 }}
+    matchLabels: {{- include "openfilz-web.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      labels: {{- include "common.labels.standard" . | nindent 8 }}
+      labels: {{- include "openfilz-web.labels" . | nindent 8 }}
     spec:
       {{- with .Values.image.pullSecrets }}
       imagePullSecrets: {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with (.Values.nodeSelector | default (dig "nodeSelector" dict (.Values.global | default dict))) }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (.Values.tolerations | default (dig "tolerations" list (.Values.global | default dict))) }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
-        - name: {{ .Chart.Name }}
-          image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        - name: web
+          image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ include "openfilz-web.imageTag" . }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
               containerPort: 8080
-              protocol: TCP
-          # Angular runtime config → the container writes ngx-env.js at startup from
-          # these NG_APP_* values (no mounted ConfigMap). Add more NG_APP_* as needed.
+          # The container generates ngx-env.js at startup from NG_APP_* (same
+          # mechanism as the dokploy compose deployment).
           env:
             - name: NG_APP_API_URL
-              value: {{ .Values.app.apiUrl | quote }}
+              value: {{ include "openfilz-web.apiUrl" . | quote }}
             - name: NG_APP_GRAPHQL_URL
-              value: {{ .Values.app.graphQlUrl | quote }}
+              value: {{ include "openfilz-web.graphQlUrl" . | quote }}
+            - name: NG_APP_AUTHENTICATION_ENABLED
+              value: {{ include "openfilz-web.authEnabled" . | quote }}
+            {{- if eq (include "openfilz-web.authEnabled" .) "true" }}
+            - name: NG_APP_AUTHENTICATION_AUTHORITY
+              value: {{ include "openfilz-web.authPublicAuthority" . | quote }}
+            - name: NG_APP_AUTHENTICATION_CLIENT_ID
+              value: {{ include "openfilz-web.authClientId" . | quote }}
+            {{- end }}
+            - name: NG_APP_ONLYOFFICE_ENABLED
+              value: {{ include "openfilz-web.onlyofficeEnabled" . | quote }}
+            {{- if eq (include "openfilz-web.onlyofficeEnabled" .) "true" }}
+            - name: NG_APP_ONLYOFFICE_URL
+              value: {{ include "openfilz-web.onlyofficePublicUrl" . | quote }}
+            {{- end }}
+          {{- with .Values.extraEnv }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "openfilz-web.fullname" $ }}-extra-env
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          {{- with .Values.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
