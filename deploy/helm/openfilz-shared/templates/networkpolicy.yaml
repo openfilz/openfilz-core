@@ -37,9 +37,11 @@ spec:
 {{- end }}
 ---
 # Tenant/demo namespaces (labelled by the provisioner with the tenant-access key)
-# → shared services: keycloak 8080, opensearch 9200, gotenberg 3000, clamav 3310,
-# onlyoffice 80. One combined policy: a port only admits traffic to the component
-# actually listening on it, so the port/component cross-product is harmless.
+# → shared services: keycloak 8080, opensearch 9200, gotenberg 3000, onlyoffice 80.
+# One combined policy: a port only admits traffic to the component actually
+# listening on it, so the port/component cross-product is harmless.
+# (EE-only shared services — ClamAV — ship their own allow policies in the
+# openfilz-shared-ee add-on chart, installed into this same namespace.)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -51,7 +53,7 @@ spec:
     matchExpressions:
       - key: app.kubernetes.io/component
         operator: In
-        values: ["keycloak", "opensearch", "gotenberg", "clamav", "onlyoffice"]
+        values: ["keycloak", "opensearch", "gotenberg", "onlyoffice"]
   policyTypes: ["Ingress"]
   ingress:
     - from:
@@ -62,7 +64,6 @@ spec:
         - port: 8080
         - port: 9200
         - port: 3000
-        - port: 3310
         - port: 80
 {{- if .Values.keycloak.enabled }}
 ---

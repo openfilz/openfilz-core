@@ -1,8 +1,9 @@
-# Default values — shared services for the openfilz-shared namespace on the
-# Hetzner k3s cluster. Env names mirror the authoritative composes:
-#   - Keycloak / Gotenberg / OpenSearch: openfilz-core/deploy/docker-compose/dokploy/compose.yaml
-#   - OnlyOffice / antivirus: openfilz-enterprise/docker/dokploy-compose-ee.yml
-# Keep them in sync when the composes evolve.
+# Default values — shared services for the openfilz-shared namespace.
+# Env names mirror the authoritative CE compose
+# (deploy/docker-compose/dokploy/compose.yaml) — keep them in sync when it
+# evolves. Enterprise-only shared services (ClamAV for antivirus-api) are NOT
+# part of this chart: EE deployments add them with the openfilz-shared-ee
+# chart from the openfilz-enterprise repository.
 
 hosts:
   auth: auth-demo.openfilz.com
@@ -22,10 +23,6 @@ images:
   keycloakDb: postgres:17-alpine
   opensearch: opensearchproject/opensearch:2.19.1
   gotenberg: gotenberg/gotenberg:8
-  # The dokploy EE deployment embeds clamd inside the native antivirus-api image;
-  # here the shared clamd is the official image, reachable by the per-tenant
-  # antivirus-api pods on 3310 (OPENFILZ_ANTIVIRUSAPI_CLAMAV_HOST/PORT).
-  clamav: clamav/clamav:1.4
   onlyoffice: onlyoffice/documentserver:latest
   pullPolicy: Always
 
@@ -97,20 +94,6 @@ gotenberg:
     - "--log-level=info"
 
 # =============================================================================
-# ClamAV daemon (clamd on 3310). Signature DB (~300MB download, ~1.5-2Gi RAM
-# resident) is persisted so restarts don't re-download.
-# =============================================================================
-clamav:
-  enabled: true
-  # freshclam's initial signature download is slow — the startup probe allows
-  # failureThreshold * periodSeconds (default 60 * 10s = 10 min) before failing.
-  startupProbeFailureThreshold: 60
-  persistence:
-    enabled: true
-    size: 10Gi                   # hcloud CSI minimum is 10Gi
-    storageClassName: hcloud-volumes
-
-# =============================================================================
 # OnlyOffice document server (disabled by default — enable when a tenant needs
 # collaborative editing; JWT secret is per-installation, shared with the APIs).
 # =============================================================================
@@ -138,9 +121,9 @@ networkPolicy:
   enabled: true
   # Namespace that runs the Traefik ingress controller (k3s default: kube-system)
   ingressControllerNamespace: kube-system
-  # Namespaces carrying this label may reach the shared services (opensearch 9200,
-  # gotenberg 3000, clamav 3310, keycloak 8080, onlyoffice 80). The provisioner
-  # labels every tenant/demo namespace with it.
+  # Namespaces carrying this label may reach the shared services (keycloak 8080,
+  # opensearch 9200, gotenberg 3000, onlyoffice 80). The provisioner labels every
+  # tenant/demo namespace with it.
   tenantAccessLabel:
     key: openfilz.com/tenant-access
     value: "true"
@@ -158,9 +141,6 @@ resources:
   gotenberg:
     requests: { cpu: 100m, memory: 512Mi }
     limits: { memory: 1Gi }
-  clamav:
-    requests: { cpu: 200m, memory: 1536Mi }
-    limits: { memory: 3Gi }
   onlyoffice:
     requests: { cpu: 500m, memory: 2Gi }
     limits: { memory: 4Gi }
