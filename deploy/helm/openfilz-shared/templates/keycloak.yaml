@@ -43,6 +43,9 @@ spec:
       {{- with .Values.tolerations }}
       tolerations: {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.images.pullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: keycloak
           image: {{ .Values.images.keycloak }}
@@ -143,6 +146,16 @@ spec:
               value: {{ .Values.keycloak.idp.microsoftClientId | quote }}
             - name: MICROSOFT_CLIENT_SECRET
               value: {{ .Values.keycloak.idp.microsoftClientSecret | quote }}
+            # --- Image-specific extras (e.g. enterprise webhook/truststore vars) ---
+            {{- range $name, $value := .Values.keycloak.extraEnv }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- with .Values.keycloak.extraEnvSecretRef }}
+          envFrom:
+            - secretRef:
+                name: {{ . }}
+          {{- end }}
           readinessProbe:
             httpGet:
               path: /health/ready

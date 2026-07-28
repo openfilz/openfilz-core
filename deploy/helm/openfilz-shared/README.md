@@ -93,6 +93,34 @@ kubectl label namespace demo-ce openfilz.com/tenant-access=true
 Without the label, that namespace's API pods time out on Keycloak JWT
 validation, full-text indexing and thumbnails.
 
+## Keycloak: CE vs EE — image, realm and initial load DIFFER
+
+The chart's default `images.keycloak` is the **CE image**
+(`ghcr.io/openfilz/keycloak:26.5`, public, built from
+`deploy/docker-compose/dokploy/keycloak/`): it bakes the **CE realm export**
+(openfilz-web client, OPENFILZ role groups) + the OpenFilz login/email themes,
+and its entrypoint substitutes `KEYCLOAK_PUBLIC_URL` / `OPENFILZ_WEB_ROOT_URL`
+/ the default role+group variables into the realm at first import.
+
+**Enterprise deployments must NOT use the CE image.** The EE Keycloak image
+(private, built from the openfilz-enterprise repo) bakes a **different realm
+export** (adds the license-server webhook client, `signature-service`,
+`openfilz-admin`, …), ships the `keycloak-events` provider (user-created
+webhook → license-server) and a combined truststore, and needs extra env vars
+(`WEBHOOK_URI`, `WEBHOOK_SECRET`, `JAVA_OPTS_APPEND`).
+
+The chart supports that swap without any template change — the EE values
+overlay lives next to the `openfilz-shared-ee` chart in openfilz-enterprise
+and sets:
+
+- `images.keycloak` → the EE image, `images.pullSecrets` → ghcr pull secret;
+- `keycloak.extraEnv` (map) / `keycloak.extraEnvSecretRef` → the EE-only vars.
+
+The realm baked into the image only becomes the **initial load** on the very
+first start against an empty keycloak_db — switching images later does NOT
+re-import or migrate an existing realm. Pick the right image before the first
+install.
+
 ## Realm per tenant/demo
 
 The custom Keycloak image bakes the realm export + OpenFilz themes; `--import-realm`

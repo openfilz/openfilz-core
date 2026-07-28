@@ -19,12 +19,23 @@ ingress:
   annotations: {}
 
 images:
+  # The CE Keycloak image (public) — built from deploy/docker-compose/dokploy/
+  # keycloak/: bakes the CE realm export + OpenFilz login/email themes; the
+  # entrypoint envsubst's KEYCLOAK_PUBLIC_URL / OPENFILZ_WEB_ROOT_URL / default
+  # role+group vars into the realm at import.
+  # NOTE: Enterprise deployments run a DIFFERENT image here (different baked
+  # realm/initial load + extra providers) — see the openfilz-enterprise repo's
+  # openfilz-shared-ee chart for the EE overlay (image swap via this value +
+  # keycloak.extraEnv + images.pullSecrets).
   keycloak: ghcr.io/openfilz/keycloak:26.5
   keycloakDb: postgres:17-alpine
   opensearch: opensearchproject/opensearch:2.19.1
   gotenberg: gotenberg/gotenberg:8
   onlyoffice: onlyoffice/documentserver:latest
   pullPolicy: Always
+  # Pull secrets for the Keycloak pod (needed when images.keycloak is replaced
+  # by a private image, e.g. the enterprise one). List of {name: <secret>}.
+  pullSecrets: []
 
 # =============================================================================
 # Keycloak — one realm per tenant/demo; the image bakes the realm export
@@ -61,6 +72,12 @@ keycloak:
     githubClientSecret: ""
     microsoftClientId: ""
     microsoftClientSecret: ""
+  # Extra environment variables for the Keycloak container (map name: value) —
+  # the seam for image-specific settings a replacement image needs (e.g. the
+  # enterprise image's webhook/truststore variables).
+  extraEnv: {}
+  # Existing Secret injected via envFrom — for sensitive extras.
+  extraEnvSecretRef: ""
   # Dedicated small PostgreSQL for Keycloak only ({{ .Release.Name }}-keycloak-db)
   db:
     name: keycloak_db
