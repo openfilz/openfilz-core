@@ -146,7 +146,7 @@ spec:
               value: {{ .Values.keycloak.idp.microsoftClientId | quote }}
             - name: MICROSOFT_CLIENT_SECRET
               value: {{ .Values.keycloak.idp.microsoftClientSecret | quote }}
-            # --- Image-specific extras (e.g. enterprise webhook/truststore vars) ---
+            # --- Image-specific extras (replacement-image webhook/truststore vars) ---
             {{- range $name, $value := .Values.keycloak.extraEnv }}
             - name: {{ $name }}
               value: {{ $value | quote }}

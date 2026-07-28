@@ -4,9 +4,7 @@ description: >-
   OpenFilz shared services for the openfilz-shared namespace — Keycloak (realm per
   tenant/demo, with its own small PostgreSQL), OpenSearch (single node), Gotenberg
   and optionally OnlyOffice. Consumed cross-namespace by the application namespaces
-  (labelled openfilz.com/tenant-access=true). Enterprise-only shared services
-  (ClamAV/antivirus) are layered on by the openfilz-shared-ee chart from the
-  openfilz-enterprise repository.
+  (labelled openfilz.com/tenant-access=true).
 type: application
 version: 0.1.0
 appVersion: "latest"

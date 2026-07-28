@@ -3,16 +3,11 @@
 Shared services for the `openfilz-shared` namespace: **Keycloak** (+ its own
 small PostgreSQL), **OpenSearch** (single node), **Gotenberg** and optionally
 **OnlyOffice**. They are deployed **once** and consumed cross-namespace by
-every OpenFilz application namespace (CE or EE, demo or per-tenant).
+every OpenFilz application namespace (demo or per-tenant).
 
-Env names mirror the authoritative CE compose
+Env names mirror the authoritative compose
 (`deploy/docker-compose/dokploy/compose.yaml`); update the templates when it
 gains/renames variables.
-
-> **Enterprise:** this chart is Community Edition only. EE-only shared services
-> (ClamAV for antivirus-api) are layered on top by the **`openfilz-shared-ee`**
-> add-on chart from the openfilz-enterprise repository, installed into this
-> same namespace.
 
 ## Which components does an OpenFilz deployment need?
 
@@ -26,8 +21,9 @@ gains/renames variables.
 ## Install
 
 ```bash
-# prerequisites: a cluster (e.g. openfilz-enterprise/deploy/k3s/cluster.yaml), cert-manager wildcard TLS secret
-# (wildcard-openfilz-com-tls) synced into the namespace.
+# prerequisites: a Kubernetes cluster with an ingress controller, and a
+# wildcard TLS secret (wildcard-openfilz-com-tls) synced into the namespace
+# (e.g. via cert-manager).
 kubectl create namespace openfilz-shared
 kubectl label namespace openfilz-shared pod-security.kubernetes.io/enforce=baseline
 
@@ -42,8 +38,8 @@ kubectl -n openfilz-shared get pods -w   # keycloak-db → keycloak (realm impor
 Then add the DNS A/CNAME record for `hosts.auth` → your ingress LB IP, and open
 `https://<hosts.auth>`.
 
-> PodSecurity: `baseline`, not `restricted` — OnlyOffice (and the EE add-on's
-> ClamAV init) don't currently pass `restricted`. Tighten per component later.
+> PodSecurity: `baseline`, not `restricted` — OnlyOffice doesn't currently
+> pass `restricted`. Tighten per component later.
 
 ### Values that MUST be set
 
@@ -71,9 +67,6 @@ openfilz-ee, the provisioner) embed these FQDNs:
 | Gotenberg | `shared-gotenberg.openfilz-shared.svc.cluster.local` | 3000 |
 | OnlyOffice | `shared-onlyoffice.openfilz-shared.svc.cluster.local` | 80 |
 
-(EE add-on, from openfilz-shared-ee: ClamAV at
-`shared-clamav.openfilz-shared.svc.cluster.local:3310`.)
-
 ## Namespace-label contract (tenant access)
 
 The NetworkPolicies default-deny ingress on the namespace, then allow:
@@ -93,28 +86,21 @@ kubectl label namespace demo-ce openfilz.com/tenant-access=true
 Without the label, that namespace's API pods time out on Keycloak JWT
 validation, full-text indexing and thumbnails.
 
-## Keycloak: CE vs EE — image, realm and initial load DIFFER
+## Replacing the Keycloak image
 
-The chart's default `images.keycloak` is the **CE image**
-(`ghcr.io/openfilz/keycloak:26.5`, public, built from
-`deploy/docker-compose/dokploy/keycloak/`): it bakes the **CE realm export**
-(openfilz-web client, OPENFILZ role groups) + the OpenFilz login/email themes,
-and its entrypoint substitutes `KEYCLOAK_PUBLIC_URL` / `OPENFILZ_WEB_ROOT_URL`
-/ the default role+group variables into the realm at first import.
+The default `images.keycloak` (`ghcr.io/openfilz/keycloak:26.5`, public, built
+from `deploy/docker-compose/dokploy/keycloak/`) bakes the **realm export**
+(the initial load) + the OpenFilz login/email themes, and its entrypoint
+substitutes `KEYCLOAK_PUBLIC_URL` / `OPENFILZ_WEB_ROOT_URL` / the default
+role+group variables into the realm at first import.
 
-**Enterprise deployments must NOT use the CE image.** The EE Keycloak image
-(private, built from the openfilz-enterprise repo) bakes a **different realm
-export** (adds the license-server webhook client, `signature-service`,
-`openfilz-admin`, …), ships the `keycloak-events` provider (user-created
-webhook → license-server) and a combined truststore, and needs extra env vars
-(`WEBHOOK_URI`, `WEBHOOK_SECRET`, `JAVA_OPTS_APPEND`).
+A customized Keycloak image (different baked realm, extra providers) can be
+swapped in without any template change:
 
-The chart supports that swap without any template change — the EE values
-overlay lives next to the `openfilz-shared-ee` chart in openfilz-enterprise
-and sets:
-
-- `images.keycloak` → the EE image, `images.pullSecrets` → ghcr pull secret;
-- `keycloak.extraEnv` (map) / `keycloak.extraEnvSecretRef` → the EE-only vars.
+- `images.keycloak` → the replacement image, `images.pullSecrets` → pull
+  secret(s) when it comes from a private registry;
+- `keycloak.extraEnv` (map) / `keycloak.extraEnvSecretRef` (envFrom) → any
+  image-specific env vars it needs.
 
 The realm baked into the image only becomes the **initial load** on the very
 first start against an empty keycloak_db — switching images later does NOT

@@ -16,9 +16,9 @@ under the `openfilz-api:` / `openfilz-web:` subchart keys.
 ## Install (demo-ce)
 
 ```bash
-# prerequisites: a cluster (e.g. openfilz-enterprise/deploy/k3s/cluster.yaml),
-# cert-manager wildcard TLS secret synced into the namespace, demo-ce realm
-# created in the shared Keycloak.
+# prerequisites: a Kubernetes cluster with an ingress controller, a wildcard
+# TLS secret synced into the namespace (e.g. via cert-manager), and a demo-ce
+# realm created in the shared Keycloak.
 kubectl create namespace demo-ce
 kubectl label namespace demo-ce pod-security.kubernetes.io/enforce=restricted
 

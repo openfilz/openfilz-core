@@ -1,9 +1,6 @@
-# OpenFilz Helm charts (Community Edition)
+# OpenFilz Helm charts
 
-Everything needed to run **OpenFilz CE on Kubernetes**. These charts are
-Community Edition only — no enterprise component lives here. (Enterprise
-deployments reuse them and add their own charts on top; see
-"Deploying OpenFilz EE" below.)
+Everything needed to run **OpenFilz on Kubernetes**.
 
 | Chart | Purpose |
 |---|---|
@@ -77,25 +74,6 @@ Cross-cutting settings live once under `global:` (hosts, ingress, auth, db,
 OnlyOffice, node scheduling, `imageTag`); api-specific settings (storage
 local/minio, features, quotas, resources) under `openfilz-api:` — see each
 chart's README and values.yaml.
-
-## Deploying OpenFilz EE
-
-The Enterprise stack **reuses the `openfilz-shared` chart** and replaces
-`openfilz-ce` with the `openfilz-ee` chart (collaboration-api, web-ee, admin,
-license-server, optional webhooks/archiving). Three EE-specific points, all
-served from the openfilz-enterprise repository (`deploy/k3s/charts/`):
-
-1. **The Keycloak image/config/initial load is different** — EE platforms
-   apply the `values-keycloak-ee.yaml` overlay (next to the openfilz-shared-ee
-   chart) on the `openfilz-shared` release **from the first install**: EE
-   image (different baked realm), keycloak-events webhook to license-server,
-   truststore. See "Keycloak: CE vs EE" in openfilz-shared's README.
-2. `openfilz-shared-ee` — EE add-on installed **into the same
-   `openfilz-shared` namespace** (ClamAV for antivirus-api).
-3. `openfilz-ee` — the per-instance EE stack (needs a license bundle + access
-   to the private ghcr images).
-
-The full EE runbook is `openfilz-enterprise/deploy/k3s/INSTALL.md`.
 
 ## Releases
 

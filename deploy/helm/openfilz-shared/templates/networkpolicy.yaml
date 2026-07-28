@@ -40,8 +40,8 @@ spec:
 # → shared services: keycloak 8080, opensearch 9200, gotenberg 3000, onlyoffice 80.
 # One combined policy: a port only admits traffic to the component actually
 # listening on it, so the port/component cross-product is harmless.
-# (EE-only shared services — ClamAV — ship their own allow policies in the
-# openfilz-shared-ee add-on chart, installed into this same namespace.)
+# (Add-on charts installed into this same namespace ship their own allow
+# policies for the extra services they deploy.)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
