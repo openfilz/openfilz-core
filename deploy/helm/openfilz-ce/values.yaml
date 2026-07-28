@@ -14,8 +14,10 @@ global:
   # DB secret to <release>-db (key `postgres-password`). Do not disable.
   ce:
     enabled: true
-  # Pin one image tag for api + web (empty = the component charts' appVersion,
-  # i.e. latest).
+  # Pin ONE image tag for api + web (empty = each component chart's
+  # appVersion). Note api and web images are released on separate version
+  # streams — prefer the per-subchart `openfilz-api.image.tag` /
+  # `openfilz-web.image.tag` when pinning real releases.
   imageTag: ""
   hosts:
     web: ce-demo.openfilz.com

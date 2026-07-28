@@ -81,8 +81,12 @@ Every backend release publishes all four charts as OCI artifacts —
 `oci://ghcr.io/openfilz/charts/<name>:<version>` — from the
 `publish-helm-charts` job in `.github/workflows/release-backend.yml`. The
 chart version and appVersion are stamped with the release version at package
-time (appVersion is the default image tag, so chart X.Y.Z runs images X.Y.Z),
-alongside the images pushed by the same pipeline. Install directly from the
+time (appVersion is the default image tag, so the api chart X.Y.Z runs
+`openfilz-api:X.Y.Z`), alongside the images pushed by the same pipeline. The
+one exception is `openfilz-web`: its images are released from the
+openfilz-web repository on their own version stream, so the chart keeps
+appVersion `latest` — set `openfilz-web.image.tag` (or the chart-local
+`image.tag`) to pin a specific web release. Install directly from the
 registry, e.g.:
 
 ```bash

@@ -251,10 +251,14 @@ jobs:
         # Chart.yaml files themselves (version + appVersion, and openfilz-ce's
         # dependency constraints: the 4-space-indented `version:` lines). The
         # subcharts' appVersion matters: it is the image-tag default.
+        # EXCEPTION — openfilz-web: its images are released from the
+        # openfilz-web repo on their OWN version stream, so a core-version
+        # appVersion would point at a tag that may not exist. Its appVersion
+        # stays "latest" (chart version is still stamped); pin
+        # openfilz-web.image.tag for reproducible installs.
         # Workspace-only edits; nothing is committed.
         run: |
           for f in deploy/helm/openfilz-api/Chart.yaml \
-                   deploy/helm/openfilz-web/Chart.yaml \
                    deploy/helm/openfilz-shared/Chart.yaml \
                    deploy/helm/openfilz-ce/Chart.yaml; do
             sed -i -E \
@@ -263,6 +267,7 @@ jobs:
               -e "s/^(    version: ).*/\1\"$VERSION\"/" \
               "$f"
           done
+          sed -i -E "s/^(version:).*/\1 $VERSION/" deploy/helm/openfilz-web/Chart.yaml
 
       - name: Package and push charts
         run: |
@@ -271,7 +276,12 @@ jobs:
           mkdir -p target/charts-dist
           for c in openfilz-api openfilz-web openfilz-shared openfilz-ce; do
             helm lint "deploy/helm/$c"
-            helm package "deploy/helm/$c" --version "$VERSION" --app-version "$VERSION" -d target/charts-dist
+            if [ "$c" = "openfilz-web" ]; then
+              # keep appVersion "latest" — web images version independently
+              helm package "deploy/helm/$c" --version "$VERSION" -d target/charts-dist
+            else
+              helm package "deploy/helm/$c" --version "$VERSION" --app-version "$VERSION" -d target/charts-dist
+            fi
             helm push "target/charts-dist/$c-$VERSION.tgz" "$CHARTS_REGISTRY"
           done
           echo "Published $CHARTS_REGISTRY/{openfilz-api,openfilz-web,openfilz-shared,openfilz-ce}:$VERSION"

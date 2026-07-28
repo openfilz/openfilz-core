@@ -26,7 +26,11 @@ replicaCount: 1
 image:
   registry: ghcr.io
   repository: openfilz/openfilz-web
-  tag: ""                    # default: global.imageTag, then the chart appVersion
+  # Default: global.imageTag, then the chart appVersion. NOTE: openfilz-web
+  # images are released on their own version stream (openfilz-web repo), so
+  # released charts keep appVersion "latest" — pin a tag here for
+  # reproducible installs.
+  tag: ""
   pullPolicy: Always
   pullSecrets: []
 
