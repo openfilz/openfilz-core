@@ -2,15 +2,15 @@
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
-  name: {{ include "common.names.fullname" . }}
-  labels: {{- include "common.labels.standard" . | nindent 4 }}
+  name: {{ include "openfilz-api.fullname" . }}
+  labels: {{- include "openfilz-api.labels" . | nindent 4 }}
 spec:
-  {{- if .Values.openshift.route.hostname }}
-  host: {{ .Values.openshift.route.hostname }}
+  {{- with (.Values.openshift.route.hostname | default (include "openfilz-api.hostApi" .)) }}
+  host: {{ . }}
   {{- end }}
   to:
     kind: Service
-    name: {{ include "common.names.fullname" . }}
+    name: {{ include "openfilz-api.fullname" . }}
   port:
     targetPort: http
   {{- if .Values.openshift.route.tls.enabled }}

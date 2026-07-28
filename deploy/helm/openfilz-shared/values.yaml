@@ -1,0 +1,166 @@
+# Default values — shared services for the openfilz-shared namespace on the
+# Hetzner k3s cluster. Env names mirror the authoritative composes:
+#   - Keycloak / Gotenberg / OpenSearch: openfilz-core/deploy/docker-compose/dokploy/compose.yaml
+#   - OnlyOffice / antivirus: openfilz-enterprise/docker/dokploy-compose-ee.yml
+# Keep them in sync when the composes evolve.
+
+hosts:
+  auth: auth-demo.openfilz.com
+  # OnlyOffice public hostname — only used when onlyoffice.enabled
+  docs: docs-demo.openfilz.com
+
+ingress:
+  enabled: true
+  className: traefik
+  # Wildcard *.openfilz.com cert (cert-manager DNS-01) — secret must exist in this
+  # namespace (or be synced into it, e.g. with reflector).
+  tlsSecretName: wildcard-openfilz-com-tls
+  annotations: {}
+
+images:
+  keycloak: ghcr.io/openfilz/keycloak:26.5
+  keycloakDb: postgres:17-alpine
+  opensearch: opensearchproject/opensearch:2.19.1
+  gotenberg: gotenberg/gotenberg:8
+  # The dokploy EE deployment embeds clamd inside the native antivirus-api image;
+  # here the shared clamd is the official image, reachable by the per-tenant
+  # antivirus-api pods on 3310 (OPENFILZ_ANTIVIRUSAPI_CLAMAV_HOST/PORT).
+  clamav: clamav/clamav:1.4
+  onlyoffice: onlyoffice/documentserver:latest
+  pullPolicy: Always
+
+# =============================================================================
+# Keycloak — one realm per tenant/demo; the image bakes the realm export
+# (template realm) + the OpenFilz login/email themes.
+# =============================================================================
+keycloak:
+  enabled: true
+  adminUser: admin
+  # Required unless existingSecret is set (secret keys: admin-password, db-password).
+  adminPassword: ""
+  existingSecret: ""
+  # OPENFILZ_WEB_ROOT_URL — substituted into the baked realm export at import time
+  # (entrypoint.sh envsubst). Only affects the template realm; per-tenant realms are
+  # created afterwards via the Keycloak Admin API with their own URLs.
+  webRootUrl: https://ce-demo.openfilz.com
+  # Default role/group for new users — applied to the 4 realm-substitution slots
+  # (KEYCLOAK_DEFAULT_ROLE_1..4 / KEYCLOAK_DEFAULT_GROUP_1..4).
+  defaultRole: READER
+  defaultGroup: /OPENFILZ/READER
+  smtp:
+    host: ""
+    port: "587"
+    from: noreply@openfilz.com
+    ssl: "false"
+    starttls: "true"
+    auth: "true"
+    user: ""
+    password: ""
+  # Identity providers / social login (empty = provider stays unconfigured)
+  idp:
+    googleClientId: ""
+    googleClientSecret: ""
+    githubClientId: ""
+    githubClientSecret: ""
+    microsoftClientId: ""
+    microsoftClientSecret: ""
+  # Dedicated small PostgreSQL for Keycloak only ({{ .Release.Name }}-keycloak-db)
+  db:
+    name: keycloak_db
+    user: keycloak
+    # Required unless keycloak.existingSecret is set.
+    password: ""
+    storage: 10Gi                # hcloud CSI minimum is 10Gi
+    storageClassName: hcloud-volumes
+
+# =============================================================================
+# OpenSearch — single node, security plugin disabled (in-cluster access only,
+# guarded by NetworkPolicy). No ulimits in k8s: memory_lock is disabled via env.
+# =============================================================================
+opensearch:
+  enabled: true
+  javaOpts: -Xms512m -Xmx512m
+  storage: 10Gi
+  storageClassName: hcloud-volumes
+
+# =============================================================================
+# Gotenberg — stateless document conversion (thumbnails, PDF)
+# =============================================================================
+gotenberg:
+  enabled: true
+  # Container args — mirror the CE compose command flags.
+  args:
+    - "gotenberg"
+    - "--api-timeout=60s"
+    - "--libreoffice-restart-after=100"
+    - "--libreoffice-auto-start=true"
+    - "--log-level=info"
+
+# =============================================================================
+# ClamAV daemon (clamd on 3310). Signature DB (~300MB download, ~1.5-2Gi RAM
+# resident) is persisted so restarts don't re-download.
+# =============================================================================
+clamav:
+  enabled: true
+  # freshclam's initial signature download is slow — the startup probe allows
+  # failureThreshold * periodSeconds (default 60 * 10s = 10 min) before failing.
+  startupProbeFailureThreshold: 60
+  persistence:
+    enabled: true
+    size: 10Gi                   # hcloud CSI minimum is 10Gi
+    storageClassName: hcloud-volumes
+
+# =============================================================================
+# OnlyOffice document server (disabled by default — enable when a tenant needs
+# collaborative editing; JWT secret is per-installation, shared with the APIs).
+# =============================================================================
+onlyoffice:
+  enabled: false
+  # Required when enabled, unless existingSecret is set (secret key: jwt-secret).
+  jwtSecret: ""
+  existingSecret: ""
+  persistence:
+    data:
+      enabled: false
+      size: 10Gi
+      storageClassName: hcloud-volumes
+    logs:
+      enabled: false
+      size: 10Gi
+      storageClassName: hcloud-volumes
+
+# Schedule on the tenant pool (mgmt pool is tainted anyway).
+nodeSelector:
+  openfilz.com/pool: tenant
+tolerations: []
+
+networkPolicy:
+  enabled: true
+  # Namespace that runs the Traefik ingress controller (k3s default: kube-system)
+  ingressControllerNamespace: kube-system
+  # Namespaces carrying this label may reach the shared services (opensearch 9200,
+  # gotenberg 3000, clamav 3310, keycloak 8080, onlyoffice 80). The provisioner
+  # labels every tenant/demo namespace with it.
+  tenantAccessLabel:
+    key: openfilz.com/tenant-access
+    value: "true"
+
+resources:
+  keycloak:
+    requests: { cpu: 200m, memory: 1Gi }
+    limits: { memory: 2Gi }
+  keycloakDb:
+    requests: { cpu: 50m, memory: 256Mi }
+    limits: { memory: 512Mi }
+  opensearch:
+    requests: { cpu: 200m, memory: 1Gi }
+    limits: { memory: 1536Mi }
+  gotenberg:
+    requests: { cpu: 100m, memory: 512Mi }
+    limits: { memory: 1Gi }
+  clamav:
+    requests: { cpu: 200m, memory: 1536Mi }
+    limits: { memory: 3Gi }
+  onlyoffice:
+    requests: { cpu: 500m, memory: 2Gi }
+    limits: { memory: 4Gi }

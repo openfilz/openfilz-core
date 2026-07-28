@@ -1,0 +1,138 @@
+{{- if .Values.onlyoffice.enabled }}
+{{- if .Values.onlyoffice.persistence.data.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-onlyoffice-data
+  labels:
+    {{- include "openfilz-shared.labels" . | nindent 4 }}
+    app.kubernetes.io/component: onlyoffice
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: {{ .Values.onlyoffice.persistence.data.storageClassName }}
+  resources:
+    requests:
+      storage: {{ .Values.onlyoffice.persistence.data.size }}
+---
+{{- end }}
+{{- if .Values.onlyoffice.persistence.logs.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-onlyoffice-logs
+  labels:
+    {{- include "openfilz-shared.labels" . | nindent 4 }}
+    app.kubernetes.io/component: onlyoffice
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: {{ .Values.onlyoffice.persistence.logs.storageClassName }}
+  resources:
+    requests:
+      storage: {{ .Values.onlyoffice.persistence.logs.size }}
+---
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-onlyoffice
+  labels:
+    {{- include "openfilz-shared.labels" . | nindent 4 }}
+    app.kubernetes.io/component: onlyoffice
+spec:
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: onlyoffice
+  ports:
+    - name: http
+      port: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-onlyoffice
+  labels:
+    {{- include "openfilz-shared.labels" . | nindent 4 }}
+    app.kubernetes.io/component: onlyoffice
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate            # RWO Data/logs PVCs (when enabled) — one pod at a time
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: onlyoffice
+  template:
+    metadata:
+      labels:
+        {{- include "openfilz-shared.labels" . | nindent 8 }}
+        app.kubernetes.io/component: onlyoffice
+    spec:
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: onlyoffice
+          image: {{ .Values.images.onlyoffice }}
+          ports:
+            - name: http
+              containerPort: 80
+          env:
+            - name: JWT_ENABLED
+              value: "true"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "openfilz-shared.onlyofficeSecretName" . }}
+                  key: jwt-secret
+            - name: JWT_HEADER
+              value: Authorization
+            - name: ALLOW_META_IP_ADDRESS
+              value: "true"
+            - name: ALLOW_PRIVATE_IP_ADDRESS
+              value: "true"
+          startupProbe:
+            httpGet:
+              path: /healthcheck
+              port: 80
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 80
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 80
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.resources.onlyoffice | nindent 12 }}
+          {{- if or .Values.onlyoffice.persistence.data.enabled .Values.onlyoffice.persistence.logs.enabled }}
+          volumeMounts:
+            {{- if .Values.onlyoffice.persistence.data.enabled }}
+            - name: data
+              mountPath: /var/www/onlyoffice/Data
+            {{- end }}
+            {{- if .Values.onlyoffice.persistence.logs.enabled }}
+            - name: logs
+              mountPath: /var/log/onlyoffice
+            {{- end }}
+          {{- end }}
+      {{- if or .Values.onlyoffice.persistence.data.enabled .Values.onlyoffice.persistence.logs.enabled }}
+      volumes:
+        {{- if .Values.onlyoffice.persistence.data.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-onlyoffice-data
+        {{- end }}
+        {{- if .Values.onlyoffice.persistence.logs.enabled }}
+        - name: logs
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-onlyoffice-logs
+        {{- end }}
+      {{- end }}
+{{- end }}

@@ -1,18 +1,16 @@
-{{/*
-Render a PersistentVolume for manual provisioning when not on OpenShift.
-*/}}
-{{- if and .Values.persistence.enabled (not .Values.openshift.enabled) (not .Values.persistence.existingClaim) }}
+{{- /* Manual hostPath PV — local kind/dev clusters only */ -}}
+{{- if and (eq .Values.storage.type "local") .Values.storage.persistence.hostPath (not .Values.storage.persistence.existingClaim) }}
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: {{ printf "%s-pv" (include "common.names.fullname" .) }}
-  labels: {{- include "common.labels.standard" . | nindent 4 }}
+  name: {{ include "openfilz-api.fullname" . }}-pv
+  labels: {{- include "openfilz-api.labels" . | nindent 4 }}
 spec:
   accessModes:
-    {{- toYaml .Values.persistence.accessModes | nindent 4 }}
-  storageClassName: {{ .Values.persistence.storageClass }}
+    {{- toYaml .Values.storage.persistence.accessModes | nindent 4 }}
+  storageClassName: {{ .Values.storage.persistence.storageClassName }}
   capacity:
-    storage: {{ .Values.persistence.size }}
+    storage: {{ .Values.storage.persistence.size }}
   hostPath:
-    path: {{ .Values.persistence.hostPath }}
+    path: {{ .Values.storage.persistence.hostPath }}
 {{- end }}

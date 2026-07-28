@@ -1,72 +1,198 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "common.names.fullname" . }}
-  labels: {{- include "common.labels.standard" . | nindent 4 }}
+  name: {{ include "openfilz-api.fullname" . }}
+  labels: {{- include "openfilz-api.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  {{- if eq .Values.storage.type "local" }}
+  strategy:
+    type: Recreate            # RWO storage PVC — no two pods may mount it at once
+  {{- end }}
   selector:
-    matchLabels: {{- include "common.labels.matchLabels" . | nindent 6 }}
+    matchLabels: {{- include "openfilz-api.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      labels: {{- include "common.labels.standard" . | nindent 8 }}
+      labels: {{- include "openfilz-api.labels" . | nindent 8 }}
     spec:
       {{- with .Values.image.pullSecrets }}
       imagePullSecrets: {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with (.Values.nodeSelector | default (dig "nodeSelector" dict (.Values.global | default dict))) }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (.Values.tolerations | default (dig "tolerations" list (.Values.global | default dict))) }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext: {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
-        - name: {{ .Chart.Name }}
-          image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        - name: api
+          image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ include "openfilz-api.imageTag" . }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
               containerPort: {{ .Values.api.port }}
-              protocol: TCP
           env:
-            - name: SPRING_PROFILES_ACTIVE
-              value: {{ .Values.spring.activeProfile }}
+            - name: LANG
+              value: C.UTF-8
+            - name: LC_ALL
+              value: C.UTF-8
+            - name: SERVER_PORT
+              value: {{ .Values.api.port | quote }}
+            # --- Database (application.yml derives the R2DBC + Flyway URLs) ---
             - name: DB_HOST
-              value: {{ .Values.database.host }}
+              value: {{ include "openfilz-api.dbHost" . | quote }}
             - name: DB_PORT
               value: {{ .Values.database.port | quote }}
             - name: DB_NAME
-              value: {{ .Values.database.name }}
-            - name: API_ROOT_URL
-              value: {{ .Values.route.hostname }}
+              value: {{ include "openfilz-api.dbName" . | quote }}
+            {{- if .Values.database.secretKeys.user }}
             - name: DB_USER
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.database.existingSecret | default (printf "%s-db-credentials" (include "common.names.fullname" .)) }}
-                  key: user
+                  name: {{ include "openfilz-api.dbSecretName" . }}
+                  key: {{ .Values.database.secretKeys.user }}
+            {{- else }}
+            - name: DB_USER
+              value: {{ include "openfilz-api.dbUser" . | quote }}
+            {{- end }}
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.database.existingSecret | default (printf "%s-db-credentials" (include "common.names.fullname" .)) }}
-                  key: password
-            - name: JAVA_TOOL_OPTIONS
-              value: "-Dopenfilz.security.cors-allowed-origins={{ .Values.api.corsAllowedUrls }} -Dserver.port={{ .Values.api.port }} -Dstorage.type={{ .Values.storage.type }} -Dstorage.local.basePath={{ .Values.storage.basePath }}"
+                  name: {{ include "openfilz-api.dbSecretName" . }}
+                  key: {{ include "openfilz-api.dbPasswordKey" . }}
+            - name: SPRING_FLYWAY_BASELINE_ON_MIGRATE
+              value: "true"
+            - name: SPRING_FLYWAY_BASELINE_VERSION
+              value: "0"
+            # --- Security / Keycloak ---
+            - name: OPENFILZ_SECURITY_NO_AUTH
+              value: {{ eq (include "openfilz-api.authEnabled" .) "false" | quote }}
+            {{- with (include "openfilz-api.realmInternalUrl" .) }}
+            - name: KEYCLOAK_REALM_URL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with (include "openfilz-api.corsAllowedOrigins" .) }}
+            - name: OPENFILZ_SECURITY_CORS_ALLOWED_ORIGINS
+              value: {{ . | quote }}
+            {{- end }}
+            # --- Storage ---
+            - name: STORAGE_TYPE
+              value: {{ .Values.storage.type | quote }}
+            {{- if eq .Values.storage.type "local" }}
+            - name: STORAGE_LOCAL_BASE_PATH
+              value: {{ .Values.storage.local.basePath | quote }}
+            - name: THUMBNAIL_STORAGE_BASE_PATH
+              value: {{ .Values.storage.local.basePath | quote }}
+            {{- else }}
+            - name: MINIO_ENDPOINT
+              value: {{ .Values.storage.minio.endpoint | quote }}
+            {{- if .Values.storage.minio.existingSecret }}
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.storage.minio.existingSecret }}
+                  key: access-key
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.storage.minio.existingSecret }}
+                  key: secret-key
+            {{- else }}
+            - name: MINIO_ACCESS_KEY
+              value: {{ .Values.storage.minio.accessKey | quote }}
+            - name: MINIO_SECRET_KEY
+              value: {{ .Values.storage.minio.secretKey | quote }}
+            {{- end }}
+            - name: MINIO_BUCKET_NAME
+              value: {{ .Values.storage.minio.bucketName | quote }}
+            - name: MINIO_REGION
+              value: {{ .Values.storage.minio.region | quote }}
+            {{- end }}
+            # --- URLs ---
+            - name: OPENFILZ_INTERNAL_API_BASE_URL
+              value: http://{{ include "openfilz-api.fullname" . }}:{{ .Values.service.port }}
+            {{- with (include "openfilz-api.publicApiBaseUrl" .) }}
+            - name: OPENFILZ_PUBLIC_API_BASE_URL
+              value: {{ . | quote }}
+            - name: API_ROOT_URL
+              value: {{ printf "%s/" . | quote }}
+            {{- end }}
+            {{- with (include "openfilz-api.publicWebBaseUrl" .) }}
+            - name: OPENFILZ_COMMON_WEBPUBLICBASEURL
+              value: {{ printf "%s/" . | quote }}
+            {{- end }}
+            # --- Features / companion services ---
+            - name: OPENFILZ_THUMBNAIL_ACTIVE
+              value: {{ .Values.features.thumbnails | quote }}
+            {{- with .Values.gotenberg.url }}
+            - name: GOTENBERG_URL
+              value: {{ . | quote }}
+            {{- end }}
+            - name: OPENFILZ_SOFTDELETE_ACTIVE
+              value: {{ .Values.features.softDelete | quote }}
+            - name: OPENFILZ_CALCULATECHECKSUM
+              value: {{ .Values.features.checksum | quote }}
+            - name: ONLYOFFICE_ENABLED
+              value: {{ include "openfilz-api.onlyofficeEnabled" . | quote }}
+            {{- if eq (include "openfilz-api.onlyofficeEnabled" .) "true" }}
+            - name: ONLYOFFICE_URL
+              value: {{ include "openfilz-api.onlyofficeInternalUrl" . | quote }}
+            - name: ONLYOFFICE_JWT_SECRET
+              value: {{ include "openfilz-api.onlyofficeJwtSecret" . | quote }}
+            {{- end }}
+            - name: OPENFILZ_FULLTEXT_ACTIVE
+              value: {{ .Values.features.fulltext | quote }}
+            {{- if .Values.features.fulltext }}
+            - name: OPENFILZ_FULLTEXT_OPENSEARCH_HOST
+              value: {{ .Values.opensearch.host | quote }}
+            - name: OPENFILZ_FULLTEXT_OPENSEARCH_PORT
+              value: {{ .Values.opensearch.port | quote }}
+            - name: OPENFILZ_FULLTEXT_OPENSEARCH_SCHEME
+              value: {{ .Values.opensearch.scheme | quote }}
+            {{- end }}
+            # --- Quotas (MB) ---
+            - name: OPENFILZ_QUOTA_FILE_UPLOAD
+              value: {{ .Values.quotas.fileUploadMb | quote }}
+            - name: OPENFILZ_QUOTA_USER
+              value: {{ .Values.quotas.userMb | quote }}
           {{- if or .Values.extraEnv .Values.extraEnvSecretRef }}
           envFrom:
             {{- if .Values.extraEnv }}
             - configMapRef:
-                name: {{ include "common.names.fullname" . }}-extra-env
+                name: {{ include "openfilz-api.fullname" . }}-extra-env
             {{- end }}
             {{- if .Values.extraEnvSecretRef }}
             - secretRef:
                 name: {{ .Values.extraEnvSecretRef }}
             {{- end }}
           {{- end }}
-          {{- if .Values.persistence.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          {{- with .Values.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if eq .Values.storage.type "local" }}
           volumeMounts:
-            - name: data
-              mountPath: {{ .Values.storage.basePath }}
+            - name: storage
+              mountPath: {{ .Values.storage.local.basePath }}
           {{- end }}
-          {{- if .Values.resources }}
-          resources: {{ toYaml .Values.resources | nindent 12 }}
-          {{- end }}
-      {{- if .Values.persistence.enabled }}
+      {{- if eq .Values.storage.type "local" }}
       volumes:
-        - name: data
+        - name: storage
           persistentVolumeClaim:
-            claimName: {{ .Values.persistence.existingClaim | default (include "common.names.fullname" .) }}
+            claimName: {{ include "openfilz-api.storageClaimName" . }}
       {{- end }}

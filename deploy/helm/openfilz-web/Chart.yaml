@@ -1,14 +1,15 @@
 apiVersion: v2
 name: openfilz-web
-description: A Helm chart for deploying the Openfilz web app.
-version: 1.0.0
-appVersion: "0.0.1-SNAPSHOT"
-
-dependencies:
-  - name: common
-    version: "2.x.x"
-    repository: "https://charts.bitnami.com/bitnami"
-    # The 'common' chart is used for standardized helpers and labels.
-
+description: >-
+  OpenFilz Community Edition web UI (Angular, served by nginx). Deployable
+  standalone or as a subchart of the openfilz-ce umbrella chart, which wires
+  the host/auth conventions through the `global:` values block.
+type: application
+version: 1.1.0
+appVersion: "latest"
+keywords:
+  - openfilz
+  - dms
+home: https://openfilz.com
 sources:
-  - https://github.com/openfilz/openfilz-core
+  - https://github.com/openfilz/openfilz-web

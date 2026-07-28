@@ -18,3 +18,6 @@
 # .NET build artifacts
 **/bin/
 **/obj/
+
+# Helm: vendored subchart archives (helm dependency build output)
+/deploy/helm/*/charts/*.tgz
