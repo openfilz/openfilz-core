@@ -6,8 +6,10 @@ namespace and as the template for per-tenant Essential installs. Shared services
 [`openfilz-shared`](../openfilz-shared/) release — this chart only points at them.
 
 Since 0.2.0 this is an **umbrella chart**: the api and web workloads are the
-[`openfilz-api`](../openfilz-api/) and [`openfilz-web`](../openfilz-web/)
-component charts (declared as `file://` dependencies), and this chart only adds
+[`openfilz-api`](../openfilz-api/) component chart (a `file://` dependency)
+and the `openfilz-web` chart (published from the **openfilz-web repository**
+to `oci://ghcr.io/openfilz/charts`, tracked with a `1.x.x` range so each
+umbrella release embeds the latest web release), and this chart only adds
 PostgreSQL, the DB secret, the optional pg_dump backup CronJob and the
 namespace NetworkPolicies. Cross-cutting settings (hosts, ingress, auth, db,
 OnlyOffice, scheduling) live under `global:`; component-specific settings live
@@ -22,7 +24,7 @@ under the `openfilz-api:` / `openfilz-web:` subchart keys.
 kubectl create namespace demo-ce
 kubectl label namespace demo-ce pod-security.kubernetes.io/enforce=restricted
 
-helm dependency build .        # vendors ../openfilz-api + ../openfilz-web
+helm dependency build .        # vendors ../openfilz-api + pulls openfilz-web from ghcr
 
 helm install demo-ce . -n demo-ce \
   --set db.password="$(openssl rand -base64 24)" \

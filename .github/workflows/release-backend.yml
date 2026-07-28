@@ -247,15 +247,11 @@ jobs:
       - name: Stamp chart versions
         # `helm package --version/--app-version` stamps the chart being
         # packaged, but the openfilz-ce umbrella vendors its file://
-        # dependencies from the on-disk directories — so also stamp the
-        # Chart.yaml files themselves (version + appVersion, and openfilz-ce's
-        # dependency constraints: the 4-space-indented `version:` lines). The
-        # subcharts' appVersion matters: it is the image-tag default.
-        # EXCEPTION — openfilz-web: its images are released from the
-        # openfilz-web repo on their OWN version stream, so a core-version
-        # appVersion would point at a tag that may not exist. Its appVersion
-        # stays "latest" (chart version is still stamped); pin
-        # openfilz-web.image.tag for reproducible installs.
+        # openfilz-api dependency from the on-disk directory — so also stamp
+        # the Chart.yaml files themselves. The subcharts' appVersion matters:
+        # it is the image-tag default. The openfilz-web chart is NOT published
+        # from here — it lives in the openfilz-web repo (own release train);
+        # the umbrella pulls it from ghcr via its 1.x.x OCI dependency.
         # Workspace-only edits; nothing is committed.
         run: |
           for f in deploy/helm/openfilz-api/Chart.yaml \
@@ -264,24 +260,19 @@ jobs:
             sed -i -E \
               -e "s/^(version:).*/\1 $VERSION/" \
               -e "s/^(appVersion:).*/\1 \"$VERSION\"/" \
-              -e "s/^(    version: ).*/\1\"$VERSION\"/" \
               "$f"
           done
-          sed -i -E "s/^(version:).*/\1 $VERSION/" deploy/helm/openfilz-web/Chart.yaml
 
       - name: Package and push charts
         run: |
           set -euo pipefail
+          # resolves openfilz-api from the stamped local dir (file://, 1.x.x)
+          # and openfilz-web from ghcr (oci://, 1.x.x — must be public)
           helm dependency update deploy/helm/openfilz-ce
           mkdir -p target/charts-dist
-          for c in openfilz-api openfilz-web openfilz-shared openfilz-ce; do
+          for c in openfilz-api openfilz-shared openfilz-ce; do
             helm lint "deploy/helm/$c"
-            if [ "$c" = "openfilz-web" ]; then
-              # keep appVersion "latest" — web images version independently
-              helm package "deploy/helm/$c" --version "$VERSION" -d target/charts-dist
-            else
-              helm package "deploy/helm/$c" --version "$VERSION" --app-version "$VERSION" -d target/charts-dist
-            fi
+            helm package "deploy/helm/$c" --version "$VERSION" --app-version "$VERSION" -d target/charts-dist
             helm push "target/charts-dist/$c-$VERSION.tgz" "$CHARTS_REGISTRY"
           done
-          echo "Published $CHARTS_REGISTRY/{openfilz-api,openfilz-web,openfilz-shared,openfilz-ce}:$VERSION"
+          echo "Published $CHARTS_REGISTRY/{openfilz-api,openfilz-shared,openfilz-ce}:$VERSION"

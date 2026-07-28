@@ -1,9 +1,11 @@
 # Default values — tuned for the demo-ce namespace on the Hetzner k3s cluster.
 #
-# The api and web workloads come from the openfilz-api / openfilz-web component
-# charts (../openfilz-api, ../openfilz-web) — run `helm dependency build` once
-# before install. This chart adds PostgreSQL, the DB secret, the optional
-# pg_dump backup CronJob and the namespace NetworkPolicies.
+# The api and web workloads come from the openfilz-api component chart
+# (../openfilz-api) and the openfilz-web chart (published from the
+# openfilz-web repository to oci://ghcr.io/openfilz/charts) — run
+# `helm dependency build` once before install. This chart adds PostgreSQL,
+# the DB secret, the optional pg_dump backup CronJob and the namespace
+# NetworkPolicies.
 #
 # Cross-cutting settings live under `global:` (shared with the subcharts);
 # component-specific settings live under the subchart keys `openfilz-api:` /
@@ -93,7 +95,8 @@ openfilz-api:
     limits: { memory: 1Gi }
 
 # ---------------------------------------------------------------------------
-# openfilz-web subchart (see ../openfilz-web/values.yaml for all keys)
+# openfilz-web subchart (chart source: the openfilz-web repository,
+# deploy/helm/openfilz-web/values.yaml, for all keys)
 # ---------------------------------------------------------------------------
 openfilz-web:
   resources:
