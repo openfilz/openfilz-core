@@ -203,8 +203,10 @@ jobs:
       - name: Lint and render charts
         run: |
           set -euo pipefail
-          helm dependency build deploy/helm/openfilz-ce
-          for c in openfilz-api openfilz-web openfilz-shared openfilz-ce; do
+          # openfilz-web is resolved from ghcr (the chart lives in the
+          # openfilz-web repo and must be published + public)
+          helm dependency update deploy/helm/openfilz-ce
+          for c in openfilz-api openfilz-shared openfilz-ce; do
             helm lint "deploy/helm/$c"
           done
           # umbrella: default + minio/onlyoffice/fulltext/backup variant
@@ -219,8 +221,6 @@ jobs:
           # components: standalone example values
           helm template api deploy/helm/openfilz-api -f deploy/helm/openfilz-api/example-values/values-kind.yaml >/dev/null
           helm template api deploy/helm/openfilz-api -f deploy/helm/openfilz-api/example-values/values-oc.yaml >/dev/null
-          helm template web deploy/helm/openfilz-web -f deploy/helm/openfilz-web/example-values/values-kind.yaml >/dev/null
-          helm template web deploy/helm/openfilz-web -f deploy/helm/openfilz-web/example-values/values-oc.yaml >/dev/null
           # shared services
           helm template shared deploy/helm/openfilz-shared \
             --set keycloak.adminPassword=x --set keycloak.db.password=y >/dev/null

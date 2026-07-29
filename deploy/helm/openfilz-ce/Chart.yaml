@@ -15,10 +15,15 @@ keywords:
 home: https://openfilz.com
 sources:
   - https://github.com/openfilz/openfilz-core
+# openfilz-api comes from this repo (file://); openfilz-web lives in the
+# openfilz-web repository, which publishes its chart to ghcr on every web
+# release (chart version = appVersion = image tag). Both use a 1.x.x range —
+# `helm dependency update/build` resolves the latest matching version (Chart
+# major bumps require updating these ranges).
 dependencies:
   - name: openfilz-api
-    version: "1.1.0"
+    version: "1.x.x"
     repository: file://../openfilz-api
   - name: openfilz-web
-    version: "1.1.0"
-    repository: file://../openfilz-web
+    version: "1.x.x"
+    repository: oci://ghcr.io/openfilz/charts

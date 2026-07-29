@@ -19,5 +19,7 @@
 **/bin/
 **/obj/
 
-# Helm: vendored subchart archives (helm dependency build output)
+# Helm: vendored subchart archives + resolved lock (helm dependency update
+# output — the openfilz-ce umbrella tracks openfilz-web via a 1.x.x OCI range)
 /deploy/helm/*/charts/*.tgz
+/deploy/helm/openfilz-ce/Chart.lock
