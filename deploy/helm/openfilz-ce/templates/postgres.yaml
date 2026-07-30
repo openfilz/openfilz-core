@@ -40,6 +40,9 @@ spec:
       {{- with .Values.global.tolerations }}
       tolerations: {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.db.podSecurityContext }}
+      securityContext: {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: postgres
           image: {{ .Values.images.postgres }}
@@ -73,7 +76,9 @@ spec:
         name: data
       spec:
         accessModes: ["ReadWriteOnce"]
-        storageClassName: {{ .Values.db.storageClassName }}
+        {{- with .Values.db.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
         resources:
           requests:
             storage: {{ .Values.db.storage }}

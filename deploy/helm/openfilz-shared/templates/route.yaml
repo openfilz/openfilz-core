@@ -1,0 +1,50 @@
+{{- /* OpenShift Routes — replace the Ingress when openshift.enabled */ -}}
+{{- if .Values.openshift.enabled }}
+{{- if .Values.keycloak.enabled }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ .Release.Name }}-keycloak
+  labels:
+    {{- include "openfilz-shared.labels" . | nindent 4 }}
+    app.kubernetes.io/component: keycloak
+spec:
+  {{- with .Values.hosts.auth }}
+  host: {{ . }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ .Release.Name }}-keycloak
+  port:
+    targetPort: http
+  {{- if .Values.openshift.route.tls.enabled }}
+  tls:
+    termination: {{ .Values.openshift.route.tls.termination }}
+    insecureEdgeTerminationPolicy: {{ .Values.openshift.route.tls.insecureEdgeTerminationPolicy }}
+  {{- end }}
+{{- end }}
+{{- if .Values.onlyoffice.enabled }}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ .Release.Name }}-onlyoffice
+  labels:
+    {{- include "openfilz-shared.labels" . | nindent 4 }}
+    app.kubernetes.io/component: onlyoffice
+spec:
+  {{- with .Values.hosts.docs }}
+  host: {{ . }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ .Release.Name }}-onlyoffice
+  port:
+    targetPort: http
+  {{- if .Values.openshift.route.tls.enabled }}
+  tls:
+    termination: {{ .Values.openshift.route.tls.termination }}
+    insecureEdgeTerminationPolicy: {{ .Values.openshift.route.tls.insecureEdgeTerminationPolicy }}
+  {{- end }}
+{{- end }}
+{{- end }}

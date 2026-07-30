@@ -75,6 +75,38 @@ OnlyOffice, node scheduling, `imageTag`); api-specific settings (storage
 local/minio, features, quotas, resources) under `openfilz-api:` — see each
 chart's README and values.yaml.
 
+## OpenShift notes
+
+Both installable charts support OpenShift out of the box — see
+`openfilz-shared/example-values/values-openshift.yaml` and
+`openfilz-ce/example-values/values-openshift.yaml` for complete, commented
+value sets. The four things that differ from vanilla Kubernetes:
+
+1. **Routes instead of Ingress** — set `openshift.enabled=true`
+   (openfilz-shared) and `openfilz-api.openshift.*` / `openfilz-web.openshift.*`
+   (openfilz-ce); the Ingress templates are skipped automatically. Route hosts
+   come from the usual `hosts.*` / `global.hosts.*` values.
+2. **SCCs and UIDs** — several images (PostgreSQL, OpenSearch, OnlyOffice, the
+   web nginx entrypoint) need a specific UID or root, which the default
+   `restricted` SCC forbids. Grant an SCC (`anyuid` per ServiceAccount in
+   production; `privileged` on `default` as a lab shortcut) **and** set the
+   per-workload `podSecurityContext.runAsUser` values from the example files —
+   OpenShift picks the least-privileged SCC that validates the pod, so a pod
+   that requests nothing still lands on `restricted` with a random UID.
+3. **NetworkPolicies** — set `networkPolicy.ingressControllerNamespace:
+   openshift-ingress` *and* `networkPolicy.ingressFromNamespaceLabels` with the
+   policy-group entries (see example values): OpenShift routers are often
+   host-networked, and their traffic only matches the
+   `policy-group.network.openshift.io/*` pseudo-namespaces — with only the
+   namespace-name selector the routes time out even though they exist.
+4. **StorageClass** — all `storageClassName` values default to empty = the
+   cluster's default StorageClass; set them explicitly if your cluster has no
+   default.
+
+(The `OPENFILZ_FULLTEXT_OPENSEARCH_HOST/_PORT/_SCHEME` env vars injected for
+`features.fulltext` are the same names the production compose uses — Spring's
+relaxed binding maps them onto `openfilz.full-text.opensearch.*`.)
+
 ## Releases
 
 Every backend release publishes all four charts as OCI artifacts —

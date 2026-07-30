@@ -1,0 +1,63 @@
+# Example values — OpenShift (on-prem).
+#
+#   helm install shared . -n openfilz-shared -f example-values/values-openshift.yaml \
+#     --set keycloak.adminPassword=... --set keycloak.db.password=... \
+#     --set hosts.auth=auth.apps.<cluster-domain>
+#
+# Prerequisites (see also "OpenShift notes" in the README):
+#   oc new-project openfilz-shared
+#   # Lab shortcut — the images below need specific UIDs/root, which the
+#   # restricted SCC forbids. For production, prefer per-workload
+#   # ServiceAccounts with the minimum SCC (anyuid) instead of privileged:
+#   oc adm policy add-scc-to-user privileged -z default -n openfilz-shared
+
+# Routes instead of Ingress (Keycloak; OnlyOffice too when enabled).
+openshift:
+  enabled: true
+
+hosts:
+  auth: auth.apps.example.com        # Route host
+  # docs: docs.apps.example.com      # only when onlyoffice.enabled
+
+# Explicit runAsUser per workload: even when a permissive SCC is GRANTED,
+# OpenShift picks the least-privileged SCC that validates the pod — a pod that
+# requests nothing matches `restricted` and gets a random namespace UID (broken
+# entrypoints / data-dir permissions). Requesting the image's real UID makes
+# the pod fall through to the granted SCC.
+keycloak:
+  podSecurityContext:
+    runAsUser: 1000                  # keycloak user
+  db:
+    podSecurityContext:
+      runAsUser: 0                   # postgres:alpine runs as root
+    storageClassName: ""             # empty = cluster default StorageClass
+
+opensearch:
+  # Chart default already: runAsUser 1000 + fsGroup 1000 (PVC write access)
+  storageClassName: ""
+
+gotenberg:
+  podSecurityContext:
+    runAsUser: 1001                  # gotenberg user
+
+onlyoffice:
+  podSecurityContext:
+    runAsUser: 0                     # documentserver runs as root
+
+networkPolicy:
+  # OpenShift router namespace (replaces kube-system/Traefik)
+  ingressControllerNamespace: openshift-ingress
+  # Routers are often HOST-NETWORKED — traffic then only matches the
+  # policy-group pseudo-namespaces, not openshift-ingress. Keep both entries;
+  # unmatched ones are harmless.
+  ingressFromNamespaceLabels:
+    - network.openshift.io/policy-group: ingress            # openshift-sdn
+    - policy-group.network.openshift.io/host-network: ""    # OVN-Kubernetes, host-networked router
+
+# Air-gapped / proxied registries: point every image at your internal proxy.
+# images:
+#   keycloak: registry.example.com/proxy/ghcr.io/openfilz/keycloak:26.5
+#   keycloakDb: registry.example.com/proxy/docker.io/postgres:17-alpine
+#   opensearch: registry.example.com/proxy/docker.io/opensearchproject/opensearch:2.19.1
+#   gotenberg: registry.example.com/proxy/docker.io/gotenberg/gotenberg:8
+#   onlyoffice: registry.example.com/proxy/docker.io/onlyoffice/documentserver:latest

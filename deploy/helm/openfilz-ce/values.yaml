@@ -53,9 +53,10 @@ global:
     internalUrl: http://shared-onlyoffice.openfilz-shared.svc.cluster.local
     publicUrl: ""
     jwtSecret: ""
-  # Schedule on the tenant pool (mgmt pool is tainted anyway).
-  nodeSelector:
-    openfilz.com/pool: tenant
+  # Scheduling constraints for every pod ({} / [] = none). Platform-specific
+  # pools belong in install values, e.g. the Hetzner k3s platform passes:
+  # --set global.nodeSelector."openfilz\.com/pool"=tenant
+  nodeSelector: {}
   tolerations: []
 
 # ---------------------------------------------------------------------------
@@ -79,8 +80,10 @@ openfilz-api:
   storage:
     type: local
     persistence:
-      size: 10Gi               # hcloud CSI minimum is 10Gi
-      storageClassName: hcloud-volumes
+      size: 10Gi
+      # Empty = the cluster's default StorageClass (e.g. hcloud-volumes on
+      # the Hetzner platform — its CSI minimum is 10Gi).
+      storageClassName: ""
     minio:
       endpoint: https://s3.fr-par.scw.cloud
       accessKey: ""
@@ -110,8 +113,12 @@ db:
   # Required unless global.db.existingSecret is set. Stored in the
   # <release>-db secret under the key `postgres-password`.
   password: ""
-  storage: 10Gi                # hcloud CSI minimum is 10Gi
-  storageClassName: hcloud-volumes
+  storage: 10Gi
+  # Empty = the cluster's default StorageClass.
+  storageClassName: ""
+  # Pod securityContext for the PostgreSQL StatefulSet ({} = defaults).
+  # OpenShift: postgres:alpine needs runAsUser 0 — see example-values.
+  podSecurityContext: {}
 
 images:
   postgres: postgres:17-alpine
@@ -129,6 +136,7 @@ backup:
   enabled: false
   schedule: "0 3 * * *"
   retentionDays: 30
+  podSecurityContext: {}       # job pods (pg_dump + mc upload)
   images:
     mc: minio/mc:latest
   s3:
@@ -141,5 +149,13 @@ backup:
 
 networkPolicy:
   enabled: true
-  # Namespace that runs the Traefik ingress controller (k3s default: kube-system)
+  # Namespace running the ingress controller, matched by name
+  # (kubernetes.io/metadata.name). k3s/Traefik: kube-system; OpenShift:
+  # openshift-ingress. Empty = skip this source.
   ingressControllerNamespace: kube-system
+  # Extra namespaceSelector label-sets, each OR'ed in as an additional allowed
+  # ingress source. Needed on OpenShift, where the router is often
+  # HOST-NETWORKED and its traffic doesn't match the namespace above:
+  #   - network.openshift.io/policy-group: ingress            # openshift-sdn
+  #   - policy-group.network.openshift.io/host-network: ""    # OVN-Kubernetes, host-networked router
+  ingressFromNamespaceLabels: []

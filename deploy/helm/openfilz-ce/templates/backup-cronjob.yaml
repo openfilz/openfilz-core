@@ -43,6 +43,9 @@ spec:
           {{- with .Values.global.tolerations }}
           tolerations: {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- with .Values.backup.podSecurityContext }}
+          securityContext: {{- toYaml . | nindent 12 }}
+          {{- end }}
           initContainers:
             - name: dump
               image: {{ .Values.images.postgres }}
