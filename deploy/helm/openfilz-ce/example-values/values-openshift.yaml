@@ -1,0 +1,72 @@
+# Example values — OpenShift (on-prem): Routes instead of Ingress, explicit
+# per-workload UIDs (SCC), OpenShift-aware NetworkPolicies, cluster-default
+# StorageClass.
+#
+#   oc new-project openfilz-ce
+#   oc label namespace openfilz-ce openfilz.com/tenant-access=true
+#   # Lab shortcut — for production prefer per-workload ServiceAccounts with
+#   # the minimum SCC (anyuid) instead of privileged:
+#   oc adm policy add-scc-to-user privileged -z default -n openfilz-ce
+#
+#   helm dependency build .
+#   helm install openfilz . -n openfilz-ce -f example-values/values-openshift.yaml \
+#     --set db.password=... \
+#     --set global.hosts.web=openfilz.apps.<cluster-domain> \
+#     --set global.hosts.api=openfilz-api.apps.<cluster-domain> \
+#     --set global.auth.publicAuthority=https://auth.apps.<cluster-domain>/realms/<realm> \
+#     --set global.auth.realmInternalUrl=http://shared-keycloak.openfilz-shared.svc.cluster.local:8080/realms/<realm>
+#
+#   oc get routes -n openfilz-ce
+
+global:
+  ingress:
+    enabled: false               # Routes below replace the Ingresses
+
+openfilz-api:
+  openshift:
+    enabled: true
+    route:
+      enabled: true              # host = global.hosts.api
+  gotenberg:
+    url: http://shared-gotenberg.openfilz-shared.svc.cluster.local:3000
+  storage:
+    persistence:
+      storageClassName: ""       # empty = cluster default StorageClass
+  # The api image (Paketo) ships its own podSecurityContext default
+  # (1002/1000/1000) — usually fine; align with your granted SCC if needed.
+
+openfilz-web:
+  openshift:
+    enabled: true
+    route:
+      enabled: true              # host = global.hosts.web
+  # The web entrypoint writes ngx-env.js into the nginx html dir → needs the
+  # image's root user. Requires openfilz-web chart >= 1.2.13 (earlier charts
+  # have no podSecurityContext value).
+  podSecurityContext:
+    runAsUser: 0
+
+db:
+  podSecurityContext:
+    runAsUser: 0                 # postgres:alpine runs as root
+  storageClassName: ""
+
+networkPolicy:
+  # OpenShift router namespace (replaces kube-system/Traefik)
+  ingressControllerNamespace: openshift-ingress
+  # Routers are often HOST-NETWORKED — traffic then only matches the
+  # policy-group pseudo-namespaces, not openshift-ingress. Keep both entries;
+  # unmatched ones are harmless.
+  ingressFromNamespaceLabels:
+    - network.openshift.io/policy-group: ingress            # openshift-sdn
+    - policy-group.network.openshift.io/host-network: ""    # OVN-Kubernetes, host-networked router
+
+# Air-gapped / proxied registries: point the images at your internal proxy.
+# global:
+#   imageTag: ""                 # or pin release tags explicitly per image
+# openfilz-api:
+#   image: { registry: registry.example.com/proxy/ghcr.io, repository: openfilz/openfilz-api }
+# openfilz-web:
+#   image: { registry: registry.example.com/proxy/ghcr.io, repository: openfilz/openfilz-web }
+# images:
+#   postgres: registry.example.com/proxy/docker.io/postgres:17-alpine

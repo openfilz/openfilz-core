@@ -46,6 +46,9 @@ spec:
       {{- with .Values.images.pullSecrets }}
       imagePullSecrets: {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.keycloak.podSecurityContext }}
+      securityContext: {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: keycloak
           image: {{ .Values.images.keycloak }}

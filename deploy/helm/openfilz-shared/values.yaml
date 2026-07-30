@@ -16,6 +16,16 @@ ingress:
   tlsSecretName: wildcard-openfilz-com-tls
   annotations: {}
 
+# OpenShift: expose Keycloak (and OnlyOffice when enabled) via Routes instead
+# of the Ingress above. See the README's "OpenShift notes" (SCCs, NetworkPolicy).
+openshift:
+  enabled: false
+  route:
+    tls:
+      enabled: true
+      termination: "edge"
+      insecureEdgeTerminationPolicy: "Redirect"
+
 images:
   # The OpenFilz Keycloak image (public) — built from deploy/docker-compose/
   # dokploy/keycloak/: bakes the realm export (the initial load on first start)
@@ -75,14 +85,21 @@ keycloak:
   extraEnv: {}
   # Existing Secret injected via envFrom — for sensitive extras.
   extraEnvSecretRef: ""
+  # Pod securityContext ({} = cluster/image defaults). On OpenShift set an
+  # explicit runAsUser per the example values so the pod requests the SCC it
+  # needs instead of getting a random namespace UID.
+  podSecurityContext: {}
   # Dedicated small PostgreSQL for Keycloak only ({{ .Release.Name }}-keycloak-db)
   db:
     name: keycloak_db
     user: keycloak
     # Required unless keycloak.existingSecret is set.
     password: ""
-    storage: 10Gi                # hcloud CSI minimum is 10Gi
-    storageClassName: hcloud-volumes
+    storage: 10Gi
+    # Empty = the cluster's default StorageClass (e.g. hcloud-volumes on the
+    # Hetzner platform — its CSI minimum is 10Gi).
+    storageClassName: ""
+    podSecurityContext: {}     # OpenShift: postgres:alpine needs runAsUser 0
 
 # =============================================================================
 # OpenSearch — single node, security plugin disabled (in-cluster access only,
@@ -92,13 +109,21 @@ opensearch:
   enabled: true
   javaOpts: -Xms512m -Xmx512m
   storage: 10Gi
-  storageClassName: hcloud-volumes
+  # Empty = the cluster's default StorageClass.
+  storageClassName: ""
+  # The image runs as the opensearch user (1000); fsGroup makes the data PVC
+  # group-writable — required on CSI drivers that mount root-owned volumes
+  # (observed on OpenShift), harmless elsewhere.
+  podSecurityContext:
+    runAsUser: 1000
+    fsGroup: 1000
 
 # =============================================================================
 # Gotenberg — stateless document conversion (thumbnails, PDF)
 # =============================================================================
 gotenberg:
   enabled: true
+  podSecurityContext: {}       # OpenShift: gotenberg user is 1001
   # Container args — mirror the CE compose command flags.
   args:
     - "gotenberg"
@@ -116,25 +141,35 @@ onlyoffice:
   # Required when enabled, unless existingSecret is set (secret key: jwt-secret).
   jwtSecret: ""
   existingSecret: ""
+  podSecurityContext: {}       # OpenShift: the documentserver image needs runAsUser 0
   persistence:
     data:
       enabled: false
       size: 10Gi
-      storageClassName: hcloud-volumes
+      storageClassName: ""     # empty = the cluster's default StorageClass
     logs:
       enabled: false
       size: 10Gi
-      storageClassName: hcloud-volumes
+      storageClassName: ""
 
-# Schedule on the tenant pool (mgmt pool is tainted anyway).
-nodeSelector:
-  openfilz.com/pool: tenant
+# Scheduling constraints for every pod in this chart ({} / [] = none).
+# Platform-specific pools belong in install values, e.g. the Hetzner k3s
+# platform passes: --set nodeSelector."openfilz\.com/pool"=tenant
+nodeSelector: {}
 tolerations: []
 
 networkPolicy:
   enabled: true
-  # Namespace that runs the Traefik ingress controller (k3s default: kube-system)
+  # Namespace running the ingress controller, matched by name
+  # (kubernetes.io/metadata.name). k3s/Traefik: kube-system; OpenShift:
+  # openshift-ingress. Empty = skip this source.
   ingressControllerNamespace: kube-system
+  # Extra namespaceSelector label-sets, each OR'ed in as an additional allowed
+  # ingress source. Needed on OpenShift, where the router is often
+  # HOST-NETWORKED and its traffic doesn't match the namespace above:
+  #   - network.openshift.io/policy-group: ingress            # openshift-sdn
+  #   - policy-group.network.openshift.io/host-network: ""    # OVN-Kubernetes, host-networked router
+  ingressFromNamespaceLabels: []
   # Namespaces carrying this label may reach the shared services (keycloak 8080,
   # opensearch 9200, gotenberg 3000, onlyoffice 80). The provisioner labels every
   # tenant/demo namespace with it.

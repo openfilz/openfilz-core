@@ -41,6 +41,9 @@ spec:
       {{- with .Values.tolerations }}
       tolerations: {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.opensearch.podSecurityContext }}
+      securityContext: {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: opensearch
           image: {{ .Values.images.opensearch }}
@@ -83,7 +86,9 @@ spec:
         name: data
       spec:
         accessModes: ["ReadWriteOnce"]
-        storageClassName: {{ .Values.opensearch.storageClassName }}
+        {{- with .Values.opensearch.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
         resources:
           requests:
             storage: {{ .Values.opensearch.storage }}

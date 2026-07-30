@@ -13,7 +13,10 @@ spec:
   podSelector: {}
   policyTypes: ["Ingress"]
 ---
-# Traefik (ingress controller) → web + api
+# Ingress controller / router → web + api.
+# Sources: the controller's namespace by name, plus any label-selected
+# namespaces from networkPolicy.ingressFromNamespaceLabels (OpenShift routers
+# are often host-networked and only match the policy-group pseudo-namespaces).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -29,9 +32,16 @@ spec:
   policyTypes: ["Ingress"]
   ingress:
     - from:
+        {{- with .Values.networkPolicy.ingressControllerNamespace }}
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressControllerNamespace }}
+              kubernetes.io/metadata.name: {{ . }}
+        {{- end }}
+        {{- range .Values.networkPolicy.ingressFromNamespaceLabels }}
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml . | nindent 14 }}
+        {{- end }}
       ports:
         - port: 8080
 ---

@@ -9,7 +9,9 @@ metadata:
     app.kubernetes.io/component: onlyoffice
 spec:
   accessModes: ["ReadWriteOnce"]
-  storageClassName: {{ .Values.onlyoffice.persistence.data.storageClassName }}
+  {{- with .Values.onlyoffice.persistence.data.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
   resources:
     requests:
       storage: {{ .Values.onlyoffice.persistence.data.size }}
@@ -25,7 +27,9 @@ metadata:
     app.kubernetes.io/component: onlyoffice
 spec:
   accessModes: ["ReadWriteOnce"]
-  storageClassName: {{ .Values.onlyoffice.persistence.logs.storageClassName }}
+  {{- with .Values.onlyoffice.persistence.logs.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
   resources:
     requests:
       storage: {{ .Values.onlyoffice.persistence.logs.size }}
@@ -72,6 +76,9 @@ spec:
       {{- end }}
       {{- with .Values.tolerations }}
       tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.onlyoffice.podSecurityContext }}
+      securityContext: {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
         - name: onlyoffice
