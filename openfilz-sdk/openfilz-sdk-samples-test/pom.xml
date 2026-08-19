@@ -4,7 +4,7 @@
     <parent>
         <groupId>org.openfilz</groupId>
         <artifactId>openfilz-sdk</artifactId>
-        <version>1.1.23-SNAPSHOT</version>
+        <version>1.2.18-SNAPSHOT</version>
     </parent>
 
     <artifactId>openfilz-sdk-samples-test</artifactId>
@@ -17,17 +17,7 @@
         <maven.install.skip>true</maven.install.skip>
     </properties>
 
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>org.testcontainers</groupId>
-                <artifactId>testcontainers-bom</artifactId>
-                <version>1.19.7</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
+    <!-- Testcontainers (2.x) is managed by spring-boot-dependencies -->
 
     <dependencies>
         <!-- Java SDK (blocking) -->
@@ -73,15 +63,15 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- Testcontainers -->
+        <!-- Testcontainers (2.x renamed its modules with a testcontainers- prefix) -->
         <dependency>
             <groupId>org.testcontainers</groupId>
-            <artifactId>junit-jupiter</artifactId>
+            <artifactId>testcontainers-junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
-            <artifactId>postgresql</artifactId>
+            <artifactId>testcontainers-postgresql</artifactId>
             <scope>test</scope>
         </dependency>
 
@@ -103,6 +93,9 @@
                     <includes>
                         <include>**/*IT.java</include>
                     </includes>
+                    <!-- Netty 4.2 FFM direct buffers break JDK AsynchronousFileChannel on Windows
+                         (netty/netty#16071) which hangs multipart uploads in tests -->
+                    <argLine>-Dio.netty.noPreferDirect=true</argLine>
                 </configuration>
                 <executions>
                     <execution>

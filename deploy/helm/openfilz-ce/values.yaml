@@ -1,0 +1,161 @@
+# Default values — tuned for the demo-ce namespace on the Hetzner k3s cluster.
+#
+# The api and web workloads come from the openfilz-api component chart
+# (../openfilz-api) and the openfilz-web chart (published from the
+# openfilz-web repository to oci://ghcr.io/openfilz/charts) — run
+# `helm dependency build` once before install. This chart adds PostgreSQL,
+# the DB secret, the optional pg_dump backup CronJob and the namespace
+# NetworkPolicies.
+#
+# Cross-cutting settings live under `global:` (shared with the subcharts);
+# component-specific settings live under the subchart keys `openfilz-api:` /
+# `openfilz-web:`.
+
+global:
+  # Umbrella wiring for the subcharts: DB host defaults to <release>-postgres,
+  # DB secret to <release>-db (key `postgres-password`). Do not disable.
+  ce:
+    enabled: true
+  # Pin ONE image tag for api + web (empty = each component chart's
+  # appVersion). Note api and web images are released on separate version
+  # streams — prefer the per-subchart `openfilz-api.image.tag` /
+  # `openfilz-web.image.tag` when pinning real releases.
+  imageTag: ""
+  hosts:
+    web: ce-demo.openfilz.com
+    api: ce-demo-api.openfilz.com
+  ingress:
+    enabled: true
+    className: traefik
+    # Wildcard *.openfilz.com cert (cert-manager DNS-01) — secret must exist in
+    # this namespace (or be synced into it, e.g. with reflector).
+    tlsSecretName: wildcard-openfilz-com-tls
+  # Keycloak lives in the openfilz-shared namespace (realm per tenant/demo).
+  auth:
+    enabled: true
+    # Browser-facing issuer (must match the token `iss` claim):
+    publicAuthority: https://auth-demo.openfilz.com/realms/demo-ce
+    clientId: openfilz-web
+    # In-cluster URL the API uses for JWT validation (KEYCLOAK_REALM_URL).
+    # Canonical shared-services release name is `shared` → services are shared-<component>.
+    realmInternalUrl: http://shared-keycloak.openfilz-shared.svc.cluster.local:8080/realms/demo-ce
+  db:
+    name: openfilz
+    user: openfilz
+    # Bring-your-own secret for the PostgreSQL password (key MUST be
+    # `postgres-password`). Empty → this chart creates <release>-db from
+    # db.password below.
+    existingSecret: ""
+  # OnlyOffice (openfilz-shared namespace) — enable when a tenant needs
+  # collaborative editing; the JWT secret is shared with the API.
+  onlyoffice:
+    enabled: false
+    internalUrl: http://shared-onlyoffice.openfilz-shared.svc.cluster.local
+    publicUrl: ""
+    jwtSecret: ""
+  # Scheduling constraints for every pod ({} / [] = none). Platform-specific
+  # pools belong in install values, e.g. the Hetzner k3s platform passes:
+  # --set global.nodeSelector."openfilz\.com/pool"=tenant
+  nodeSelector: {}
+  tolerations: []
+
+# ---------------------------------------------------------------------------
+# openfilz-api subchart (see ../openfilz-api/values.yaml for all keys)
+# ---------------------------------------------------------------------------
+openfilz-api:
+  features:
+    thumbnails: true
+    softDelete: true
+    checksum: true
+    fulltext: false            # needs OpenSearch in openfilz-shared
+  gotenberg:
+    url: http://shared-gotenberg.openfilz-shared.svc.cluster.local:3000
+  opensearch:
+    host: shared-opensearch.openfilz-shared.svc.cluster.local
+    port: 9200
+    scheme: http
+  # Document storage: STORAGE_TYPE=local on a PVC for the demo. Switch to
+  # minio + a Scaleway SSE bucket for customer installs (see study doc —
+  # managed storage is always a Scaleway SSE bucket).
+  storage:
+    type: local
+    persistence:
+      size: 10Gi
+      # Empty = the cluster's default StorageClass (e.g. hcloud-volumes on
+      # the Hetzner platform — its CSI minimum is 10Gi).
+      storageClassName: ""
+    minio:
+      endpoint: https://s3.fr-par.scw.cloud
+      accessKey: ""
+      secretKey: ""
+      bucketName: ""
+      region: fr-par
+  quotas:
+    fileUploadMb: 1024
+    userMb: 2048
+  resources:
+    requests: { cpu: 100m, memory: 512Mi }
+    limits: { memory: 1Gi }
+
+# ---------------------------------------------------------------------------
+# openfilz-web subchart (chart source: the openfilz-web repository,
+# deploy/helm/openfilz-web/values.yaml, for all keys)
+# ---------------------------------------------------------------------------
+openfilz-web:
+  resources:
+    requests: { cpu: 25m, memory: 64Mi }
+    limits: { memory: 128Mi }
+
+# ---------------------------------------------------------------------------
+# PostgreSQL (this chart's own StatefulSet)
+# ---------------------------------------------------------------------------
+db:
+  # Required unless global.db.existingSecret is set. Stored in the
+  # <release>-db secret under the key `postgres-password`.
+  password: ""
+  storage: 10Gi
+  # Empty = the cluster's default StorageClass.
+  storageClassName: ""
+  # Pod securityContext for the PostgreSQL StatefulSet ({} = defaults).
+  # OpenShift: postgres:alpine needs runAsUser 0 — see example-values.
+  podSecurityContext: {}
+
+images:
+  postgres: postgres:17-alpine
+
+resources:
+  postgres:
+    requests: { cpu: 50m, memory: 256Mi }
+    limits: { memory: 512Mi }
+
+# Nightly pg_dump of the tenant PostgreSQL → an S3 bucket (Scaleway SSE), pruned
+# after retentionDays. The provisioner enables this per Essential tenant with a
+# dedicated backup bucket + scoped key. Documents need no extra backup (they live
+# on the versioned document bucket).
+backup:
+  enabled: false
+  schedule: "0 3 * * *"
+  retentionDays: 30
+  podSecurityContext: {}       # job pods (pg_dump + mc upload)
+  images:
+    mc: minio/mc:latest
+  s3:
+    endpoint: https://s3.fr-par.scw.cloud
+    bucket: ""
+    prefix: pgdump
+    accessKey: ""
+    secretKey: ""
+    existingSecret: ""   # keys: access-key, secret-key
+
+networkPolicy:
+  enabled: true
+  # Namespace running the ingress controller, matched by name
+  # (kubernetes.io/metadata.name). k3s/Traefik: kube-system; OpenShift:
+  # openshift-ingress. Empty = skip this source.
+  ingressControllerNamespace: kube-system
+  # Extra namespaceSelector label-sets, each OR'ed in as an additional allowed
+  # ingress source. Needed on OpenShift, where the router is often
+  # HOST-NETWORKED and its traffic doesn't match the namespace above:
+  #   - network.openshift.io/policy-group: ingress            # openshift-sdn
+  #   - policy-group.network.openshift.io/host-network: ""    # OVN-Kubernetes, host-networked router
+  ingressFromNamespaceLabels: []

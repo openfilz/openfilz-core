@@ -17,6 +17,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
         @JsonSubTypes.Type(value = MoveAudit.class, name = AuditLogDetails.MOVE),
         @JsonSubTypes.Type(value = RenameAudit.class, name = AuditLogDetails.RENAME),
         @JsonSubTypes.Type(value = ReplaceAudit.class, name = AuditLogDetails.REPLACE),
+        @JsonSubTypes.Type(value = RestoreVersionAudit.class, name = AuditLogDetails.RESTORE_VERSION),
         @JsonSubTypes.Type(value = UpdateMetadataAudit.class, name = AuditLogDetails.UPDATE_METADATA),
         @JsonSubTypes.Type(value = UploadAudit.class, name = AuditLogDetails.UPLOAD)
 
@@ -31,6 +32,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
                 @DiscriminatorMapping(value = AuditLogDetails.MOVE, schema = MoveAudit.class),
                 @DiscriminatorMapping(value = AuditLogDetails.RENAME, schema = RenameAudit.class),
                 @DiscriminatorMapping(value = AuditLogDetails.REPLACE, schema = ReplaceAudit.class),
+                @DiscriminatorMapping(value = AuditLogDetails.RESTORE_VERSION, schema = RestoreVersionAudit.class),
                 @DiscriminatorMapping(value = AuditLogDetails.UPDATE_METADATA, schema = UpdateMetadataAudit.class),
                 @DiscriminatorMapping(value = AuditLogDetails.UPLOAD, schema = UploadAudit.class)
         }
@@ -46,6 +48,7 @@ public abstract class AuditLogDetails implements IAuditLogDetails {
     public static final String MOVE = "move";
     public static final String RENAME = "rename";
     public static final String REPLACE = "replace";
+    public static final String RESTORE_VERSION = "restoreVersion";
     public static final String UPDATE_METADATA = "updateMetadata";
     public static final String UPLOAD = "upload";
 }

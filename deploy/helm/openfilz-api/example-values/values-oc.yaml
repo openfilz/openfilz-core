@@ -1,43 +1,29 @@
-# Example values for an OpenShift deployment
+# Example values — OpenShift: Route instead of Ingress, dynamic storage class,
+# DB credentials from an existing Secret.
 
-# -- Enable OpenShift-specific resources and logic.
 openshift:
   enabled: true
-  # -- Enable and configure the OpenShift Route for external access.
   route:
     enabled: true
-    # -- Set the desired hostname for your application.
-    # hostname: "dms-api.apps.my-cluster.com"
+    # hostname: "dms-api.apps.my-cluster.com"   # empty = OpenShift generates one
     tls:
       enabled: true
       termination: "edge"
       insecureEdgeTerminationPolicy: "Redirect"
-      # In production, provide certs via --set or secrets, not directly in this file.
-      # key: ""
-      # certificate: ""
 
-# -- Disable the Kubernetes Ingress, as we are using an OpenShift Route.
 ingress:
   enabled: false
 
-# -- Configure persistence to use a dynamic provisioner available in OpenShift.
-persistence:
-  enabled: true
-  size: 1Gi
+storage:
+  type: local
+  persistence:
+    size: 1Gi
+    # storageClassName: thin-csi
 
-# -- Database password should be set via --set or a sealed secret in production.
 database:
   host: my-db.svc.cluster.local
+  name: dms_db
   existingSecret: db-credentials
-# -- Remaining values can inherit from the defaults in values.yaml or be set as needed.
-# replicaCount: 2
-# image:
-#   tag: "1.2.3"
-
-# -- Extra environment variables injected via a chart-managed ConfigMap.
-# extraEnv:
-#   MY_CUSTOM_VAR: "my-value"
-#   FEATURE_FLAG_X: "true"
-
-# -- Inject sensitive env vars from an existing Secret.
-# extraEnvSecretRef: "my-app-secrets"
+  secretKeys:
+    user: user            # DB_USER read from the secret
+    password: password

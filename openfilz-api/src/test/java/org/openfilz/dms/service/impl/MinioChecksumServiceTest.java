@@ -177,6 +177,43 @@ class MinioChecksumServiceTest {
     }
 
     @Test
+    void calculateSha256Checksum_whenStreamReadAndCloseFail_errorsAndClosesGracefully() throws Exception {
+        // A stream that fails on read AND on close exercises every error/cleanup branch:
+        // readInputStreamAsFlux sink.error + finally-close-error, streamAndCalculateChecksum
+        // doFinally-close-error and onErrorResume-close-error.
+        java.io.InputStream faulty = new java.io.InputStream() {
+            @Override
+            public int read() throws java.io.IOException {
+                throw new java.io.IOException("read boom");
+            }
+
+            @Override
+            public int read(byte[] b) throws java.io.IOException {
+                throw new java.io.IOException("read boom");
+            }
+
+            @Override
+            public int read(byte[] b, int off, int len) throws java.io.IOException {
+                throw new java.io.IOException("read boom");
+            }
+
+            @Override
+            public void close() throws java.io.IOException {
+                throw new java.io.IOException("close boom");
+            }
+        };
+        GetObjectResponse mockResponse = new GetObjectResponse(
+                Headers.of(Map.of()), "test-bucket", "", "test-object", faulty);
+
+        when(minioAsyncClient.getObject(any(GetObjectArgs.class)))
+                .thenReturn(CompletableFuture.completedFuture(mockResponse));
+
+        StepVerifier.create(service.calculateSha256Checksum("test-object"))
+                .expectError()
+                .verify();
+    }
+
+    @Test
     void calculateSha256Checksum_withLargeData_processesInChunks() throws Exception {
         // Create data larger than the buffer size to test chunked processing
         byte[] content = new byte[16384]; // 16KB > 8192 buffer

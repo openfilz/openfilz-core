@@ -278,4 +278,31 @@ class MinioThumbnailStorageServiceTest {
                 .expectNext(false)
                 .verifyComplete();
     }
+
+    @Test
+    void ensureBucketExists_whenMissing_createsBucket() throws Exception {
+        when(minioClient.bucketExists(any(BucketExistsArgs.class))).thenReturn(false);
+
+        ReflectionTestUtils.invokeMethod(service, "ensureBucketExists");
+
+        verify(minioClient).makeBucket(any(MakeBucketArgs.class));
+    }
+
+    @Test
+    void ensureBucketExists_whenPresent_doesNotCreate() throws Exception {
+        when(minioClient.bucketExists(any(BucketExistsArgs.class))).thenReturn(true);
+
+        ReflectionTestUtils.invokeMethod(service, "ensureBucketExists");
+
+        verify(minioClient, never()).makeBucket(any(MakeBucketArgs.class));
+    }
+
+    @Test
+    void ensureBucketExists_whenClientFails_throwsRuntimeException() throws Exception {
+        when(minioClient.bucketExists(any(BucketExistsArgs.class)))
+                .thenThrow(new RuntimeException("minio down"));
+
+        assertThrows(RuntimeException.class,
+                () -> ReflectionTestUtils.invokeMethod(service, "ensureBucketExists"));
+    }
 }

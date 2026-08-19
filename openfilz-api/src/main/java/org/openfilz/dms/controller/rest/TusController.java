@@ -129,7 +129,7 @@ public class TusController {
 
         // Validate upload length against TUS max size
         if (uploadLength > tusProperties.getMaxUploadSize()) {
-            return Mono.just(ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+            return Mono.just(ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE)
                     .header("Tus-Resumable", TUS_VERSION)
                     .build());
         }
@@ -164,7 +164,7 @@ public class TusController {
                     log.warn("Failed to create upload: {}", e.getMessage());
                     String errorType = e.getClass().getSimpleName();
                     return switch (errorType) {
-                        case "FileSizeExceededException" -> Mono.just(ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                        case "FileSizeExceededException" -> Mono.just(ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE)
                                 .header("Tus-Resumable", TUS_VERSION)
                                 .build());
                         case "UserQuotaExceededException" -> Mono.just(ResponseEntity.status(HttpStatus.INSUFFICIENT_STORAGE)

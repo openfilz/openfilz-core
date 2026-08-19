@@ -1,0 +1,29 @@
+apiVersion: v2
+name: openfilz-ce
+description: >-
+  OpenFilz Community Edition stack for one namespace — the openfilz-api and
+  openfilz-web component charts plus a single-node PostgreSQL, an optional
+  pg_dump backup CronJob and namespace NetworkPolicies. Shared services
+  (Keycloak, Gotenberg, OpenSearch, OnlyOffice) are consumed from an
+  openfilz-shared release via values.
+type: application
+version: 0.2.0
+appVersion: "latest"
+keywords:
+  - openfilz
+  - dms
+home: https://openfilz.com
+sources:
+  - https://github.com/openfilz/openfilz-core
+# openfilz-api comes from this repo (file://); openfilz-web lives in the
+# openfilz-web repository, which publishes its chart to ghcr on every web
+# release (chart version = appVersion = image tag). Both use a 1.x.x range —
+# `helm dependency update/build` resolves the latest matching version (Chart
+# major bumps require updating these ranges).
+dependencies:
+  - name: openfilz-api
+    version: "1.x.x"
+    repository: file://../openfilz-api
+  - name: openfilz-web
+    version: "1.x.x"
+    repository: oci://ghcr.io/openfilz/charts

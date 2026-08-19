@@ -1,8 +1,8 @@
 package org.openfilz.dms.utils;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import io.r2dbc.postgresql.codec.Json;
 import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.dto.audit.AuditLogDetails;
@@ -43,7 +43,7 @@ public class JsonUtils {
         }
         try {
             return objectMapper.readTree(json.asString());
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new RuntimeException(e);
         }
     }
@@ -66,7 +66,7 @@ public class JsonUtils {
     private <T> T sneakyConvertValue(String json, Class<T> clazz) {
         try {
             return objectMapper.convertValue(objectMapper.readTree(json), clazz);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new RuntimeException(e);
         }
     }
@@ -74,7 +74,7 @@ public class JsonUtils {
     private Json sneakyToJson(Object object) {
         try {
             return Json.of(objectMapper.writeValueAsString(object));
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new RuntimeException(e);
         }
     }

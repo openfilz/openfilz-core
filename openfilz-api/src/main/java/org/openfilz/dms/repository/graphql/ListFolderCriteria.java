@@ -35,6 +35,9 @@ public class ListFolderCriteria {
         if(filter.contentType() != null) {
             query = sqlUtils.bindCriteria(CONTENT_TYPE, filter.contentType(), query);
         }
+        if(filter.contentTypes() != null && !filter.contentTypes().isEmpty()) {
+            query = sqlUtils.bindLikeAnyCriteria(CONTENT_TYPE, filter.contentTypes(), query);
+        }
         if(filter.metadata() != null) {
             query = sqlUtils.bindMetadata(filter.metadata(), query);
         }
@@ -91,6 +94,10 @@ public class ListFolderCriteria {
         }
         if(request.contentType() != null) {
             sqlUtils.appendEqualsCriteria(prefix, CONTENT_TYPE, appendAnd(query, appendAnd));
+            appendAnd = true;
+        }
+        if(request.contentTypes() != null && !request.contentTypes().isEmpty()) {
+            sqlUtils.appendLikeAnyCriteria(prefix, CONTENT_TYPE, request.contentTypes().size(), appendAnd(query, appendAnd));
             appendAnd = true;
         }
         if(request.name() != null) {

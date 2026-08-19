@@ -1,0 +1,109 @@
+{{- if .Values.backup.enabled }}
+{{- if not .Values.backup.s3.existingSecret }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-backup-s3
+  labels:
+    {{- include "openfilz-ce.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+type: Opaque
+stringData:
+  access-key: {{ required "Set backup.s3.accessKey (or backup.s3.existingSecret)" .Values.backup.s3.accessKey | quote }}
+  secret-key: {{ required "Set backup.s3.secretKey (or backup.s3.existingSecret)" .Values.backup.s3.secretKey | quote }}
+---
+{{- end }}
+# Nightly pg_dump → S3 (Scaleway SSE bucket). Documents are already safe on the
+# versioned document bucket — this covers the per-tenant PostgreSQL.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-pgdump
+  labels:
+    {{- include "openfilz-ce.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels:
+            {{- include "openfilz-ce.labels" . | nindent 12 }}
+            app.kubernetes.io/component: backup
+        spec:
+          restartPolicy: OnFailure
+          {{- with .Values.global.nodeSelector }}
+          nodeSelector: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.global.tolerations }}
+          tolerations: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.backup.podSecurityContext }}
+          securityContext: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          initContainers:
+            - name: dump
+              image: {{ .Values.images.postgres }}
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -e
+                  TS=$(date -u +%Y%m%dT%H%M%SZ)
+                  export PGPASSWORD="$POSTGRES_PASSWORD"
+                  pg_dump -Fc -h {{ .Release.Name }}-postgres -U "$PGUSER" "$PGDATABASE" \
+                    > "/backup/$PGDATABASE-$TS.dump"
+                  ls -lh /backup
+              env:
+                - name: PGUSER
+                  value: {{ .Values.global.db.user | quote }}
+                - name: PGDATABASE
+                  value: {{ .Values.global.db.name | quote }}
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "openfilz-ce.dbSecretName" . }}
+                      key: postgres-password
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+          containers:
+            # minio/mc ships a shell; entrypoint (mc) overridden below.
+            - name: upload
+              image: {{ .Values.backup.images.mc }}
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -e
+                  mc alias set target "$S3_ENDPOINT" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY"
+                  mc cp /backup/*.dump "target/$S3_BUCKET/$S3_PREFIX/"
+                  mc rm --recursive --force --older-than {{ .Values.backup.retentionDays }}d \
+                    "target/$S3_BUCKET/$S3_PREFIX/" || true
+              env:
+                - name: S3_ENDPOINT
+                  value: {{ .Values.backup.s3.endpoint | quote }}
+                - name: S3_BUCKET
+                  value: {{ required "Set backup.s3.bucket" .Values.backup.s3.bucket | quote }}
+                - name: S3_PREFIX
+                  value: {{ .Values.backup.s3.prefix | quote }}
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.s3.existingSecret | default (printf "%s-backup-s3" .Release.Name) }}
+                      key: access-key
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.s3.existingSecret | default (printf "%s-backup-s3" .Release.Name) }}
+                      key: secret-key
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+          volumes:
+            - name: backup
+              emptyDir: {}
+{{- end }}

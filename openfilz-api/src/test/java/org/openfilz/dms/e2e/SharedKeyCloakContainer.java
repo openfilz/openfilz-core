@@ -1,6 +1,7 @@
 package org.openfilz.dms.e2e;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import dasniko.testcontainers.keycloak.KeycloakContainer;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -60,13 +61,7 @@ public final class SharedKeyCloakContainer {
                 )
                 .retrieve()
                 .bodyToMono(String.class)
-                .map(response -> {
-                    try {
-                        return new ObjectMapper().readTree(response).get("access_token").asText();
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
-                })
+                .map(response -> new JsonMapper().readTree(response).get("access_token").asText())
                 .block();
     }
 }

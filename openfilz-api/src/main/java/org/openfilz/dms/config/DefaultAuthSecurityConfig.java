@@ -11,6 +11,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.security.authorization.AuthorizationDecision;
+import org.springframework.security.authorization.AuthorizationResult;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableReactiveMethodSecurity;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
@@ -96,7 +97,7 @@ public class DefaultAuthSecurityConfig {
         return jwt -> jwt.jwtDecoder(jwtDecoder());
     }
 
-    private AuthorizationDecision newAuthorizationDecision(Authentication auth, AuthorizationContext context) {
+    private AuthorizationResult newAuthorizationDecision(Authentication auth, AuthorizationContext context) {
         if (isGraphQlIntrospection(context)) {
             return new AuthorizationDecision(true);
         }
@@ -108,7 +109,7 @@ public class DefaultAuthSecurityConfig {
      * Only GraphQL introspection queries are allowed without authentication,
      * analogous to how Swagger serves its OpenAPI spec publicly at /v3/api-docs.
      */
-    private AuthorizationDecision newUnauthenticatedDecision(AuthorizationContext context) {
+    private AuthorizationResult newUnauthenticatedDecision(AuthorizationContext context) {
         if (isGraphQlIntrospection(context)) {
             return new AuthorizationDecision(true);
         }

@@ -1,0 +1,177 @@
+{{- if .Values.keycloak.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-keycloak
+  labels:
+    {{- include "openfilz-shared.labels" . | nindent 4 }}
+    app.kubernetes.io/component: keycloak
+spec:
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: keycloak
+  ports:
+    - name: http
+      port: 8080
+    - name: management
+      port: 9000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-keycloak
+  labels:
+    {{- include "openfilz-shared.labels" . | nindent 4 }}
+    app.kubernetes.io/component: keycloak
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate            # --import-realm + embedded Infinispan — one instance at a time
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: keycloak
+  template:
+    metadata:
+      labels:
+        {{- include "openfilz-shared.labels" . | nindent 8 }}
+        app.kubernetes.io/component: keycloak
+    spec:
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.images.pullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.keycloak.podSecurityContext }}
+      securityContext: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: keycloak
+          image: {{ .Values.images.keycloak }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          args: ["start", "--import-realm"]
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: management
+              containerPort: 9000
+          env:
+            # --- Admin credentials ---
+            - name: KC_BOOTSTRAP_ADMIN_USERNAME
+              value: {{ .Values.keycloak.adminUser | quote }}
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "openfilz-shared.keycloakSecretName" . }}
+                  key: admin-password
+            # --- Database ---
+            - name: KC_DB
+              value: postgres
+            - name: KC_DB_URL
+              value: jdbc:postgresql://{{ .Release.Name }}-keycloak-db:5432/{{ .Values.keycloak.db.name }}
+            - name: KC_DB_USERNAME
+              value: {{ .Values.keycloak.db.user | quote }}
+            - name: KC_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "openfilz-shared.keycloakSecretName" . }}
+                  key: db-password
+            # --- Hostname (behind Traefik) ---
+            - name: KC_HOSTNAME
+              value: {{ .Values.hosts.auth | quote }}
+            - name: KC_HOSTNAME_URL
+              value: https://{{ .Values.hosts.auth }}
+            - name: KC_HOSTNAME_STRICT
+              value: "false"
+            - name: KC_HOSTNAME_STRICT_HTTPS
+              value: "false"
+            - name: KC_PROXY_HEADERS
+              value: xforwarded
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+            - name: KC_METRICS_ENABLED
+              value: "true"
+            # --- Realm import substitution (resolved by entrypoint.sh envsubst) ---
+            - name: KEYCLOAK_PUBLIC_URL
+              value: https://{{ .Values.hosts.auth }}
+            - name: OPENFILZ_WEB_ROOT_URL
+              value: {{ .Values.keycloak.webRootUrl | quote }}
+            # --- Default roles/groups for new users ---
+            - name: KEYCLOAK_DEFAULT_ROLE_1
+              value: {{ .Values.keycloak.defaultRole | quote }}
+            - name: KEYCLOAK_DEFAULT_ROLE_2
+              value: {{ .Values.keycloak.defaultRole | quote }}
+            - name: KEYCLOAK_DEFAULT_ROLE_3
+              value: {{ .Values.keycloak.defaultRole | quote }}
+            - name: KEYCLOAK_DEFAULT_ROLE_4
+              value: {{ .Values.keycloak.defaultRole | quote }}
+            - name: KEYCLOAK_DEFAULT_GROUP_1
+              value: {{ .Values.keycloak.defaultGroup | quote }}
+            - name: KEYCLOAK_DEFAULT_GROUP_2
+              value: {{ .Values.keycloak.defaultGroup | quote }}
+            - name: KEYCLOAK_DEFAULT_GROUP_3
+              value: {{ .Values.keycloak.defaultGroup | quote }}
+            - name: KEYCLOAK_DEFAULT_GROUP_4
+              value: {{ .Values.keycloak.defaultGroup | quote }}
+            # --- SMTP ---
+            - name: SMTP_HOST
+              value: {{ .Values.keycloak.smtp.host | quote }}
+            - name: SMTP_PORT
+              value: {{ .Values.keycloak.smtp.port | quote }}
+            - name: SMTP_FROM
+              value: {{ .Values.keycloak.smtp.from | quote }}
+            - name: SMTP_SSL
+              value: {{ .Values.keycloak.smtp.ssl | quote }}
+            - name: SMTP_STARTTLS
+              value: {{ .Values.keycloak.smtp.starttls | quote }}
+            - name: SMTP_AUTH
+              value: {{ .Values.keycloak.smtp.auth | quote }}
+            - name: SMTP_USER
+              value: {{ .Values.keycloak.smtp.user | quote }}
+            - name: SMTP_PASSWORD
+              value: {{ .Values.keycloak.smtp.password | quote }}
+            # --- Identity providers / social login ---
+            - name: GOOGLE_CLIENT_ID
+              value: {{ .Values.keycloak.idp.googleClientId | quote }}
+            - name: GOOGLE_CLIENT_SECRET
+              value: {{ .Values.keycloak.idp.googleClientSecret | quote }}
+            - name: GITHUB_CLIENT_ID
+              value: {{ .Values.keycloak.idp.githubClientId | quote }}
+            - name: GITHUB_CLIENT_SECRET
+              value: {{ .Values.keycloak.idp.githubClientSecret | quote }}
+            - name: MICROSOFT_CLIENT_ID
+              value: {{ .Values.keycloak.idp.microsoftClientId | quote }}
+            - name: MICROSOFT_CLIENT_SECRET
+              value: {{ .Values.keycloak.idp.microsoftClientSecret | quote }}
+            # --- Image-specific extras (replacement-image webhook/truststore vars) ---
+            {{- range $name, $value := .Values.keycloak.extraEnv }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- with .Values.keycloak.extraEnvSecretRef }}
+          envFrom:
+            - secretRef:
+                name: {{ . }}
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 9000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 18
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 9000
+            initialDelaySeconds: 180
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.resources.keycloak | nindent 12 }}
+{{- end }}

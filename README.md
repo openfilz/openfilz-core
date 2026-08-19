@@ -9,7 +9,7 @@
 ![Branches Coverage](./.github/badges/branches.svg)
 ![Maven Central Version](https://img.shields.io/maven-central/v/org.openfilz/openfilz-api?link=https%3A%2F%2Fcentral.sonatype.com%2Fnamespace%2Forg.openfilz)
 
-OpenFilz is a modern, reactive document management API designed for scalability, security, and performance. Built on **Spring Boot 3.5+ / WebFlux**, it provides a centralized solution for handling document and folder-related operations through comprehensive REST and GraphQL APIs.
+OpenFilz is a modern, reactive document management API designed for scalability, security, and performance. Built on **Spring Boot 4+ / WebFlux**, it provides a centralized solution for handling document and folder-related operations through comprehensive REST and GraphQL APIs.
 
 **[Try the live demo](https://app.openfilz.org/)** | **[Swagger API Documentation](https://api.openfilz.org/swagger-ui/index.html)**
 
@@ -41,7 +41,7 @@ Pick the guide that matches your role:
 | Component | Technology |
 |-----------|------------|
 | Language | Java 25 |
-| Framework | Spring Boot 3.5.8, Spring WebFlux |
+| Framework | Spring Boot 4+, Spring WebFlux |
 | Database | PostgreSQL (R2DBC, non-blocking) |
 | Migrations | Flyway |
 | Storage | Local filesystem or S3/MinIO (pluggable) |
@@ -205,7 +205,7 @@ OpenFilz provides **5 official SDKs** auto-generated from the OpenAPI specificat
 <td align="center"><a href="https://central.sonatype.com/artifact/org.openfilz/openfilz-sdk-java"><img src="https://img.shields.io/maven-central/v/org.openfilz/openfilz-sdk-java?label=Maven%20Central" alt="Maven Central"/></a></td>
 <td align="center"><a href="https://central.sonatype.com/artifact/org.openfilz/openfilz-sdk-java-reactive"><img src="https://img.shields.io/maven-central/v/org.openfilz/openfilz-sdk-java-reactive?label=Maven%20Central" alt="Maven Central"/></a></td>
 <td align="center"><a href="https://www.npmjs.com/package/@openfilz-sdk/typescript"><img src="https://img.shields.io/npm/v/@openfilz-sdk/typescript?label=npm" alt="npm"/></a></td>
-<td align="center"><a href="https://pypi.org/project/openfilz-sdk-python/"><img src="https://img.shields.io/pypi/v/openfilz-sdk-python?label=PyPI" alt="PyPI"/></a></td>
+<td align="center"><a href="https://pypi.org/project/openfilz-sdk/"><img src="https://img.shields.io/pypi/v/openfilz-sdk?label=PyPI" alt="PyPI"/></a></td>
 <td align="center"><a href="https://www.nuget.org/packages/OpenFilz.Sdk"><img src="https://img.shields.io/nuget/v/OpenFilz.Sdk?label=NuGet" alt="NuGet"/></a></td>
 </tr>
 </table>

@@ -220,16 +220,13 @@ docker-compose -f docker-compose.yml \
   -f docker-compose.minio.yml up -d
 ```
 
-When not using Make, you must manually generate the frontend config (`ngx-env.js`):
+When not using Make, set the `NG_APP_*` variables in `.env` (see `.env.example`).
+`docker-compose.yml` passes them to the `openfilz-web` container, which writes
+`ngx-env.js` at startup. To override the auth/OnlyOffice toggles for one run:
 
 ```bash
-export NG_APP_API_URL="http://localhost:8081/api/v1"
-export NG_APP_GRAPHQL_URL="http://localhost:8081/graphql/v1"
-export NG_APP_AUTHENTICATION_ENABLED="true"
-export NG_APP_AUTHENTICATION_AUTHORITY="http://localhost:8180/realms/openfilz"
-export NG_APP_AUTHENTICATION_CLIENT_ID="openfilz-web"
-export NG_APP_ONLYOFFICE_ENABLED="false"
-envsubst < ngx-env.template.js > ngx-env.js
+NG_APP_AUTHENTICATION_ENABLED=true NG_APP_ONLYOFFICE_ENABLED=false \
+  docker-compose -f docker-compose.yml -f docker-compose.auth.yml up -d
 ```
 
 ### Kubernetes / Helm
@@ -296,7 +293,7 @@ Database schema is managed automatically by **Flyway**. Migrations run on startu
 | `storage.minio.access-key` / `MINIO_ACCESS_KEY` | `minioadmin` | S3 access key |
 | `storage.minio.secret-key` / `MINIO_SECRET_KEY` | `minioadmin` | S3 secret key |
 | `storage.minio.bucket-name` / `MINIO_BUCKET_NAME` | `dms-bucket` | S3 bucket name |
-| `storage.minio.versioning-enabled` | `false` | Enable S3 bucket versioning (preserves old versions on replace) |
+| `storage.minio.versioning-enabled` / `STORAGE_MINIO_VERSIONING_ENABLED` | `false` | Enable S3 bucket versioning (preserves old versions on replace) and the document version endpoints (`GET .../versions`, `GET .../versions/{versionId}/download`, `POST .../versions/{versionId}/restore`). Pair with `NG_APP_STORAGE_MINIO_VERSIONING_ENABLED=true` on the frontend to show the version history UI. Restore is history-preserving (server-side copy creating a new latest version, single-copy limit 5 GiB). Versions accumulate in the bucket — consider MinIO lifecycle rules to cap version count/age. |
 
 **Choosing a storage backend:**
 
@@ -731,7 +728,9 @@ This verifies the SHA-256 hash chain has not been tampered with.
 - Verify MinIO credentials and endpoint
 
 **Frontend configuration not updating**
-- Regenerate `ngx-env.js`: `make generate-config` or `make clean && make up-auth`
+- The web container writes `ngx-env.js` at startup from `NG_APP_*`. Update the values in
+  `.env` and recreate the web container (`docker-compose up -d --force-recreate openfilz-web`).
+  `/ngx-env.js` is served with no-cache headers, so a browser refresh picks up the change.
 
 ### Reset Everything
 

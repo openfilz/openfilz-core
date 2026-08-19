@@ -11,7 +11,7 @@ import org.openfilz.dms.scheduler.TusUploadCleanupScheduler;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.codec.json.Jackson2JsonEncoder;
+import org.springframework.http.codec.json.JacksonJsonEncoder;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
 import java.io.IOException;
@@ -50,8 +50,8 @@ public abstract class AbstractTusIT extends TestContainersKeyCloakConfig {
     @Autowired
     private TusUploadCleanupScheduler tusUploadCleanupScheduler;
 
-    public AbstractTusIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
-        super(webTestClient, customJackson2JsonEncoder);
+    public AbstractTusIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
+        super(webTestClient, customJacksonJsonEncoder);
     }
 
     @BeforeAll
@@ -224,7 +224,7 @@ public abstract class AbstractTusIT extends TestContainersKeyCloakConfig {
         long tooLarge = 11L * 1024 * 1024 * 1024; // 11GB, exceeds default 10GB max
         String metadata = buildUploadMetadata("huge-file.bin", null, true);
         createUpload(tooLarge, metadata)
-                .expectStatus().isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE)
+                .expectStatus().isEqualTo(HttpStatus.CONTENT_TOO_LARGE)
                 .expectHeader().valueEquals("Tus-Resumable", "1.0.0");
     }
 

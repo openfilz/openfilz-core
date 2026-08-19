@@ -19,11 +19,15 @@ import java.util.Map;
 public class ReplaceAudit extends AuditLogDetails {
 
     public ReplaceAudit(String filename) {
-        this(filename, null);
+        this(filename, null, null);
     }
 
     public ReplaceAudit(Map<String, Object> metadata) {
-        this(null, metadata);
+        this(null, metadata, null);
+    }
+
+    public ReplaceAudit(String filename, String versionId) {
+        this(filename, null, versionId);
     }
 
     @Schema(description = "New file replacing the existing one")
@@ -32,5 +36,8 @@ public class ReplaceAudit extends AuditLogDetails {
     @Schema(description = "New metadata replacing the existing ones")
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     private Map<String, Object> metadata;
+
+    @Schema(description = "Storage version identifier created by this replace (only when versioning is enabled)")
+    private String versionId;
 
 }

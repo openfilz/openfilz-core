@@ -1,0 +1,195 @@
+# Default values — shared services for the openfilz-shared namespace.
+# Env names mirror the authoritative compose
+# (deploy/docker-compose/dokploy/compose.yaml) — keep them in sync when it
+# evolves.
+
+hosts:
+  auth: auth-demo.openfilz.com
+  # OnlyOffice public hostname — only used when onlyoffice.enabled
+  docs: docs-demo.openfilz.com
+
+ingress:
+  enabled: true
+  className: traefik
+  # Wildcard *.openfilz.com cert (cert-manager DNS-01) — secret must exist in this
+  # namespace (or be synced into it, e.g. with reflector).
+  tlsSecretName: wildcard-openfilz-com-tls
+  annotations: {}
+
+# OpenShift: expose Keycloak (and OnlyOffice when enabled) via Routes instead
+# of the Ingress above. See the README's "OpenShift notes" (SCCs, NetworkPolicy).
+openshift:
+  enabled: false
+  route:
+    tls:
+      enabled: true
+      termination: "edge"
+      insecureEdgeTerminationPolicy: "Redirect"
+
+images:
+  # The OpenFilz Keycloak image (public) — built from deploy/docker-compose/
+  # dokploy/keycloak/: bakes the realm export (the initial load on first start)
+  # + the OpenFilz login/email themes; the entrypoint envsubst's
+  # KEYCLOAK_PUBLIC_URL / OPENFILZ_WEB_ROOT_URL / default role+group vars into
+  # the realm at import. A customized image (different baked realm, extra
+  # providers) can be swapped in via this value + images.pullSecrets +
+  # keycloak.extraEnv below — see "Replacing the Keycloak image" in the README.
+  keycloak: ghcr.io/openfilz/keycloak:26.5
+  keycloakDb: postgres:17-alpine
+  opensearch: opensearchproject/opensearch:2.19.1
+  gotenberg: gotenberg/gotenberg:8
+  onlyoffice: onlyoffice/documentserver:latest
+  pullPolicy: Always
+  # Pull secrets for the Keycloak pod (needed when images.keycloak is replaced
+  # by an image from a private registry). List of {name: <secret>}.
+  pullSecrets: []
+
+# =============================================================================
+# Keycloak — one realm per tenant/demo; the image bakes the realm export
+# (template realm) + the OpenFilz login/email themes.
+# =============================================================================
+keycloak:
+  enabled: true
+  adminUser: admin
+  # Required unless existingSecret is set (secret keys: admin-password, db-password).
+  adminPassword: ""
+  existingSecret: ""
+  # OPENFILZ_WEB_ROOT_URL — substituted into the baked realm export at import time
+  # (entrypoint.sh envsubst). Only affects the template realm; per-tenant realms are
+  # created afterwards via the Keycloak Admin API with their own URLs.
+  webRootUrl: https://ce-demo.openfilz.com
+  # Default role/group for new users — applied to the 4 realm-substitution slots
+  # (KEYCLOAK_DEFAULT_ROLE_1..4 / KEYCLOAK_DEFAULT_GROUP_1..4).
+  defaultRole: READER
+  defaultGroup: /OPENFILZ/READER
+  smtp:
+    host: ""
+    port: "587"
+    from: noreply@openfilz.com
+    ssl: "false"
+    starttls: "true"
+    auth: "true"
+    user: ""
+    password: ""
+  # Identity providers / social login (empty = provider stays unconfigured)
+  idp:
+    googleClientId: ""
+    googleClientSecret: ""
+    githubClientId: ""
+    githubClientSecret: ""
+    microsoftClientId: ""
+    microsoftClientSecret: ""
+  # Extra environment variables for the Keycloak container (map name: value) —
+  # the seam for image-specific settings a replacement image needs (webhook
+  # providers, truststores, ...).
+  extraEnv: {}
+  # Existing Secret injected via envFrom — for sensitive extras.
+  extraEnvSecretRef: ""
+  # Pod securityContext ({} = cluster/image defaults). On OpenShift set an
+  # explicit runAsUser per the example values so the pod requests the SCC it
+  # needs instead of getting a random namespace UID.
+  podSecurityContext: {}
+  # Dedicated small PostgreSQL for Keycloak only ({{ .Release.Name }}-keycloak-db)
+  db:
+    name: keycloak_db
+    user: keycloak
+    # Required unless keycloak.existingSecret is set.
+    password: ""
+    storage: 10Gi
+    # Empty = the cluster's default StorageClass (e.g. hcloud-volumes on the
+    # Hetzner platform — its CSI minimum is 10Gi).
+    storageClassName: ""
+    podSecurityContext: {}     # OpenShift: postgres:alpine needs runAsUser 0
+
+# =============================================================================
+# OpenSearch — single node, security plugin disabled (in-cluster access only,
+# guarded by NetworkPolicy). No ulimits in k8s: memory_lock is disabled via env.
+# =============================================================================
+opensearch:
+  enabled: true
+  javaOpts: -Xms512m -Xmx512m
+  storage: 10Gi
+  # Empty = the cluster's default StorageClass.
+  storageClassName: ""
+  # The image runs as the opensearch user (1000); fsGroup makes the data PVC
+  # group-writable — required on CSI drivers that mount root-owned volumes
+  # (observed on OpenShift), harmless elsewhere.
+  podSecurityContext:
+    runAsUser: 1000
+    fsGroup: 1000
+
+# =============================================================================
+# Gotenberg — stateless document conversion (thumbnails, PDF)
+# =============================================================================
+gotenberg:
+  enabled: true
+  podSecurityContext: {}       # OpenShift: gotenberg user is 1001
+  # Container args — mirror the CE compose command flags.
+  args:
+    - "gotenberg"
+    - "--api-timeout=60s"
+    - "--libreoffice-restart-after=100"
+    - "--libreoffice-auto-start=true"
+    - "--log-level=info"
+
+# =============================================================================
+# OnlyOffice document server (disabled by default — enable when a tenant needs
+# collaborative editing; JWT secret is per-installation, shared with the APIs).
+# =============================================================================
+onlyoffice:
+  enabled: false
+  # Required when enabled, unless existingSecret is set (secret key: jwt-secret).
+  jwtSecret: ""
+  existingSecret: ""
+  podSecurityContext: {}       # OpenShift: the documentserver image needs runAsUser 0
+  persistence:
+    data:
+      enabled: false
+      size: 10Gi
+      storageClassName: ""     # empty = the cluster's default StorageClass
+    logs:
+      enabled: false
+      size: 10Gi
+      storageClassName: ""
+
+# Scheduling constraints for every pod in this chart ({} / [] = none).
+# Platform-specific pools belong in install values, e.g. the Hetzner k3s
+# platform passes: --set nodeSelector."openfilz\.com/pool"=tenant
+nodeSelector: {}
+tolerations: []
+
+networkPolicy:
+  enabled: true
+  # Namespace running the ingress controller, matched by name
+  # (kubernetes.io/metadata.name). k3s/Traefik: kube-system; OpenShift:
+  # openshift-ingress. Empty = skip this source.
+  ingressControllerNamespace: kube-system
+  # Extra namespaceSelector label-sets, each OR'ed in as an additional allowed
+  # ingress source. Needed on OpenShift, where the router is often
+  # HOST-NETWORKED and its traffic doesn't match the namespace above:
+  #   - network.openshift.io/policy-group: ingress            # openshift-sdn
+  #   - policy-group.network.openshift.io/host-network: ""    # OVN-Kubernetes, host-networked router
+  ingressFromNamespaceLabels: []
+  # Namespaces carrying this label may reach the shared services (keycloak 8080,
+  # opensearch 9200, gotenberg 3000, onlyoffice 80). The provisioner labels every
+  # tenant/demo namespace with it.
+  tenantAccessLabel:
+    key: openfilz.com/tenant-access
+    value: "true"
+
+resources:
+  keycloak:
+    requests: { cpu: 200m, memory: 1Gi }
+    limits: { memory: 2Gi }
+  keycloakDb:
+    requests: { cpu: 50m, memory: 256Mi }
+    limits: { memory: 512Mi }
+  opensearch:
+    requests: { cpu: 200m, memory: 1Gi }
+    limits: { memory: 1536Mi }
+  gotenberg:
+    requests: { cpu: 100m, memory: 512Mi }
+    limits: { memory: 1Gi }
+  onlyoffice:
+    requests: { cpu: 500m, memory: 2Gi }
+    limits: { memory: 4Gi }

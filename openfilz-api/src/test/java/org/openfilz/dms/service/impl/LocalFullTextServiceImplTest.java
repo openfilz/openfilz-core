@@ -15,6 +15,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -351,5 +352,21 @@ class LocalFullTextServiceImplTest {
         service.updateIndexField(docId, "name", "newName");
 
         verify(indexService, timeout(2000)).updateIndexField(docId, "name", "newName");
+    }
+
+    @Test
+    void isRetryableException_conflictMessages_areRetryable() {
+        assertEquals(Boolean.TRUE, org.springframework.test.util.ReflectionTestUtils.invokeMethod(
+                service, "isRetryableException", new RuntimeException("version_conflict")));
+        assertEquals(Boolean.TRUE, org.springframework.test.util.ReflectionTestUtils.invokeMethod(
+                service, "isRetryableException", new RuntimeException("HTTP 409 Conflict")));
+    }
+
+    @Test
+    void isRetryableException_otherOrNullMessage_notRetryable() {
+        assertEquals(Boolean.FALSE, org.springframework.test.util.ReflectionTestUtils.invokeMethod(
+                service, "isRetryableException", new RuntimeException("boom")));
+        assertEquals(Boolean.FALSE, org.springframework.test.util.ReflectionTestUtils.invokeMethod(
+                service, "isRetryableException", new RuntimeException()));
     }
 }

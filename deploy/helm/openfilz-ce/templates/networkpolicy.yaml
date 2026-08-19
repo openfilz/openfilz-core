@@ -1,0 +1,72 @@
+{{- if .Values.networkPolicy.enabled }}
+# Default-deny ingress for the whole namespace, then explicit allows.
+# Egress is left open for the demo profile — tighten per tenant class if needed.
+# The web/api pods come from the openfilz-web / openfilz-api subcharts, which
+# carry the app.kubernetes.io/component: web|api labels by contract.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-default-deny-ingress
+  labels:
+    {{- include "openfilz-ce.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+---
+# Ingress controller / router → web + api.
+# Sources: the controller's namespace by name, plus any label-selected
+# namespaces from networkPolicy.ingressFromNamespaceLabels (OpenShift routers
+# are often host-networked and only match the policy-group pseudo-namespaces).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-allow-ingress-controller
+  labels:
+    {{- include "openfilz-ce.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values: ["web", "api"]
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        {{- with .Values.networkPolicy.ingressControllerNamespace }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . }}
+        {{- end }}
+        {{- range .Values.networkPolicy.ingressFromNamespaceLabels }}
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml . | nindent 14 }}
+        {{- end }}
+      ports:
+        - port: 8080
+---
+# api → postgres (only the api may reach the database)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-allow-api-to-postgres
+  labels:
+    {{- include "openfilz-ce.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: postgres
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values: ["api", "backup"]
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+      ports:
+        - port: 5432
+{{- end }}

@@ -1,8 +1,8 @@
 package org.openfilz.dms.service.impl;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import io.r2dbc.postgresql.codec.Json;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -263,7 +263,10 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                                 .storagePath(storagePath);
 
                         return saveDocumentService.doSaveFile(saveDocumentService.saveNewDocumentFunction(documentBuilder))
-                                .flatMap(savedDoc -> auditService.logAction(AuditAction.UPLOAD_DOCUMENT, FILE, savedDoc.getId())
+                                .flatMap(savedDoc -> storageService.getLatestVersionId(savedDoc.getStoragePath())
+                                        .map(versionId -> new UploadAudit(savedDoc.getName(), parentFolderId, null, versionId))
+                                        .defaultIfEmpty(new UploadAudit(savedDoc.getName(), parentFolderId, null))
+                                        .flatMap(details -> auditService.logAction(AuditAction.UPLOAD_DOCUMENT, FILE, savedDoc.getId(), details))
                                         .thenReturn(savedDoc))
                                 .as(tx::transactional)
                                 .doOnSuccess(this::postProcessDocument)
@@ -510,8 +513,10 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                                                     .metadata(jsonUtils.cloneOrNewEmptyJson(originalFile.getMetadata()));
                                             return saveDocumentService.doSaveFile(saveDocumentService.saveNewDocumentFunction(copiedFile));
                                         })
-                                        .flatMap(cf -> auditService.logAction(COPY_FILE, FILE, cf.getId(),
-                                                        new CopyAudit(fileIdToCopy, request.targetFolderId()))
+                                        .flatMap(cf -> storageService.getLatestVersionId(cf.getStoragePath())
+                                                        .map(versionId -> new CopyAudit(fileIdToCopy, request.targetFolderId(), null, versionId))
+                                                        .defaultIfEmpty(new CopyAudit(fileIdToCopy, request.targetFolderId()))
+                                                        .flatMap(details -> auditService.logAction(COPY_FILE, FILE, cf.getId(), details))
                                                         .thenReturn(cf)
                                                 )
                                         )
@@ -587,8 +592,11 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                                                                         .metadata(jsonUtils.cloneOrNewEmptyJson(childFile.getMetadata()));
                                                                 return saveDocumentService.doSaveFile(saveDocumentService.saveNewDocumentFunction(documentBuilder));
                                                             })
-                                                            .flatMap(ccf -> auditService.logAction(COPY_FILE_CHILD, FILE, ccf.getId(),
-                                                                    new CopyAudit(childFile.getId(), newFolderId, sourceFolderId)).thenReturn(ccf)
+                                                            .flatMap(ccf -> storageService.getLatestVersionId(ccf.getStoragePath())
+                                                                    .map(versionId -> new CopyAudit(childFile.getId(), newFolderId, sourceFolderId, versionId))
+                                                                    .defaultIfEmpty(new CopyAudit(childFile.getId(), newFolderId, sourceFolderId))
+                                                                    .flatMap(details -> auditService.logAction(COPY_FILE_CHILD, FILE, ccf.getId(), details))
+                                                                    .thenReturn(ccf)
                                                             )
                                                             .as(tx::transactional)
                                                             .doOnSuccess(this::postProcessDocument)
@@ -743,7 +751,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                     if (currentMetadata == null || currentMetadata.isNull() || !currentMetadata.isObject()) {
                         updatedMetadataNode = objectMapper.createObjectNode();
                     } else {
-                        updatedMetadataNode = currentMetadata.deepCopy();
+                        updatedMetadataNode = ((ObjectNode) currentMetadata).deepCopy();
                     }
 
                     for (Map.Entry<String, Object> entry : request.metadataToUpdate().entrySet()) {

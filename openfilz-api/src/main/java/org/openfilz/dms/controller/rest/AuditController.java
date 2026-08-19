@@ -12,6 +12,7 @@ import org.openfilz.dms.dto.audit.AuditVerificationResult;
 import org.openfilz.dms.dto.request.SearchByAuditLogRequest;
 import org.openfilz.dms.enums.SortOrder;
 import org.openfilz.dms.service.AuditService;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -25,6 +26,7 @@ import static org.openfilz.dms.config.RestApiVersion.ENDPOINT_AUDIT;
 @RequestMapping(RestApiVersion.API_PREFIX + ENDPOINT_AUDIT)
 @RequiredArgsConstructor
 @SecurityRequirement(name = "keycloak_auth")
+@ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
 public class AuditController {
     private final AuditService auditService;
 

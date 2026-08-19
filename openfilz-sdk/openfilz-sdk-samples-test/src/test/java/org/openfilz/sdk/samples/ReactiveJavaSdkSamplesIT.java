@@ -20,6 +20,7 @@ import reactor.test.StepVerifier;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.nio.channels.WritableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -144,15 +145,22 @@ public class ReactiveJavaSdkSamplesIT extends SdkSamplesBaseConfig {
         WebClient webClient = WebClient.create(getApiBaseUrl());
         Path tempDownload = Files.createTempFile("sdk-reactive-download-", ".txt");
 
+        // Write through a synchronous WritableByteChannel rather than the Path overload:
+        // the Path overload uses AsynchronousFileChannel, which on Windows rejects
+        // Netty 4.2's FFM-backed direct buffers (netty/netty#16071,
+        // "ByteBuffer derived from closeable shared sessions not supported")
+        WritableByteChannel channel = Files.newByteChannel(tempDownload, StandardOpenOption.WRITE);
+
         StepVerifier.create(
                         DataBufferUtils.write(
                                         webClient.get()
                                                 .uri("/api/v1/documents/{id}/download", fileId)
                                                 .retrieve()
                                                 .bodyToFlux(DataBuffer.class),
-                                        tempDownload,
-                                        StandardOpenOption.WRITE)
+                                        channel)
+                                .map(DataBufferUtils::release)
                                 .then(Mono.fromCallable(() -> {
+                                    channel.close();
                                     // Verify content by streaming line-by-line — no full-file buffering
                                     try (BufferedReader reader = Files.newBufferedReader(tempDownload)) {
                                         return reader.readLine();

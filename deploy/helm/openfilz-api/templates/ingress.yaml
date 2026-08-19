@@ -1,26 +1,37 @@
-{{- if and .Values.ingress.enabled (not .Values.openshift.enabled) }}
+{{- if and (eq (include "openfilz-api.ingressEnabled" .) "true") (not .Values.openshift.enabled) }}
+{{- $host := include "openfilz-api.hostApi" . }}
+{{- $tlsSecret := include "openfilz-api.ingressTlsSecret" . }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "common.names.fullname" . }}
-  labels: {{- include "common.labels.standard" . | nindent 4 }}
+  name: {{ include "openfilz-api.fullname" . }}
+  labels: {{- include "openfilz-api.labels" . | nindent 4 }}
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  {{- if .Values.ingress.ingressClassName }}
-  ingressClassName: {{ .Values.ingress.ingressClassName }}
+  {{- with (include "openfilz-api.ingressClassName" .) }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- if and $host $tlsSecret }}
+  tls:
+    - hosts:
+        - {{ $host }}
+      secretName: {{ $tlsSecret }}
   {{- end }}
   rules:
-    - http:
+    - {{- if $host }}
+      host: {{ $host }}
+      {{- end }}
+      http:
         paths:
           {{- range .Values.ingress.paths }}
           - path: {{ . }}
             pathType: Prefix
             backend:
               service:
-                name: {{ include "common.names.fullname" $ }}
+                name: {{ include "openfilz-api.fullname" $ }}
                 port:
                   name: http
           {{- end }}

@@ -1,6 +1,7 @@
 package org.openfilz.dms.service.impl;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.QuotaProperties;
@@ -271,12 +272,11 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
                             .build();
 
                     return documentDAO.create(document)
-                            .flatMap(savedDoc -> auditService.logAction(
-                                    AuditAction.UPLOAD_DOCUMENT,
-                                    FILE,
-                                    savedDoc.getId(),
-                                    new UploadAudit(savedDoc.getName(), request.parentFolderId(), request.metadata())
-                            ).thenReturn(savedDoc))
+                            .flatMap(savedDoc -> storageService.getLatestVersionId(savedDoc.getStoragePath())
+                                    .map(versionId -> new UploadAudit(savedDoc.getName(), request.parentFolderId(), request.metadata(), versionId))
+                                    .defaultIfEmpty(new UploadAudit(savedDoc.getName(), request.parentFolderId(), request.metadata()))
+                                    .flatMap(details -> auditService.logAction(AuditAction.UPLOAD_DOCUMENT, FILE, savedDoc.getId(), details))
+                                    .thenReturn(savedDoc))
                             .as(tx::transactional)
                             .doOnSuccess(this::postProcessDocument)
                             .doOnSuccess(doc -> cleanupTusMetadata(uploadId).subscribe())
@@ -432,7 +432,8 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
                 byte[] jsonBytes = objectMapper.writeValueAsBytes(object);
                 DataBuffer buffer = new DefaultDataBufferFactory().wrap(jsonBytes);
                 return Flux.just(buffer);
-            } catch (IOException e) {
+            } catch (JacksonException e) {
+                // Jackson 3 throws unchecked JacksonException instead of IOException
                 return Flux.error(new TusUploadException("Error serializing metadata to JSON", e));
             }
         });

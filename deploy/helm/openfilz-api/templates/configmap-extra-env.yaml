@@ -2,8 +2,8 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "common.names.fullname" . }}-extra-env
-  labels: {{- include "common.labels.standard" . | nindent 4 }}
+  name: {{ include "openfilz-api.fullname" . }}-extra-env
+  labels: {{- include "openfilz-api.labels" . | nindent 4 }}
 data:
   {{- range $key, $value := .Values.extraEnv }}
   {{ $key }}: {{ $value | quote }}

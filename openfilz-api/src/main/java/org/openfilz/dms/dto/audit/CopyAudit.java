@@ -19,10 +19,17 @@ import java.util.UUID;
 public class CopyAudit extends AuditLogDetails {
 
     public CopyAudit(UUID sourceFileId, UUID targetFolderId) {
-        this(sourceFileId, targetFolderId, null);
+        this(sourceFileId, targetFolderId, null, null);
+    }
+
+    public CopyAudit(UUID sourceFileId, UUID targetFolderId, UUID sourceFolderId) {
+        this(sourceFileId, targetFolderId, sourceFolderId, null);
     }
 
     private UUID sourceFileId;
     private UUID targetFolderId;
     private UUID sourceFolderId;
+
+    @Schema(description = "Storage version identifier of the copied file's initial version (only when versioning is enabled)")
+    private String versionId;
 }

@@ -53,7 +53,7 @@ class GlobalExceptionHandlerTest {
 
         StepVerifier.create(handler.handleFileSizeExceeded(ex))
                 .expectNextMatches(response -> {
-                    assertEquals(HttpStatus.PAYLOAD_TOO_LARGE, response.getStatusCode());
+                    assertEquals(HttpStatus.CONTENT_TOO_LARGE, response.getStatusCode());
                     assertEquals(413, response.getBody().status());
                     return true;
                 })

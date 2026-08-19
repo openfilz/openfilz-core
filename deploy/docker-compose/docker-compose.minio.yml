@@ -67,3 +67,5 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
       MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-openfilz-bucket}
+      # Bucket versioning + version history UI (set the NG_APP_* twin on the web service too)
+      STORAGE_MINIO_VERSIONING_ENABLED: ${STORAGE_MINIO_VERSIONING_ENABLED:-false}

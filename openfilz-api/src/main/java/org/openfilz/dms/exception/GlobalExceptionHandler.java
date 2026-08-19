@@ -7,6 +7,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.support.WebExchangeBindException;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.util.stream.Collectors;
@@ -30,7 +32,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(FileSizeExceededException.class)
     public Mono<ResponseEntity<ErrorResponse>> handleFileSizeExceeded(FileSizeExceededException ex) {
         log.warn("File size exceeded: {}", ex.getMessage());
-        return Mono.just(ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(new ErrorResponse(HttpStatus.PAYLOAD_TOO_LARGE.value(), ex.getMessage())));
+        return Mono.just(ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE).body(new ErrorResponse(HttpStatus.CONTENT_TOO_LARGE.value(), ex.getMessage())));
     }
 
     @ExceptionHandler(UserQuotaExceededException.class)
@@ -63,6 +65,19 @@ public class GlobalExceptionHandler {
         return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse(HttpStatus.BAD_REQUEST.value(), "Validation failed: " + errors)));
     }
 
+    @ExceptionHandler(VersioningDisabledException.class)
+    public Mono<ResponseEntity<ErrorResponse>> handleVersioningDisabled(VersioningDisabledException ex) {
+        log.warn("Versioning disabled: {}", ex.getMessage());
+        // 409 (not 404) so clients can distinguish "feature off" from "version not found"
+        return Mono.just(ResponseEntity.status(HttpStatus.CONFLICT).body(new ErrorResponse(HttpStatus.CONFLICT.value(), ex.getMessage())));
+    }
+
+    @ExceptionHandler(CannotRestoreLatestVersionException.class)
+    public Mono<ResponseEntity<ErrorResponse>> handleCannotRestoreLatestVersion(CannotRestoreLatestVersionException ex) {
+        log.warn("Cannot restore latest version: {}", ex.getMessage());
+        return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse(HttpStatus.BAD_REQUEST.value(), ex.getMessage())));
+    }
+
     @ExceptionHandler(AuditException.class)
     public Mono<ResponseEntity<ErrorResponse>> handleAuditException(AuditException ex) {
         log.error("AuditException", ex);
@@ -79,6 +94,25 @@ public class GlobalExceptionHandler {
     public Mono<ResponseEntity<ErrorResponse>> handleAccessDeniedException(AccessDeniedException ex) {
         log.warn("AccessDeniedException", ex);
         return Mono.just(ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ErrorResponse(HttpStatus.FORBIDDEN.value(), ex.getMessage())));
+    }
+
+    /**
+     * Spring/WebFlux throws ResponseStatusException for things like "no handler matched" (404),
+     * bad method (405), content-type mismatch (415), etc. These are client-side issues — we must
+     * (a) preserve the original status code (NOT rewrite to 500) and (b) log at a sane level so
+     * routine 404 polls don't flood the log as ERRORs with full reactor stack traces.
+     */
+    @ExceptionHandler(ResponseStatusException.class)
+    public Mono<ResponseEntity<ErrorResponse>> handleResponseStatus(ResponseStatusException ex, ServerWebExchange exchange) {
+        HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
+        String path = exchange.getRequest().getMethod() + " " + exchange.getRequest().getPath().value();
+        if (status != null && status.is5xxServerError()) {
+            log.warn("{} -> {} {}", path, ex.getStatusCode(), ex.getReason(), ex);
+        } else {
+            log.debug("{} -> {} {}", path, ex.getStatusCode(), ex.getReason());
+        }
+        String msg = ex.getReason() != null ? ex.getReason() : (status != null ? status.getReasonPhrase() : "Error");
+        return Mono.just(ResponseEntity.status(ex.getStatusCode()).body(new ErrorResponse(ex.getStatusCode().value(), msg)));
     }
 
     @ExceptionHandler(Throwable.class)

@@ -9,7 +9,7 @@ import org.openfilz.dms.scheduler.AuditVerificationScheduler;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.client.MultipartBodyBuilder;
-import org.springframework.http.codec.json.Jackson2JsonEncoder;
+import org.springframework.http.codec.json.JacksonJsonEncoder;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -34,8 +34,8 @@ public class AuditSchedulerDirectIT extends TestContainersBaseConfig {
     @Autowired(required = false)
     private AuditVerificationScheduler auditVerificationScheduler;
 
-    public AuditSchedulerDirectIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
-        super(webTestClient, customJackson2JsonEncoder);
+    public AuditSchedulerDirectIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
+        super(webTestClient, customJacksonJsonEncoder);
     }
 
     // ==================== AuditVerificationScheduler direct call ====================

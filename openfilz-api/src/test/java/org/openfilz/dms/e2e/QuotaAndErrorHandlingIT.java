@@ -11,7 +11,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
-import org.springframework.http.codec.json.Jackson2JsonEncoder;
+import org.springframework.http.codec.json.JacksonJsonEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
@@ -38,8 +38,8 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 @TestConstructor(autowireMode = ALL)
 public class QuotaAndErrorHandlingIT extends TestContainersBaseConfig {
 
-    public QuotaAndErrorHandlingIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
-        super(webTestClient, customJackson2JsonEncoder);
+    public QuotaAndErrorHandlingIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
+        super(webTestClient, customJacksonJsonEncoder);
     }
 
     @DynamicPropertySource
@@ -86,13 +86,13 @@ public class QuotaAndErrorHandlingIT extends TestContainersBaseConfig {
 
     @Test
     void whenInvalidJsonBody_thenError() {
-        // Malformed JSON causes server error
+        // Malformed JSON should be rejected as a client error
         getWebTestClient().post()
                 .uri(RestApiVersion.API_PREFIX + "/folders")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue("{invalid json}")
                 .exchange()
-                .expectStatus().is5xxServerError();
+                .expectStatus().isBadRequest();
     }
 
     // ==================== listFolder error paths ====================

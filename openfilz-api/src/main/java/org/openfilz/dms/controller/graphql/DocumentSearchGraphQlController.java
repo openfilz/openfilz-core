@@ -53,6 +53,7 @@ public class DocumentSearchGraphQlController {
             type = DocumentType.FILE;
             contentType = info.contentType() == null ? ContentTypeMapper.getContentType(info.extension()) :  info.contentType();
         }
-        return thumbnailUrlResolver.resolveThumbnailUrl(info.id(), type, contentType);
+        // updatedAt is a cache-busting token so a replaced/restored document's thumbnail is re-fetched
+        return thumbnailUrlResolver.resolveThumbnailUrl(info.id(), type, contentType, info.updatedAt());
     }
 }

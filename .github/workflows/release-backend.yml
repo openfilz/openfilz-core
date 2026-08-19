@@ -23,6 +23,12 @@ jobs:
   build:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    outputs:
+      releaseVersion: ${{ steps.versions.outputs.releaseVersion }}
+    permissions:
+      contents: write      # create tags, releases, push changelog
+      packages: write      # jib push to ghcr.io
+      id-token: write      # OIDC for npm Trusted Publishing
     steps:
       - run: |
           echo The PR was merged to main....
@@ -45,10 +51,15 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      - name: Set up Node.js 18
+      - name: Set up Node.js 24
         uses: actions/setup-node@v6
         with:
-          node-version: '18'
+          node-version: '24'
+      # Node 24.18+ bundles npm 11.16+, which already satisfies OIDC Trusted Publishing
+      # (needs npm >= 11.5.1). We intentionally do NOT run `npm install -g npm@latest`:
+      # its self-upgrade currently ships a tree whose bundled `sigstore` is missing, so
+      # `npm publish` provenance dies with "Cannot find module 'sigstore'" (npm/cli#9722).
+      # Rely on the pristine Node-bundled npm instead.
 
       - name: Set up Python 3
         uses: actions/setup-python@v6
@@ -159,7 +170,7 @@ jobs:
       - name: Perform Release
         run: mvn -Dmaven.wagon.http.retryHandler.count=3 -B release:perform -Darguments="-Pkube,publishMaven,publishSdk -Dmaven.test.skip=false -Dsurefire.skip=true -Dit.test=OpenApiSpecExtractionIT -Dfailsafe.failIfNoSpecifiedTests=false -Dnpm.publish.tag=latest -Dregistry.hostname=ghcr.io -Dregistry.port=443 -Ddocker.context.path=openfilz/ -Djib.to.auth.username=${{ github.actor }} -Djib.to.auth.password=${{ secrets.GITHUB_TOKEN }}"
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # npm publish authenticates via OIDC Trusted Publishing (no token) — see .npmrc
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
@@ -203,3 +214,65 @@ jobs:
         run: |
           rm -f ~/.git-credentials
           git config --global --unset credential.helper || true
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Helm charts ride the same release train as the images: once the tag exists
+  # and the jib images are pushed (release:perform above), package deploy/helm/*
+  # at the release version and push them as OCI artifacts to
+  # oci://ghcr.io/openfilz/charts/<name>:<version> (same registry family, same
+  # GITHUB_TOKEN). Kept as a SEPARATE job so a chart-publish failure never
+  # blocks the release itself and can be re-run alone.
+  # NOTE: the first publish of each chart creates a PRIVATE ghcr package —
+  # flip charts/openfilz-* to public once in the ghcr UI (like the images).
+  # ──────────────────────────────────────────────────────────────────────────
+  publish-helm-charts:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write      # helm push to ghcr.io
+    env:
+      VERSION: ${{ needs.build.outputs.releaseVersion }}
+      CHARTS_REGISTRY: oci://ghcr.io/${{ github.repository_owner }}/charts
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: v${{ needs.build.outputs.releaseVersion }}   # the tag release:prepare pushed
+
+      - uses: azure/setup-helm@v4
+
+      - name: Helm registry login (ghcr)
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Stamp chart versions
+        # `helm package --version/--app-version` stamps the chart being
+        # packaged, but the openfilz-ce umbrella vendors its file://
+        # openfilz-api dependency from the on-disk directory — so also stamp
+        # the Chart.yaml files themselves. The subcharts' appVersion matters:
+        # it is the image-tag default. The openfilz-web chart is NOT published
+        # from here — it lives in the openfilz-web repo (own release train);
+        # the umbrella pulls it from ghcr via its 1.x.x OCI dependency.
+        # Workspace-only edits; nothing is committed.
+        run: |
+          for f in deploy/helm/openfilz-api/Chart.yaml \
+                   deploy/helm/openfilz-shared/Chart.yaml \
+                   deploy/helm/openfilz-ce/Chart.yaml; do
+            sed -i -E \
+              -e "s/^(version:).*/\1 $VERSION/" \
+              -e "s/^(appVersion:).*/\1 \"$VERSION\"/" \
+              "$f"
+          done
+
+      - name: Package and push charts
+        run: |
+          set -euo pipefail
+          # resolves openfilz-api from the stamped local dir (file://, 1.x.x)
+          # and openfilz-web from ghcr (oci://, 1.x.x — must be public)
+          helm dependency update deploy/helm/openfilz-ce
+          mkdir -p target/charts-dist
+          for c in openfilz-api openfilz-shared openfilz-ce; do
+            helm lint "deploy/helm/$c"
+            helm package "deploy/helm/$c" --version "$VERSION" --app-version "$VERSION" -d target/charts-dist
+            helm push "target/charts-dist/$c-$VERSION.tgz" "$CHARTS_REGISTRY"
+          done
+          echo "Published $CHARTS_REGISTRY/{openfilz-api,openfilz-shared,openfilz-ce}:$VERSION"

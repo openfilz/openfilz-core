@@ -47,11 +47,13 @@ public class OnlyOfficeController implements UserInfoService {
     public Mono<OnlyOfficeConfigResponse> getEditorConfig(
             @PathVariable UUID documentId,
             @Parameter(description = "Whether the user can edit the document")
-            @RequestParam(defaultValue = "true") boolean canEdit) {
+            @RequestParam(defaultValue = "true") boolean canEdit,
+            @Parameter(description = "Stored version to view (read-only); omit for the latest content")
+            @RequestParam(required = false) String versionId) {
 
-        log.debug("Generating OnlyOffice config for document {}, canEdit={}", documentId, canEdit);
+        log.debug("Generating OnlyOffice config for document {}, canEdit={}, versionId={}", documentId, canEdit, versionId);
 
-        return onlyOfficeService.generateEditorConfig(documentId, canEdit);
+        return onlyOfficeService.generateEditorConfig(documentId, canEdit, versionId);
     }
 
     /**

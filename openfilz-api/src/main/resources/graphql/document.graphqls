@@ -55,8 +55,10 @@ input ListFolderRequest {
     id : UUID
     "Type (FILE or FOLDER) of the elements to filter"
     type : DocumentType
-    "Content-Type of the files to filter"
+    "Content-Type of the files to filter (exact match)"
     contentType : String
+    "Content-Types of the files to filter: matched as a case-insensitive OR of LIKE patterns (a value without % is an exact match). Used e.g. to filter a folder by a file-type category such as Word or Excel that spans several content-types."
+    contentTypes : [String]
     "name of the elements to filter (exact match)"
     name : String
     "name of the elements to filter (like clause)"

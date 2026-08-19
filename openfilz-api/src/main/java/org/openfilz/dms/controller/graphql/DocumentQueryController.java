@@ -76,7 +76,7 @@ public class DocumentQueryController {
      */
     @SchemaMapping(typeName = "FolderElementInfo", field = "thumbnailUrl")
     public Mono<String> folderElementThumbnailUrl(FullDocumentInfo info) {
-        return thumbnailUrlResolver.resolveThumbnailUrl(info.id(), info.type(), info.contentType());
+        return thumbnailUrlResolver.resolveThumbnailUrl(info.id(), info.type(), info.contentType(), versionToken(info));
     }
 
     /**
@@ -84,7 +84,15 @@ public class DocumentQueryController {
      */
     @SchemaMapping(typeName = "DocumentInfo", field = "thumbnailUrl")
     public Mono<String> documentInfoThumbnailUrl(FullDocumentInfo info) {
-        return thumbnailUrlResolver.resolveThumbnailUrl(info.id(), info.type(), info.contentType());
+        return thumbnailUrlResolver.resolveThumbnailUrl(info.id(), info.type(), info.contentType(), versionToken(info));
+    }
+
+    /**
+     * Cache-busting token for the thumbnail URL: the document's last-update time, which
+     * changes on upload/replace/restore so the frontend re-fetches the regenerated thumbnail.
+     */
+    private static String versionToken(FullDocumentInfo info) {
+        return info.updatedAt() == null ? null : Long.toString(info.updatedAt().toInstant().toEpochMilli());
     }
 
 }

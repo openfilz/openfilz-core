@@ -1,0 +1,48 @@
+{{- if and .Values.ingress.enabled (not .Values.openshift.enabled) (or .Values.keycloak.enabled .Values.onlyoffice.enabled) }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "openfilz-shared.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  tls:
+    - hosts:
+        {{- if .Values.keycloak.enabled }}
+        - {{ .Values.hosts.auth }}
+        {{- end }}
+        {{- if .Values.onlyoffice.enabled }}
+        - {{ .Values.hosts.docs }}
+        {{- end }}
+      secretName: {{ .Values.ingress.tlsSecretName }}
+  rules:
+    {{- if .Values.keycloak.enabled }}
+    - host: {{ .Values.hosts.auth }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-keycloak
+                port:
+                  name: http
+    {{- end }}
+    {{- if .Values.onlyoffice.enabled }}
+    - host: {{ .Values.hosts.docs }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-onlyoffice
+                port:
+                  name: http
+    {{- end }}
+{{- end }}

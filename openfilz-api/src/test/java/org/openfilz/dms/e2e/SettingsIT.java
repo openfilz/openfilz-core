@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.response.Settings;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.codec.json.Jackson2JsonEncoder;
+import org.springframework.http.codec.json.JacksonJsonEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
@@ -33,8 +33,8 @@ public class SettingsIT {
     @TestConstructor(autowireMode = ALL)
     class SoftDeleteDisabledIT extends TestContainersBaseConfig {
 
-        public SoftDeleteDisabledIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
-            super(webTestClient, customJackson2JsonEncoder);
+        public SoftDeleteDisabledIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
+            super(webTestClient, customJacksonJsonEncoder);
         }
 
         @DynamicPropertySource
@@ -70,8 +70,8 @@ public class SettingsIT {
     @TestConstructor(autowireMode = ALL)
     class RecycleBinDisabledIT extends TestContainersBaseConfig {
 
-        public RecycleBinDisabledIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
-            super(webTestClient, customJackson2JsonEncoder);
+        public RecycleBinDisabledIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
+            super(webTestClient, customJacksonJsonEncoder);
         }
 
         @DynamicPropertySource
@@ -107,8 +107,8 @@ public class SettingsIT {
     @TestConstructor(autowireMode = ALL)
     class AutoCleanupIntervalZeroIT extends TestContainersBaseConfig {
 
-        public AutoCleanupIntervalZeroIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
-            super(webTestClient, customJackson2JsonEncoder);
+        public AutoCleanupIntervalZeroIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
+            super(webTestClient, customJacksonJsonEncoder);
         }
 
         @DynamicPropertySource
@@ -144,8 +144,8 @@ public class SettingsIT {
     @TestConstructor(autowireMode = ALL)
     class AutoCleanupIntervalEmptyIT extends TestContainersBaseConfig {
 
-        public AutoCleanupIntervalEmptyIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
-            super(webTestClient, customJackson2JsonEncoder);
+        public AutoCleanupIntervalEmptyIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
+            super(webTestClient, customJacksonJsonEncoder);
         }
 
         @DynamicPropertySource
@@ -181,8 +181,8 @@ public class SettingsIT {
     @TestConstructor(autowireMode = ALL)
     class AutoCleanupInterval30DaysIT extends TestContainersBaseConfig {
 
-        public AutoCleanupInterval30DaysIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
-            super(webTestClient, customJackson2JsonEncoder);
+        public AutoCleanupInterval30DaysIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
+            super(webTestClient, customJacksonJsonEncoder);
         }
 
         @DynamicPropertySource
@@ -220,8 +220,8 @@ public class SettingsIT {
     @TestConstructor(autowireMode = ALL)
     class AutoCleanupInterval7DaysIT extends TestContainersBaseConfig {
 
-        public AutoCleanupInterval7DaysIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
-            super(webTestClient, customJackson2JsonEncoder);
+        public AutoCleanupInterval7DaysIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
+            super(webTestClient, customJacksonJsonEncoder);
         }
 
         @DynamicPropertySource
@@ -259,8 +259,8 @@ public class SettingsIT {
     @TestConstructor(autowireMode = ALL)
     class AutoCleanupInterval90DaysIT extends TestContainersBaseConfig {
 
-        public AutoCleanupInterval90DaysIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
-            super(webTestClient, customJackson2JsonEncoder);
+        public AutoCleanupInterval90DaysIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
+            super(webTestClient, customJacksonJsonEncoder);
         }
 
         @DynamicPropertySource
@@ -298,8 +298,8 @@ public class SettingsIT {
     @TestConstructor(autowireMode = ALL)
     class AutoCleanupIntervalNumberOnlyIT extends TestContainersBaseConfig {
 
-        public AutoCleanupIntervalNumberOnlyIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
-            super(webTestClient, customJackson2JsonEncoder);
+        public AutoCleanupIntervalNumberOnlyIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
+            super(webTestClient, customJacksonJsonEncoder);
         }
 
         @DynamicPropertySource

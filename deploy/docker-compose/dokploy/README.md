@@ -41,16 +41,19 @@ The compose file uses `${OPENFILZ_FILES_BASE}` for all host-side bind mount path
 
 #### What goes in `OPENFILZ_FILES_BASE`?
 
-The compose file bind-mounts two files from this directory:
+The compose file bind-mounts one file from this directory:
 
 | Container path | Host path (`${OPENFILZ_FILES_BASE}/...`) | Purpose |
 |---|---|---|
 | `/docker-entrypoint-initdb.d/init-keycloak-db.sh` | `db-create.sh` | Creates the Keycloak database on first PostgreSQL startup |
-| `/usr/share/nginx/html/ngx-env.js` | `openfilz-web/ngx-env.js` | Runtime config for the Angular frontend (API URL, Keycloak URL, etc.) |
+
+> **No `ngx-env.js` to manage.** The Angular frontend's runtime config is generated
+> inside the `openfilz-web` container at startup from the `NG_APP_*` values, which
+> `compose.yaml` derives automatically from the `*_HOSTNAME` variables you set in step 4.
 
 #### Setup instructions
 
-Both files are available in this repository. You just need to transfer them to your Dokploy server and edit `ngx-env.js` with your actual domains.
+The `db-create.sh` script is available in this repository. Transfer it to your Dokploy server.
 
 **1. SSH into your Dokploy server and create the directory:**
 
@@ -66,30 +69,6 @@ sudo mkdir -p /etc/dokploy/openfilz-ce/openfilz-web
 # From the openfilz-core/deploy/docker-compose/dokploy/ directory:
 scp db-create.sh user@your-server:/etc/dokploy/openfilz-ce/db-create.sh
 ```
-
-Then create `ngx-env.js` with your actual domains. You can either edit locally and `scp`, or create it directly on the server:
-
-```bash
-# Edit ngx-env.js locally first (replace yourdomain.com with your actual domain),
-# then transfer it:
-scp openfilz-web/ngx-env.js user@your-server:/etc/dokploy/openfilz-ce/openfilz-web/ngx-env.js
-```
-
-The `ngx-env.js` file should contain (replace `yourdomain.com` with your actual domain):
-
-```javascript
-globalThis._NGX_ENV_ = {
-    "NG_APP_API_URL": "https://api.yourdomain.com/api/v1",
-    "NG_APP_GRAPHQL_URL": "https://api.yourdomain.com/graphql/v1",
-    "NG_APP_AUTHENTICATION_ENABLED": "true",
-    "NG_APP_AUTHENTICATION_AUTHORITY": "https://auth.yourdomain.com/realms/openfilz",
-    "NG_APP_AUTHENTICATION_CLIENT_ID": "openfilz-web",
-    "NG_APP_ONLYOFFICE_ENABLED": "true",
-    "NG_APP_ONLYOFFICE_URL": "https://docs.yourdomain.com"
-};
-```
-
-A ready-to-edit template is available at `openfilz-web/ngx-env.js` in this directory.
 
 **3. On the server, make the init script executable:**
 
@@ -107,9 +86,7 @@ Your final directory on the server should look like:
 
 ```
 /etc/dokploy/openfilz-ce/
-├── db-create.sh
-└── openfilz-web/
-    └── ngx-env.js
+└── db-create.sh
 ```
 
 > **Note:** The compose file will fail with a clear error (`Set OPENFILZ_FILES_BASE in .env`) if this variable is not set.

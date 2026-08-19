@@ -6,10 +6,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.response.UploadResponse;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
-import org.springframework.http.codec.json.Jackson2JsonEncoder;
+import org.springframework.http.codec.json.JacksonJsonEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
@@ -24,6 +25,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -70,8 +72,8 @@ public abstract class ThumbnailsBaseIT extends TestContainersBaseConfig {
             .waitingFor(Wait.forHttp("/health").forPort(3000).forStatusCode(200))
             .withStartupTimeout(Duration.ofSeconds(120));
 
-    public ThumbnailsBaseIT(WebTestClient webTestClient, Jackson2JsonEncoder customJackson2JsonEncoder) {
-        super(webTestClient, customJackson2JsonEncoder);
+    public ThumbnailsBaseIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
+        super(webTestClient, customJacksonJsonEncoder);
     }
 
     @BeforeAll
@@ -1259,5 +1261,160 @@ public abstract class ThumbnailsBaseIT extends TestContainersBaseConfig {
         assertThumbnailNotFound(originalId);
         assertThumbnailNotFound(copyId);
         log.info("File without extension: no thumbnails at any stage (as expected)");
+    }
+
+    // ==========================================
+    // Content Replace — thumbnail regeneration & cache-busting
+    // ==========================================
+
+    /**
+     * Uploads a file, setting an explicit part content type so the stored contentType is
+     * deterministic (multipart content-type auto-detection for a ClassPathResource is not).
+     */
+    protected UploadResponse uploadFile(String resourcePath, MediaType contentType) {
+        MultipartBodyBuilder builder = new MultipartBodyBuilder();
+        builder.part("file", new ClassPathResource(resourcePath), contentType);
+
+        return webTestClient.post()
+                .uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/documents/upload")
+                        .queryParam("allowDuplicateFileNames", true)
+                        .build())
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(BodyInserters.fromMultipartData(builder.build()))
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(UploadResponse.class)
+                .returnResult()
+                .getResponseBody();
+    }
+
+    /**
+     * Replaces a document's content via PUT /documents/{id}/replace-content, setting an
+     * explicit part content type so the resulting contentType is deterministic.
+     */
+    protected void replaceContent(UUID documentId, String resourcePath, MediaType contentType) {
+        MultipartBodyBuilder builder = new MultipartBodyBuilder();
+        builder.part("file", new ClassPathResource(resourcePath), contentType);
+
+        webTestClient.put()
+                .uri(RestApiVersion.API_PREFIX + "/documents/{id}/replace-content", documentId)
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(BodyInserters.fromMultipartData(builder.build()))
+                .exchange()
+                .expectStatus().isOk();
+    }
+
+    /**
+     * Reads the {@code thumbnailUrl} field of a document via the GraphQL {@code documentById}
+     * query. Returns null when the document exposes no thumbnail.
+     * <p>
+     * The selection set mirrors the real frontend queries (which always request
+     * {@code type}, {@code contentType} and {@code updatedAt} alongside {@code thumbnailUrl}):
+     * field fetching is projection-based, so the {@code thumbnailUrl} resolver only sees the
+     * fields the client selected — {@code contentType} gates the URL and {@code updatedAt}
+     * feeds the {@code ?v=} cache-bust token.
+     */
+    protected String getThumbnailUrlViaGraphQl(UUID documentId) {
+        String query = """
+                query documentById($id:UUID!) {
+                  documentById(id:$id) {
+                    id
+                    type
+                    contentType
+                    updatedAt
+                    thumbnailUrl
+                  }
+                }
+                """;
+        Map<String, Object> document = newGraphQlClient()
+                .document(query)
+                .variable("id", documentId)
+                .retrieve("documentById")
+                .toEntity(new ParameterizedTypeReference<Map<String, Object>>() {})
+                .block();
+        assertNotNull(document, "documentById should return the document");
+        return (String) document.get("thumbnailUrl");
+    }
+
+    /**
+     * Polls the GraphQL {@code thumbnailUrl} until it is exposed (thumbnail generation is async).
+     */
+    protected String waitForThumbnailUrl(UUID documentId) throws InterruptedException {
+        long start = System.currentTimeMillis();
+        String url = getThumbnailUrlViaGraphQl(documentId);
+        while (url == null && System.currentTimeMillis() - start < THUMBNAIL_GENERATION_TIMEOUT_MS) {
+            waitForAsyncOperation(THUMBNAIL_POLL_INTERVAL_MS);
+            url = getThumbnailUrlViaGraphQl(documentId);
+        }
+        assertNotNull(url, "thumbnailUrl should become available for document " + documentId);
+        return url;
+    }
+
+    /**
+     * Extracts the {@code ?v=} cache-bust token from a thumbnail URL, or null if absent.
+     */
+    private static String versionTokenOf(String thumbnailUrl) {
+        int idx = thumbnailUrl.indexOf("?v=");
+        if (idx < 0) {
+            return null;
+        }
+        String token = thumbnailUrl.substring(idx + 3);
+        int amp = token.indexOf('&');
+        return amp < 0 ? token : token.substring(0, amp);
+    }
+
+    @Test
+    @DisplayName("Replace content: thumbnailUrl ?v= cache-bust token must change so the fresh thumbnail is fetched")
+    void shouldChangeThumbnailUrlVersionTokenAfterContentReplace() throws InterruptedException {
+        // 1. Upload a PNG and wait for its thumbnail to be generated
+        UploadResponse uploaded = uploadFile("test-image.png", MediaType.IMAGE_PNG);
+        assertNotNull(uploaded, "Upload response should not be null");
+        UUID id = uploaded.id();
+        waitForThumbnail(id);
+
+        // 2. The GraphQL thumbnailUrl must carry a ?v= cache-bust token
+        String urlBefore = waitForThumbnailUrl(id);
+        assertTrue(urlBefore.contains("/thumbnails/img/" + id),
+                "thumbnailUrl should target the document thumbnail endpoint: " + urlBefore);
+        String tokenBefore = versionTokenOf(urlBefore);
+        assertNotNull(tokenBefore, "thumbnailUrl must carry a ?v= cache-bust token: " + urlBefore);
+
+        // 3. Replace the content with a different image (updatedAt changes)
+        replaceContent(id, "test-image.jpg", MediaType.IMAGE_JPEG);
+
+        // 4. The regenerated thumbnail is served at the SAME path, so only the ?v= token
+        //    defeats a stale browser/proxy cache: it must now differ.
+        String urlAfter = waitForThumbnailUrl(id);
+        String tokenAfter = versionTokenOf(urlAfter);
+        assertNotNull(tokenAfter, "thumbnailUrl must still carry a ?v= token after replace: " + urlAfter);
+        assertNotEquals(tokenBefore, tokenAfter,
+                "cache-bust token must change after a content replace so the fresh thumbnail is fetched");
+        log.info("Thumbnail cache-bust token changed on replace: {} -> {}", tokenBefore, tokenAfter);
+    }
+
+    @Test
+    @DisplayName("Replace content: replacing with an unsupported type removes the stale thumbnail")
+    void shouldRemoveThumbnailWhenContentReplacedWithUnsupportedType() throws InterruptedException {
+        // 1. Upload a PNG and wait for its thumbnail to exist
+        UploadResponse uploaded = uploadFile("test-image.png", MediaType.IMAGE_PNG);
+        assertNotNull(uploaded, "Upload response should not be null");
+        UUID id = uploaded.id();
+        waitForThumbnail(id);
+        assertTrue(thumbnailExists(id), "thumbnail should exist after uploading an image");
+
+        // 2. Replace the content with a file whose type has no thumbnail support
+        replaceContent(id, "test-file-no-extension", MediaType.APPLICATION_OCTET_STREAM);
+
+        // 3. The previous thumbnail must be removed (async) - poll until it is gone
+        long start = System.currentTimeMillis();
+        while (thumbnailExists(id) && System.currentTimeMillis() - start < THUMBNAIL_GENERATION_TIMEOUT_MS) {
+            waitForAsyncOperation(THUMBNAIL_POLL_INTERVAL_MS);
+        }
+        assertThumbnailNotFound(id);
+
+        // 4. GraphQL must no longer advertise a thumbnailUrl for this document
+        assertNull(getThumbnailUrlViaGraphQl(id),
+                "thumbnailUrl must be null once the thumbnail has been removed");
+        log.info("Stale thumbnail removed after replacing with an unsupported content type");
     }
 }

@@ -8,6 +8,7 @@ import io.minio.messages.VersioningConfiguration;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.MinioProperties;
+import org.openfilz.dms.dto.response.DocumentVersionInfo;
 import org.openfilz.dms.exception.StorageException;
 import org.openfilz.dms.service.StorageService;
 import org.openfilz.dms.utils.FileUtils;
@@ -29,6 +30,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
+import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -79,6 +82,12 @@ public class MinioStorageService implements StorageService {
                 if(minioProperties.isVersioningEnabled()) {
                     VersioningConfiguration bucketVersioning = minioClient.getBucketVersioning(GetBucketVersioningArgs.builder().bucket(minioProperties.getBucketName()).build());
                     log.debug("Bucket Versioning: {}", bucketVersioning.status());
+                    if (bucketVersioning.status() != VersioningConfiguration.Status.ENABLED) {
+                        // bucket created before the flag was turned on: enable versioning now,
+                        // otherwise replace-content silently keeps no history
+                        minioClient.setBucketVersioning(SetBucketVersioningArgs.builder().bucket(minioProperties.getBucketName()).config(new VersioningConfiguration(VersioningConfiguration.Status.ENABLED, false)).build());
+                        log.info("Bucket versioning enabled on existing bucket '{}'.", minioProperties.getBucketName());
+                    }
                 }
                 if(wormMode) {
                     try {
@@ -495,6 +504,106 @@ public class MinioStorageService implements StorageService {
         }).subscribeOn(Schedulers.boundedElastic()).then();
     }
 
+    // ==================== Versioning Support Methods ====================
+
+    @Override
+    public Flux<DocumentVersionInfo> listFileVersions(String storagePath) {
+        if (!minioProperties.isVersioningEnabled()) {
+            return Flux.empty();
+        }
+        return Flux.<DocumentVersionInfo>create(sink -> {
+            try {
+                Iterable<Result<Item>> results = minioClient.listObjects(
+                        ListObjectsArgs.builder()
+                                .bucket(minioProperties.getBucketName())
+                                .prefix(storagePath)
+                                .includeVersions(true)
+                                .build());
+                for (Result<Item> result : results) {
+                    Item item = result.get();
+                    // prefix-listing can over-match; skip delete markers (no content to act on)
+                    if (!item.objectName().equals(storagePath) || item.isDeleteMarker()) {
+                        continue;
+                    }
+                    sink.next(new DocumentVersionInfo(item.versionId(),
+                            item.lastModified() != null ? item.lastModified().toOffsetDateTime() : null,
+                            item.size(), item.isLatest()));
+                }
+                sink.complete();
+            } catch (Exception e) {
+                sink.error(new StorageException("MinIO listFileVersions failed for " + storagePath, e));
+            }
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @Override
+    public Mono<? extends Resource> loadFileVersion(String storagePath, String versionId) {
+        return Mono.fromCallable(() -> {
+            try {
+                InputStream stream = minioClient.getObject(
+                        GetObjectArgs.builder()
+                                .bucket(minioProperties.getBucketName())
+                                .object(storagePath)
+                                .versionId(versionId)
+                                .build()
+                );
+                // InputStreamResource will close the stream when the resource is consumed
+                return new InputStreamResource(stream);
+            } catch (Exception e) {
+                log.error("Error loading version {} of file {} from MinIO", versionId, storagePath, e);
+                throw new StorageException("MinIO load file version failed for " + storagePath, e);
+            }
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @Override
+    public Mono<String> restoreFileVersion(String storagePath, String versionId) {
+        return Mono.fromCallable(() -> {
+            try {
+                // Server-side copy of the given version onto the same key: MinIO creates a
+                // new latest version, nothing is deleted (history-preserving restore).
+                ObjectWriteResponse response = minioClient.copyObject(
+                        CopyObjectArgs.builder()
+                                .bucket(minioProperties.getBucketName())
+                                .object(storagePath)
+                                .legalHold(wormMode)
+                                .source(CopySource.builder()
+                                        .bucket(minioProperties.getBucketName())
+                                        .object(storagePath)
+                                        .versionId(versionId)
+                                        .build())
+                                .build());
+                log.info("Restored version {} of '{}' as new version {} in MinIO bucket '{}'",
+                        versionId, storagePath, response.versionId(), minioProperties.getBucketName());
+                return response.versionId();
+            } catch (Exception e) {
+                log.error("Error restoring version {} of file {} in MinIO", versionId, storagePath, e);
+                throw new StorageException("MinIO restore file version failed for " + storagePath, e);
+            }
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @Override
+    public Mono<String> getLatestVersionId(String storagePath) {
+        if (!minioProperties.isVersioningEnabled()) {
+            return Mono.empty();
+        }
+        return Mono.fromCallable(() -> {
+                    StatObjectResponse stat = minioClient.statObject(
+                            StatObjectArgs.builder()
+                                    .bucket(minioProperties.getBucketName())
+                                    .object(storagePath)
+                                    .build());
+                    return stat.versionId(); // null (-> empty Mono) when bucket is unversioned
+                })
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorResume(e -> {
+                    // audit enrichment must never fail the main operation
+                    log.warn("Could not stat latest versionId of '{}': {}", storagePath, e.getMessage());
+                    return Mono.empty();
+                });
+    }
+
     @Override
     public Flux<String> listFiles(String prefix) {
         return Flux.create(sink -> {
@@ -514,6 +623,62 @@ public class MinioStorageService implements StorageService {
                 sink.error(new StorageException("MinIO listFiles failed", e));
             }
         });
+    }
+
+    @Override
+    public Mono<Long> cleanupExpiredVersions(Duration retention) {
+        if (!minioProperties.isVersioningEnabled()) {
+            return Mono.just(0L);
+        }
+        if (Boolean.TRUE.equals(wormMode)) {
+            // WORM / object-lock makes versions immutable — retention cleanup must never run.
+            log.info("WORM mode active — skipping version retention cleanup");
+            return Mono.just(0L);
+        }
+        if (retention == null || retention.isZero() || retention.isNegative()) {
+            // Unlimited retention: keep every version forever.
+            return Mono.just(0L);
+        }
+        return Mono.fromCallable(() -> {
+            OffsetDateTime cutoff = OffsetDateTime.now().minus(retention);
+            long deleted = 0L;
+            Iterable<Result<Item>> results = minioClient.listObjects(
+                    ListObjectsArgs.builder()
+                            .bucket(minioProperties.getBucketName())
+                            .recursive(true)
+                            .includeVersions(true)
+                            .build());
+            for (Result<Item> result : results) {
+                Item item = result.get();
+                // Never touch the current version or delete markers — only prune OLD noncurrent versions.
+                if (item.isLatest() || item.isDeleteMarker() || item.versionId() == null) {
+                    continue;
+                }
+                OffsetDateTime lastModified = item.lastModified() != null
+                        ? item.lastModified().toOffsetDateTime() : null;
+                if (lastModified == null || !lastModified.isBefore(cutoff)) {
+                    continue;
+                }
+                try {
+                    minioClient.removeObject(
+                            RemoveObjectArgs.builder()
+                                    .bucket(minioProperties.getBucketName())
+                                    .object(item.objectName())
+                                    .versionId(item.versionId())
+                                    .build());
+                    deleted++;
+                } catch (Exception e) {
+                    log.warn("Could not delete expired version {} of '{}': {}",
+                            item.versionId(), item.objectName(), e.getMessage());
+                }
+            }
+            log.info("Version retention cleanup: deleted {} expired version(s) older than {}", deleted, retention);
+            return deleted;
+        }).subscribeOn(Schedulers.boundedElastic())
+          .onErrorResume(e -> {
+              log.error("Version retention cleanup failed for bucket '{}'", minioProperties.getBucketName(), e);
+              return Mono.just(0L);
+          });
     }
 
 }

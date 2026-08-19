@@ -1,6 +1,6 @@
 package org.openfilz.dms.repository.graphql;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import graphql.schema.DataFetchingEnvironment;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.dto.request.ListFolderRequest;

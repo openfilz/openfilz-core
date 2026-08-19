@@ -40,6 +40,12 @@ public class ThumbnailPostProcessor {
         if (!thumbnailService.isSupported(document.getContentType())) {
             log.debug("Thumbnail generation not supported for document: {} (type: {})",
                 document.getId(), document.getContentType());
+            // The content type can't produce a thumbnail. On a content replace/restore to an
+            // unsupported type this must remove any thumbnail left over from a previous version,
+            // otherwise the stale image keeps being served. No-op on a fresh upload.
+            thumbnailService.deleteThumbnail(document.getId())
+                .doOnError(e -> log.warn("Failed to delete stale thumbnail for document: {}", document.getId(), e))
+                .subscribe();
             return;
         }
 
