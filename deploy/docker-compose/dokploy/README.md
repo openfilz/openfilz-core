@@ -169,7 +169,7 @@ Click **Deploy** and wait for all services to start (this may take a few minutes
 
 ## Custom Keycloak Image
 
-This deployment uses a custom Keycloak image (`ghcr.io/openfilz/keycloak:26.5`) that includes:
+This deployment uses a custom Keycloak image (`ghcr.io/openfilz/keycloak:26.7`) that includes:
 
 - **Pre-imported realm**: The OpenFilz realm configuration is baked into the image
 - **Custom themes**: OpenFilz-branded login and email themes
@@ -182,9 +182,26 @@ cd keycloak/
 ./build-push-keycloak-image.sh
 ```
 
+### Upgrading the Keycloak version
+
+`keycloak/Dockerfile`'s `FROM` line is the **single source of truth** for the
+Keycloak version. The build script and the `build-keycloak.yml` workflow both
+derive the published tag from it, so they cannot disagree.
+
+The other references (compose defaults, `.env` values, Helm values, docs) carry a
+concrete tag on purpose. To keep them honest, `keycloak/check-keycloak-version.sh`
+fails if any of them drifts from the Dockerfile; it runs in CI and at the start of
+the build script. After bumping the `FROM` line, run it to see everything still to
+update:
+
+```bash
+cd keycloak/
+./check-keycloak-version.sh
+```
+
 To use a specific version, set:
 ```env
-KEYCLOAK_IMAGE=ghcr.io/openfilz/keycloak:26.5
+KEYCLOAK_IMAGE=ghcr.io/openfilz/keycloak:26.7
 ```
 
 ## Keycloak Database Initialization

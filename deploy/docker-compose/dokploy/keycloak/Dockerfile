@@ -1,4 +1,4 @@
-FROM quay.io/keycloak/keycloak:26.5
+FROM quay.io/keycloak/keycloak:26.7
 
 LABEL org.opencontainers.image.source="https://github.com/openfilz/openfilz-core"
 
