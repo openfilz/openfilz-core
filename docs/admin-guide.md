@@ -486,14 +486,20 @@ When `openfilz.ai.active=false` (default), the AI feature is completely inert: n
 
 You must enable **exactly one** chat model and **exactly one** embedding model. The two can come from different providers (e.g., Ollama for embeddings + OpenAI for chat).
 
+> The `*.enabled` switches in the tables below are OpenFilz properties, not Spring AI ones. Spring
+> AI 2.0 gates each provider on a single selector (`spring.ai.model.chat` /
+> `spring.ai.model.embedding`, valued with the provider name or `none`); OpenFilz derives those
+> selectors from these booleans, picking Ollama when both providers are enabled. Set
+> `spring.ai.model.*` yourself to bypass the mapping.
+
 **Ollama (local, free, recommended for development):**
 
 | Property / Env Variable | Default | Description |
 |--------------------------|---------|-------------|
 | `spring.ai.ollama.base-url` / `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
-| `spring.ai.ollama.chat.enabled` / `OLLAMA_CHAT_ENABLED` | `false` | Enable Ollama as the chat model provider |
+| `openfilz.ai.ollama.chat.enabled` / `OLLAMA_CHAT_ENABLED` | `false` | Enable Ollama as the chat model provider |
 | `spring.ai.ollama.chat.model` / `OLLAMA_CHAT_MODEL` | `llama3` | Ollama chat model name |
-| `spring.ai.ollama.embedding.enabled` / `OLLAMA_EMBEDDING_ENABLED` | `false` | Enable Ollama as the embedding model provider |
+| `openfilz.ai.ollama.embedding.enabled` / `OLLAMA_EMBEDDING_ENABLED` | `false` | Enable Ollama as the embedding model provider |
 | `spring.ai.ollama.embedding.model` / `OLLAMA_EMBEDDING_MODEL` | `nomic-embed-text` | Ollama embedding model name |
 
 **OpenAI-compatible API (cloud, production-ready):**
@@ -502,9 +508,9 @@ You must enable **exactly one** chat model and **exactly one** embedding model. 
 |--------------------------|---------|-------------|
 | `spring.ai.openai.api-key` / `OPENAI_API_KEY` | *(empty)* | API key (required when using OpenAI) |
 | `spring.ai.openai.base-url` / `OPENAI_BASE_URL` | `https://api.openai.com` | API base URL (change for Azure OpenAI or other providers) |
-| `spring.ai.openai.chat.enabled` / `OPENAI_CHAT_ENABLED` | `false` | Enable OpenAI as the chat model provider |
+| `openfilz.ai.openai.chat.enabled` / `OPENAI_CHAT_ENABLED` | `false` | Enable OpenAI as the chat model provider |
 | `spring.ai.openai.chat.model` / `OPENAI_CHAT_MODEL` | `gpt-4o` | Chat model name |
-| `spring.ai.openai.embedding.enabled` / `OPENAI_EMBEDDING_ENABLED` | `false` | Enable OpenAI as the embedding model provider |
+| `openfilz.ai.openai.embedding.enabled` / `OPENAI_EMBEDDING_ENABLED` | `false` | Enable OpenAI as the embedding model provider |
 | `spring.ai.openai.embedding.model` / `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model name |
 
 #### RAG and Embedding Configuration

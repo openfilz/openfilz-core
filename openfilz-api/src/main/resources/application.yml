@@ -109,6 +109,18 @@ openfilz:
   # AI Document Chat Configuration
   ai:
     active: false  # Set to true to enable AI chat features
+    # Provider switches — translated into spring.ai.model.chat / spring.ai.model.embedding
+    # (see AiModelProviderEnvironmentPostProcessor). Ollama wins when both are enabled.
+    ollama:
+      chat:
+        enabled: ${OLLAMA_CHAT_ENABLED:false}
+      embedding:
+        enabled: ${OLLAMA_EMBEDDING_ENABLED:false}
+    openai:
+      chat:
+        enabled: ${OPENAI_CHAT_ENABLED:false}
+      embedding:
+        enabled: ${OPENAI_EMBEDDING_ENABLED:false}
     system-prompt: |
       You are OpenFilz AI Assistant, a helpful document management assistant.
       You help users find, organize, and understand their documents stored in OpenFilz.
@@ -224,14 +236,17 @@ onlyoffice:
 # ============================================================
 # Spring AI Configuration (only used when openfilz.ai.active=true)
 # ============================================================
+# Which provider serves chat / embeddings is driven by the openfilz.ai.<provider>.<kind>.enabled
+# switches below: AiModelProviderEnvironmentPostProcessor turns them into Spring AI 2.0's
+# spring.ai.model.chat / spring.ai.model.embedding selectors (Ollama wins if both are enabled,
+# 'none' if neither is). Set spring.ai.model.* explicitly to bypass that mapping.
+
 # Ollama (default for local development)
 spring.ai.ollama:
   base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
   chat:
-    enabled: ${OLLAMA_CHAT_ENABLED:false}
     model: ${OLLAMA_CHAT_MODEL:qwen2.5}
   embedding:
-    enabled: ${OLLAMA_EMBEDDING_ENABLED:false}
     model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
 
 # OpenAI-compatible API (for cloud providers: OpenAI, Anthropic via proxy, etc.)
@@ -241,20 +256,9 @@ spring.ai.openai:
   api-key: ${OPENAI_API_KEY:disabled}
   base-url: ${OPENAI_BASE_URL:https://api.openai.com}
   chat:
-    enabled: ${OPENAI_CHAT_ENABLED:false}
     model: ${OPENAI_CHAT_MODEL:gpt-4o}
   embedding:
-    enabled: ${OPENAI_EMBEDDING_ENABLED:false}
     model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
-  image:
-    enabled: false
-  audio:
-    speech:
-      enabled: false
-    transcription:
-      enabled: false
-  moderation:
-    enabled: false
 
 # PgVector Store (auto-configured when spring-ai-starter-vector-store-pgvector is on classpath)
 spring.ai.vectorstore.pgvector:

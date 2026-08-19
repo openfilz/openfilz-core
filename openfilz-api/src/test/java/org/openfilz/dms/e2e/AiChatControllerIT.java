@@ -51,16 +51,17 @@ public class AiChatControllerIT extends TestContainersBaseConfig {
     @DynamicPropertySource
     static void configureAiProperties(DynamicPropertyRegistry registry) {
         registry.add("openfilz.ai.active", () -> true);
-        // Disable all real model auto-configuration
-        registry.add("spring.ai.ollama.chat.enabled", () -> false);
-        registry.add("spring.ai.ollama.embedding.enabled", () -> false);
         registry.add("spring.ai.openai.api-key", () -> "test-dummy-key");
-        registry.add("spring.ai.openai.chat.enabled", () -> false);
-        registry.add("spring.ai.openai.embedding.enabled", () -> false);
-        registry.add("spring.ai.openai.image.enabled", () -> false);
-        registry.add("spring.ai.openai.audio.speech.enabled", () -> false);
-        registry.add("spring.ai.openai.audio.transcription.enabled", () -> false);
-        registry.add("spring.ai.openai.moderation.enabled", () -> false);
+        // Spring AI 2.0 dropped the per-provider spring.ai.<provider>.<kind>.enabled flags: provider
+        // auto-configuration is now gated on spring.ai.model.*, and those conditions match if the
+        // property is missing. Pinning every selector to "none" keeps the real Ollama/OpenAI models
+        // out of the context so AiTestConfig's mocks are the only ChatModel/EmbeddingModel beans.
+        registry.add("spring.ai.model.chat", () -> "none");
+        registry.add("spring.ai.model.embedding", () -> "none");
+        registry.add("spring.ai.model.image", () -> "none");
+        registry.add("spring.ai.model.moderation", () -> "none");
+        registry.add("spring.ai.model.audio.speech", () -> "none");
+        registry.add("spring.ai.model.audio.transcription", () -> "none");
         registry.add("spring.ai.vectorstore.pgvector.initialize-schema", () -> false);
         registry.add("spring.autoconfigure.exclude", () -> "org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration");
     }

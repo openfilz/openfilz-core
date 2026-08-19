@@ -4,6 +4,7 @@ import org.mockito.Mockito;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -63,6 +64,10 @@ public class AiTestConfig {
         var assistantMessage = new AssistantMessage("This is a test AI response about your documents.");
         var generation = new Generation(assistantMessage);
         var chatResponse = new ChatResponse(List.of(generation));
+
+        // Spring AI 2.0's ChatClient copies the model's default options into every request
+        // (DefaultChatClientUtils calls getOptions().mutate()), so the mock has to expose some.
+        when(chatModel.getOptions()).thenReturn(ChatOptions.builder().build());
 
         when(chatModel.stream(any(org.springframework.ai.chat.prompt.Prompt.class)))
                 .thenReturn(Flux.just(chatResponse));

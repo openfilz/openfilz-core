@@ -33,6 +33,38 @@ public class AiProperties {
     private EmbeddingConfig embedding = new EmbeddingConfig();
 
     /**
+     * Ollama provider switches.
+     */
+    private Provider ollama = new Provider();
+
+    /**
+     * OpenAI provider switches.
+     */
+    private Provider openai = new Provider();
+
+    /**
+     * Per-provider switches deciding which Spring AI model auto-configuration is activated.
+     * Consumed by {@link AiModelProviderEnvironmentPostProcessor}, which turns them into the
+     * {@code spring.ai.model.chat} / {@code spring.ai.model.embedding} selectors Spring AI 2.0
+     * gates its provider auto-configurations on.
+     */
+    @Data
+    public static class Provider {
+
+        private Toggle chat = new Toggle();
+
+        private Toggle embedding = new Toggle();
+
+        @Data
+        public static class Toggle {
+            /**
+             * Whether this provider serves that kind of model.
+             */
+            private boolean enabled = false;
+        }
+    }
+
+    /**
      * Chunk size for splitting documents before embedding.
      */
     @Data
