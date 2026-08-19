@@ -273,6 +273,34 @@
 
 
 
+        <!-- Spring AI -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-ollama</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-openai</artifactId>
+            <exclusions>
+                <!-- openai-java-core drags in the pre-Jakarta swagger-annotations, whose classes
+                     share the io.swagger.v3.oas.annotations package with the -jakarta artifact
+                     springdoc uses. Two copies of @Schema on the classpath make springdoc read the
+                     wrong one and emit a bogus "default": "" on every property. -->
+                <exclusion>
+                    <groupId>io.swagger.core.v3</groupId>
+                    <artifactId>swagger-annotations</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-vector-store-pgvector</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-tika-document-reader</artifactId>
+        </dependency>
+
         <!-- JWT Library for OnlyOffice tokens (versions managed in the parent pom) -->
         <!-- jjwt has no Jackson 3 adapter yet: jjwt-jackson uses Jackson 2, which Spring Boot 4 still manages -->
         <dependency>

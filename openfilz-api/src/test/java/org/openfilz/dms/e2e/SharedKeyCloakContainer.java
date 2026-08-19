@@ -17,10 +17,13 @@ import java.io.IOException;
  */
 public final class SharedKeyCloakContainer {
 
+    /** Pinned to the Keycloak minor shipped by deploy/docker-compose/dokploy/keycloak/Dockerfile. */
+    private static final String KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.7";
+
     private static final KeycloakContainer KEYCLOAK_CONTAINER;
 
     static {
-        KEYCLOAK_CONTAINER = new KeycloakContainer()
+        KEYCLOAK_CONTAINER = new KeycloakContainer(KEYCLOAK_IMAGE)
                 .withRealmImportFile("keycloak/realm-export.json")
                 .withEnv("KEYCLOAK_DEFAULT_ROLE", "READER")
                 .withEnv("KEYCLOAK_DEFAULT_GROUP", "OPENFILZ/READER")

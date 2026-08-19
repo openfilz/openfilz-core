@@ -240,6 +240,7 @@ Selected via `@Lazy @Qualifier` + a `@Configuration` factory with `@Primary @Bea
 | GET, GraphQL queries, search | `READER` or `CONTRIBUTOR` |
 | POST, PUT, PATCH | `CONTRIBUTOR` |
 | `/audit/*` | `AUDITOR` |
+| `/ai/*` (all methods) | `READER`, `CONTRIBUTOR`, or `CLEANER` |
 
 **Implementations:**
 
@@ -265,6 +266,8 @@ Roles are extracted from the JWT token by `DefaultJwtTokenParser`, reading eithe
 | `UserFavorite` | `user_favorites` | Per-user favorites (composite PK: email + docId) |
 | `RecycleBin` | `recycle_bin` | Soft-deleted items |
 | `AuditLog` | `audit_logs` | Immutable operation history with hash chain |
+| `AiChatConversation` | `ai_chat_conversations` | AI chat conversation metadata |
+| `AiChatMessage` | `ai_chat_messages` | AI chat message history (user + assistant) |
 
 ---
 
@@ -277,6 +280,9 @@ Roles are extracted from the JWT token by `DefaultJwtTokenParser`, reading eithe
 | **DAO** | `DocumentDAO` — complex query composition with recursive CTEs |
 | **Factory** | `StorageConfig` — runtime switching between storage implementations |
 | **MapStruct** | DTO mapping between entities and response objects |
+| **Conditional Bean** | `@ConditionalOnProperty` activates entire feature modules (e.g., AI) only when their toggle is `true` |
+| **RAG** | Retrieval-Augmented Generation for AI chat — document chunks retrieved from pgvector are injected into the LLM prompt |
+| **Tool Callback** | Spring AI function calling — `DocumentAiTools` methods are exposed as LLM-callable tools via `@Tool` annotations |
 
 ---
 

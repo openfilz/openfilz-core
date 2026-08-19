@@ -36,9 +36,10 @@ MINIO := -f docker-compose.minio.yml
 ONLYOFFICE := -f docker-compose.onlyoffice.yml
 FULLTEXT := -f docker-compose.fulltext.yml
 THUMBNAILS := -f docker-compose-thumbnails.yml
+AI := -f docker-compose.ai.yml
 
-.PHONY: help generate-config up up-auth up-minio up-onlyoffice up-fulltext up-full \
-        up-auth-minio up-auth-fulltext up-auth-onlyoffice up-demo down logs ps restart clean build pull
+.PHONY: help generate-config up up-auth up-minio up-onlyoffice up-fulltext up-ai up-full \
+        up-auth-minio up-auth-fulltext up-auth-onlyoffice up-auth-ai up-demo down logs ps restart clean build pull
 
 help:
 	@echo "OpenFilz Docker Compose Commands:"
@@ -48,6 +49,7 @@ help:
 	@echo "  make up-minio        Start with MinIO storage"
 	@echo "  make up-onlyoffice   Start with OnlyOffice document server"
 	@echo "  make up-fulltext     Start with OpenSearch full-text search"
+	@echo "  make up-ai           Start with AI document chat (Ollama)"
 	@echo "  make up-demo         Start all CE features (no auth) for demo"
 	@echo "  make up-full         Start all services"
 	@echo ""
@@ -60,6 +62,7 @@ help:
 	@echo "Combinations:"
 	@echo "  make up-auth-minio       Start with auth + MinIO"
 	@echo "  make up-auth-fulltext    Start with auth + OpenSearch"
+	@echo "  make up-auth-ai          Start with auth + AI chat"
 	@echo "  make up-auth-onlyoffice  Start with auth + OnlyOffice"
 	@echo ""
 	@echo "Access URLs:"
@@ -69,7 +72,8 @@ help:
 # Frontend feature toggles passed to the web container, which writes ngx-env.js at
 # startup from the NG_APP_* env. $(1)=auth enabled, $(2)=onlyoffice enabled. The other
 # NG_APP_* values are exported from .env (see `export` above) and read by the web
-# service's compose `environment:` block.
+# service's compose `environment:` block. The AI chat UI has no toggle here — the web app
+# reads it from the API's /settings response, driven by OPENFILZ_AI_ACTIVE.
 web_toggles = NG_APP_AUTHENTICATION_ENABLED=$(1) NG_APP_ONLYOFFICE_ENABLED=$(2)
 
 # Base services only (no auth, no onlyoffice)
@@ -92,6 +96,10 @@ up-onlyoffice:
 up-fulltext:
 	$(call web_toggles,false,false) $(COMPOSE) $(FULLTEXT) up -d
 
+# With AI document chat (Ollama)
+up-ai:
+	$(call web_toggles,false,false) $(COMPOSE) $(AI) up -d
+
 # Common combinations
 up-auth-minio:
 	$(call web_toggles,true,false) $(COMPOSE) $(AUTH) $(MINIO) up -d
@@ -102,20 +110,23 @@ up-auth-fulltext:
 up-auth-onlyoffice:
 	$(call web_toggles,true,true) $(COMPOSE) $(AUTH) $(ONLYOFFICE) up -d
 
+up-auth-ai:
+	$(call web_toggles,true,false) $(COMPOSE) $(AUTH) $(AI) up -d
+
 # Community Edition demo (all features, no auth)
 up-demo:
-	$(call web_toggles,false,true) OPENFILZ_CALCULATECHECKSUM=true $(COMPOSE) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) --profile thumbnails up -d
+	$(call web_toggles,false,true) OPENFILZ_CALCULATECHECKSUM=true $(COMPOSE) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) $(AI) --profile thumbnails up -d
 
 # All services
 up-full:
-	$(call web_toggles,true,true) $(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) --profile thumbnails up -d
+	$(call web_toggles,true,true) $(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) $(AI) --profile thumbnails up -d
 
 # Management commands
 down:
-	$(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) --profile thumbnails down
+	$(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) $(AI) --profile thumbnails down
 
 logs:
-	$(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) --profile thumbnails logs -f
+	$(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) $(AI) --profile thumbnails logs -f
 
 ps:
 	docker-compose ps
@@ -123,7 +134,7 @@ ps:
 restart: down up
 
 clean:
-	$(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) --profile thumbnails down -v
+	$(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) $(AI) --profile thumbnails down -v
 
 # Build images locally (if needed)
 build:
@@ -131,7 +142,7 @@ build:
 
 # Pull latest images
 pull:
-	$(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) --profile thumbnails pull
+	$(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) $(AI) --profile thumbnails pull
 
 # Show the frontend config the web container will generate (auth/onlyoffice off here)
 generate-config:

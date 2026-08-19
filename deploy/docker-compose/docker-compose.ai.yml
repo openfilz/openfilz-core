@@ -1,0 +1,91 @@
+# OpenFilz Docker Compose - AI Document Chat Overlay
+#
+# Adds Ollama LLM server and enables AI features in the API.
+# Requires pgvector extension — overrides the PostgreSQL image.
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.ai.yml up -d
+#   # or
+#   make up-ai
+#
+# For OpenAI instead of Ollama, skip this overlay and set the OPENAI_*
+# variables in .env along with OPENFILZ_AI_ACTIVE=true.
+
+services:
+  # =============================================================================
+  # PostgreSQL — override to pgvector-enabled image
+  # =============================================================================
+  postgres:
+    image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg17}
+
+  # =============================================================================
+  # Ollama LLM Server (local AI inference)
+  # =============================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: openfilz-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    networks:
+      - openfilz-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # =============================================================================
+  # Ollama Model Initialization
+  # Pulls the required chat and embedding models on first startup.
+  # =============================================================================
+  ollama-init:
+    image: curlimages/curl:latest
+    container_name: openfilz-ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        echo "Pulling chat model: ${OLLAMA_CHAT_MODEL:-llama3}..."
+        curl -sf http://ollama:11434/api/pull -d "{\"name\": \"${OLLAMA_CHAT_MODEL:-llama3}\"}"
+        echo ""
+        echo "Pulling embedding model: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}..."
+        curl -sf http://ollama:11434/api/pull -d "{\"name\": \"${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}\"}"
+        echo ""
+        echo "Models ready."
+    networks:
+      - openfilz-network
+
+  # =============================================================================
+  # OpenFilz API — enable AI features
+  # =============================================================================
+  openfilz-api:
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      # Enable AI feature
+      OPENFILZ_AI_ACTIVE: "true"
+
+      # Ollama configuration
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_CHAT_ENABLED: ${OLLAMA_CHAT_ENABLED:-true}
+      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-llama3}
+      OLLAMA_EMBEDDING_ENABLED: ${OLLAMA_EMBEDDING_ENABLED:-true}
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+
+      # OpenAI configuration (disabled by default — set in .env to use)
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com}
+      OPENAI_CHAT_ENABLED: ${OPENAI_CHAT_ENABLED:-false}
+      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4o}
+      OPENAI_EMBEDDING_ENABLED: ${OPENAI_EMBEDDING_ENABLED:-false}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+
+volumes:
+  ollama-data:

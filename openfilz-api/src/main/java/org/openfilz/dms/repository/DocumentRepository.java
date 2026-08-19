@@ -27,4 +27,6 @@ public interface DocumentRepository extends ReactiveCrudRepository<Document, UUI
     Mono<Boolean> existsByNameAndParentIdIsNullAndActiveIsTrue(String name);
 
     Mono<Boolean> existsByNameAndParentIdAndActiveIsTrue(String name, UUID parentId);
+
+    Flux<Document> findByNameContainingIgnoreCaseAndActiveTrue(String name);
 }

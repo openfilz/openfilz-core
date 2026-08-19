@@ -88,7 +88,7 @@ validation, full-text indexing and thumbnails.
 
 ## Replacing the Keycloak image
 
-The default `images.keycloak` (`ghcr.io/openfilz/keycloak:26.5`, public, built
+The default `images.keycloak` (`ghcr.io/openfilz/keycloak:26.7`, public, built
 from `deploy/docker-compose/dokploy/keycloak/`) bakes the **realm export**
 (the initial load) + the OpenFilz login/email themes, and its entrypoint
 substitutes `KEYCLOAK_PUBLIC_URL` / `OPENFILZ_WEB_ROOT_URL` / the default

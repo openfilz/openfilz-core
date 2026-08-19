@@ -21,6 +21,11 @@ public class SettingsServiceImpl implements SettingsService {
     @Value("${openfilz.thumbnail.active:false}")
     private Boolean thumbnailActive;
 
+    // Single switch for the AI feature: the frontend shows the chat UI from this, so enabling
+    // the backend flag is all it takes (no separate NG_APP_* toggle to keep in sync).
+    @Value("${openfilz.ai.active:false}")
+    private Boolean aiActive;
+
     private final RecycleBinProperties recycleBinProperties;
 
     private final QuotaProperties quotaProperties;
@@ -47,6 +52,7 @@ public class SettingsServiceImpl implements SettingsService {
                .fileQuotaMB(quotaProperties.getFileUpload())
                .userQuotaMB(quotaProperties.getUser())
                .thumbnailsActive(thumbnailActive)
+               .aiActive(aiActive)
                .build());
 
     }

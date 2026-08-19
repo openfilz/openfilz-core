@@ -122,6 +122,32 @@ quotas:
   fileUploadMb: 1024
   userMb: 2048
 
+# -- AI Document Chat configuration.
+# Set ai.active to true and configure an LLM provider to enable AI features.
+# Requires PostgreSQL with pgvector extension.
+ai:
+  # @param ai.active Enable AI document chat (RAG, function calling, SSE streaming)
+  active: false
+  # -- Ollama (local LLM)
+  ollama:
+    baseUrl: "http://ollama:11434"
+    chat:
+      enabled: false
+      model: "llama3"
+    embedding:
+      enabled: false
+      model: "nomic-embed-text"
+  # -- OpenAI-compatible API (cloud LLM)
+  openai:
+    apiKey: ""
+    baseUrl: "https://api.openai.com"
+    chat:
+      enabled: false
+      model: "gpt-4o"
+    embedding:
+      enabled: false
+      model: "text-embedding-3-small"
+
 # Extra environment variables injected via a chart-managed ConfigMap (envFrom).
 extraEnv: {}
 # Existing Secret injected as environment variables via envFrom.

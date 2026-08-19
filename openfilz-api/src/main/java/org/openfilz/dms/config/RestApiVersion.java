@@ -19,4 +19,5 @@ public interface RestApiVersion {
     String ENDPOINT_ONLYOFFICE = "/onlyoffice";
     String ENDPOINT_THUMBNAILS = "/thumbnails";
     String ENDPOINT_TUS = "/tus";
+    String ENDPOINT_AI = "/ai";
 }
