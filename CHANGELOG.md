@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[3bac7d5b093d998](https://github.com/openfilz/openfilz-core/commit/3bac7d5b093d998) maven-release-bot[bot] *2026-07-30 16:24:22*
+[9e16f3999634af8](https://github.com/openfilz/openfilz-core/commit/9e16f3999634af8) maven-release-bot[bot] *2026-08-19 23:42:51*
 
 
-## v1.2.17
+## v1.2.18
 ### No issue
 
-**[maven-release-plugin] prepare release v1.2.17**
+**[maven-release-plugin] prepare release v1.2.18**
 
 
-[9a21e9c26b9bdb3](https://github.com/openfilz/openfilz-core/commit/9a21e9c26b9bdb3) maven-release-bot[bot] *2026-07-30 16:24:20*
+[c65e48d8e11616d](https://github.com/openfilz/openfilz-core/commit/c65e48d8e11616d) maven-release-bot[bot] *2026-08-19 23:42:48*
 
-**Merge pull request #178 from openfilz/develop**
+**Merge pull request #180 from openfilz/develop**
 
- * Develop
+ * AI document chat: Spring AI 2.0 + single-switch activation
 
-[28f0036afc49ac6](https://github.com/openfilz/openfilz-core/commit/28f0036afc49ac6) Yann Demel *2026-07-30 16:22:19*
+[c3538aa935125fa](https://github.com/openfilz/openfilz-core/commit/c3538aa935125fa) Yann Demel *2026-08-19 23:39:24*
 
 
