@@ -245,7 +245,6 @@ These variables are passed to the `openfilz-web` container, which writes `ngx-en
 | `NG_APP_AUTHENTICATION_CLIENT_ID` | `openfilz-web` | Keycloak client ID |
 | `NG_APP_ONLYOFFICE_ENABLED` | `false` | Enable/disable OnlyOffice integration |
 | `NG_APP_ONLYOFFICE_URL` | `http://localhost:8080` | OnlyOffice document server URL |
-| `NG_APP_AI_ENABLED` | `false` | Show the AI document-chat UI. Must be set in tandem with `OPENFILZ_AI_ACTIVE` on the API — the `/ai` endpoints only exist when that backend flag is on. `make up-ai` sets both |
 
 ### Storage Configuration (MinIO)
 

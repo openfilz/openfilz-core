@@ -4,5 +4,5 @@ import lombok.Builder;
 
 @Builder
 public record Settings(Integer emptyBinInterval, Integer fileQuotaMB, Integer userQuotaMB,
-                       String language, String theme, boolean thumbnailsActive) {
+                       String language, String theme, boolean thumbnailsActive, boolean aiActive) {
 }

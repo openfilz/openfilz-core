@@ -479,19 +479,27 @@ OpenFilz includes an optional AI assistant that can answer questions about your 
 | Property / Env Variable | Default | Description |
 |--------------------------|---------|-------------|
 | `openfilz.ai.active` / `OPENFILZ_AI_ACTIVE` | `false` | Master switch — set to `true` to enable all AI features |
-| `NG_APP_AI_ENABLED` (web container) | `false` | Shows the chat UI in openfilz-web. Set it in tandem with `OPENFILZ_AI_ACTIVE` — the UI calls endpoints that only exist when the backend switch is on. `make up-ai` / `make up-auth-ai` set both for you |
 
-When `openfilz.ai.active=false` (default), the AI feature is completely inert: no AI beans are created, no AI REST endpoints are exposed, no embedding processing occurs, and the AI database tables (`ai_chat_conversations`, `ai_chat_messages`, `vector_store`) are **not created**. The Flyway migration for AI only runs when the feature is active.
+`openfilz.ai.active` is the **only** switch you need to flip. It gates the AI beans, the AI REST
+endpoints, the embedding pipeline, the Flyway migration that creates the AI tables — and the chat
+UI in openfilz-web, which reads the flag from the API's `/api/v1/settings` response rather than
+from a frontend variable of its own. There is nothing to keep in sync.
+
+When `openfilz.ai.active=false` (default), the AI feature is completely inert: no AI beans are created, no AI REST endpoints are exposed, no embedding processing occurs, no LLM provider is auto-configured, and the AI database tables (`ai_chat_conversations`, `ai_chat_messages`, `vector_store`) are **not created**. The Flyway migration for AI only runs when the feature is active.
 
 #### LLM Provider Configuration
 
-You must enable **exactly one** chat model and **exactly one** embedding model. The two can come from different providers (e.g., Ollama for embeddings + OpenAI for chat).
+With the feature on and no provider switch set, OpenFilz uses **Ollama**, whose defaults target a
+stock local install (`localhost:11434`, `qwen2.5` for chat, `nomic-embed-text` for embeddings) — so
+`OPENFILZ_AI_ACTIVE=true` against a running Ollama is a complete configuration. Set the switches
+below to choose otherwise; chat and embeddings resolve independently, so they can come from
+different providers (e.g. Ollama for embeddings + OpenAI for chat).
 
 > The `*.enabled` switches in the tables below are OpenFilz properties, not Spring AI ones. Spring
 > AI 2.0 gates each provider on a single selector (`spring.ai.model.chat` /
 > `spring.ai.model.embedding`, valued with the provider name or `none`); OpenFilz derives those
-> selectors from these booleans, picking Ollama when both providers are enabled. Set
-> `spring.ai.model.*` yourself to bypass the mapping.
+> selectors from `openfilz.ai.active` plus these booleans, picking Ollama when both providers are
+> enabled. Set `spring.ai.model.*` yourself to bypass the mapping.
 
 **Ollama (local, free, recommended for development):**
 

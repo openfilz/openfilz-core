@@ -132,8 +132,5 @@ services:
       # Must be set in tandem with STORAGE_MINIO_VERSIONING_ENABLED on the API
       # (frontend flag without the backend flag yields HTTP 409 on version actions)
       NG_APP_STORAGE_MINIO_VERSIONING_ENABLED: ${NG_APP_STORAGE_MINIO_VERSIONING_ENABLED:-false}
-      # Must be set in tandem with OPENFILZ_AI_ACTIVE on the API — the AI endpoints are
-      # conditional on the backend flag, so the chat UI would 404 without it
-      NG_APP_AI_ENABLED: ${NG_APP_AI_ENABLED:-false}
     networks:
       - openfilz-network

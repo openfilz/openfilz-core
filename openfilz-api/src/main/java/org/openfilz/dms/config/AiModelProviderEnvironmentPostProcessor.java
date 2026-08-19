@@ -11,32 +11,38 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Translates the OpenFilz per-provider AI switches into the Spring AI model selectors.
+ * Derives Spring AI's model selectors from {@code openfilz.ai.active} and the per-provider
+ * OpenFilz switches, so that {@code openfilz.ai.active} is the single switch for the feature.
  * <p>
  * Spring AI 2.0 removed the per-provider {@code spring.ai.<provider>.chat.enabled} flags. A
  * provider's auto-configuration is now gated on a single selector — {@code spring.ai.model.chat}
  * and {@code spring.ai.model.embedding} — whose value is the provider name, or {@code none} to
- * disable it. Those conditions are {@code matchIfMissing = true}, so leaving the selector unset
+ * disable it. Those conditions are {@code matchIfMissing = true}, so leaving the selectors unset
  * with both the Ollama and OpenAI starters on the classpath would instantiate <em>both</em>
  * providers' models.
  * <p>
- * OpenFilz keeps exposing the boolean switches ({@code OLLAMA_CHAT_ENABLED},
- * {@code OPENAI_CHAT_ENABLED}, …) that deployments already use, and this post-processor derives
- * the selectors from them. Ollama wins when both are enabled; when neither is, the selector is set
- * to {@code none} so no provider model is built at all.
- * <p>
- * An explicitly-set {@code spring.ai.model.*} property always takes precedence — it is the escape
- * hatch for providers OpenFilz does not expose a boolean for.
- * <p>
- * The ordering matters: the switches this reads come from {@code application.yml}, so it has to run
- * after {@code ConfigDataEnvironmentPostProcessor} has contributed the config data — otherwise every
- * switch would read as absent and every provider would silently resolve to {@code none}.
+ * The rules applied here:
+ * <ul>
+ *   <li>{@code openfilz.ai.active=false} (default) — every selector is {@code none}. Nothing is
+ *       built, which matches the rest of the feature: every AI bean is conditional on that flag.</li>
+ *   <li>{@code openfilz.ai.active=true} — chat and embedding resolve independently from the
+ *       {@code openfilz.ai.<provider>.<kind>.enabled} switches ({@code OLLAMA_CHAT_ENABLED},
+ *       {@code OPENAI_CHAT_ENABLED}, …), Ollama winning when both are enabled. When a kind has no
+ *       switch set it falls back to Ollama, whose defaults point at a stock local install
+ *       (localhost:11434, qwen2.5, nomic-embed-text) — so turning the feature on is enough.</li>
+ *   <li>An explicitly-set {@code spring.ai.model.*} property always wins — the escape hatch for
+ *       providers OpenFilz exposes no switch for.</li>
+ * </ul>
+ * The ordering matters: the switches read here come from {@code application.yml}, so this has to
+ * run after {@code ConfigDataEnvironmentPostProcessor} has contributed the config data — otherwise
+ * every switch would read as absent.
  */
 @Order(Ordered.LOWEST_PRECEDENCE)
 public class AiModelProviderEnvironmentPostProcessor implements EnvironmentPostProcessor {
 
     private static final String PROPERTY_SOURCE_NAME = "openfilzAiModelProviders";
 
+    private static final String AI_ACTIVE = "openfilz.ai.active";
     private static final String CHAT_SELECTOR = "spring.ai.model.chat";
     private static final String EMBEDDING_SELECTOR = "spring.ai.model.embedding";
 
@@ -54,12 +60,15 @@ public class AiModelProviderEnvironmentPostProcessor implements EnvironmentPostP
 
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
+        boolean aiActive = environment.getProperty(AI_ACTIVE, Boolean.class, false);
         Map<String, Object> selectors = new LinkedHashMap<>();
 
-        putIfAbsent(environment, selectors, CHAT_SELECTOR,
-                provider(environment, "openfilz.ai.ollama.chat.enabled", "openfilz.ai.openai.chat.enabled"));
-        putIfAbsent(environment, selectors, EMBEDDING_SELECTOR,
-                provider(environment, "openfilz.ai.ollama.embedding.enabled", "openfilz.ai.openai.embedding.enabled"));
+        putIfAbsent(environment, selectors, CHAT_SELECTOR, aiActive
+                ? provider(environment, "openfilz.ai.ollama.chat.enabled", "openfilz.ai.openai.chat.enabled")
+                : NONE);
+        putIfAbsent(environment, selectors, EMBEDDING_SELECTOR, aiActive
+                ? provider(environment, "openfilz.ai.ollama.embedding.enabled", "openfilz.ai.openai.embedding.enabled")
+                : NONE);
         for (String unused : UNUSED_SELECTORS) {
             putIfAbsent(environment, selectors, unused, NONE);
         }
@@ -70,13 +79,13 @@ public class AiModelProviderEnvironmentPostProcessor implements EnvironmentPostP
     }
 
     private String provider(ConfigurableEnvironment environment, String ollamaFlag, String openaiFlag) {
-        if (environment.getProperty(ollamaFlag, Boolean.class, false)) {
-            return OLLAMA;
-        }
-        if (environment.getProperty(openaiFlag, Boolean.class, false)) {
+        if (environment.getProperty(openaiFlag, Boolean.class, false)
+                && !environment.getProperty(ollamaFlag, Boolean.class, false)) {
             return OPENAI;
         }
-        return NONE;
+        // Ollama wins when both are enabled, and is the fallback when neither is: its defaults
+        // target a stock local install, so `openfilz.ai.active=true` alone is a working setup.
+        return OLLAMA;
     }
 
     private void putIfAbsent(ConfigurableEnvironment environment, Map<String, Object> selectors,
