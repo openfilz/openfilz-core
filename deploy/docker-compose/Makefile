@@ -70,57 +70,55 @@ help:
 	@echo "  With auth:    API on :8081, Web on :4200, Keycloak on :8180"
 
 # Frontend feature toggles passed to the web container, which writes ngx-env.js at
-# startup from the NG_APP_* env. $(1)=auth enabled, $(2)=onlyoffice enabled. The other
-# NG_APP_* values are exported from .env (see `export` above) and read by the web
-# service's compose `environment:` block.
-web_toggles = NG_APP_AUTHENTICATION_ENABLED=$(1) NG_APP_ONLYOFFICE_ENABLED=$(2)
+# startup from the NG_APP_* env. $(1)=auth enabled, $(2)=onlyoffice enabled,
+# $(3)=AI chat enabled. The other NG_APP_* values are exported from .env (see `export`
+# above) and read by the web service's compose `environment:` block.
+web_toggles = NG_APP_AUTHENTICATION_ENABLED=$(1) NG_APP_ONLYOFFICE_ENABLED=$(2) NG_APP_AI_ENABLED=$(3)
 
 # Base services only (no auth, no onlyoffice)
 up:
-	$(call web_toggles,false,false) $(COMPOSE) up -d
+	$(call web_toggles,false,false,false) $(COMPOSE) up -d
 
 # With Keycloak authentication
 up-auth:
-	$(call web_toggles,true,false) $(COMPOSE) $(AUTH) up -d
+	$(call web_toggles,true,false,false) $(COMPOSE) $(AUTH) up -d
 
 # With MinIO storage
 up-minio:
-	$(call web_toggles,false,false) $(COMPOSE) $(MINIO) up -d
+	$(call web_toggles,false,false,false) $(COMPOSE) $(MINIO) up -d
 
 # With OnlyOffice
 up-onlyoffice:
-	$(call web_toggles,false,true) $(COMPOSE) $(ONLYOFFICE) up -d
+	$(call web_toggles,false,true,false) $(COMPOSE) $(ONLYOFFICE) up -d
 
 # With OpenSearch full-text search
 up-fulltext:
-	$(call web_toggles,false,false) $(COMPOSE) $(FULLTEXT) up -d
+	$(call web_toggles,false,false,false) $(COMPOSE) $(FULLTEXT) up -d
 
 # With AI document chat (Ollama)
 up-ai:
-	$(call generate_config,false,false)
-	$(COMPOSE) $(AI) up -d
+	$(call web_toggles,false,false,true) $(COMPOSE) $(AI) up -d
 
 # Common combinations
 up-auth-minio:
-	$(call web_toggles,true,false) $(COMPOSE) $(AUTH) $(MINIO) up -d
+	$(call web_toggles,true,false,false) $(COMPOSE) $(AUTH) $(MINIO) up -d
 
 up-auth-fulltext:
-	$(call web_toggles,true,false) $(COMPOSE) $(AUTH) $(FULLTEXT) up -d
+	$(call web_toggles,true,false,false) $(COMPOSE) $(AUTH) $(FULLTEXT) up -d
 
 up-auth-onlyoffice:
-	$(call web_toggles,true,true) $(COMPOSE) $(AUTH) $(ONLYOFFICE) up -d
+	$(call web_toggles,true,true,false) $(COMPOSE) $(AUTH) $(ONLYOFFICE) up -d
 
 up-auth-ai:
-	$(call generate_config,true,false)
-	$(COMPOSE) $(AUTH) $(AI) up -d
+	$(call web_toggles,true,false,true) $(COMPOSE) $(AUTH) $(AI) up -d
 
 # Community Edition demo (all features, no auth)
 up-demo:
-	$(call web_toggles,false,true) OPENFILZ_CALCULATECHECKSUM=true $(COMPOSE) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) $(AI) --profile thumbnails up -d
+	$(call web_toggles,false,true,true) OPENFILZ_CALCULATECHECKSUM=true $(COMPOSE) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) $(AI) --profile thumbnails up -d
 
 # All services
 up-full:
-	$(call web_toggles,true,true) $(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) $(AI) --profile thumbnails up -d
+	$(call web_toggles,true,true,true) $(COMPOSE) $(AUTH) $(MINIO) $(ONLYOFFICE) $(FULLTEXT) $(THUMBNAILS) $(AI) --profile thumbnails up -d
 
 # Management commands
 down:

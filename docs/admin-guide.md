@@ -479,6 +479,7 @@ OpenFilz includes an optional AI assistant that can answer questions about your 
 | Property / Env Variable | Default | Description |
 |--------------------------|---------|-------------|
 | `openfilz.ai.active` / `OPENFILZ_AI_ACTIVE` | `false` | Master switch — set to `true` to enable all AI features |
+| `NG_APP_AI_ENABLED` (web container) | `false` | Shows the chat UI in openfilz-web. Set it in tandem with `OPENFILZ_AI_ACTIVE` — the UI calls endpoints that only exist when the backend switch is on. `make up-ai` / `make up-auth-ai` set both for you |
 
 When `openfilz.ai.active=false` (default), the AI feature is completely inert: no AI beans are created, no AI REST endpoints are exposed, no embedding processing occurs, and the AI database tables (`ai_chat_conversations`, `ai_chat_messages`, `vector_store`) are **not created**. The Flyway migration for AI only runs when the feature is active.
 
