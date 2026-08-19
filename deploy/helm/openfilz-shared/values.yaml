@@ -34,7 +34,7 @@ images:
   # the realm at import. A customized image (different baked realm, extra
   # providers) can be swapped in via this value + images.pullSecrets +
   # keycloak.extraEnv below — see "Replacing the Keycloak image" in the README.
-  keycloak: ghcr.io/openfilz/keycloak:26.5
+  keycloak: ghcr.io/openfilz/keycloak:26.7
   keycloakDb: postgres:17-alpine
   opensearch: opensearchproject/opensearch:2.19.1
   gotenberg: gotenberg/gotenberg:8

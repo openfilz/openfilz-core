@@ -29,6 +29,9 @@ jobs:
           KC_VERSION=$(grep '^FROM' deploy/docker-compose/dokploy/keycloak/Dockerfile | grep -oP '(?<=keycloak:)\S+')
           echo "keycloak_version=$KC_VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Check no pinned Keycloak reference has drifted
+        run: sh ./deploy/docker-compose/dokploy/keycloak/check-keycloak-version.sh
+
       - name: Build image
         run: docker build -t ghcr.io/openfilz/keycloak:${{ steps.version.outputs.keycloak_version }} deploy/docker-compose/dokploy/keycloak
 

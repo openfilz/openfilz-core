@@ -14,7 +14,7 @@ services:
   # Keycloak Authentication Server
   # =============================================================================
   keycloak:
-    image: ${KEYCLOAK_IMAGE:-ghcr.io/openfilz/keycloak:26.5}
+    image: ${KEYCLOAK_IMAGE:-ghcr.io/openfilz/keycloak:26.7}
     container_name: openfilz-keycloak
     restart: unless-stopped
     environment:

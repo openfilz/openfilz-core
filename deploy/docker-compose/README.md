@@ -271,7 +271,7 @@ Used with `docker-compose.auth.yml`:
 | `KEYCLOAK_ADMIN` | `admin` | Keycloak bootstrap admin username (maps to `KC_BOOTSTRAP_ADMIN_USERNAME`) |
 | `KEYCLOAK_ADMIN_PASSWORD` | `admin` | Keycloak bootstrap admin password (maps to `KC_BOOTSTRAP_ADMIN_PASSWORD`) |
 | `KEYCLOAK_PORT` | `8180` | Keycloak exposed port |
-| `KEYCLOAK_IMAGE` | `ghcr.io/openfilz/keycloak:26.5` | Custom Keycloak Docker image |
+| `KEYCLOAK_IMAGE` | `ghcr.io/openfilz/keycloak:26.7` | Custom Keycloak Docker image |
 | `KEYCLOAK_MANAGEMENT_PORT` | `9000` | Keycloak management port |
 | `KEYCLOAK_REALM_URL` | `http://keycloak:8080/realms/openfilz` | Internal Docker URL for Keycloak realm (used by API for JWK fetching) |
 | `KEYCLOAK_DB_USER` | `keycloak` | Keycloak database user |
