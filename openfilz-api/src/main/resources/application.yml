@@ -138,10 +138,15 @@ openfilz:
       6. Only ask for confirmation on destructive actions (delete, rename). Act immediately on reads.
       7. When RAG context is provided, USE IT and mention the document name.
       8. You can analyze images and PDFs. When a user asks about an image file or wants to extract text from an image or scanned PDF, use the describeImage tool with the appropriate task ('describe', 'ocr', or 'answer').
+    embedding:
       chunk-size: 1000       # Characters per text chunk
       chunk-overlap: 200     # Overlap between chunks
       top-k: 5               # Number of similar chunks to retrieve
       similarity-threshold: 0.3  # Minimum similarity score (0.0 - 1.0) — lower = more results, higher = stricter match
+      # The embedding model is a one-time deployment decision: changing it invalidates every vector
+      # already stored in vector_store (see EmbeddingRegistryGuard). fail-fast (default) refuses to
+      # start on a mismatch while indexed vectors exist; warn starts anyway with degraded RAG results.
+      validation: ${OPENFILZ_AI_EMBEDDING_VALIDATION:fail-fast}
 
   calculate-checksum: false
   #  calculate-checksum: default false - if true : calculate checksum of each new or modified file
@@ -240,6 +245,9 @@ onlyoffice:
 # switches below: AiModelProviderEnvironmentPostProcessor turns them into Spring AI 2.0's
 # spring.ai.model.chat / spring.ai.model.embedding selectors (Ollama wins if both are enabled,
 # 'none' if neither is). Set spring.ai.model.* explicitly to bypass that mapping.
+# The chat model can be swapped freely; the EMBEDDING model is a one-time deployment decision —
+# changing it invalidates every stored vector (see EmbeddingRegistryGuard and
+# openfilz.ai.embedding.validation above).
 
 # Ollama (default for local development)
 spring.ai.ollama:
@@ -259,6 +267,9 @@ spring.ai.openai:
     model: ${OPENAI_CHAT_MODEL:gpt-4o}
   embedding:
     model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+    # vector_store's embedding column is fixed at vector(768), so ask OpenAI to shorten its
+    # vectors to 768 (text-embedding-3-* support native dimension shortening; default is 1536).
+    dimensions: ${OPENAI_EMBEDDING_DIMENSIONS:768}
 
 # PgVector Store (auto-configured when spring-ai-starter-vector-store-pgvector is on classpath)
 spring.ai.vectorstore.pgvector:

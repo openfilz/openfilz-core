@@ -38,6 +38,13 @@ import javax.sql.DataSource;
 @ConditionalOnProperty(name = "openfilz.ai.active", havingValue = "true")
 public class AiConfig {
 
+    /**
+     * Vector dimension of the {@code vector_store.embedding} column (see
+     * {@code db/ai-migration/V1_4__add_ai_support.sql}). Every configured embedding model must
+     * produce vectors of exactly this size — {@link EmbeddingRegistryGuard} enforces it at startup.
+     */
+    public static final int EMBEDDING_DIMENSIONS = 768;
+
     @Bean
     ChatClient chatClient(ChatModel chatModel, AiProperties aiProperties, DocumentAiTools documentAiTools,
                           ToolCallingManager toolCallingManager) {
@@ -76,7 +83,7 @@ public class AiConfig {
     @Bean
     VectorStore vectorStore(JdbcTemplate aiJdbcTemplate, EmbeddingModel embeddingModel) {
         return PgVectorStore.builder(aiJdbcTemplate, embeddingModel)
-                .dimensions(768)
+                .dimensions(EMBEDDING_DIMENSIONS)
                 .distanceType(PgDistanceType.COSINE_DISTANCE)
                 .indexType(PgIndexType.HNSW)
                 .initializeSchema(false) // Flyway manages the schema
