@@ -19,9 +19,22 @@ on:
           - minor
           - major
 
+# A release mutates shared state (tag, version-bump commits, published artifacts), so only one
+# may run at a time. cancel-in-progress stays false: interrupting release:perform mid-publish
+# would leave a tag with no artifacts behind it.
+concurrency:
+  group: release-backend
+  cancel-in-progress: false
+
 jobs:
   build:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    # Only a merged develop -> main PR releases. GitHub auto-closes any other open PR targeting
+    # main as "merged" the moment its commits arrive there by another route, and that fires this
+    # workflow a second time — a stale feat/* PR did exactly that during the 1.2.18 release and
+    # started a concurrent release run.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'develop')
     runs-on: ubuntu-latest
     outputs:
       releaseVersion: ${{ steps.versions.outputs.releaseVersion }}
