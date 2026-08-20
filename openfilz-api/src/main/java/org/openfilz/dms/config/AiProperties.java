@@ -88,5 +88,17 @@ public class AiProperties {
          * Minimum similarity threshold (0.0 - 1.0) for vector search results.
          */
         private double similarityThreshold = 0.7;
+
+        /**
+         * How {@link EmbeddingRegistryGuard} reacts when the configured embedding model no longer
+         * matches the one that indexed the existing vectors (or its dimensions don't fit the
+         * vector_store schema). FAIL_FAST (default) refuses to start; WARN logs an error and
+         * starts anyway, accepting degraded RAG results.
+         */
+        private Validation validation = Validation.FAIL_FAST;
+
+        public enum Validation {
+            FAIL_FAST, WARN
+        }
     }
 }
