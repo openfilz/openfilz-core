@@ -649,13 +649,14 @@ Then start normally (`make up`, `make up-auth`, etc.). No Ollama container is ne
 
 #### Database Tables
 
-The AI migrations (`V1_4__add_ai_support.sql`, `V1_5__add_user_ai_settings.sql`) run **only when `openfilz.ai.active=true`** and create:
+The AI migrations (`V1_4__add_ai_support.sql`, `V1_5__add_embedding_registry.sql`, `V1_6__add_user_ai_settings.sql`) run **only when `openfilz.ai.active=true`** and create:
 
 | Table | Purpose |
 |-------|---------|
 | `ai_chat_conversations` | Conversation metadata (title, creator, timestamps). Conversations are owned by their creator; rows created before ownership stamping (`created_by IS NULL`) stay visible to everyone |
 | `ai_chat_messages` | Message history (user and assistant messages per conversation) |
 | `vector_store` | Document embeddings for semantic search (768-dim vectors with HNSW index) |
+| `ai_embedding_registry` | Records which embedding model produced the stored vectors (one-time deployment decision, enforced at startup) |
 | `user_ai_settings` | Per-user BYOK chat-LLM overrides (provider, model, AES-256-GCM-encrypted API key) |
 
 ### CORS

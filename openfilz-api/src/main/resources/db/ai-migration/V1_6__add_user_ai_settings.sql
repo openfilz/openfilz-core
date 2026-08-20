@@ -1,5 +1,5 @@
 -- ============================================================
--- V1_5: Per-user AI (LLM) settings — BYOK (bring your own key)
+-- V1_6: Per-user AI (LLM) settings — BYOK (bring your own key)
 -- A user can override the server-default chat model with their
 -- own provider + API key. The key is stored AES-256-GCM
 -- encrypted with the server-side AI_SETTINGS_ENCRYPTION_KEY.
