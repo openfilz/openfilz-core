@@ -368,6 +368,12 @@
             <artifactId>testcontainers-minio</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Real LLM for the AI end-to-end tests (see SharedOllamaContainer) -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-ollama</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers-r2dbc</artifactId>
