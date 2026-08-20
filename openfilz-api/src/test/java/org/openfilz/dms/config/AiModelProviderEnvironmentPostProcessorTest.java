@@ -79,6 +79,70 @@ class AiModelProviderEnvironmentPostProcessorTest {
     }
 
     @Test
+    void anthropicEnabled_selectsAnthropicChat() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.anthropic.chat.enabled", "true");
+
+        assertEquals("anthropic", environment.getProperty("spring.ai.model.chat"));
+        // Anthropic has no embeddings API — embedding falls back to Ollama
+        assertEquals("ollama", environment.getProperty("spring.ai.model.embedding"));
+    }
+
+    @Test
+    void googleEnabled_selectsGoogleGenaiChat() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.google.chat.enabled", "true",
+                "openfilz.ai.openai.embedding.enabled", "true");
+
+        assertEquals("google-genai", environment.getProperty("spring.ai.model.chat"));
+        assertEquals("openai", environment.getProperty("spring.ai.model.embedding"));
+    }
+
+    /** Embedding is Ollama/OpenAI only: the pgvector schema is pinned to their 768-dim output. */
+    @Test
+    void anthropicAndGoogleEmbeddingSwitches_areIgnored() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.anthropic.embedding.enabled", "true",
+                "openfilz.ai.google.embedding.enabled", "true");
+
+        assertEquals("ollama", environment.getProperty("spring.ai.model.embedding"));
+    }
+
+    @Test
+    void chatPriority_anthropicBeatsGoogleAndOpenai() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.anthropic.chat.enabled", "true",
+                "openfilz.ai.google.chat.enabled", "true",
+                "openfilz.ai.openai.chat.enabled", "true");
+
+        assertEquals("anthropic", environment.getProperty("spring.ai.model.chat"));
+    }
+
+    @Test
+    void chatPriority_ollamaBeatsAnthropic() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.ollama.chat.enabled", "true",
+                "openfilz.ai.anthropic.chat.enabled", "true");
+
+        assertEquals("ollama", environment.getProperty("spring.ai.model.chat"));
+    }
+
+    @Test
+    void chatPriority_googleBeatsOpenai() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.google.chat.enabled", "true",
+                "openfilz.ai.openai.chat.enabled", "true");
+
+        assertEquals("google-genai", environment.getProperty("spring.ai.model.chat"));
+    }
+
+    @Test
     void chatAndEmbeddingResolveIndependently() {
         MockEnvironment environment = process(
                 "openfilz.ai.active", "true",

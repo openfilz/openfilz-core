@@ -26,6 +26,11 @@ public class SettingsServiceImpl implements SettingsService {
     @Value("${openfilz.ai.active:false}")
     private Boolean aiActive;
 
+    // BYOK: lets users override the chat LLM with their own provider + API key. Read at
+    // runtime (plain @Value, no conditional bean) so it stays a deployment toggle in native images.
+    @Value("${openfilz.ai.user-settings.enabled:false}")
+    private Boolean aiUserSettingsEnabled;
+
     private final RecycleBinProperties recycleBinProperties;
 
     private final QuotaProperties quotaProperties;
@@ -53,6 +58,7 @@ public class SettingsServiceImpl implements SettingsService {
                .userQuotaMB(quotaProperties.getUser())
                .thumbnailsActive(thumbnailActive)
                .aiActive(aiActive)
+               .aiUserSettingsEnabled(aiActive && aiUserSettingsEnabled)
                .build());
 
     }

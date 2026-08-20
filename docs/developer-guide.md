@@ -496,6 +496,48 @@ curl -X DELETE -H "Authorization: Bearer <token>" \
 
 Deletes the conversation and all its messages (cascade).
 
+> **Ownership:** conversations are scoped to the connected user (email claim). Listing only
+> returns your own conversations (plus legacy rows created before ownership stamping); reading,
+> continuing, or deleting someone else's conversation returns `404`.
+
+#### Per-User AI Settings (BYOK)
+
+> Requires `openfilz.ai.user-settings.enabled=true` (plus `AI_SETTINGS_ENCRYPTION_KEY`) on top of
+> `openfilz.ai.active=true`. See the admin guide for setup and key-creation walkthroughs.
+
+Users can override the **chat** model with their own provider + API key; embeddings stay on the
+server-configured model. The API key is write-only.
+
+```bash
+# Read my settings (provider is null when on the server default; the key is never returned)
+curl -H "Authorization: Bearer <token>" \
+  "http://localhost:8081/api/v1/settings/ai"
+
+# Save my settings (provider: OPENAI | ANTHROPIC | GOOGLE | OPENAI_COMPATIBLE;
+# baseUrl only for OPENAI_COMPATIBLE; omit apiKey on later saves to keep the stored key)
+curl -X PUT -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"provider": "ANTHROPIC", "model": "claude-opus-5", "apiKey": "sk-ant-..."}' \
+  "http://localhost:8081/api/v1/settings/ai"
+
+# Test a configuration with a one-token probe (falls back to the stored key when apiKey is omitted)
+curl -X POST -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"provider": "ANTHROPIC", "model": "claude-opus-5", "apiKey": "sk-ant-..."}' \
+  "http://localhost:8081/api/v1/settings/ai/test"
+
+# Reset to the server default
+curl -X DELETE -H "Authorization: Bearer <token>" \
+  "http://localhost:8081/api/v1/settings/ai"
+```
+
+**Architecture:** `UserChatClientResolver` resolves each chat request's `ChatModel` — the
+server-default bean, or a per-user model built *programmatically* from the vendor SDK clients
+(no Spring auto-configuration involved, so the `spring.ai.model.*` selectors and GraalVM
+build-time conditions are untouched; native-image-safe). Built models are cached per user
+(Caffeine) and invalidated on settings changes. `ChatClientAssembler` then assembles the
+`ChatClient` per request with a fresh `DocumentAiTools` instance — the doc-link registry is
+per-conversation-turn state, and per-request tools also route the vision tool (`describeImage`)
+to the user's own model.
+
 #### AI Function Calling
 
 The AI assistant can invoke the following document management tools during a conversation:

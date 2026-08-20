@@ -274,19 +274,14 @@ public class AiChatControllerIT extends TestContainersBaseConfig {
     }
 
     @Test
-    void whenGetHistoryOfNonExistentConversation_thenReturnsEmptyList() {
-        UUID randomId = UUID.randomUUID();
-
-        List<AiChatResponse> history = getWebTestClient().get()
-                .uri(AI_PREFIX + "/conversations/" + randomId)
+    void whenGetHistoryOfNonExistentConversation_thenNotFound() {
+        // Conversations are ownership-checked now: a conversation that doesn't exist (or belongs
+        // to someone else) surfaces as 404 instead of an empty list.
+        getWebTestClient().get()
+                .uri(AI_PREFIX + "/conversations/" + UUID.randomUUID())
                 .accept(MediaType.APPLICATION_JSON)
                 .exchange()
-                .expectStatus().isOk()
-                .expectBody(new ParameterizedTypeReference<List<AiChatResponse>>() {})
-                .returnResult().getResponseBody();
-
-        Assertions.assertNotNull(history);
-        Assertions.assertTrue(history.isEmpty());
+                .expectStatus().isNotFound();
     }
 
     @Test

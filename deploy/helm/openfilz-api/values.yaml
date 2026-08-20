@@ -147,6 +147,23 @@ ai:
     embedding:
       enabled: false
       model: "text-embedding-3-small"
+  # -- Anthropic Claude (chat only — Anthropic has no embeddings API, keep Ollama/OpenAI embeddings)
+  anthropic:
+    apiKey: ""
+    chat:
+      enabled: false
+      model: "claude-opus-5"
+  # -- Google Gemini via the Gemini Developer API (chat only — embeddings stay on Ollama/OpenAI)
+  google:
+    apiKey: ""
+    chat:
+      enabled: false
+      model: "gemini-2.5-flash"
+  # -- Per-user AI settings (BYOK): users override the chat LLM with their own provider + API key.
+  # encryptionKey protects the stored keys (base64, 32 bytes): openssl rand -base64 32
+  userSettings:
+    enabled: false
+    encryptionKey: ""
 
 # Extra environment variables injected via a chart-managed ConfigMap (envFrom).
 extraEnv: {}

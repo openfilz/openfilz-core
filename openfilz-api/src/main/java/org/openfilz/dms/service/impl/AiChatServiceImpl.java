@@ -10,30 +10,40 @@ import org.openfilz.dms.entity.AiChatMessage;
 import org.openfilz.dms.repository.AiChatConversationRepository;
 import org.openfilz.dms.repository.AiChatMessageRepository;
 import org.openfilz.dms.service.AiChatService;
+import org.openfilz.dms.service.ai.ChatClientAssembler;
 import org.openfilz.dms.service.ai.DocumentAiTools;
+import org.openfilz.dms.service.ai.DocumentAiToolsFactory;
+import org.openfilz.dms.service.ai.UserChatClientResolver;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * Implementation of AiChatService using Spring AI ChatClient with RAG.
+ * <p>
+ * Per request, the chat model is resolved for the connected user (server default or BYOK
+ * override), a fresh {@link DocumentAiTools} instance is created (its doc-link registry is
+ * per-conversation-turn state — a singleton would cross-contaminate concurrent users), and
+ * the {@link ChatClient} is assembled on top. Conversations are owned by their creator;
+ * legacy rows without an owner stay visible to everyone.
  */
 @Slf4j
 @Service
@@ -41,125 +51,130 @@ import java.util.stream.Collectors;
 @ConditionalOnProperty(name = "openfilz.ai.active", havingValue = "true")
 public class AiChatServiceImpl implements AiChatService {
 
-    private final ChatClient chatClient;
+    private final UserChatClientResolver chatResolver;
+    private final ChatClientAssembler assembler;
+    private final DocumentAiToolsFactory toolsFactory;
     private final VectorStore vectorStore;
     private final AiProperties aiProperties;
     private final AiChatConversationRepository conversationRepository;
     private final AiChatMessageRepository messageRepository;
-    private final DocumentAiTools documentAiTools;
-
-    /** Tracks document names that came from RAG context (not tool calls). */
-    private final java.util.Set<String> ragDocumentNames = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
 
     @Override
-    public Flux<AiChatResponse> chat(AiChatRequest request) {
-        log.debug("[AI] === New chat request ===");
+    public Flux<AiChatResponse> chat(AiChatRequest request, String userEmail) {
+        log.debug("[AI] === New chat request (user={}) ===", userEmail);
         log.debug("[AI] User message: {}", request.getMessage());
         log.debug("[AI] Conversation ID: {}", request.getConversationId() != null ? request.getConversationId() : "(new conversation)");
 
-        // 1. Resolve or create conversation
+        // 1. Resolve or create conversation (ownership-checked)
         Mono<UUID> conversationIdMono = request.getConversationId() != null
-                ? Mono.just(request.getConversationId())
-                : createConversation(request.getMessage());
+                ? requireVisible(request.getConversationId(), userEmail).map(AiChatConversation::getId)
+                : createConversation(request.getMessage(), userEmail);
 
         return conversationIdMono.flatMapMany(conversationId -> {
             log.debug("[AI] Conversation ID resolved: {}", conversationId);
 
-            // 2. Save user message and clear document registry for this turn
-            documentAiTools.clearRegistry();
-            ragDocumentNames.clear();
-            Mono<Void> saveUserMsg = saveMessage(conversationId, "USER", request.getMessage())
-                    .doOnSuccess(v -> log.debug("[AI] User message saved to DB"));
+            // 2. Resolve the user's chat model (server default or BYOK) and build the
+            //    per-request tool instance + client on top of it.
+            return chatResolver.resolve(userEmail).flatMapMany(resolved -> {
+                DocumentAiTools tools = toolsFactory.create(resolved.chatModel());
+                ChatClient chatClient = assembler.assemble(resolved.chatModel(), tools);
+                Set<String> ragDocumentNames = new HashSet<>();
+                log.debug("[AI] Chat model: {} ({})", resolved.provider(), resolved.model());
 
-            // 3. Retrieve relevant document chunks (RAG) — also registers found docs in the registry
-            Mono<String> contextMono = retrieveContext(request.getMessage());
+                // 3. Save user message
+                Mono<Void> saveUserMsg = saveMessage(conversationId, "USER", request.getMessage())
+                        .doOnSuccess(v -> log.debug("[AI] User message saved to DB"));
 
-            // 4. Load conversation history
-            Mono<List<Message>> historyMono = loadConversationHistory(conversationId);
+                // 4. Retrieve relevant document chunks (RAG) — also registers found docs in the registry
+                Mono<String> contextMono = retrieveContext(request.getMessage(), tools, ragDocumentNames);
 
-            return saveUserMsg
-                    .then(Mono.zip(contextMono, historyMono))
-                    .flatMapMany(tuple -> {
-                        String ragContext = tuple.getT1();
-                        List<Message> history = tuple.getT2();
+                // 5. Load conversation history
+                Mono<List<Message>> historyMono = loadConversationHistory(conversationId);
 
-                        log.debug("[AI] RAG context: {}", ragContext.isBlank() ? "(none)" : ragContext.length() + " chars");
-                        log.debug("[AI] Conversation history: {} previous messages", history.size());
+                return saveUserMsg
+                        .then(Mono.zip(contextMono, historyMono))
+                        .flatMapMany(tuple -> {
+                            String ragContext = tuple.getT1();
+                            List<Message> history = tuple.getT2();
 
-                        // 5. Build the prompt with RAG context + history + user message
-                        String augmentedMessage = buildAugmentedMessage(request.getMessage(), ragContext);
-                        log.debug("[AI] Augmented prompt: {}", augmentedMessage.length() > 200
-                                ? augmentedMessage.substring(0, 200) + "..." : augmentedMessage);
+                            log.debug("[AI] RAG context: {}", ragContext.isBlank() ? "(none)" : ragContext.length() + " chars");
+                            log.debug("[AI] Conversation history: {} previous messages", history.size());
 
-                        // 6. Stream the response (registry already cleared + populated by RAG above)
-                        StringBuilder fullResponse = new StringBuilder();
+                            // 6. Build the prompt with RAG context + history + user message
+                            String augmentedMessage = buildAugmentedMessage(request.getMessage(), ragContext);
+                            log.debug("[AI] Augmented prompt: {}", augmentedMessage.length() > 200
+                                    ? augmentedMessage.substring(0, 200) + "..." : augmentedMessage);
 
-                        log.debug("[AI] Sending prompt to LLM (streaming)...");
-                        return chatClient.prompt()
-                                .messages(history)
-                                .user(augmentedMessage)
-                                .stream()
-                                .content()
-                                .doOnNext(chunk -> {
-                                    fullResponse.append(chunk);
-                                    if (fullResponse.length() == chunk.length()) {
-                                        log.debug("[AI] LLM started streaming response");
-                                    }
-                                })
-                                .doOnComplete(() -> log.debug("[AI] LLM streaming complete, raw response: {} chars", fullResponse.length()))
-                                .then(Mono.defer(() -> {
-                                    // Post-process: enrich response with document links
-                                    log.debug("[AI] Document registry: {} entries: {}", documentAiTools.getRegistry().size(), documentAiTools.getRegistry().keySet());
-                                    String enriched = documentAiTools.enrichWithDocLinks(fullResponse.toString());
+                            // 7. Stream the response
+                            StringBuilder fullResponse = new StringBuilder();
 
-                                    // Append "Sources" section with links to documents found by RAG
-                                    // This guarantees document links appear even when the LLM forgets to mention filenames
-                                    enriched = appendSourceLinks(enriched);
+                            log.debug("[AI] Sending prompt to LLM (streaming)...");
+                            return chatClient.prompt()
+                                    .messages(history)
+                                    .user(augmentedMessage)
+                                    .stream()
+                                    .content()
+                                    .doOnNext(chunk -> {
+                                        fullResponse.append(chunk);
+                                        if (fullResponse.length() == chunk.length()) {
+                                            log.debug("[AI] LLM started streaming response");
+                                        }
+                                    })
+                                    .doOnComplete(() -> log.debug("[AI] LLM streaming complete, raw response: {} chars", fullResponse.length()))
+                                    .then(Mono.defer(() -> {
+                                        // Post-process: enrich response with document links
+                                        log.debug("[AI] Document registry: {} entries: {}", tools.getRegistry().size(), tools.getRegistry().keySet());
+                                        String enriched = tools.enrichWithDocLinks(fullResponse.toString());
 
-                                    log.debug("[AI] Enriched response: {} chars (was {} chars)", enriched.length(), fullResponse.length());
-                                    log.debug("[AI] Final response preview: {}", enriched.length() > 300
-                                            ? enriched.substring(0, 300) + "..." : enriched);
+                                        // Append "Sources" section with links to documents found by RAG
+                                        // This guarantees document links appear even when the LLM forgets to mention filenames
+                                        enriched = appendSourceLinks(enriched, tools, ragDocumentNames);
 
-                                    return saveMessage(conversationId, "ASSISTANT", enriched)
-                                            .doOnSuccess(v -> log.debug("[AI] Assistant message saved to DB"))
-                                            .then(updateConversationTimestamp(conversationId))
-                                            .thenReturn(enriched);
-                                }))
-                                .flatMapMany(enriched -> Flux.just(
-                                        AiChatResponse.builder()
+                                        log.debug("[AI] Enriched response: {} chars (was {} chars)", enriched.length(), fullResponse.length());
+                                        log.debug("[AI] Final response preview: {}", enriched.length() > 300
+                                                ? enriched.substring(0, 300) + "..." : enriched);
+
+                                        return saveMessage(conversationId, "ASSISTANT", enriched)
+                                                .doOnSuccess(v -> log.debug("[AI] Assistant message saved to DB"))
+                                                .then(updateConversationTimestamp(conversationId))
+                                                .thenReturn(enriched);
+                                    }))
+                                    .flatMapMany(enriched -> Flux.just(
+                                            AiChatResponse.builder()
+                                                    .conversationId(conversationId)
+                                                    .content(enriched)
+                                                    .type(AiChatResponse.EventType.MESSAGE)
+                                                    .build(),
+                                            AiChatResponse.builder()
+                                                    .conversationId(conversationId)
+                                                    .type(AiChatResponse.EventType.DONE)
+                                                    .build()
+                                    ))
+                                    .doOnComplete(() -> log.debug("[AI] === Chat request complete ==="))
+                                    .onErrorResume(e -> {
+                                        log.error("[AI] Error during AI chat streaming", e);
+                                        return Flux.just(AiChatResponse.builder()
                                                 .conversationId(conversationId)
-                                                .content(enriched)
-                                                .type(AiChatResponse.EventType.MESSAGE)
-                                                .build(),
-                                        AiChatResponse.builder()
-                                                .conversationId(conversationId)
-                                                .type(AiChatResponse.EventType.DONE)
-                                                .build()
-                                ))
-                                .doOnComplete(() -> log.debug("[AI] === Chat request complete ==="))
-                                .onErrorResume(e -> {
-                                    log.error("[AI] Error during AI chat streaming", e);
-                                    return Flux.just(AiChatResponse.builder()
-                                            .conversationId(conversationId)
-                                            .content("An error occurred while processing your request: " + e.getMessage())
-                                            .type(AiChatResponse.EventType.ERROR)
-                                            .build());
-                                });
-                    });
+                                                .content("An error occurred while processing your request: " + e.getMessage())
+                                                .type(AiChatResponse.EventType.ERROR)
+                                                .build());
+                                    });
+                        });
+            });
         });
     }
 
     @Override
-    public Flux<AiChatConversation> listConversations() {
-        log.debug("[AI] Listing conversations");
-        return conversationRepository.findAll()
-                .sort((a, b) -> b.getUpdatedAt().compareTo(a.getUpdatedAt()));
+    public Flux<AiChatConversation> listConversations(String userEmail) {
+        log.debug("[AI] Listing conversations for user {}", userEmail);
+        return conversationRepository.findVisibleToUser(userEmail);
     }
 
     @Override
-    public Flux<AiChatResponse> getConversationHistory(UUID conversationId) {
-        log.debug("[AI] Loading conversation history: {}", conversationId);
-        return messageRepository.findByConversationIdOrderByCreatedAtAsc(conversationId)
+    public Flux<AiChatResponse> getConversationHistory(UUID conversationId, String userEmail) {
+        log.debug("[AI] Loading conversation history: {} (user={})", conversationId, userEmail);
+        return requireVisible(conversationId, userEmail)
+                .flatMapMany(conversation -> messageRepository.findByConversationIdOrderByCreatedAtAsc(conversationId))
                 .map(msg -> AiChatResponse.builder()
                         .conversationId(conversationId)
                         .content(msg.getContent())
@@ -168,16 +183,30 @@ public class AiChatServiceImpl implements AiChatService {
     }
 
     @Override
-    public Mono<Void> deleteConversation(UUID conversationId) {
-        log.debug("[AI] Deleting conversation: {}", conversationId);
-        return conversationRepository.deleteById(conversationId);
+    public Mono<Void> deleteConversation(UUID conversationId, String userEmail) {
+        log.debug("[AI] Deleting conversation: {} (user={})", conversationId, userEmail);
+        return requireVisible(conversationId, userEmail)
+                .flatMap(conversation -> conversationRepository.deleteById(conversationId));
     }
 
-    private Mono<UUID> createConversation(String firstMessage) {
-        log.debug("[AI] Creating new conversation, title: {}", firstMessage.length() > 50
+    /**
+     * Load a conversation the user is allowed to see: their own, or a legacy unowned one.
+     * Someone else's conversation surfaces as 404 (not 403) to avoid leaking its existence.
+     */
+    private Mono<AiChatConversation> requireVisible(UUID conversationId, String userEmail) {
+        return conversationRepository.findById(conversationId)
+                .filter(conversation -> conversation.getCreatedBy() == null
+                        || conversation.getCreatedBy().equals(userEmail))
+                .switchIfEmpty(Mono.error(
+                        new ResponseStatusException(HttpStatus.NOT_FOUND, "Conversation not found")));
+    }
+
+    private Mono<UUID> createConversation(String firstMessage, String userEmail) {
+        log.debug("[AI] Creating new conversation for {}, title: {}", userEmail, firstMessage.length() > 50
                 ? firstMessage.substring(0, 50) + "..." : firstMessage);
         var conversation = AiChatConversation.builder()
                 .title(firstMessage.length() > 100 ? firstMessage.substring(0, 100) + "..." : firstMessage)
+                .createdBy(userEmail)
                 .createdAt(OffsetDateTime.now())
                 .updatedAt(OffsetDateTime.now())
                 .build();
@@ -220,7 +249,7 @@ public class AiChatServiceImpl implements AiChatService {
     /** Maximum total characters of RAG context to inject into the prompt (avoids overwhelming the LLM). */
     private static final int MAX_RAG_CONTEXT_CHARS = 4000;
 
-    private Mono<String> retrieveContext(String query) {
+    private Mono<String> retrieveContext(String query, DocumentAiTools tools, Set<String> ragDocumentNames) {
         log.debug("[AI] RAG: searching vector store for: '{}' (topK={}, threshold={})",
                 query, aiProperties.getEmbedding().getTopK(), aiProperties.getEmbedding().getSimilarityThreshold());
         return Mono.fromCallable(() -> {
@@ -247,7 +276,7 @@ public class AiChatServiceImpl implements AiChatService {
             // Build context from the best chunks, capping total size
             double bestScore = relevantDocs.getFirst().getScore();
             StringBuilder context = new StringBuilder();
-            var includedDocs = new java.util.HashSet<String>();
+            var includedDocs = new HashSet<String>();
 
             for (var doc : relevantDocs) {
                 String docName = doc.getMetadata().getOrDefault("document_name", "Unknown").toString();
@@ -257,7 +286,7 @@ public class AiChatServiceImpl implements AiChatService {
                 if (text == null || text.length() < 20) {
                     log.debug("[AI] RAG: skipping chunk from '{}' — too short ({} chars)", docName, text != null ? text.length() : 0);
                     // Still register the document for linking even if text is short
-                    registerRagDocument(doc);
+                    registerRagDocument(doc, tools, ragDocumentNames);
                     includedDocs.add(docName);
                     continue;
                 }
@@ -272,7 +301,7 @@ public class AiChatServiceImpl implements AiChatService {
                 if (context.length() + chunk.length() > MAX_RAG_CONTEXT_CHARS) {
                     if (context.isEmpty()) {
                         context.append(chunk, 0, Math.min(chunk.length(), MAX_RAG_CONTEXT_CHARS));
-                        registerRagDocument(doc);
+                        registerRagDocument(doc, tools, ragDocumentNames);
                         includedDocs.add(docName);
                     }
                     log.debug("[AI] RAG: capped context at {} chars (limit={})", context.length(), MAX_RAG_CONTEXT_CHARS);
@@ -280,7 +309,7 @@ public class AiChatServiceImpl implements AiChatService {
                 }
                 if (!context.isEmpty()) context.append("\n\n---\n\n");
                 context.append(chunk);
-                registerRagDocument(doc);
+                registerRagDocument(doc, tools, ragDocumentNames);
                 includedDocs.add(docName);
             }
 
@@ -290,15 +319,15 @@ public class AiChatServiceImpl implements AiChatService {
     }
 
     /** Register a RAG-discovered document in the tool registry for doc-link enrichment (but not for Sources). */
-    private void registerRagDocument(Document doc) {
+    private void registerRagDocument(Document doc, DocumentAiTools tools, Set<String> ragDocumentNames) {
         String docName = doc.getMetadata().getOrDefault("document_name", "Unknown").toString();
         ragDocumentNames.add(docName);
         String docId = doc.getMetadata().getOrDefault("document_id", "").toString();
         String parentId = doc.getMetadata().getOrDefault("parent_id", "").toString();
         if (!docId.isBlank()) {
             try {
-                documentAiTools.getRegistry().putIfAbsent(docName,
-                        new org.openfilz.dms.service.ai.DocumentAiTools.DocRef(
+                tools.getRegistry().putIfAbsent(docName,
+                        new DocumentAiTools.DocRef(
                                 UUID.fromString(docId),
                                 parentId.isBlank() ? null : UUID.fromString(parentId),
                                 "FILE", docName));
@@ -313,8 +342,8 @@ public class AiChatServiceImpl implements AiChatService {
      * that aren't already linked in the response text. This guarantees the user always sees
      * clickable links to relevant documents, even when the LLM doesn't mention the filename.
      */
-    private String appendSourceLinks(String response) {
-        var registry = documentAiTools.getRegistry();
+    private String appendSourceLinks(String response, DocumentAiTools tools, Set<String> ragDocumentNames) {
+        var registry = tools.getRegistry();
         if (registry.isEmpty()) return response;
 
         // Find documents that are NOT already linked AND not from RAG context only

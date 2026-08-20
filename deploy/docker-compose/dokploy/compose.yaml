@@ -228,6 +228,15 @@ services:
       OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4o}
       OPENAI_EMBEDDING_ENABLED: ${OPENAI_EMBEDDING_ENABLED:-false}
       OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_CHAT_ENABLED: ${ANTHROPIC_CHAT_ENABLED:-false}
+      ANTHROPIC_CHAT_MODEL: ${ANTHROPIC_CHAT_MODEL:-claude-opus-5}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GOOGLE_CHAT_ENABLED: ${GOOGLE_CHAT_ENABLED:-false}
+      GOOGLE_CHAT_MODEL: ${GOOGLE_CHAT_MODEL:-gemini-2.5-flash}
+      # Per-user AI settings (BYOK) — needs an encryption key: openssl rand -base64 32
+      AI_USER_SETTINGS_ENABLED: ${AI_USER_SETTINGS_ENABLED:-false}
+      AI_SETTINGS_ENCRYPTION_KEY: ${AI_SETTINGS_ENCRYPTION_KEY:-}
 
     volumes:
       - openfilz-storage:/var/data/openfilz
