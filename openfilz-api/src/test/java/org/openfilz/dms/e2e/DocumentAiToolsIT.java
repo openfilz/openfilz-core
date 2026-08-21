@@ -179,6 +179,30 @@ public class DocumentAiToolsIT extends TestContainersBaseConfig {
                 "Should confirm folder move, got: " + result);
     }
 
+    @Test
+    void moveDocuments_targetFolderDoesNotExist_reportsMissingFolder() {
+        UploadResponse file = uploadDocument(newFileBuilder());
+
+        // A named target that doesn't exist must not silently resolve to root
+        String result = documentAiTools.moveDocuments(
+                file.id().toString(),
+                "no-such-folder-" + UUID.randomUUID());
+
+        Assertions.assertTrue(result.contains("No folder named"),
+                "Should report the missing target folder, got: " + result);
+    }
+
+    @Test
+    void writeFile_targetFolderDoesNotExist_reportsMissingFolder() {
+        String result = documentAiTools.writeFile(
+                "ai-note-" + UUID.randomUUID() + ".txt",
+                "some content",
+                "no-such-folder-" + UUID.randomUUID());
+
+        Assertions.assertTrue(result.contains("No folder named"),
+                "Should report the missing target folder, got: " + result);
+    }
+
     // ========================= renameDocument =========================
 
     @Test

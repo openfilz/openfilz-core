@@ -24,6 +24,7 @@ import org.springframework.util.MimeType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
@@ -71,6 +72,25 @@ public class DocumentAiTools {
 
     public record DocRef(UUID id, UUID parentId, String type, String name) {}
 
+    /** Sentinel folder id for the root level (matches the parentId encoding in doc markers). */
+    public static final String ROOT_FOLDER_ID = "root";
+
+    /**
+     * Folders whose direct content was modified by tool calls in the current turn
+     * ({@link #ROOT_FOLDER_ID} for the root level). Sent to the frontend with the DONE
+     * event so it can refresh the file explorer only when the displayed folder is affected.
+     */
+    private final Set<String> modifiedFolders = ConcurrentHashMap.newKeySet();
+
+    private void recordFolderModified(UUID folderId) {
+        modifiedFolders.add(folderId != null ? folderId.toString() : ROOT_FOLDER_ID);
+    }
+
+    /** Get the folders modified during the current turn (for the DONE event). */
+    public Set<String> getModifiedFolders() {
+        return modifiedFolders;
+    }
+
     private void register(UUID id, UUID parentId, String type, String name) {
         documentRegistry.put(name, new DocRef(id, parentId, type, name));
     }
@@ -100,6 +120,7 @@ public class DocumentAiTools {
     /** Clear the registry before each new user message. */
     public void clearRegistry() {
         documentRegistry.clear();
+        modifiedFolders.clear();
     }
 
     /** Get all registered documents (for post-processing). */
@@ -113,10 +134,33 @@ public class DocumentAiTools {
     private static final Pattern RAW_UUID_PATTERN = Pattern.compile(
             "\\b[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\\b");
 
+    /** Matches a complete [[doc:...]] marker — well-formed or mangled (empty id, stripped UUID) — capturing the plain name. */
+    private static final Pattern DOC_MARKER_PATTERN = Pattern.compile(
+            "\\[\\[doc:[^\\[\\]]*?(?:FILE|FOLDER):([^\\[\\]]+?)]]");
+
+    /**
+     * Collapse any [[doc:...]] markers in the text back to the plain document name.
+     * The LLM sees enriched assistant messages in the conversation history and mimics the
+     * marker syntax in new responses; left as-is, the UUID-stripping and name-replacement
+     * passes in {@link #enrichWithDocLinks(String)} mangle those markers into nested garbage
+     * such as {@code [[doc::root:FILE:[[doc:...]]]]}. Applied repeatedly to unwrap nesting.
+     */
+    public static String stripDocMarkers(String text) {
+        if (text == null || text.isEmpty()) return text;
+        String result = text;
+        String previous;
+        do {
+            previous = result;
+            result = DOC_MARKER_PATTERN.matcher(result).replaceAll("$1");
+        } while (!result.equals(previous));
+        return result;
+    }
+
     /**
      * Post-process AI response text:
-     * 1. Replace known document names with [[doc:...]] markers
+     * 1. Collapse any marker syntax the LLM mimicked from history back to plain names
      * 2. Strip any leftover UUID references the LLM included
+     * 3. Replace known document names with [[doc:...]] markers
      */
     public String enrichWithDocLinks(String text) {
         if (text == null || documentRegistry.isEmpty()) return text;
@@ -126,8 +170,9 @@ public class DocumentAiTools {
                 .sorted((a, b) -> b.name().length() - a.name().length())
                 .toList();
 
-        // First strip all UUID references from the LLM text
-        String result = UUID_LABEL_PATTERN.matcher(text).replaceAll("");
+        // First collapse LLM-emitted markers to plain names, then strip all UUID references
+        String result = stripDocMarkers(text);
+        result = UUID_LABEL_PATTERN.matcher(result).replaceAll("");
         result = RAW_UUID_PATTERN.matcher(result).replaceAll("");
         result = result.replaceAll("\\(\\s*\\)", "").replaceAll("\\s{2,}", " ");
 
@@ -260,7 +305,15 @@ public class DocumentAiTools {
     ) {
         log.debug("[AI-TOOL] writeFile called with: file='{}', folder='{}', content={}chars", fileName, folderName, content != null ? content.length() : 0);
         try {
-            UUID parentId = resolveToId(folderName);
+            // Same rule as moveDocuments: an unknown named folder must not silently become root
+            UUID parentId = null;
+            if (!isRootFolderName(folderName)) {
+                parentId = resolveToId(folderName);
+                if (parentId == null) {
+                    return toolResult("writeFile",
+                            "No folder named '%s' exists. Ask the user whether to create it (createFolder), then retry.".formatted(folderName));
+                }
+            }
 
             // Create a temporary file with the content
             java.nio.file.Path tempFile = java.nio.file.Files.createTempFile("ai-write-", "-" + fileName);
@@ -299,6 +352,7 @@ public class DocumentAiTools {
 
             if (saved != null) {
                 register(saved);
+                recordFolderModified(parentId);
                 log.info("[AI-TOOL] writeFile: created '{}' ({} bytes) in folder {}", fileName, fileSize, parentId);
                 return toolResult("writeFile", "File '%s' created successfully.".formatted(fileName));
             }
@@ -312,14 +366,24 @@ public class DocumentAiTools {
     @Tool(description = "Create a new folder. Returns the new folder's ID.")
     public String createFolder(
             @ToolParam(description = "Name of the new folder") String name,
-            @ToolParam(description = "UUID of the parent folder. Use null for root.") String parentFolderId
+            @ToolParam(description = "UUID or name of the parent folder. Use null for root.") String parentFolderId
     ) {
         log.debug("[AI-TOOL] createFolder called with: name='{}', parent='{}'", name, parentFolderId);
         try {
-            UUID parentId = parseUuid(parentFolderId);
+            // An unknown named parent must not silently become root
+            UUID parentId = null;
+            if (!isRootFolderName(parentFolderId)) {
+                parentId = resolveToId(parentFolderId);
+                if (parentId == null) {
+                    return toolResult("createFolder",
+                            "No parent folder '%s' exists. Create it first, or use null for root.".formatted(parentFolderId));
+                }
+            }
             var request = new CreateFolderRequest(name, parentId);
 
             var result = documentService.createFolder(request).block();
+            register(result.id(), parentId, DocumentType.FOLDER.name(), name);
+            recordFolderModified(parentId);
             return "Folder '%s' created successfully with ID: %s".formatted(name, result.id());
         } catch (Exception e) {
             log.error("Error creating folder", e);
@@ -330,16 +394,25 @@ public class DocumentAiTools {
     @Tool(description = "Move files or folders to a different folder. Accepts document/folder names or IDs.")
     public String moveDocuments(
             @ToolParam(description = "Comma-separated list of document or folder names to move") String documentNames,
-            @ToolParam(description = "Name of the target folder, or null for root.") String targetFolder
+            @ToolParam(description = "Name of the target folder (must already exist — create it with createFolder first if needed), or null for root.") String targetFolder
     ) {
         log.debug("[AI-TOOL] moveDocuments called with: items='{}', target='{}'", documentNames, targetFolder);
         try {
-            // Resolve target folder
-            UUID targetId = resolveToId(targetFolder);
+            // Resolve target folder — a named folder that doesn't exist must NOT silently
+            // fall back to root (the move would fail or land in the wrong place)
+            UUID targetId = null;
+            if (!isRootFolderName(targetFolder)) {
+                targetId = resolveToId(targetFolder);
+                if (targetId == null) {
+                    return toolResult("moveDocuments",
+                            "No folder named '%s' exists. Ask the user whether to create it (createFolder), then retry the move.".formatted(targetFolder));
+                }
+            }
 
             // Resolve each item to move
             List<UUID> fileIds = new ArrayList<>();
             List<UUID> folderIds = new ArrayList<>();
+            List<UUID> sourceParents = new ArrayList<>();
 
             for (String name : documentNames.split(",")) {
                 String trimmed = name.trim();
@@ -366,6 +439,7 @@ public class DocumentAiTools {
                 }
 
                 if (doc != null && id != null) {
+                    sourceParents.add(doc.getParentId());
                     if (doc.getType() == org.openfilz.dms.enums.DocumentType.FOLDER) {
                         folderIds.add(id);
                     } else {
@@ -385,6 +459,9 @@ public class DocumentAiTools {
             }
 
             if (moved == 0) return "No matching documents found to move.";
+            // Both sides of the move changed content: the target and each source folder
+            recordFolderModified(targetId);
+            sourceParents.forEach(this::recordFolderModified);
             return "Successfully moved %d item(s).".formatted(moved);
         } catch (Exception e) {
             log.error("Error moving documents", e);
@@ -392,10 +469,15 @@ public class DocumentAiTools {
         }
     }
 
+    /** True when the name refers to the root folder (null/blank or a root alias). */
+    private boolean isRootFolderName(String name) {
+        return name == null || name.isBlank() || "null".equalsIgnoreCase(name)
+                || "root".equalsIgnoreCase(name) || "My Folder".equalsIgnoreCase(name);
+    }
+
     /** Resolve a name or UUID string to a UUID, searching the registry and DB if needed. */
     private UUID resolveToId(String nameOrId) {
-        if (nameOrId == null || nameOrId.isBlank() || "null".equalsIgnoreCase(nameOrId)
-                || "root".equalsIgnoreCase(nameOrId) || "My Folder".equalsIgnoreCase(nameOrId)) {
+        if (isRootFolderName(nameOrId)) {
             return null; // root folder
         }
         UUID id = parseUuid(nameOrId);
@@ -442,6 +524,7 @@ public class DocumentAiTools {
                 documentService.renameFile(id, renameRequest).block();
             }
 
+            recordFolderModified(doc.getParentId());
             return "Successfully renamed to '%s'.".formatted(newName);
         } catch (Exception e) {
             log.error("Error renaming document", e);

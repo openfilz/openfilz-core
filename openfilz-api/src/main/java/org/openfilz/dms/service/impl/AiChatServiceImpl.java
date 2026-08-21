@@ -148,6 +148,10 @@ public class AiChatServiceImpl implements AiChatService {
                                             AiChatResponse.builder()
                                                     .conversationId(conversationId)
                                                     .type(AiChatResponse.EventType.DONE)
+                                                    // Folders whose content changed via tool calls — the frontend
+                                                    // refreshes the file explorer only when it displays one of them
+                                                    .modifiedFolderIds(tools.getModifiedFolders().isEmpty()
+                                                            ? null : List.copyOf(tools.getModifiedFolders()))
                                                     .build()
                                     ))
                                     .doOnComplete(() -> log.debug("[AI] === Chat request complete ==="))
@@ -235,10 +239,12 @@ public class AiChatServiceImpl implements AiChatService {
     }
 
     private Mono<List<Message>> loadConversationHistory(UUID conversationId) {
+        // Assistant messages are stored enriched with [[doc:...]] markers for the frontend;
+        // strip them before prompting so the LLM never sees (and never mimics) the marker syntax.
         return messageRepository.findByConversationIdOrderByCreatedAtAsc(conversationId)
                 .map(msg -> (Message) switch (msg.getRole()) {
                     case "USER" -> new UserMessage(msg.getContent());
-                    case "ASSISTANT" -> new AssistantMessage(msg.getContent());
+                    case "ASSISTANT" -> new AssistantMessage(DocumentAiTools.stripDocMarkers(msg.getContent()));
                     case "SYSTEM" -> new SystemMessage(msg.getContent());
                     default -> new UserMessage(msg.getContent());
                 })
