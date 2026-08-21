@@ -1,0 +1,310 @@
+# AI Architecture — Developer Guide
+
+How the OpenFilz AI feature works end to end: configuration resolution, document ingestion &
+indexing (full-text + vectors), the chat pipeline, and per-user model overrides (BYOK).
+For the full property tables and API-key creation walkthroughs, see the
+[admin guide → AI Document Chat](admin-guide.md#ai-document-chat); for the REST endpoints, see the
+[developer guide → AI Chat](developer-guide.md#ai-chat).
+
+Everything below lives in `openfilz-api` and is inert unless `openfilz.ai.active=true` — every AI
+bean is conditional on that flag, and the AI Flyway migrations (`db/ai-migration/`) only run when
+it is set.
+
+---
+
+## 1. Component overview
+
+```mermaid
+flowchart LR
+    subgraph Frontend["openfilz-web"]
+        ChatUI["Chat panel<br/>(SSE)"]
+        SettingsUI["Settings → AI Assistant<br/>(BYOK)"]
+    end
+
+    subgraph API["openfilz-api"]
+        ChatCtrl["AiChatController<br/>/api/v1/ai/**"]
+        SettingsCtrl["AiSettingsController<br/>/api/v1/settings/ai"]
+        ChatSvc["AiChatServiceImpl"]
+        Resolver["UserChatClientResolver<br/>(Caffeine cache)"]
+        Assembler["ChatClientAssembler"]
+        ToolsFactory["DocumentAiToolsFactory<br/>→ per-request DocumentAiTools"]
+        EmbedSvc["DocumentEmbeddingServiceImpl"]
+        FullText["LocalFullTextServiceImpl"]
+        PostProc["DefaultMetadataPostProcessor"]
+        Cipher["AiSettingsCipher<br/>(AES-256-GCM)"]
+        Guard["EmbeddingRegistryGuard<br/>(startup)"]
+    end
+
+    subgraph Stores["Storage"]
+        PG[("PostgreSQL<br/>+ pgvector")]
+        OS[("OpenSearch")]
+        S3[("MinIO / FS")]
+    end
+
+    subgraph LLMs["Chat LLM providers"]
+        Ollama["Ollama"]
+        OpenAI["OpenAI"]
+        Claude["Anthropic Claude"]
+        Gemini["Google Gemini"]
+    end
+
+    ChatUI --> ChatCtrl --> ChatSvc
+    SettingsUI --> SettingsCtrl --> Cipher
+    SettingsCtrl --> PG
+    ChatSvc --> Resolver --> Assembler
+    Resolver --> Cipher
+    ChatSvc --> ToolsFactory
+    ChatSvc -->|"RAG similarity search"| PG
+    PostProc --> FullText --> OS
+    FullText -->|"shared Tika text"| EmbedSvc
+    PostProc -->|"full-text off"| EmbedSvc
+    EmbedSvc -->|"chunks + vectors"| PG
+    EmbedSvc --> S3
+    Guard --> PG
+    Assembler -.->|"resolved ChatModel"| LLMs
+```
+
+Key design points:
+
+| Decision | Why |
+|---|---|
+| **No `ChatClient` bean** — assembled per request by `ChatClientAssembler` | Each request gets a fresh `DocumentAiTools` (its doc-link registry is per-turn state; a singleton cross-contaminated concurrent users) and the *user's* model (BYOK) |
+| **Chat model is per-user, embedding model is per-deployment** | Vectors from different embedding models live in incomparable spaces — swapping the embedding model silently breaks similarity search. `EmbeddingRegistryGuard` enforces this at startup; the chat model can be swapped freely |
+| **Provider clients built programmatically for BYOK** | No Spring auto-configuration involved → the `spring.ai.model.*` selectors and GraalVM build-time conditions are untouched (native-image-safe); BYOK flags are read at runtime |
+| **404 (not 403) on foreign conversations** | Doesn't leak the existence of other users' conversations |
+
+---
+
+## 2. Configuration resolution & startup
+
+Spring AI 2.0 gates each provider's auto-configuration on the selectors `spring.ai.model.chat`
+and `spring.ai.model.embedding` (value = provider name or `none`), whose conditions match when
+the property is *missing* — with four starters on the classpath, all four providers would be
+built. `AiModelProviderEnvironmentPostProcessor` derives the selectors so **`openfilz.ai.active`
+is the single switch**:
+
+```
+openfilz.ai.active=false   →  every selector = none            (nothing is built)
+openfilz.ai.active=true    →  chat      = first enabled of: ollama > anthropic > google-genai > openai
+                              embedding = first enabled of: ollama > openai      (768-dim pin)
+                              (no switch set → ollama: its defaults target a stock local install)
+```
+
+The per-provider switches are `openfilz.ai.<provider>.<kind>.enabled`
+(`OLLAMA_CHAT_ENABLED`, `ANTHROPIC_CHAT_ENABLED`, `GOOGLE_CHAT_ENABLED`, `OPENAI_CHAT_ENABLED`,
+`OLLAMA_EMBEDDING_ENABLED`, `OPENAI_EMBEDDING_ENABLED`). An explicitly set `spring.ai.model.*`
+always wins. Anthropic/Gemini have no embedding switch: Anthropic has no embeddings API, and the
+`vector_store` schema is pinned to `vector(768)`.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Boot as Spring Boot
+    participant EPP as AiModelProviderEnvironmentPostProcessor
+    participant FW as Flyway
+    participant CTX as ApplicationContext
+    participant Guard as EmbeddingRegistryGuard
+
+    Boot->>EPP: postProcessEnvironment (after ConfigData)
+    EPP->>EPP: read openfilz.ai.* switches
+    EPP-->>Boot: contribute spring.ai.model.chat / .embedding / … selectors
+    Boot->>FW: migrate (db/migration + db/ai-migration when AI active)
+    Note over FW: V1_4 chat tables + vector_store<br/>V1_5 ai_embedding_registry<br/>V1_6 user_ai_settings
+    Boot->>CTX: create beans (one ChatModel, one EmbeddingModel reach AiConfig)
+    Note over CTX: AiSettingsCipher fails fast if BYOK is enabled<br/>without AI_SETTINGS_ENCRYPTION_KEY
+    Boot->>Guard: ApplicationRunner.run
+    Guard->>Guard: compare configured embedding provider+model+dimensions<br/>against ai_embedding_registry (single row)
+    alt first start
+        Guard->>Guard: record the configuration
+    else mismatch while vectors exist
+        Guard-->>Boot: FAIL_FAST (default) → abort startup, or WARN → start with degraded RAG
+    end
+```
+
+Where each knob lives:
+
+| Concern | Property (env var) |
+|---|---|
+| Master switch | `openfilz.ai.active` (`OPENFILZ_AI_ACTIVE`) |
+| Provider selection | `openfilz.ai.<provider>.<kind>.enabled` (`*_CHAT_ENABLED`, `*_EMBEDDING_ENABLED`) |
+| Provider connection | `spring.ai.<provider>.api-key` / `.chat.model` / `.embedding.model` (`*_API_KEY`, `*_CHAT_MODEL`, …) |
+| Chunking / RAG | `openfilz.ai.embedding.chunk-size`, `.chunk-overlap`, `.top-k`, `.similarity-threshold` |
+| Embedding-change policy | `openfilz.ai.embedding.validation` = `fail-fast` (default) \| `warn` |
+| System prompt | `openfilz.ai.system-prompt` |
+| BYOK | `openfilz.ai.user-settings.enabled` (`AI_USER_SETTINGS_ENABLED`) + `.encryption-key` (`AI_SETTINGS_ENCRYPTION_KEY`, `openssl rand -base64 32`) |
+
+---
+
+## 3. Ingestion & indexing pipeline
+
+Every document write (REST upload, TUS finalize, version replace, copy) ends in
+`DefaultMetadataPostProcessor.processDocument`, which fans out to the three optional indexers —
+all fire-and-forget, so uploads never block on indexing:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as Upload (REST / TUS)
+    participant DS as SaveDocumentService
+    participant PP as DefaultMetadataPostProcessor
+    participant FT as LocalFullTextServiceImpl
+    participant Tika as TikaService
+    participant OS as OpenSearch
+    participant ES as DocumentEmbeddingServiceImpl
+    participant VS as PgVectorStore
+    participant EM as EmbeddingModel (Ollama/OpenAI)
+
+    U->>DS: store file + save Document row
+    DS->>PP: processDocument(document)   [async]
+    alt full-text active (openfilz.full-text.active=true)
+        PP->>FT: indexDocument
+        FT->>Tika: extract text (spooled to temp file, streamed)
+        Tika-->>FT: text
+        FT->>OS: index {name, metadata, content}
+        FT->>ES: embedFromText(document, text)   [shared extraction]
+    else full-text off, AI on
+        PP->>ES: embedDocument(document)
+        ES->>Tika: extract text (own spooled extraction)
+        Tika-->>ES: text
+    end
+    ES->>ES: TokenTextSplitter(chunk-size=1000, overlap=200)
+    ES->>ES: tag chunks: document_id, document_name, parent_id, content_type
+    ES->>EM: embed(chunks)
+    EM-->>ES: 768-dim vectors
+    ES->>VS: add(chunks)  → INSERT INTO vector_store
+```
+
+- **One Tika extraction, two indexes.** When full-text is on, OpenSearch and the vector store
+  share the same extracted text; the standalone `embedDocument` path only exists for AI-without-
+  full-text deployments.
+- **Chunk metadata is the RAG join key**: `document_id`/`document_name`/`parent_id` on each chunk
+  let the chat pipeline turn similarity hits back into clickable document links.
+- **Deletion**: document delete → `removeEmbeddings(documentId)` → `vector_store` rows deleted by
+  `document_id` filter (OpenSearch delete goes through `FullTextService.deleteDocument`).
+- **Search vs RAG**: OpenSearch powers the app's search bar (full-text + metadata + suggestions);
+  `vector_store` powers *only* the chat's semantic retrieval. They are independent — either can
+  be enabled without the other.
+
+---
+
+## 4. Chat workflow
+
+`POST /api/v1/ai/chat` streams Server-Sent Events. Per request, the pipeline resolves *which
+model answers* (server default or the user's BYOK override), builds a fresh tool set wired to
+that model, then runs RAG + tool-calling:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant C as AiChatController
+    participant S as AiChatServiceImpl
+    participant R as UserChatClientResolver
+    participant DB as PostgreSQL
+    participant A as ChatClientAssembler
+    participant T as DocumentAiTools (per request)
+    participant VS as PgVectorStore
+    participant LLM as ChatModel (Ollama/OpenAI/Claude/Gemini)
+
+    User->>C: POST /ai/chat {message, conversationId?} (SSE)
+    C->>S: chat(request, userEmail)   [email from JWT]
+    S->>DB: conversation: ownership check, or create (created_by = userEmail)
+    S->>R: resolve(userEmail)
+    alt BYOK on + user has settings
+        R->>DB: user_ai_settings row
+        R->>R: decrypt key (AiSettingsCipher), build vendor ChatModel<br/>(cache hit unless config changed)
+    else
+        R-->>S: server-default ChatModel bean
+    end
+    S->>T: toolsFactory.create(resolvedModel)
+    S->>A: assemble(resolvedModel, tools) → ChatClient<br/>(system prompt + tool callbacks + ToolCallingAdvisor)
+    S->>DB: save USER message
+    par RAG retrieval
+        S->>VS: similaritySearch(query, topK, threshold)
+        VS-->>S: chunks → context (capped 4000 chars), docs registered in T
+    and history
+        S->>DB: load conversation messages
+    end
+    S->>LLM: stream(history + RAG context + user message)
+    loop tool calls (ToolCallingAdvisor)
+        LLM-->>S: tool-call request
+        S->>T: execute @Tool method (queryDocuments, readDocumentContent, …)
+        T->>DB: query / act via DocumentService
+        T-->>LLM: tool result (discovered docs registered in T)
+    end
+    LLM-->>S: streamed answer
+    S->>S: post-process: replace known doc names with [[doc:id:parent:type:name]] markers,<br/>strip raw UUIDs, append "Sources" for unlinked tool-discovered docs
+    S->>DB: save ASSISTANT message, bump conversation updated_at
+    S-->>User: SSE: MESSAGE (enriched text) + DONE   (ERROR on failure)
+```
+
+- **Tools** (8 `@Tool` methods on `DocumentAiTools`): `queryDocuments`, `readDocumentContent`,
+  `describeImage` (vision — runs on the *resolved* model, so BYOK users get their own model),
+  `writeFile`, `createFolder`, `moveDocuments`, `renameDocument`, `getDocumentPath`.
+- **Doc-link enrichment**: every tool call and RAG hit registers `{id, parentId, type, name}` in
+  the request's `DocumentAiTools` registry; after streaming, document names in the answer are
+  replaced with `[[doc:…]]` markers the frontend renders as clickable links.
+- **Conversation scoping**: `created_by` is stamped on creation; list returns own + legacy
+  (`created_by IS NULL`) rows; reading/continuing/deleting a foreign conversation → 404.
+
+---
+
+## 5. Per-user model override (BYOK)
+
+Gated by `openfilz.ai.user-settings.enabled` — read at **runtime** (plain `@Value`), so it stays
+a deployment toggle in native images. Only the *chat* model is user-selectable (see §2 for why
+embeddings are fixed).
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant UI as Settings → AI Assistant
+    participant SC as AiSettingsController
+    participant Ci as AiSettingsCipher
+    participant DB as user_ai_settings
+    participant R as UserChatClientResolver
+
+    User->>UI: pick provider (OpenAI / Claude / Gemini / OpenAI-compatible), model, API key
+    UI->>SC: POST /settings/ai/test {provider, model, apiKey?}
+    SC->>SC: build throwaway ChatModel, 1-token probe (30s timeout)
+    SC-->>UI: {ok, message, latencyMs}
+    UI->>SC: PUT /settings/ai
+    SC->>Ci: encrypt(apiKey)  [AES-256-GCM, random IV, key = AI_SETTINGS_ENCRYPTION_KEY]
+    SC->>DB: upsert row (keyed by user email)
+    SC->>R: evict(userEmail)  → next chat rebuilds the model
+    Note over SC,UI: responses only ever carry hasApiKey + last-4 suffix —<br/>the key is write-only
+    User->>UI: DELETE /settings/ai → back to server default
+```
+
+Security properties:
+
+- Keys at rest: `base64(iv[12] ‖ ciphertext+GCM-tag)`; startup **fails fast** if BYOK is enabled
+  without a valid 32-byte key; rotating `AI_SETTINGS_ENCRYPTION_KEY` invalidates all stored keys
+  (users re-enter them — a broken decrypt surfaces as an error in chat, never a silent fallback
+  to a model the user didn't choose).
+- `UserChatClientResolver` caches built models per user (Caffeine, 30 min idle / 500 entries),
+  invalidated on save/delete and by a config-hash comparison — the per-request cost is a cache
+  lookup; the pooled HTTP clients live in the cached `ChatModel`.
+- Vendor clients are built via Spring AI's `AnthropicSetup` / `OpenAiSetup` helpers (Gemini:
+  `com.google.genai.Client`); **both sync and async clients must be supplied** or the model
+  builder self-builds the missing one from environment variables and fails.
+
+---
+
+## 6. Where to look in the code
+
+| Area | Entry point |
+|---|---|
+| Selector derivation | `config/AiModelProviderEnvironmentPostProcessor` |
+| Beans (DataSource, PgVectorStore) | `config/AiConfig` |
+| Embedding-change guard | `config/EmbeddingRegistryGuard` |
+| Ingestion fan-out | `service/impl/DefaultMetadataPostProcessor` |
+| Text extraction / OpenSearch | `service/impl/TikaService`, `service/impl/LocalFullTextServiceImpl` |
+| Chunking + vectors | `service/impl/DocumentEmbeddingServiceImpl` |
+| Chat pipeline | `service/impl/AiChatServiceImpl` |
+| Model resolution (BYOK) | `service/ai/UserChatClientResolver` |
+| Client assembly + tools | `service/ai/ChatClientAssembler`, `service/ai/DocumentAiTools(+Factory)` |
+| BYOK settings API + crypto | `controller/rest/AiSettingsController`, `service/impl/AiSettingsCipher` |
+| Migrations | `resources/db/ai-migration/V1_4..V1_6` |
+| Native hints (Anthropic SDK) | `config/AnthropicSdkRuntimeHints` |

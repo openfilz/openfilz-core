@@ -438,6 +438,10 @@ Returns: total files, total folders, storage breakdown by content type, and file
 
 The AI chat API uses **Server-Sent Events (SSE)** for streaming responses. The AI assistant can answer questions about your documents using RAG (Retrieval-Augmented Generation) and perform document management actions via function calling.
 
+> **How it works inside:** see [AI Architecture](ai.md) for the component overview and sequence
+> diagrams — configuration resolution, ingestion → indexing (OpenSearch + pgvector), the chat
+> pipeline (RAG + tool calling), and per-user model overrides (BYOK).
+
 #### Start or Continue a Conversation
 
 ```bash

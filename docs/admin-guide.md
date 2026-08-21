@@ -469,6 +469,10 @@ openfilz:
 
 OpenFilz includes an optional AI assistant that can answer questions about your documents, search and organize files, and summarize content using Retrieval-Augmented Generation (RAG). When enabled, uploaded documents are automatically chunked, embedded, and stored in a pgvector table for semantic similarity search.
 
+> **Developer deep-dive:** [AI Architecture](ai.md) explains how the configuration is resolved at
+> startup, the ingestion → indexing pipeline (full-text + vectors), the chat workflow, and BYOK —
+> with architecture and sequence diagrams.
+
 #### Prerequisites
 
 - **PostgreSQL with pgvector extension**: The database must have the `vector` extension available. Use the `pgvector/pgvector` Docker image instead of plain `postgres` (provided automatically by `docker-compose.ai.yml`).
