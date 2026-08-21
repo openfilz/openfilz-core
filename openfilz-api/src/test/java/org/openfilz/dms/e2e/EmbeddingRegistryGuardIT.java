@@ -70,7 +70,18 @@ public class EmbeddingRegistryGuardIT extends TestContainersBaseConfig {
         environment.setProperty("spring.ai." + provider + ".embedding.model", model);
         EmbeddingModel embeddingModel = mock(EmbeddingModel.class);
         when(embeddingModel.dimensions()).thenReturn(AiConfig.EMBEDDING_DIMENSIONS);
-        return new EmbeddingRegistryGuard(aiJdbcTemplate, embeddingModel, environment, new AiProperties());
+        AiProperties aiProperties = new AiProperties();
+        aiProperties.setActive(true); // the guard self-checks the runtime AI flag now
+        return new EmbeddingRegistryGuard(provider(aiJdbcTemplate), provider(embeddingModel), environment, aiProperties);
+    }
+
+    private static <T> org.springframework.beans.factory.ObjectProvider<T> provider(T instance) {
+        return new org.springframework.beans.factory.ObjectProvider<>() {
+            @Override
+            public T getIfAvailable() {
+                return instance;
+            }
+        };
     }
 
     private void insertVector() {

@@ -16,10 +16,13 @@ import org.springframework.ai.content.Media;
 import org.springframework.ai.reader.tika.TikaDocumentReader;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.core.io.Resource;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.util.MimeType;
+import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,7 +46,7 @@ import java.util.stream.Collectors;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "openfilz.ai.active", havingValue = "true")
+@Lazy
 public class DocumentAiTools {
 
     private final DocumentService documentService;
@@ -51,6 +54,53 @@ public class DocumentAiTools {
     private final StorageService storageService;
     private final AiDocumentQueryService queryService;
     private final ChatModel chatModel;
+    private final AiAccessPolicy accessPolicy;
+
+    /**
+     * The requesting user, set per request by {@link DocumentAiToolsFactory}. Every document
+     * the tools surface or act on is checked against {@link AiAccessPolicy} for this user.
+     * Null (singleton/test usage) only ever meets the permit-all core policy.
+     */
+    private String userEmail;
+
+    /**
+     * The requesting user's Authentication, re-established on every blocking tool
+     * subscription so security-context-based enforcement in extension layers (secure DAO
+     * overrides) applies inside tool calls. Tool threads have no ambient Reactor context —
+     * a plain {@code .block()} would silently run without the caller's identity.
+     */
+    private Authentication authentication;
+
+    /** Bind the tools instance to the requesting user (fluent, used by the factory). */
+    public DocumentAiTools forUser(String userEmail, Authentication authentication) {
+        this.userEmail = userEmail;
+        this.authentication = authentication;
+        return this;
+    }
+
+    /** Subscribe with the requesting user's Authentication in the Reactor context, then block. */
+    private <T> T blockWithAuth(Mono<T> mono) {
+        return (authentication != null
+                ? mono.contextWrite(ReactiveSecurityContextHolder.withAuthentication(authentication))
+                : mono).block();
+    }
+
+    /** Can the requesting user see this document? Root (null) is always visible. */
+    private boolean canRead(UUID documentId) {
+        return documentId == null || Boolean.TRUE.equals(accessPolicy.canRead(documentId, userEmail).block());
+    }
+
+    /** Can the requesting user modify this document / create content inside this folder? */
+    private boolean canModify(UUID documentId) {
+        return Boolean.TRUE.equals(accessPolicy.canModify(documentId, userEmail).block());
+    }
+
+    /** Can the requesting user create content inside the given folder (null = root)? */
+    private boolean canCreateIn(UUID parentId) {
+        return parentId == null
+                ? Boolean.TRUE.equals(accessPolicy.canCreateAtRoot(userEmail).block())
+                : canModify(parentId);
+    }
 
     /** Image MIME types supported for direct vision analysis. */
     private static final List<String> VISION_MIME_TYPES = List.of(
@@ -268,21 +318,37 @@ public class DocumentAiTools {
 
             // Count only
             if (countOnly != null && countOnly) {
-                long count = queryService.count(request);
-                return toolResult("queryDocuments", "Found %d document(s).".formatted(count));
+                if (accessPolicy.permitAll()) {
+                    long count = queryService.count(request, userEmail);
+                    return toolResult("queryDocuments", "Found %d document(s).".formatted(count));
+                }
+                // Per-document policy in effect: count only what the user can actually see
+                // (scan a capped page instead of a raw SQL count that would over-report)
+                var countRequest = new ListFolderRequest(
+                        searchAllFolders ? null : folderId, docType, null, null, nameLike,
+                        null, null, null, null, null, null, null, null, null, true,
+                        new PageCriteria(sort, order, 1, 200), searchAllFolders);
+                var rows = queryService.query(countRequest, userEmail);
+                long count = rows == null ? 0 : rows.stream().filter(r -> canRead(r.id())).count();
+                return toolResult("queryDocuments", "Found %d document(s)%s.".formatted(
+                        count, rows != null && rows.size() >= 200 ? " (only the first 200 were scanned)" : ""));
             }
 
-            // Query
-            var results = queryService.query(request);
+            // Query — never surface documents the requesting user cannot read
+            var results = queryService.query(request, userEmail);
             if (results == null || results.isEmpty()) {
+                return toolResult("queryDocuments", "No documents found.");
+            }
+            var accessible = results.stream().filter(r -> canRead(r.id())).toList();
+            if (accessible.isEmpty()) {
                 return toolResult("queryDocuments", "No documents found.");
             }
 
             // Register all results for doc-link enrichment
-            results.forEach(r -> register(r.id(), r.parentId(), r.type().name(), r.name()));
+            accessible.forEach(r -> register(r.id(), r.parentId(), r.type().name(), r.name()));
 
             // Format results
-            String formatted = results.stream()
+            String formatted = accessible.stream()
                     .map(r -> "- [%s] %s (%s, %s)".formatted(
                             r.type().name(),
                             r.name(),
@@ -290,7 +356,7 @@ public class DocumentAiTools {
                             r.createdAt() != null ? r.createdAt().toLocalDate().toString() : "unknown date"))
                     .collect(Collectors.joining("\n"));
 
-            return toolResult("queryDocuments", "Found %d result(s):\n%s".formatted(results.size(), formatted));
+            return toolResult("queryDocuments", "Found %d result(s):\n%s".formatted(accessible.size(), formatted));
         } catch (Exception e) {
             log.error("Error querying documents", e);
             return "Error querying documents: " + e.getMessage();
@@ -314,49 +380,35 @@ public class DocumentAiTools {
                             "No folder named '%s' exists. Ask the user whether to create it (createFolder), then retry.".formatted(folderName));
                 }
             }
+            if (!canCreateIn(parentId)) {
+                return toolResult("writeFile", "You don't have permission to create files in %s.".formatted(
+                        parentId == null ? "the root folder" : "folder '%s'".formatted(folderName)));
+            }
 
             // Create a temporary file with the content
             java.nio.file.Path tempFile = java.nio.file.Files.createTempFile("ai-write-", "-" + fileName);
             java.nio.file.Files.writeString(tempFile, content != null ? content : "");
             long fileSize = java.nio.file.Files.size(tempFile);
 
-            // Create a FilePart from the temp file
-            var resource = new org.springframework.core.io.FileSystemResource(tempFile.toFile());
+            try {
+                // Go through the regular upload pipeline (not a raw repository save) so
+                // ownership, audit, checksum, thumbnails, and indexing all apply as if the
+                // user had uploaded the file themselves
+                var response = blockWithAuth(documentService.uploadDocument(
+                        new org.openfilz.dms.utils.PathFilePart("file", fileName, tempFile),
+                        fileSize, parentId, null, Boolean.FALSE));
 
-            // Determine content type from extension
-            String contentType = "text/plain";
-            if (fileName.endsWith(".md")) contentType = "text/markdown";
-            else if (fileName.endsWith(".html")) contentType = "text/html";
-            else if (fileName.endsWith(".json")) contentType = "application/json";
-            else if (fileName.endsWith(".xml")) contentType = "application/xml";
-            else if (fileName.endsWith(".csv")) contentType = "text/csv";
-
-            // Save to storage
-            String storagePath = storageService.saveFile(new org.openfilz.dms.utils.PathFilePart("file", fileName, tempFile)).block();
-
-            // Create document record in DB
-            var doc = Document.builder()
-                    .name(fileName)
-                    .type(org.openfilz.dms.enums.DocumentType.FILE)
-                    .contentType(contentType)
-                    .size(fileSize)
-                    .storagePath(storagePath)
-                    .parentId(parentId)
-                    .active(true)
-                    .build();
-
-            var saved = documentRepository.save(doc).block();
-
-            // Clean up temp file
-            java.nio.file.Files.deleteIfExists(tempFile);
-
-            if (saved != null) {
-                register(saved);
-                recordFolderModified(parentId);
-                log.info("[AI-TOOL] writeFile: created '{}' ({} bytes) in folder {}", fileName, fileSize, parentId);
-                return toolResult("writeFile", "File '%s' created successfully.".formatted(fileName));
+                if (response != null && response.id() != null) {
+                    register(response.id(), parentId, DocumentType.FILE.name(), fileName);
+                    recordFolderModified(parentId);
+                    log.info("[AI-TOOL] writeFile: created '{}' ({} bytes) in folder {}", fileName, fileSize, parentId);
+                    return toolResult("writeFile", "File '%s' created successfully.".formatted(fileName));
+                }
+                return toolResult("writeFile", "Failed to save the file%s.".formatted(
+                        response != null && response.errorMessage() != null ? ": " + response.errorMessage() : ""));
+            } finally {
+                java.nio.file.Files.deleteIfExists(tempFile);
             }
-            return toolResult("writeFile", "Failed to save the file.");
         } catch (Exception e) {
             log.error("Error writing file", e);
             return "Error writing file: " + e.getMessage();
@@ -379,9 +431,13 @@ public class DocumentAiTools {
                             "No parent folder '%s' exists. Create it first, or use null for root.".formatted(parentFolderId));
                 }
             }
+            if (!canCreateIn(parentId)) {
+                return toolResult("createFolder", "You don't have permission to create folders in %s.".formatted(
+                        parentId == null ? "the root folder" : "folder '%s'".formatted(parentFolderId)));
+            }
             var request = new CreateFolderRequest(name, parentId);
 
-            var result = documentService.createFolder(request).block();
+            var result = blockWithAuth(documentService.createFolder(request));
             register(result.id(), parentId, DocumentType.FOLDER.name(), name);
             recordFolderModified(parentId);
             return "Folder '%s' created successfully with ID: %s".formatted(name, result.id());
@@ -408,11 +464,17 @@ public class DocumentAiTools {
                             "No folder named '%s' exists. Ask the user whether to create it (createFolder), then retry the move.".formatted(targetFolder));
                 }
             }
+            if (!canCreateIn(targetId)) {
+                return toolResult("moveDocuments", "You don't have permission to move documents into %s.".formatted(
+                        targetId == null ? "the root folder" : "folder '%s'".formatted(targetFolder)));
+            }
 
-            // Resolve each item to move
+            // Resolve each item to move — a document the user cannot see behaves like a
+            // non-existent one; a visible but non-modifiable one is reported as denied
             List<UUID> fileIds = new ArrayList<>();
             List<UUID> folderIds = new ArrayList<>();
             List<UUID> sourceParents = new ArrayList<>();
+            List<String> denied = new ArrayList<>();
 
             for (String name : documentNames.split(",")) {
                 String trimmed = name.trim();
@@ -420,25 +482,32 @@ public class DocumentAiTools {
                 Document doc = null;
 
                 if (id != null) {
-                    doc = documentRepository.findById(id).block();
+                    doc = canRead(id) ? blockWithAuth(documentRepository.findById(id)) : null;
                 } else {
                     // Resolve by name from registry
                     var ref = documentRegistry.get(trimmed);
                     if (ref != null) {
                         id = ref.id();
-                        doc = documentRepository.findById(id).block();
+                        doc = canRead(id) ? blockWithAuth(documentRepository.findById(id)) : null;
                     } else {
-                        // Search by name
+                        // Search by name — skip candidates the user cannot see
                         var found = documentRepository.findByNameContainingIgnoreCaseAndActiveTrue(trimmed)
                                 .collectList().block();
-                        if (found != null && !found.isEmpty()) {
-                            doc = found.getFirst();
-                            id = doc.getId();
+                        if (found != null) {
+                            var readable = found.stream().filter(d -> canRead(d.getId())).findFirst();
+                            if (readable.isPresent()) {
+                                doc = readable.get();
+                                id = doc.getId();
+                            }
                         }
                     }
                 }
 
                 if (doc != null && id != null) {
+                    if (!canModify(id)) {
+                        denied.add(doc.getName());
+                        continue;
+                    }
                     sourceParents.add(doc.getParentId());
                     if (doc.getType() == org.openfilz.dms.enums.DocumentType.FOLDER) {
                         folderIds.add(id);
@@ -448,13 +517,18 @@ public class DocumentAiTools {
                 }
             }
 
+            if (!denied.isEmpty()) {
+                return toolResult("moveDocuments",
+                        "You don't have permission to move: %s.".formatted(String.join(", ", denied)));
+            }
+
             int moved = 0;
             if (!fileIds.isEmpty()) {
-                documentService.moveFiles(new MoveRequest(fileIds, targetId, false)).block();
+                blockWithAuth(documentService.moveFiles(new MoveRequest(fileIds, targetId, false)));
                 moved += fileIds.size();
             }
             if (!folderIds.isEmpty()) {
-                documentService.moveFolders(new MoveRequest(folderIds, targetId, false)).block();
+                blockWithAuth(documentService.moveFolders(new MoveRequest(folderIds, targetId, false)));
                 moved += folderIds.size();
             }
 
@@ -475,22 +549,29 @@ public class DocumentAiTools {
                 || "root".equalsIgnoreCase(name) || "My Folder".equalsIgnoreCase(name);
     }
 
-    /** Resolve a name or UUID string to a UUID, searching the registry and DB if needed. */
+    /**
+     * Resolve a name or UUID string to a UUID, searching the registry and DB if needed.
+     * Only ever resolves to documents the requesting user can read — a name or id the
+     * user has no access to behaves exactly like a non-existent one.
+     */
     private UUID resolveToId(String nameOrId) {
         if (isRootFolderName(nameOrId)) {
             return null; // root folder
         }
         UUID id = parseUuid(nameOrId);
-        if (id != null) return id;
+        if (id != null) return canRead(id) ? id : null;
         var ref = documentRegistry.get(nameOrId);
         if (ref != null) return ref.id();
-        // Search DB
+        // Search DB — skip candidates the user cannot see
         var found = documentRepository.findByNameContainingIgnoreCaseAndActiveTrue(nameOrId)
                 .filter(d -> d.getType() == org.openfilz.dms.enums.DocumentType.FOLDER)
                 .collectList().block();
-        if (found != null && !found.isEmpty()) {
-            register(found.getFirst());
-            return found.getFirst().getId();
+        if (found != null) {
+            var readable = found.stream().filter(d -> canRead(d.getId())).findFirst();
+            if (readable.isPresent()) {
+                register(readable.get());
+                return readable.get().getId();
+            }
         }
         return null;
     }
@@ -504,24 +585,29 @@ public class DocumentAiTools {
         try {
             UUID id = resolveToId(documentName);
             if (id == null) {
-                // Also try searching files
+                // Also try searching files — skip candidates the user cannot see
                 var found = documentRepository.findByNameContainingIgnoreCaseAndActiveTrue(documentName)
                         .collectList().block();
-                if (found != null && !found.isEmpty()) {
-                    id = found.getFirst().getId();
+                if (found != null) {
+                    id = found.stream().filter(d -> canRead(d.getId()))
+                            .findFirst().map(Document::getId).orElse(null);
                 }
             }
             var renameRequest = new RenameRequest(newName);
 
-            Document doc = id != null ? documentRepository.findById(id).block() : null;
+            Document doc = id != null ? blockWithAuth(documentRepository.findById(id)) : null;
             if (doc == null) {
                 return "Document '%s' not found.".formatted(documentName);
             }
+            if (!canModify(doc.getId())) {
+                return toolResult("renameDocument",
+                        "You don't have permission to rename '%s'.".formatted(doc.getName()));
+            }
 
             if (doc.getType() == org.openfilz.dms.enums.DocumentType.FOLDER) {
-                documentService.renameFolder(id, renameRequest).block();
+                blockWithAuth(documentService.renameFolder(id, renameRequest));
             } else {
-                documentService.renameFile(id, renameRequest).block();
+                blockWithAuth(documentService.renameFile(id, renameRequest));
             }
 
             recordFolderModified(doc.getParentId());
@@ -545,12 +631,13 @@ public class DocumentAiTools {
             if (folderName != null && !folderName.isBlank() && !"null".equalsIgnoreCase(folderName)) {
                 UUID folderId = resolveToId(folderName);
                 if (folderId == null) {
-                    // Try searching for the folder
+                    // Try searching for the folder — skip candidates the user cannot see
                     var folders = documentRepository.findByNameContainingIgnoreCaseAndActiveTrue(folderName)
                             .filter(d -> d.getType() == org.openfilz.dms.enums.DocumentType.FOLDER)
                             .collectList().block();
-                    if (folders != null && !folders.isEmpty()) {
-                        folderId = folders.getFirst().getId();
+                    if (folders != null) {
+                        folderId = folders.stream().filter(d -> canRead(d.getId()))
+                                .findFirst().map(Document::getId).orElse(null);
                     }
                 }
                 if (folderId != null) {
@@ -559,17 +646,20 @@ public class DocumentAiTools {
                     var request = new ListFolderRequest(folderId, DocumentType.FILE, null, null, documentName,
                             null, null, null, null, null, null, null, null, null, true,
                             new PageCriteria("name", SortOrder.ASC, 1, 10), false);
-                    var results = queryService.query(request);
-                    if (results != null && !results.isEmpty()) {
-                        doc = documentRepository.findById(results.getFirst().id()).block();
+                    var results = queryService.query(request, userEmail);
+                    var match = results == null ? java.util.Optional.<UUID>empty()
+                            : results.stream().filter(r -> canRead(r.id())).findFirst().map(r -> r.id());
+                    if (match.isPresent()) {
+                        doc = blockWithAuth(documentRepository.findById(match.get()));
                         log.debug("[AI-TOOL] readDocumentContent: found '{}' in folder", doc != null ? doc.getName() : "null");
                     } else {
-                        // No match — list all files in folder for the LLM
+                        // No match — list all (accessible) files in folder for the LLM
                         var allInFolder = new ListFolderRequest(folderId, DocumentType.FILE, null, null, null,
                                 null, null, null, null, null, null, null, null, null, true,
                                 new PageCriteria("name", SortOrder.ASC, 1, 20), false);
-                        var allFiles = queryService.query(allInFolder);
+                        var allFiles = queryService.query(allInFolder, userEmail);
                         String fileList = allFiles != null ? allFiles.stream()
+                                .filter(f -> canRead(f.id()))
                                 .map(f -> "- " + f.name()).collect(Collectors.joining("\n")) : "(empty)";
                         return toolResult("readDocumentContent",
                                 "No file matching '%s' found in folder '%s'. Files in this folder:\n%s".formatted(documentName, folderName, fileList));
@@ -577,14 +667,18 @@ public class DocumentAiTools {
                 }
             }
 
-            // Fallback: resolve by name globally
+            // Fallback: resolve by name globally (only ever resolves to accessible documents)
             if (doc == null) {
                 UUID id = resolveAnyToId(documentName);
                 if (id == null) return toolResult("readDocumentContent", "Document '%s' not found.".formatted(documentName));
-                doc = documentRepository.findById(id).block();
+                doc = blockWithAuth(documentRepository.findById(id));
             }
 
             if (doc == null) return toolResult("readDocumentContent", "Document not found.");
+            // Final gate before touching content — a document the user cannot read does not exist for them
+            if (!canRead(doc.getId())) {
+                return toolResult("readDocumentContent", "Document '%s' not found.".formatted(documentName));
+            }
             if (doc.getType() == org.openfilz.dms.enums.DocumentType.FOLDER) {
                 return toolResult("readDocumentContent", "'%s' is a folder. Use listFolder to see its contents.".formatted(documentName));
             }
@@ -595,7 +689,7 @@ public class DocumentAiTools {
             register(doc);
 
             // Load the file from storage and extract text with Tika
-            Resource resource = storageService.loadFile(doc.getStoragePath()).block();
+            Resource resource = blockWithAuth(storageService.loadFile(doc.getStoragePath()));
             if (resource == null) return "Could not load the file from storage.";
 
             var tikaReader = new TikaDocumentReader(resource);
@@ -622,18 +716,21 @@ public class DocumentAiTools {
         }
     }
 
-    /** Resolve a name or UUID to any document (file or folder). */
+    /** Resolve a name or UUID to any document (file or folder) the requesting user can read. */
     private UUID resolveAnyToId(String nameOrId) {
         if (nameOrId == null || nameOrId.isBlank()) return null;
         UUID id = parseUuid(nameOrId);
-        if (id != null) return id;
+        if (id != null) return canRead(id) ? id : null;
         var ref = documentRegistry.get(nameOrId);
         if (ref != null) return ref.id();
         var found = documentRepository.findByNameContainingIgnoreCaseAndActiveTrue(nameOrId)
                 .collectList().block();
-        if (found != null && !found.isEmpty()) {
-            register(found.getFirst());
-            return found.getFirst().getId();
+        if (found != null) {
+            var readable = found.stream().filter(d -> canRead(d.getId())).findFirst();
+            if (readable.isPresent()) {
+                register(readable.get());
+                return readable.get().getId();
+            }
         }
         return null;
     }
@@ -643,9 +740,13 @@ public class DocumentAiTools {
             @ToolParam(description = "UUID of the document") String documentId
     ) {
         try {
-            var ancestors = documentService.getDocumentAncestors(parseUuid(documentId))
-                    .collectList()
-                    .block();
+            UUID id = parseUuid(documentId);
+            // A document the user cannot read does not exist for them
+            if (id == null || !canRead(id)) {
+                return "Document not found.";
+            }
+            var ancestors = blockWithAuth(documentService.getDocumentAncestors(id)
+                    .collectList());
 
             if (ancestors == null || ancestors.isEmpty()) {
                 return "Document is at the root level.";
@@ -686,29 +787,36 @@ public class DocumentAiTools {
                     var folders = documentRepository.findByNameContainingIgnoreCaseAndActiveTrue(folderName)
                             .filter(d -> d.getType() == DocumentType.FOLDER)
                             .collectList().block();
-                    if (folders != null && !folders.isEmpty()) {
-                        folderId = folders.getFirst().getId();
+                    if (folders != null) {
+                        folderId = folders.stream().filter(d -> canRead(d.getId()))
+                                .findFirst().map(Document::getId).orElse(null);
                     }
                 }
                 if (folderId != null) {
                     var request = new ListFolderRequest(folderId, DocumentType.FILE, null, null, imageName,
                             null, null, null, null, null, null, null, null, null, true,
                             new PageCriteria("name", SortOrder.ASC, 1, 10), false);
-                    var results = queryService.query(request);
-                    if (results != null && !results.isEmpty()) {
-                        doc = documentRepository.findById(results.getFirst().id()).block();
+                    var results = queryService.query(request, userEmail);
+                    var match = results == null ? java.util.Optional.<UUID>empty()
+                            : results.stream().filter(r -> canRead(r.id())).findFirst().map(r -> r.id());
+                    if (match.isPresent()) {
+                        doc = blockWithAuth(documentRepository.findById(match.get()));
                     }
                 }
             }
 
-            // Fallback: resolve by name globally
+            // Fallback: resolve by name globally (only ever resolves to accessible documents)
             if (doc == null) {
                 UUID id = resolveAnyToId(imageName);
                 if (id == null) return toolResult("describeImage", "Image '%s' not found.".formatted(imageName));
-                doc = documentRepository.findById(id).block();
+                doc = blockWithAuth(documentRepository.findById(id));
             }
 
             if (doc == null) return toolResult("describeImage", "Image not found.");
+            // Final gate before touching content — an image the user cannot read does not exist for them
+            if (!canRead(doc.getId())) {
+                return toolResult("describeImage", "Image '%s' not found.".formatted(imageName));
+            }
             if (doc.getType() == DocumentType.FOLDER) {
                 return toolResult("describeImage", "'%s' is a folder, not an image.".formatted(imageName));
             }
@@ -725,7 +833,7 @@ public class DocumentAiTools {
             register(doc);
 
             // Load the file from storage
-            Resource resource = storageService.loadFile(doc.getStoragePath()).block();
+            Resource resource = blockWithAuth(storageService.loadFile(doc.getStoragePath()));
             if (resource == null) return toolResult("describeImage", "Could not load '%s' from storage.".formatted(doc.getName()));
 
             // Build the prompt depending on the task

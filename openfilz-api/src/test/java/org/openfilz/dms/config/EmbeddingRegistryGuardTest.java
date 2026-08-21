@@ -38,10 +38,22 @@ class EmbeddingRegistryGuardTest {
     private final AiProperties aiProperties = new AiProperties();
 
     private final EmbeddingRegistryGuard guard =
-            new EmbeddingRegistryGuard(jdbcTemplate, embeddingModel, environment, aiProperties);
+            new EmbeddingRegistryGuard(provider(jdbcTemplate), provider(embeddingModel), environment, aiProperties);
+
+    private static <T> org.springframework.beans.factory.ObjectProvider<T> provider(T instance) {
+        return new org.springframework.beans.factory.ObjectProvider<>() {
+            @Override
+            public T getIfAvailable() {
+                return instance;
+            }
+        };
+    }
 
     @BeforeEach
     void defaults() {
+        // The guard now self-checks the runtime AI flag (native-safe toggle) instead of
+        // relying on a bean condition — enable it for these tests
+        aiProperties.setActive(true);
         when(embeddingModel.dimensions()).thenReturn(AiConfig.EMBEDDING_DIMENSIONS);
     }
 

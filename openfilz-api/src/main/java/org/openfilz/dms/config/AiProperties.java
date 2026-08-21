@@ -1,20 +1,28 @@
 package org.openfilz.dms.config;
 
 import lombok.Data;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Lazy;
 
 /**
  * Configuration properties for the AI document chat feature.
  * Maps to openfilz.ai.* properties in application.yml.
+ * <p>
+ * Deliberately NOT gated on {@code openfilz.ai.active}: in GraalVM native images bean
+ * conditions are evaluated at build time, so the whole AI feature is toggled at runtime —
+ * the beans always exist ({@code @Lazy} where their dependencies require the AI providers)
+ * and the entry points consult {@link #isActive()} per request.
  */
 @Data
 @Configuration
 @ConfigurationProperties(prefix = "openfilz.ai")
-@ConditionalOnProperty(name = "openfilz.ai.active", havingValue = "true")
 public class AiProperties {
+
+    /**
+     * Master runtime switch for the whole AI feature. Read at runtime (never as a bean
+     * condition) so it stays toggleable in GraalVM native images.
+     */
+    private boolean active = false;
 
     /**
      * The system prompt used by the AI assistant.

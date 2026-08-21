@@ -60,8 +60,15 @@ public class LocalFullTextServiceImpl implements FullTextService {
     private final TikaService tikaService;
     private final StorageService storageService;
 
+    // @Lazy injection point: the embedding service bean is always defined now (the AI toggle
+    // is runtime-only for native images) but must not be CREATED unless AI is actually active
+    // — its dependency chain needs an EmbeddingModel that only exists when AI is on.
     @Autowired(required = false)
+    @Lazy
     private DocumentEmbeddingService documentEmbeddingService;
+
+    @org.springframework.beans.factory.annotation.Value("${openfilz.ai.active:false}")
+    private boolean aiActive;
 
     public LocalFullTextServiceImpl(IndexService indexService, TikaService tikaService, StorageService storageService) {
         this.indexService = indexService;
@@ -96,7 +103,7 @@ public class LocalFullTextServiceImpl implements FullTextService {
 
             // When AI embedding is active, collect the Tika-extracted text to reuse it
             // for vector embedding — avoids a second Tika pass on the same file.
-            final boolean shareWithAi = documentEmbeddingService != null;
+            final boolean shareWithAi = aiActive && documentEmbeddingService != null;
             final StringBuilder collectedText = shareWithAi ? new StringBuilder() : null;
 
             Flux<String> tikaFlux = tikaService.processResource(tempFile, storageService.loadFile(document.getStoragePath()));

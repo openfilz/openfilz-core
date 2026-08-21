@@ -28,7 +28,12 @@ public class DefaultMetadataPostProcessor implements MetadataPostProcessor {
     @Autowired(required = false)
     protected FullTextService fullTextService;
 
+    // @Lazy injection point: the embedding service bean is always defined now (the AI toggle
+    // is runtime-only for native images) but must not be CREATED unless AI is actually active
+    // — its dependency chain needs an EmbeddingModel that only exists when AI is on. The
+    // aiActive flag below already gates every call.
     @Autowired(required = false)
+    @Lazy
     protected DocumentEmbeddingService documentEmbeddingService;
 
     @Value("${openfilz.thumbnail.active:false}")

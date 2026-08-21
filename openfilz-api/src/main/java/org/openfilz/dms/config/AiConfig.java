@@ -6,10 +6,10 @@ import org.springframework.ai.vectorstore.pgvector.PgVectorStore;
 import org.springframework.ai.vectorstore.pgvector.PgVectorStore.PgDistanceType;
 import org.springframework.ai.vectorstore.pgvector.PgVectorStore.PgIndexType;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.jdbc.DataSourceBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.sql.DataSource;
@@ -29,8 +29,12 @@ import javax.sql.DataSource;
  * EmbeddingModel bean reach this configuration.
  */
 @Configuration
-@ConditionalOnProperty(name = "openfilz.ai.active", havingValue = "true")
 public class AiConfig {
+
+    // NOTE: no @ConditionalOnProperty — bean conditions are evaluated at build time in GraalVM
+    // native images, so the AI feature must be toggleable at runtime. The beans below are @Lazy:
+    // they are only instantiated when an AI entry point actually uses them, which the entry
+    // points gate on AiProperties.isActive() at runtime.
 
     /**
      * Vector dimension of the {@code vector_store.embedding} column (see
@@ -45,6 +49,7 @@ public class AiConfig {
     // UserChatClientResolver. Assembly is cheap; the models carry the pooled HTTP clients.
 
     @Bean
+    @Lazy
     DataSource aiDataSource(
             @Value("${spring.flyway.url}") String jdbcUrl,
             @Value("${spring.flyway.user}") String username,
@@ -57,11 +62,13 @@ public class AiConfig {
     }
 
     @Bean
+    @Lazy
     JdbcTemplate aiJdbcTemplate(DataSource aiDataSource) {
         return new JdbcTemplate(aiDataSource);
     }
 
     @Bean
+    @Lazy
     VectorStore vectorStore(JdbcTemplate aiJdbcTemplate, EmbeddingModel embeddingModel) {
         return PgVectorStore.builder(aiJdbcTemplate, embeddingModel)
                 .dimensions(EMBEDDING_DIMENSIONS)
