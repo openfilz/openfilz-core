@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[ae24de195da8cfc](https://github.com/openfilz/openfilz-core/commit/ae24de195da8cfc) maven-release-bot[bot] *2026-08-20 00:58:58*
+[b53f73141683db6](https://github.com/openfilz/openfilz-core/commit/b53f73141683db6) maven-release-bot[bot] *2026-08-21 10:27:08*
 
 
-## v1.2.19
+## v1.2.20
 ### No issue
 
-**[maven-release-plugin] prepare release v1.2.19**
+**[maven-release-plugin] prepare release v1.2.20**
 
 
-[e282ce11961a830](https://github.com/openfilz/openfilz-core/commit/e282ce11961a830) maven-release-bot[bot] *2026-08-20 00:58:55*
+[a77b572e715ce1d](https://github.com/openfilz/openfilz-core/commit/a77b572e715ce1d) maven-release-bot[bot] *2026-08-21 10:27:06*
 
-**Merge pull request #182 from openfilz/develop**
+**Merge pull request #185 from openfilz/develop**
 
- * AI e2e tests against a real LLM + duplicate-release fix
+ * fix(ai): doc-link marker corruption, silent root fallback, folder refresh signal
 
-[47e739d0fa1a5b3](https://github.com/openfilz/openfilz-core/commit/47e739d0fa1a5b3) Yann Demel *2026-08-20 00:55:57*
+[d059d1bc0768ab6](https://github.com/openfilz/openfilz-core/commit/d059d1bc0768ab6) Yann Demel *2026-08-21 10:24:46*
 
 
