@@ -308,3 +308,27 @@ Security properties:
 | BYOK settings API + crypto | `controller/rest/AiSettingsController`, `service/impl/AiSettingsCipher` |
 | Migrations | `resources/db/ai-migration/V1_4..V1_6` |
 | Native hints (Anthropic SDK) | `config/AnthropicSdkRuntimeHints` |
+
+## 7. Deploying the local Ollama (Docker / Dokploy / Kubernetes)
+
+`openfilz.ai.active` is a **runtime** toggle (no bean conditions — native-image safe), but a
+deployment that uses the Ollama provider also needs an Ollama server and its models. The
+provider switches drive the infrastructure everywhere:
+
+| Channel | How Ollama is deployed |
+|---------|------------------------|
+| Dev compose | `docker-compose.ai.yml` overlay (`make up-ai`) — always includes `ollama` + `ollama-init` (model pull) and swaps Postgres to `pgvector/pgvector` |
+| Dokploy compose (CE `deploy/docker-compose/dokploy/compose.yaml`, EE `docker/dokploy-compose-ee.yml`) | `ollama` + `ollama-init` are **profile-gated on the provider switches**: `profiles: ["${OLLAMA_CHAT_ENABLED:-false}", "${OLLAMA_EMBEDDING_ENABLED:-false}"]` with the fixed activator `COMPOSE_PROFILES=true` — the services exist iff at least one Ollama provider is enabled. No `depends_on` from the API (profile-gated); it reaches Ollama lazily. |
+| Kubernetes (`deploy/helm/openfilz-api`) | Optional in-cluster Ollama: `ai.ollama.deploy.enabled=true` (with `ai.active=true`) renders a Deployment + fixed-name `ollama` Service + PVC, and a post-install/post-upgrade Job pulls the enabled models. Point `ai.ollama.baseUrl` at an external/GPU Ollama instead and leave `deploy.enabled=false`. |
+
+Requirements that go with it:
+
+- **pgvector**: the AI migration runs `CREATE EXTENSION vector` — Postgres must run a
+  pgvector-enabled image (`pgvector/pgvector:pgXX`). Never swap `postgres:*-alpine` to the
+  debian-based pgvector image on an **existing** volume (musl→glibc collation change);
+  dump/restore instead.
+- **Model pulls are idempotent** (`ollama-init` / the Helm Job re-pull on every deploy; an
+  already-present model is a no-op).
+- **The ollama image has no curl** — container healthchecks use `ollama list`, not curl.
+- **Embedding model = one-time decision** (`EmbeddingRegistryGuard`): enable
+  `OLLAMA_EMBEDDING_ENABLED` with the model you intend to keep.

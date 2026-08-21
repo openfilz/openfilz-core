@@ -1,0 +1,93 @@
+{{- /*
+Optional in-cluster Ollama server for the AI document chat.
+Only rendered when ai.active AND ai.ollama.deploy.enabled — deployments pointing
+ai.ollama.baseUrl at an external Ollama (or using a cloud provider) render nothing.
+The Service name is a fixed "ollama" so the default baseUrl works out of the box;
+this implies one Ollama per namespace.
+*/}}
+{{- if and .Values.ai.active .Values.ai.ollama.deploy.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-models
+  labels: {{- include "openfilz-api.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ollama
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: {{ .Values.ai.ollama.deploy.persistence.size }}
+  {{- with .Values.ai.ollama.deploy.persistence.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  labels: {{- include "openfilz-api.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ollama
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate   # RWO volume — never two pods on the model store
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ollama
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ollama
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      {{- with .Values.podSecurityContext }}
+      securityContext: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: ollama
+          image: {{ .Values.ai.ollama.deploy.image | quote }}
+          ports:
+            - name: http
+              containerPort: 11434
+              protocol: TCP
+          volumeMounts:
+            - name: models
+              mountPath: /root/.ollama
+          readinessProbe:
+            httpGet:
+              path: /api/tags
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/tags
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          {{- with .Values.ai.ollama.deploy.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: ollama-models
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+  labels: {{- include "openfilz-api.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ollama
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 11434
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

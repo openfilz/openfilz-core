@@ -137,6 +137,22 @@ ai:
     embedding:
       enabled: false
       model: "nomic-embed-text"
+    # -- Optional in-cluster Ollama server. When deploy.enabled (and ai.active), the chart
+    # creates an Ollama Deployment + Service + PVC. The Service is named "ollama" (fixed,
+    # matching the default baseUrl above — one Ollama per namespace), and a
+    # post-install/post-upgrade Job pulls the models of the enabled chat/embedding
+    # providers. Leave disabled to use an external Ollama (point baseUrl at it) or a
+    # cloud provider (openai/anthropic/google below).
+    deploy:
+      enabled: false
+      image: "ollama/ollama:latest"
+      # Pull the enabled models after install/upgrade (post-install/post-upgrade hook Job)
+      pullModels: true
+      persistence:
+        size: 20Gi
+        storageClassName: ""
+      # For GPU inference: resources: {limits: {nvidia.com/gpu: 1}} (needs the device plugin)
+      resources: {}
   # -- OpenAI-compatible API (cloud LLM)
   openai:
     apiKey: ""

@@ -16,6 +16,7 @@ volumes:
   onlyoffice-logs:
   opensearch-data1:
   opensearch-data2:
+  ollama-data:
 
 networks:
   dokploy-network:
@@ -416,3 +417,53 @@ services:
       - "traefik.http.routers.opensearch-dashboards.middlewares=opensearch-dashboards-auth"
       - "traefik.http.middlewares.opensearch-dashboards-auth.basicauth.users=${OPENSEARCH_DASHBOARDS_BASIC_AUTH}"
       - "traefik.http.services.opensearch-dashboards.loadbalancer.server.port=5601"
+
+  # ===========================================================================
+  # Ollama — local LLM server for the AI document chat (optional)
+  #
+  # Deployed only when an Ollama provider is enabled: the profile value IS the
+  # boolean (same trick as the EE optional services), so with the fixed
+  # activator COMPOSE_PROFILES=true in the environment, this service is created
+  # when OLLAMA_CHAT_ENABLED=true and/or OLLAMA_EMBEDDING_ENABLED=true, and
+  # skipped when both are false. Also set OPENFILZ_AI_ACTIVE=true (see the
+  # openfilz-api environment above) — and note the postgres image must be
+  # pgvector-enabled (the default pgvector/pgvector:pg17 already is).
+  # No service depends_on ollama: the API reaches it lazily at call time.
+  # ===========================================================================
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    profiles: ["${OLLAMA_CHAT_ENABLED:-false}", "${OLLAMA_EMBEDDING_ENABLED:-false}"]
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - dokploy-network
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # Pulls the enabled models once Ollama is healthy (idempotent re-pulls).
+  ollama-init:
+    image: curlimages/curl:latest
+    restart: "no"
+    profiles: ["${OLLAMA_CHAT_ENABLED:-false}", "${OLLAMA_EMBEDDING_ENABLED:-false}"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        if [ "${OLLAMA_CHAT_ENABLED:-false}" = "true" ]; then
+          echo "Pulling chat model: ${OLLAMA_CHAT_MODEL:-llama3}..."
+          curl -sf http://ollama:11434/api/pull -d "{\"name\": \"${OLLAMA_CHAT_MODEL:-llama3}\"}"
+        fi
+        if [ "${OLLAMA_EMBEDDING_ENABLED:-false}" = "true" ]; then
+          echo "Pulling embedding model: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}..."
+          curl -sf http://ollama:11434/api/pull -d "{\"name\": \"${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}\"}"
+        fi
+        echo "Models ready."
+    networks:
+      - dokploy-network
