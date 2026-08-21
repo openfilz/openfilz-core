@@ -184,6 +184,22 @@ spec:
               value: {{ .Values.ai.openai.embedding.enabled | quote }}
             - name: OPENAI_EMBEDDING_MODEL
               value: {{ .Values.ai.openai.embedding.model | quote }}
+            - name: ANTHROPIC_API_KEY
+              value: {{ .Values.ai.anthropic.apiKey | quote }}
+            - name: ANTHROPIC_CHAT_ENABLED
+              value: {{ .Values.ai.anthropic.chat.enabled | quote }}
+            - name: ANTHROPIC_CHAT_MODEL
+              value: {{ .Values.ai.anthropic.chat.model | quote }}
+            - name: GOOGLE_API_KEY
+              value: {{ .Values.ai.google.apiKey | quote }}
+            - name: GOOGLE_CHAT_ENABLED
+              value: {{ .Values.ai.google.chat.enabled | quote }}
+            - name: GOOGLE_CHAT_MODEL
+              value: {{ .Values.ai.google.chat.model | quote }}
+            - name: AI_USER_SETTINGS_ENABLED
+              value: {{ .Values.ai.userSettings.enabled | quote }}
+            - name: AI_SETTINGS_ENCRYPTION_KEY
+              value: {{ .Values.ai.userSettings.encryptionKey | quote }}
             {{- end }}
           {{- if or .Values.extraEnv .Values.extraEnvSecretRef }}
           envFrom:

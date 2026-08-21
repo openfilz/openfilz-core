@@ -1,12 +1,6 @@
 package org.openfilz.dms.config;
 
-import org.openfilz.dms.service.ai.DocumentAiTools;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.client.advisor.ToolCallingAdvisor;
-import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.embedding.EmbeddingModel;
-import org.springframework.ai.model.tool.ToolCallingManager;
-import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.pgvector.PgVectorStore;
 import org.springframework.ai.vectorstore.pgvector.PgVectorStore.PgDistanceType;
@@ -45,23 +39,10 @@ public class AiConfig {
      */
     public static final int EMBEDDING_DIMENSIONS = 768;
 
-    @Bean
-    ChatClient chatClient(ChatModel chatModel, AiProperties aiProperties, DocumentAiTools documentAiTools,
-                          ToolCallingManager toolCallingManager) {
-        // Spring AI 2.0 moved tool execution out of the ChatModel and into a ToolCallingAdvisor
-        // on the ChatClient. Only the auto-configured ChatClient.Builder registers that advisor;
-        // this client is built from the raw ChatClient.builder(ChatModel) factory, so it has to be
-        // registered explicitly — without it the model emits tool-call requests nobody executes.
-        return ChatClient.builder(chatModel)
-                .defaultSystem(aiProperties.getSystemPrompt())
-                .defaultToolCallbacks(MethodToolCallbackProvider.builder()
-                        .toolObjects(documentAiTools)
-                        .build())
-                .defaultAdvisors(ToolCallingAdvisor.builder()
-                        .toolCallingManager(toolCallingManager)
-                        .build())
-                .build();
-    }
+    // Note: there is deliberately no ChatClient bean. Chat clients are assembled per request by
+    // ChatClientAssembler (system prompt + per-request DocumentAiTools + ToolCallingAdvisor) from
+    // the ChatModel resolved for the user — the server-default model bean, or a BYOK model from
+    // UserChatClientResolver. Assembly is cheap; the models carry the pooled HTTP clients.
 
     @Bean
     DataSource aiDataSource(

@@ -469,10 +469,14 @@ openfilz:
 
 OpenFilz includes an optional AI assistant that can answer questions about your documents, search and organize files, and summarize content using Retrieval-Augmented Generation (RAG). When enabled, uploaded documents are automatically chunked, embedded, and stored in a pgvector table for semantic similarity search.
 
+> **Developer deep-dive:** [AI Architecture](ai.md) explains how the configuration is resolved at
+> startup, the ingestion → indexing pipeline (full-text + vectors), the chat workflow, and BYOK —
+> with architecture and sequence diagrams.
+
 #### Prerequisites
 
 - **PostgreSQL with pgvector extension**: The database must have the `vector` extension available. Use the `pgvector/pgvector` Docker image instead of plain `postgres` (provided automatically by `docker-compose.ai.yml`).
-- **An LLM provider**: Either a local [Ollama](https://ollama.com) instance or an OpenAI-compatible API (OpenAI, Azure OpenAI, etc.).
+- **An LLM provider**: A local [Ollama](https://ollama.com) instance, OpenAI, Anthropic Claude, Google Gemini, or any OpenAI-compatible API (Azure OpenAI, OpenRouter, etc.). Anthropic and Gemini provide **chat models only** — embeddings always come from Ollama or OpenAI.
 
 #### Feature Toggle
 
@@ -498,8 +502,10 @@ different providers (e.g. Ollama for embeddings + OpenAI for chat).
 > The `*.enabled` switches in the tables below are OpenFilz properties, not Spring AI ones. Spring
 > AI 2.0 gates each provider on a single selector (`spring.ai.model.chat` /
 > `spring.ai.model.embedding`, valued with the provider name or `none`); OpenFilz derives those
-> selectors from `openfilz.ai.active` plus these booleans, picking Ollama when both providers are
-> enabled. Set `spring.ai.model.*` yourself to bypass the mapping.
+> selectors from `openfilz.ai.active` plus these booleans. When several chat providers are enabled
+> at once, priority is **Ollama > Anthropic > Google > OpenAI**; embeddings are restricted to
+> Ollama/OpenAI (Anthropic has no embeddings API, and the pgvector schema is pinned to 768-dim
+> output). Set `spring.ai.model.*` yourself to bypass the mapping.
 
 **Ollama (local, free, recommended for development):**
 
@@ -521,6 +527,76 @@ different providers (e.g. Ollama for embeddings + OpenAI for chat).
 | `spring.ai.openai.chat.model` / `OPENAI_CHAT_MODEL` | `gpt-4o` | Chat model name |
 | `openfilz.ai.openai.embedding.enabled` / `OPENAI_EMBEDDING_ENABLED` | `false` | Enable OpenAI as the embedding model provider |
 | `spring.ai.openai.embedding.model` / `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model name |
+
+**Anthropic Claude (cloud, chat only):**
+
+| Property / Env Variable | Default | Description |
+|--------------------------|---------|-------------|
+| `spring.ai.anthropic.api-key` / `ANTHROPIC_API_KEY` | *(empty)* | API key (required when using Anthropic) |
+| `openfilz.ai.anthropic.chat.enabled` / `ANTHROPIC_CHAT_ENABLED` | `false` | Enable Anthropic as the chat model provider |
+| `spring.ai.anthropic.chat.model` / `ANTHROPIC_CHAT_MODEL` | `claude-opus-5` | Chat model name (`claude-haiku-4-5` for a cheaper option) |
+
+Anthropic has no embeddings API — pair it with Ollama or OpenAI embeddings (e.g. `ANTHROPIC_CHAT_ENABLED=true` + `OLLAMA_EMBEDDING_ENABLED=true`).
+
+**Google Gemini (cloud, chat only, free tier available):**
+
+| Property / Env Variable | Default | Description |
+|--------------------------|---------|-------------|
+| `spring.ai.google.genai.api-key` / `GOOGLE_API_KEY` | *(empty)* | API key from Google AI Studio (required when using Gemini) |
+| `openfilz.ai.google.chat.enabled` / `GOOGLE_CHAT_ENABLED` | `false` | Enable Gemini as the chat model provider |
+| `spring.ai.google.genai.chat.model` / `GOOGLE_CHAT_MODEL` | `gemini-2.5-flash` | Chat model name (`gemini-2.5-pro` for higher quality) |
+
+Uses the Gemini Developer API (API-key auth, not Vertex AI). In OpenFilz, Gemini serves chat only — embeddings stay on Ollama/OpenAI so the pgvector schema keeps its 768 dimensions.
+
+#### Getting an API key
+
+The cloud providers all require an API key. In every case: treat the key like a password, and rotate it by creating a new key, updating OpenFilz, then revoking the old one in the provider console.
+
+**OpenAI**
+1. Create an account on the API platform at [platform.openai.com](https://platform.openai.com) — this is distinct from ChatGPT: **a ChatGPT subscription does not include API access**.
+2. Add billing (Settings → Billing) — prepaid credits or a payment method.
+3. Go to [platform.openai.com/api-keys](https://platform.openai.com/api-keys) → *Create new secret key*. Prefer a **project-scoped** key with minimal permissions.
+4. The key (`sk-...`) is **shown once** — copy it immediately into `OPENAI_API_KEY`.
+5. Recommended: set a monthly usage limit in the OpenAI dashboard.
+
+**Anthropic (Claude)**
+1. Create an account on the Claude Console at [platform.claude.com](https://platform.claude.com) — distinct from Claude.ai: **a Claude Pro/Max chat subscription does not include API access**.
+2. Add billing / purchase credits (Settings → Billing).
+3. Settings → **API keys** → *Create key* (optionally scoped to a workspace to isolate spend and rate limits).
+4. The key (`sk-ant-...`) is **shown once** — copy it immediately into `ANTHROPIC_API_KEY`.
+5. Recommended: set workspace spend limits in the Console.
+
+**Google Gemini**
+1. Go to **Google AI Studio** at [aistudio.google.com](https://aistudio.google.com) and sign in with a Google account.
+2. Click **Get API key** → *Create API key* (bound to a Google Cloud project; AI Studio can create one for you).
+3. A **free tier** is available with no billing setup (rate-limited) — the easiest way to try the feature. Enable billing on the Cloud project for production quotas.
+4. Copy the key (`AIza...`) into `GOOGLE_API_KEY`. Optionally restrict it to the Generative Language API in the Cloud console.
+5. Quota and spend guardrails live in the Google Cloud console.
+
+#### Per-User AI Settings (BYOK)
+
+Optionally, each user can override the chat LLM with **their own provider and API key** from the
+personal settings page (*Settings → AI Assistant*): OpenAI, Anthropic Claude, Google Gemini, or any
+OpenAI-compatible endpoint (OpenRouter, Mistral, a local vLLM…). The server default remains for
+users who configure nothing. Only the **chat** model is user-selectable — embeddings (and therefore
+RAG indexing) always use the server-configured embedding model.
+
+| Property / Env Variable | Default | Description |
+|--------------------------|---------|-------------|
+| `openfilz.ai.user-settings.enabled` / `AI_USER_SETTINGS_ENABLED` | `false` | Enable per-user model overrides (BYOK) |
+| `openfilz.ai.user-settings.encryption-key` / `AI_SETTINGS_ENCRYPTION_KEY` | *(empty)* | AES-256 key protecting stored user API keys — **required when BYOK is enabled** |
+
+Generate the encryption key once per deployment:
+
+```bash
+openssl rand -base64 32
+```
+
+Notes:
+- User keys are stored **AES-256-GCM encrypted** in the `user_ai_settings` table and are write-only through the API (only a `hasApiKey` flag and the last 4 characters are ever returned).
+- The startup fails fast if BYOK is enabled without an encryption key.
+- Changing `AI_SETTINGS_ENCRYPTION_KEY` invalidates all stored user keys — users must re-enter them.
+- The settings page includes a **Test connection** button that sends a one-token probe with the submitted key, so users can validate their setup before saving.
 
 #### RAG and Embedding Configuration
 
@@ -577,13 +653,15 @@ Then start normally (`make up`, `make up-auth`, etc.). No Ollama container is ne
 
 #### Database Tables
 
-The AI migration (`V1_4__add_ai_support.sql`) runs **only when `openfilz.ai.active=true`** and creates:
+The AI migrations (`V1_4__add_ai_support.sql`, `V1_5__add_embedding_registry.sql`, `V1_6__add_user_ai_settings.sql`) run **only when `openfilz.ai.active=true`** and create:
 
 | Table | Purpose |
 |-------|---------|
-| `ai_chat_conversations` | Conversation metadata (title, creator, timestamps) |
+| `ai_chat_conversations` | Conversation metadata (title, creator, timestamps). Conversations are owned by their creator; rows created before ownership stamping (`created_by IS NULL`) stay visible to everyone |
 | `ai_chat_messages` | Message history (user and assistant messages per conversation) |
 | `vector_store` | Document embeddings for semantic search (768-dim vectors with HNSW index) |
+| `ai_embedding_registry` | Records which embedding model produced the stored vectors (one-time deployment decision, enforced at startup) |
+| `user_ai_settings` | Per-user BYOK chat-LLM overrides (provider, model, AES-256-GCM-encrypted API key) |
 
 ### CORS
 

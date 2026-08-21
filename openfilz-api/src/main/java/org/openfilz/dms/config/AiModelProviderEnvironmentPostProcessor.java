@@ -27,9 +27,12 @@ import java.util.Map;
  *       built, which matches the rest of the feature: every AI bean is conditional on that flag.</li>
  *   <li>{@code openfilz.ai.active=true} — chat and embedding resolve independently from the
  *       {@code openfilz.ai.<provider>.<kind>.enabled} switches ({@code OLLAMA_CHAT_ENABLED},
- *       {@code OPENAI_CHAT_ENABLED}, …), Ollama winning when both are enabled. When a kind has no
- *       switch set it falls back to Ollama, whose defaults point at a stock local install
- *       (localhost:11434, qwen2.5, nomic-embed-text) — so turning the feature on is enough.</li>
+ *       {@code ANTHROPIC_CHAT_ENABLED}, {@code GOOGLE_CHAT_ENABLED}, {@code OPENAI_CHAT_ENABLED}, …).
+ *       Chat priority when several are enabled: Ollama &gt; Anthropic &gt; Google &gt; OpenAI;
+ *       embedding is Ollama/OpenAI only (Anthropic has no embeddings API and the pgvector schema
+ *       is pinned to 768 dims). When a kind has no switch set it falls back to Ollama, whose
+ *       defaults point at a stock local install (localhost:11434, qwen2.5, nomic-embed-text) —
+ *       so turning the feature on is enough.</li>
  *   <li>An explicitly-set {@code spring.ai.model.*} property always wins — the escape hatch for
  *       providers OpenFilz exposes no switch for.</li>
  * </ul>
@@ -57,6 +60,29 @@ public class AiModelProviderEnvironmentPostProcessor implements EnvironmentPostP
     private static final String NONE = "none";
     private static final String OLLAMA = "ollama";
     private static final String OPENAI = "openai";
+    private static final String ANTHROPIC = "anthropic";
+    private static final String GOOGLE_GENAI = "google-genai";
+
+    /**
+     * Chat providers in priority order when several are enabled at once. Ollama first keeps the
+     * historical "Ollama wins ties" contract (and it stays the fallback when nothing is enabled,
+     * since its defaults target a stock local install).
+     */
+    private static final String[][] CHAT_PROVIDERS = {
+            {"openfilz.ai.ollama.chat.enabled", OLLAMA},
+            {"openfilz.ai.anthropic.chat.enabled", ANTHROPIC},
+            {"openfilz.ai.google.chat.enabled", GOOGLE_GENAI},
+            {"openfilz.ai.openai.chat.enabled", OPENAI},
+    };
+
+    /**
+     * Embedding stays restricted to Ollama/OpenAI: Anthropic has no embeddings API, and the
+     * pgvector schema is pinned to the 768-dim output of the models these two are configured with.
+     */
+    private static final String[][] EMBEDDING_PROVIDERS = {
+            {"openfilz.ai.ollama.embedding.enabled", OLLAMA},
+            {"openfilz.ai.openai.embedding.enabled", OPENAI},
+    };
 
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
@@ -64,10 +90,10 @@ public class AiModelProviderEnvironmentPostProcessor implements EnvironmentPostP
         Map<String, Object> selectors = new LinkedHashMap<>();
 
         putIfAbsent(environment, selectors, CHAT_SELECTOR, aiActive
-                ? provider(environment, "openfilz.ai.ollama.chat.enabled", "openfilz.ai.openai.chat.enabled")
+                ? provider(environment, CHAT_PROVIDERS)
                 : NONE);
         putIfAbsent(environment, selectors, EMBEDDING_SELECTOR, aiActive
-                ? provider(environment, "openfilz.ai.ollama.embedding.enabled", "openfilz.ai.openai.embedding.enabled")
+                ? provider(environment, EMBEDDING_PROVIDERS)
                 : NONE);
         for (String unused : UNUSED_SELECTORS) {
             putIfAbsent(environment, selectors, unused, NONE);
@@ -78,13 +104,14 @@ public class AiModelProviderEnvironmentPostProcessor implements EnvironmentPostP
         }
     }
 
-    private String provider(ConfigurableEnvironment environment, String ollamaFlag, String openaiFlag) {
-        if (environment.getProperty(openaiFlag, Boolean.class, false)
-                && !environment.getProperty(ollamaFlag, Boolean.class, false)) {
-            return OPENAI;
+    private String provider(ConfigurableEnvironment environment, String[][] candidates) {
+        for (String[] candidate : candidates) {
+            if (environment.getProperty(candidate[0], Boolean.class, false)) {
+                return candidate[1];
+            }
         }
-        // Ollama wins when both are enabled, and is the fallback when neither is: its defaults
-        // target a stock local install, so `openfilz.ai.active=true` alone is a working setup.
+        // Fallback when no switch is set: Ollama, whose defaults target a stock local install,
+        // so `openfilz.ai.active=true` alone is a working setup.
         return OLLAMA;
     }
 

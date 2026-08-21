@@ -40,6 +40,9 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 @Import(AiTestConfig.class)
 public class AiChatServiceIT extends TestContainersBaseConfig {
 
+    /** Service calls are user-scoped now; ITs run with security no-auth, matching the anonymous principal. */
+    private static final String TEST_USER = "anonymousUser";
+
     @Autowired
     private AiChatService aiChatService;
 
@@ -88,7 +91,7 @@ public class AiChatServiceIT extends TestContainersBaseConfig {
                 .message("Hello AI, help me with documents")
                 .build();
 
-        List<AiChatResponse> responses = aiChatService.chat(request)
+        List<AiChatResponse> responses = aiChatService.chat(request, TEST_USER)
                 .collectList()
                 .block();
 
@@ -137,7 +140,7 @@ public class AiChatServiceIT extends TestContainersBaseConfig {
                 .message("First question about documents")
                 .build();
 
-        List<AiChatResponse> firstResponses = aiChatService.chat(request1)
+        List<AiChatResponse> firstResponses = aiChatService.chat(request1, TEST_USER)
                 .collectList()
                 .block();
 
@@ -153,7 +156,7 @@ public class AiChatServiceIT extends TestContainersBaseConfig {
                 .conversationId(conversationId)
                 .build();
 
-        aiChatService.chat(request2).collectList().block();
+        aiChatService.chat(request2, TEST_USER).collectList().block();
 
         // Verify all messages are persisted
         List<AiChatMessage> messages = messageRepository
@@ -178,7 +181,7 @@ public class AiChatServiceIT extends TestContainersBaseConfig {
                 .message("Quick question")
                 .build();
 
-        StepVerifier.create(aiChatService.chat(request))
+        StepVerifier.create(aiChatService.chat(request, TEST_USER))
                 .thenConsumeWhile(r -> r.getType() != AiChatResponse.EventType.DONE)
                 .expectNextMatches(r -> r.getType() == AiChatResponse.EventType.DONE)
                 .verifyComplete();
@@ -190,7 +193,7 @@ public class AiChatServiceIT extends TestContainersBaseConfig {
                 .message("Tell me something")
                 .build();
 
-        List<AiChatResponse> responses = aiChatService.chat(request)
+        List<AiChatResponse> responses = aiChatService.chat(request, TEST_USER)
                 .collectList()
                 .block();
 
@@ -208,7 +211,7 @@ public class AiChatServiceIT extends TestContainersBaseConfig {
 
     @Test
     void listConversations_empty_returnsEmptyFlux() {
-        StepVerifier.create(aiChatService.listConversations())
+        StepVerifier.create(aiChatService.listConversations(TEST_USER))
                 .verifyComplete();
     }
 
@@ -218,9 +221,9 @@ public class AiChatServiceIT extends TestContainersBaseConfig {
         AiChatRequest request = AiChatRequest.builder()
                 .message("Create conversation for listing")
                 .build();
-        aiChatService.chat(request).collectList().block();
+        aiChatService.chat(request, TEST_USER).collectList().block();
 
-        List<AiChatConversation> conversations = aiChatService.listConversations()
+        List<AiChatConversation> conversations = aiChatService.listConversations(TEST_USER)
                 .collectList()
                 .block();
 
@@ -234,13 +237,13 @@ public class AiChatServiceIT extends TestContainersBaseConfig {
     void listConversations_orderedByUpdatedAt() {
         // Create two conversations
         AiChatRequest request1 = AiChatRequest.builder().message("Older conversation").build();
-        aiChatService.chat(request1).collectList().block();
+        aiChatService.chat(request1, TEST_USER).collectList().block();
 
         // Small delay for ordering
         AiChatRequest request2 = AiChatRequest.builder().message("Newer conversation").build();
-        aiChatService.chat(request2).collectList().block();
+        aiChatService.chat(request2, TEST_USER).collectList().block();
 
-        List<AiChatConversation> conversations = aiChatService.listConversations()
+        List<AiChatConversation> conversations = aiChatService.listConversations(TEST_USER)
                 .collectList()
                 .block();
 
@@ -259,7 +262,7 @@ public class AiChatServiceIT extends TestContainersBaseConfig {
                 .message("History test message")
                 .build();
 
-        List<AiChatResponse> chatResponses = aiChatService.chat(request)
+        List<AiChatResponse> chatResponses = aiChatService.chat(request, TEST_USER)
                 .collectList()
                 .block();
 
@@ -269,7 +272,7 @@ public class AiChatServiceIT extends TestContainersBaseConfig {
                 .map(AiChatResponse::getConversationId)
                 .orElseThrow();
 
-        List<AiChatResponse> history = aiChatService.getConversationHistory(conversationId)
+        List<AiChatResponse> history = aiChatService.getConversationHistory(conversationId, TEST_USER)
                 .collectList()
                 .block();
 
@@ -283,9 +286,11 @@ public class AiChatServiceIT extends TestContainersBaseConfig {
     }
 
     @Test
-    void getConversationHistory_nonExistent_returnsEmpty() {
-        StepVerifier.create(aiChatService.getConversationHistory(UUID.randomUUID()))
-                .verifyComplete();
+    void getConversationHistory_nonExistent_errorsNotFound() {
+        StepVerifier.create(aiChatService.getConversationHistory(UUID.randomUUID(), TEST_USER))
+                .expectErrorMatches(e -> e instanceof org.springframework.web.server.ResponseStatusException rse
+                        && rse.getStatusCode().value() == 404)
+                .verify();
     }
 
     @Test
@@ -294,7 +299,7 @@ public class AiChatServiceIT extends TestContainersBaseConfig {
                 .message("First message in conversation")
                 .build();
 
-        List<AiChatResponse> responses = aiChatService.chat(request1)
+        List<AiChatResponse> responses = aiChatService.chat(request1, TEST_USER)
                 .collectList()
                 .block();
 
@@ -309,7 +314,7 @@ public class AiChatServiceIT extends TestContainersBaseConfig {
                 .message("Second message in conversation")
                 .conversationId(conversationId)
                 .build();
-        aiChatService.chat(request2).collectList().block();
+        aiChatService.chat(request2, TEST_USER).collectList().block();
 
         List<AiChatMessage> messages = messageRepository
                 .findByConversationIdOrderByCreatedAtAsc(conversationId)
@@ -332,7 +337,7 @@ public class AiChatServiceIT extends TestContainersBaseConfig {
                 .message("This will be deleted")
                 .build();
 
-        List<AiChatResponse> responses = aiChatService.chat(request)
+        List<AiChatResponse> responses = aiChatService.chat(request, TEST_USER)
                 .collectList()
                 .block();
 
@@ -346,7 +351,7 @@ public class AiChatServiceIT extends TestContainersBaseConfig {
         Assertions.assertNotNull(conversationRepository.findById(conversationId).block());
 
         // Delete
-        aiChatService.deleteConversation(conversationId).block();
+        aiChatService.deleteConversation(conversationId, TEST_USER).block();
 
         // Verify deleted
         Assertions.assertNull(conversationRepository.findById(conversationId).block());
@@ -360,10 +365,11 @@ public class AiChatServiceIT extends TestContainersBaseConfig {
     }
 
     @Test
-    void deleteConversation_nonExistent_doesNotThrow() {
-        // Should not throw for non-existent ID
-        StepVerifier.create(aiChatService.deleteConversation(UUID.randomUUID()))
-                .verifyComplete();
+    void deleteConversation_nonExistent_errorsNotFound() {
+        StepVerifier.create(aiChatService.deleteConversation(UUID.randomUUID(), TEST_USER))
+                .expectErrorMatches(e -> e instanceof org.springframework.web.server.ResponseStatusException rse
+                        && rse.getStatusCode().value() == 404)
+                .verify();
     }
 
     // ========================= Conversation timestamp updates =========================
@@ -374,7 +380,7 @@ public class AiChatServiceIT extends TestContainersBaseConfig {
                 .message("Initial message")
                 .build();
 
-        List<AiChatResponse> responses = aiChatService.chat(request1)
+        List<AiChatResponse> responses = aiChatService.chat(request1, TEST_USER)
                 .collectList()
                 .block();
 
@@ -392,11 +398,98 @@ public class AiChatServiceIT extends TestContainersBaseConfig {
                 .conversationId(conversationId)
                 .build();
 
-        aiChatService.chat(request2).collectList().block();
+        aiChatService.chat(request2, TEST_USER).collectList().block();
 
         OffsetDateTime secondUpdatedAt = conversationRepository.findById(conversationId).block().getUpdatedAt();
 
         Assertions.assertFalse(secondUpdatedAt.isBefore(firstUpdatedAt),
                 "Updated timestamp should advance after second message");
+    }
+
+    // ========================= Per-user conversation scoping =========================
+
+    private static final String USER_A = "alice@openfilz.org";
+    private static final String USER_B = "bob@openfilz.org";
+
+    private UUID chatAs(String user, String message) {
+        List<AiChatResponse> responses = aiChatService.chat(
+                        AiChatRequest.builder().message(message).build(), user)
+                .collectList()
+                .block();
+        return responses.stream()
+                .filter(r -> r.getConversationId() != null)
+                .findFirst()
+                .map(AiChatResponse::getConversationId)
+                .orElseThrow();
+    }
+
+    @Test
+    void listConversations_onlyShowsOwnAndLegacy() {
+        UUID aliceConv = chatAs(USER_A, "Alice's private conversation");
+        chatAs(USER_B, "Bob's private conversation");
+
+        List<AiChatConversation> aliceList = aiChatService.listConversations(USER_A)
+                .collectList()
+                .block();
+
+        Assertions.assertNotNull(aliceList);
+        Assertions.assertTrue(aliceList.stream().anyMatch(c -> c.getId().equals(aliceConv)),
+                "Alice should see her own conversation");
+        Assertions.assertTrue(aliceList.stream().allMatch(c -> c.getCreatedBy() == null
+                        || c.getCreatedBy().equals(USER_A)),
+                "Alice must not see Bob's conversations");
+    }
+
+    @Test
+    void legacyConversationWithoutOwner_isVisibleToEveryone() {
+        UUID legacyId = UUID.randomUUID();
+        databaseClient.sql("INSERT INTO ai_chat_conversations (id, title, created_by, created_at, updated_at) "
+                        + "VALUES (:id, 'legacy pre-ownership conversation', NULL, now(), now())")
+                .bind("id", legacyId)
+                .then().block();
+
+        List<AiChatConversation> aliceList = aiChatService.listConversations(USER_A).collectList().block();
+        List<AiChatConversation> bobList = aiChatService.listConversations(USER_B).collectList().block();
+
+        Assertions.assertTrue(aliceList.stream().anyMatch(c -> c.getId().equals(legacyId)));
+        Assertions.assertTrue(bobList.stream().anyMatch(c -> c.getId().equals(legacyId)));
+    }
+
+    @Test
+    void getConversationHistory_ofAnotherUser_errorsNotFound() {
+        UUID aliceConv = chatAs(USER_A, "Alice's history");
+
+        StepVerifier.create(aiChatService.getConversationHistory(aliceConv, USER_B))
+                .expectErrorMatches(e -> e instanceof org.springframework.web.server.ResponseStatusException rse
+                        && rse.getStatusCode().value() == 404)
+                .verify();
+    }
+
+    @Test
+    void deleteConversation_ofAnotherUser_errorsNotFound() {
+        UUID aliceConv = chatAs(USER_A, "Alice's conversation to protect");
+
+        StepVerifier.create(aiChatService.deleteConversation(aliceConv, USER_B))
+                .expectErrorMatches(e -> e instanceof org.springframework.web.server.ResponseStatusException rse
+                        && rse.getStatusCode().value() == 404)
+                .verify();
+
+        Assertions.assertNotNull(conversationRepository.findById(aliceConv).block(),
+                "Bob's delete attempt must not remove Alice's conversation");
+    }
+
+    @Test
+    void continueConversation_ofAnotherUser_errorsNotFound() {
+        UUID aliceConv = chatAs(USER_A, "Alice starts a conversation");
+
+        AiChatRequest hijack = AiChatRequest.builder()
+                .message("Bob tries to continue it")
+                .conversationId(aliceConv)
+                .build();
+
+        StepVerifier.create(aiChatService.chat(hijack, USER_B))
+                .expectErrorMatches(e -> e instanceof org.springframework.web.server.ResponseStatusException rse
+                        && rse.getStatusCode().value() == 404)
+                .verify();
     }
 }

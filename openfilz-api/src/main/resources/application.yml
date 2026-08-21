@@ -121,6 +121,17 @@ openfilz:
         enabled: ${OPENAI_CHAT_ENABLED:false}
       embedding:
         enabled: ${OPENAI_EMBEDDING_ENABLED:false}
+    anthropic:
+      chat:
+        enabled: ${ANTHROPIC_CHAT_ENABLED:false}  # chat only — Anthropic has no embeddings API
+    google:
+      chat:
+        enabled: ${GOOGLE_CHAT_ENABLED:false}     # chat only — embeddings stay on Ollama/OpenAI (768-dim pgvector)
+    # BYOK: users may override the chat LLM with their own provider + API key (personal settings).
+    # Requires an encryption key for the stored API keys: openssl rand -base64 32
+    user-settings:
+      enabled: ${AI_USER_SETTINGS_ENABLED:false}
+      encryption-key: ${AI_SETTINGS_ENCRYPTION_KEY:}
     system-prompt: |
       You are OpenFilz AI Assistant, a helpful document management assistant.
       You help users find, organize, and understand their documents stored in OpenFilz.
@@ -270,6 +281,19 @@ spring.ai.openai:
     # vector_store's embedding column is fixed at vector(768), so ask OpenAI to shorten its
     # vectors to 768 (text-embedding-3-* support native dimension shortening; default is 1536).
     dimensions: ${OPENAI_EMBEDDING_DIMENSIONS:768}
+
+# Anthropic Claude (activated via ANTHROPIC_CHAT_ENABLED=true; key from platform.claude.com)
+spring.ai.anthropic:
+  api-key: ${ANTHROPIC_API_KEY:disabled}
+  chat:
+    model: ${ANTHROPIC_CHAT_MODEL:claude-opus-5}
+
+# Google Gemini — GenAI / Gemini Developer API (activated via GOOGLE_CHAT_ENABLED=true;
+# free-tier key from aistudio.google.com)
+spring.ai.google.genai:
+  api-key: ${GOOGLE_API_KEY:disabled}
+  chat:
+    model: ${GOOGLE_CHAT_MODEL:gemini-2.5-flash}
 
 # PgVector Store (auto-configured when spring-ai-starter-vector-store-pgvector is on classpath)
 spring.ai.vectorstore.pgvector:

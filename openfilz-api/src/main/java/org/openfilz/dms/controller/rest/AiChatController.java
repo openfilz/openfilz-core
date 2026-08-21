@@ -11,6 +11,7 @@ import org.openfilz.dms.dto.request.AiChatRequest;
 import org.openfilz.dms.dto.response.AiChatResponse;
 import org.openfilz.dms.entity.AiChatConversation;
 import org.openfilz.dms.service.AiChatService;
+import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -22,6 +23,7 @@ import java.util.UUID;
 /**
  * REST controller for AI document chat.
  * Provides SSE streaming for chat responses and conversation management endpoints.
+ * All operations are scoped to the connected user (conversation ownership + BYOK model).
  */
 @Slf4j
 @RestController
@@ -30,7 +32,7 @@ import java.util.UUID;
 @SecurityRequirement(name = "keycloak_auth")
 @Tag(name = "AI Chat", description = "AI-powered document chat with RAG and function calling")
 @ConditionalOnProperty(name = "openfilz.ai.active", havingValue = "true")
-public class AiChatController {
+public class AiChatController implements UserInfoService {
 
     private final AiChatService aiChatService;
 
@@ -45,7 +47,8 @@ public class AiChatController {
     )
     public Flux<AiChatResponse> chat(@Valid @RequestBody AiChatRequest request) {
         log.info("AI chat request: conversationId={}", request.getConversationId());
-        return aiChatService.chat(request);
+        return getConnectedUserEmail()
+                .flatMapMany(userEmail -> aiChatService.chat(request, userEmail));
     }
 
     /**
@@ -54,7 +57,8 @@ public class AiChatController {
     @GetMapping(value = "/conversations", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "List conversations", description = "Get all AI chat conversations for the current user")
     public Flux<AiChatConversation> listConversations() {
-        return aiChatService.listConversations();
+        return getConnectedUserEmail()
+                .flatMapMany(aiChatService::listConversations);
     }
 
     /**
@@ -63,7 +67,8 @@ public class AiChatController {
     @GetMapping(value = "/conversations/{conversationId}", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Get conversation history", description = "Get all messages in a conversation")
     public Flux<AiChatResponse> getConversationHistory(@PathVariable UUID conversationId) {
-        return aiChatService.getConversationHistory(conversationId);
+        return getConnectedUserEmail()
+                .flatMapMany(userEmail -> aiChatService.getConversationHistory(conversationId, userEmail));
     }
 
     /**
@@ -73,6 +78,7 @@ public class AiChatController {
     @Operation(summary = "Delete conversation", description = "Delete a conversation and all its messages")
     public Mono<Void> deleteConversation(@PathVariable UUID conversationId) {
         log.info("Deleting AI conversation: {}", conversationId);
-        return aiChatService.deleteConversation(conversationId);
+        return getConnectedUserEmail()
+                .flatMap(userEmail -> aiChatService.deleteConversation(conversationId, userEmail));
     }
 }
