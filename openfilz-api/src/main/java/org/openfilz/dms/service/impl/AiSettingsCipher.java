@@ -2,7 +2,7 @@ package org.openfilz.dms.service.impl;
 
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.Cipher;
@@ -25,7 +25,7 @@ import java.util.Base64;
  * at boot rather than on the first user save.
  */
 @Component
-@ConditionalOnProperty(name = "openfilz.ai.active", havingValue = "true")
+@Lazy
 public class AiSettingsCipher {
 
     private static final int GCM_IV_LENGTH = 12;

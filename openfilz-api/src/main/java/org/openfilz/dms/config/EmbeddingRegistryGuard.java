@@ -3,9 +3,9 @@ package org.openfilz.dms.config;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -39,23 +39,39 @@ import java.util.Map;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "openfilz.ai.active", havingValue = "true")
 public class EmbeddingRegistryGuard implements ApplicationRunner {
 
     static final String EMBEDDING_SELECTOR = "spring.ai.model.embedding";
     static final String NONE = "none";
 
-    private final JdbcTemplate aiJdbcTemplate;
-    private final EmbeddingModel embeddingModel;
+    // ObjectProvider: the guard bean is eager (ApplicationRunner) but must start even when the
+    // AI feature is off at runtime and neither the JdbcTemplate nor the EmbeddingModel can be
+    // created (native images bake bean conditions at build time, so the toggle is runtime-only).
+    private final ObjectProvider<JdbcTemplate> aiJdbcTemplateProvider;
+    private final ObjectProvider<EmbeddingModel> embeddingModelProvider;
     private final Environment environment;
     private final AiProperties aiProperties;
 
+    private JdbcTemplate aiJdbcTemplate;
+    private EmbeddingModel embeddingModel;
+
     @Override
     public void run(ApplicationArguments args) {
+        if (!aiProperties.isActive()) {
+            log.debug("[AI-EMBED] AI feature is disabled — skipping embedding registry check");
+            return;
+        }
         String provider = environment.getProperty(EMBEDDING_SELECTOR);
         if (provider == null || NONE.equals(provider)) {
             log.debug("[AI-EMBED] No embedding provider selected ({}={}) — skipping embedding registry check",
                     EMBEDDING_SELECTOR, provider);
+            return;
+        }
+        this.aiJdbcTemplate = aiJdbcTemplateProvider.getIfAvailable();
+        this.embeddingModel = embeddingModelProvider.getIfAvailable();
+        if (aiJdbcTemplate == null || embeddingModel == null) {
+            log.warn("[AI-EMBED] AI is active but the JdbcTemplate/EmbeddingModel are unavailable — "
+                    + "skipping embedding registry check");
             return;
         }
 

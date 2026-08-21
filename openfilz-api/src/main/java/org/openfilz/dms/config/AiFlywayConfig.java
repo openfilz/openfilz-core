@@ -1,6 +1,6 @@
 package org.openfilz.dms.config;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.flyway.autoconfigure.FlywayConfigurationCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,9 +26,13 @@ public class AiFlywayConfig {
     private static final String DEFAULT_MIGRATION_LOCATION = "classpath:db/migration";
 
     @Bean
-    @ConditionalOnProperty(name = "openfilz.ai.active", havingValue = "true")
-    public FlywayConfigurationCustomizer aiFlywayCustomizer() {
+    public FlywayConfigurationCustomizer aiFlywayCustomizer(
+            // Runtime property read (not a bean condition) — native-image safe
+            @Value("${openfilz.ai.active:false}") boolean aiActive) {
         return configuration -> {
+            if (!aiActive) {
+                return;
+            }
             Stream<String> existing = configuration.getLocations().length > 0
                     ? Arrays.stream(configuration.getLocations()).map(location -> location.getDescriptor())
                     : Stream.of(DEFAULT_MIGRATION_LOCATION);

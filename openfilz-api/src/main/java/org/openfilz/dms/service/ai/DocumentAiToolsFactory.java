@@ -5,7 +5,7 @@ import org.openfilz.dms.repository.DocumentRepository;
 import org.openfilz.dms.service.DocumentService;
 import org.openfilz.dms.service.StorageService;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 /**
@@ -24,15 +24,23 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "openfilz.ai.active", havingValue = "true")
+@Lazy
 public class DocumentAiToolsFactory {
 
     private final DocumentService documentService;
     private final DocumentRepository documentRepository;
     private final StorageService storageService;
     private final AiDocumentQueryService queryService;
+    private final AiAccessPolicy accessPolicy;
 
-    public DocumentAiTools create(ChatModel chatModel) {
-        return new DocumentAiTools(documentService, documentRepository, storageService, queryService, chatModel);
+    /**
+     * Create a tools instance bound to the requesting user: every document access inside
+     * the tools is checked against the {@link AiAccessPolicy} for this user, and blocking
+     * tool calls re-establish this Authentication in the Reactor context so security-aware
+     * DAO overrides in extension layers see the caller's identity.
+     */
+    public DocumentAiTools create(ChatModel chatModel, String userEmail, org.springframework.security.core.Authentication authentication) {
+        return new DocumentAiTools(documentService, documentRepository, storageService, queryService, chatModel, accessPolicy)
+                .forUser(userEmail, authentication);
     }
 }

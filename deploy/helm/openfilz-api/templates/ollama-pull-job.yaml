@@ -1,0 +1,46 @@
+{{- /*
+Pulls the enabled Ollama models after install/upgrade so the first chat/upload
+doesn't stall on a multi-GB model download. Idempotent: pulling an already
+present model is a no-op. Runs only for the in-cluster Ollama.
+*/}}
+{{- if and .Values.ai.active .Values.ai.ollama.deploy.enabled .Values.ai.ollama.deploy.pullModels }}
+{{- if or .Values.ai.ollama.chat.enabled .Values.ai.ollama.embedding.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "openfilz-api.fullname" . }}-ollama-pull
+  labels: {{- include "openfilz-api.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ollama-pull
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ollama-pull
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: pull-models
+          image: curlimages/curl:latest
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -e
+              until curl -sf http://ollama:11434/api/tags > /dev/null; do
+                echo "waiting for ollama..."; sleep 5
+              done
+              {{- if .Values.ai.ollama.chat.enabled }}
+              echo "Pulling chat model: {{ .Values.ai.ollama.chat.model }}"
+              curl -sf http://ollama:11434/api/pull -d '{"name": {{ .Values.ai.ollama.chat.model | quote }}}'
+              {{- end }}
+              {{- if .Values.ai.ollama.embedding.enabled }}
+              echo "Pulling embedding model: {{ .Values.ai.ollama.embedding.model }}"
+              curl -sf http://ollama:11434/api/pull -d '{"name": {{ .Values.ai.ollama.embedding.model | quote }}}'
+              {{- end }}
+              echo "Models ready."
+{{- end }}
+{{- end }}

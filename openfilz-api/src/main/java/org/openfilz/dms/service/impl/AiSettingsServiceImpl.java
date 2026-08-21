@@ -10,7 +10,7 @@ import org.openfilz.dms.repository.UserAiSettingsRepository;
 import org.openfilz.dms.service.AiSettingsService;
 import org.openfilz.dms.service.ai.UserChatClientResolver;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -27,7 +27,7 @@ import java.time.OffsetDateTime;
  */
 @Slf4j
 @Service
-@ConditionalOnProperty(name = "openfilz.ai.active", havingValue = "true")
+@Lazy
 public class AiSettingsServiceImpl implements AiSettingsService {
 
     private static final Duration TEST_TIMEOUT = Duration.ofSeconds(30);

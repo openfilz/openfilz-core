@@ -32,7 +32,9 @@ services:
     networks:
       - openfilz-network
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      # The ollama image ships no curl — the CLI talks to the local server, so
+      # a successful `ollama list` proves the API is up.
+      test: ["CMD-SHELL", "ollama list || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5

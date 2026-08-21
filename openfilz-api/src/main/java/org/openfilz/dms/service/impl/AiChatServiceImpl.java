@@ -10,6 +10,7 @@ import org.openfilz.dms.entity.AiChatMessage;
 import org.openfilz.dms.repository.AiChatConversationRepository;
 import org.openfilz.dms.repository.AiChatMessageRepository;
 import org.openfilz.dms.service.AiChatService;
+import org.openfilz.dms.service.ai.AiAccessPolicy;
 import org.openfilz.dms.service.ai.ChatClientAssembler;
 import org.openfilz.dms.service.ai.DocumentAiTools;
 import org.openfilz.dms.service.ai.DocumentAiToolsFactory;
@@ -22,8 +23,10 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
@@ -33,6 +36,7 @@ import reactor.core.scheduler.Schedulers;
 import java.time.OffsetDateTime;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -48,7 +52,7 @@ import java.util.UUID;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "openfilz.ai.active", havingValue = "true")
+@Lazy
 public class AiChatServiceImpl implements AiChatService {
 
     private final UserChatClientResolver chatResolver;
@@ -58,6 +62,7 @@ public class AiChatServiceImpl implements AiChatService {
     private final AiProperties aiProperties;
     private final AiChatConversationRepository conversationRepository;
     private final AiChatMessageRepository messageRepository;
+    private final AiAccessPolicy accessPolicy;
 
     @Override
     public Flux<AiChatResponse> chat(AiChatRequest request, String userEmail) {
@@ -70,13 +75,21 @@ public class AiChatServiceImpl implements AiChatService {
                 ? requireVisible(request.getConversationId(), userEmail).map(AiChatConversation::getId)
                 : createConversation(request.getMessage(), userEmail);
 
-        return conversationIdMono.flatMapMany(conversationId -> {
+        // Capture the caller's Authentication: the tools re-establish it on every blocking
+        // subscription so security-context-based enforcement applies inside tool calls.
+        Mono<Optional<Authentication>> authenticationMono = ReactiveSecurityContextHolder.getContext()
+                .map(ctx -> Optional.ofNullable(ctx.getAuthentication()))
+                .defaultIfEmpty(Optional.empty());
+
+        return Mono.zip(conversationIdMono, authenticationMono).flatMapMany(conversationAndAuth -> {
+            UUID conversationId = conversationAndAuth.getT1();
+            Authentication authentication = conversationAndAuth.getT2().orElse(null);
             log.debug("[AI] Conversation ID resolved: {}", conversationId);
 
             // 2. Resolve the user's chat model (server default or BYOK) and build the
             //    per-request tool instance + client on top of it.
             return chatResolver.resolve(userEmail).flatMapMany(resolved -> {
-                DocumentAiTools tools = toolsFactory.create(resolved.chatModel());
+                DocumentAiTools tools = toolsFactory.create(resolved.chatModel(), userEmail, authentication);
                 ChatClient chatClient = assembler.assemble(resolved.chatModel(), tools);
                 Set<String> ragDocumentNames = new HashSet<>();
                 log.debug("[AI] Chat model: {} ({})", resolved.provider(), resolved.model());
@@ -85,8 +98,9 @@ public class AiChatServiceImpl implements AiChatService {
                 Mono<Void> saveUserMsg = saveMessage(conversationId, "USER", request.getMessage())
                         .doOnSuccess(v -> log.debug("[AI] User message saved to DB"));
 
-                // 4. Retrieve relevant document chunks (RAG) — also registers found docs in the registry
-                Mono<String> contextMono = retrieveContext(request.getMessage(), tools, ragDocumentNames);
+                // 4. Retrieve relevant document chunks (RAG) — also registers found docs in the registry.
+                //    Chunks are filtered to documents the requesting user can read.
+                Mono<String> contextMono = retrieveContext(request.getMessage(), tools, ragDocumentNames, userEmail);
 
                 // 5. Load conversation history
                 Mono<List<Message>> historyMono = loadConversationHistory(conversationId);
@@ -255,7 +269,7 @@ public class AiChatServiceImpl implements AiChatService {
     /** Maximum total characters of RAG context to inject into the prompt (avoids overwhelming the LLM). */
     private static final int MAX_RAG_CONTEXT_CHARS = 4000;
 
-    private Mono<String> retrieveContext(String query, DocumentAiTools tools, Set<String> ragDocumentNames) {
+    private Mono<String> retrieveContext(String query, DocumentAiTools tools, Set<String> ragDocumentNames, String userEmail) {
         log.debug("[AI] RAG: searching vector store for: '{}' (topK={}, threshold={})",
                 query, aiProperties.getEmbedding().getTopK(), aiProperties.getEmbedding().getSimilarityThreshold());
         return Mono.fromCallable(() -> {
@@ -266,6 +280,15 @@ public class AiChatServiceImpl implements AiChatService {
                     .build();
 
             List<Document> relevantDocs = vectorStore.similaritySearch(searchRequest);
+
+            // The vector store is shared across all users — never let another user's content
+            // reach this user's prompt. Keep only chunks of documents the user can read;
+            // under a per-document policy, chunks without a document_id are dropped too.
+            if (relevantDocs != null && !accessPolicy.permitAll()) {
+                relevantDocs = relevantDocs.stream()
+                        .filter(doc -> isChunkReadable(doc, userEmail))
+                        .toList();
+            }
 
             if (relevantDocs == null || relevantDocs.isEmpty()) {
                 log.debug("[AI] RAG: no relevant documents found (threshold may be too high, or vector store may be empty)");
@@ -322,6 +345,29 @@ public class AiChatServiceImpl implements AiChatService {
             log.debug("[AI] RAG: included documents: {}, total context: {} chars", includedDocs, context.length());
             return context.toString();
         }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    /**
+     * True when the requesting user may read the document a RAG chunk belongs to.
+     * Chunks with no {@code document_id} metadata cannot be attributed to a document,
+     * so under a per-document policy they are treated as NOT readable (fail closed).
+     */
+    private boolean isChunkReadable(Document doc, String userEmail) {
+        String docId = doc.getMetadata().getOrDefault("document_id", "").toString();
+        if (docId.isBlank()) {
+            log.debug("[AI] RAG: dropping chunk without document_id metadata (per-document access policy active)");
+            return false;
+        }
+        try {
+            boolean readable = Boolean.TRUE.equals(accessPolicy.canRead(UUID.fromString(docId), userEmail).block());
+            if (!readable) {
+                log.debug("[AI] RAG: dropping chunk of document {} — not readable by {}", docId, userEmail);
+            }
+            return readable;
+        } catch (IllegalArgumentException e) {
+            log.debug("[AI] RAG: dropping chunk with invalid document_id '{}'", docId);
+            return false;
+        }
     }
 
     /** Register a RAG-discovered document in the tool registry for doc-link enrichment (but not for Sources). */

@@ -12,7 +12,7 @@ import org.openfilz.dms.repository.graphql.DocumentFields;
 import org.openfilz.dms.repository.graphql.ListFolderCriteria;
 import org.openfilz.dms.utils.SqlUtils;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Service;
 
@@ -28,11 +28,11 @@ import static org.openfilz.dms.entity.SqlColumnMapping.*;
  */
 @Slf4j
 @Service
-@ConditionalOnProperty(name = "openfilz.ai.active", havingValue = "true")
+@Lazy
 public class AiDocumentQueryService {
 
-    private static final String PREFIX = "d.";
-    private static final String FROM_CLAUSE = " from Documents d";
+    protected static final String PREFIX = "d.";
+    protected static final String FROM_CLAUSE = " from Documents d";
     private static final String CASE_FOLDER = ", CASE WHEN type = 'FOLDER' THEN 0 ELSE 1 END as d_type";
 
     /** All document columns we always select for AI queries. */
@@ -57,15 +57,19 @@ public class AiDocumentQueryService {
     }
 
     /**
-     * Query documents using the same filtering/sorting/pagination as the GraphQL layer.
+     * Query documents using the same filtering/sorting/pagination as the GraphQL layer,
+     * on behalf of the given user. The core FROM clause has no per-user joins (the core
+     * model has no per-document permissions); extension layers override
+     * {@link #appendFromClause(StringBuilder, String)} / {@link #bindUserContext} to
+     * restrict results to the user's own and shared documents.
      */
-    public List<FullDocumentInfo> query(ListFolderRequest request) {
+    public List<FullDocumentInfo> query(ListFolderRequest request, String userEmail) {
         log.debug("[AI-QUERY] query: folder={}, nameLike={}, type={}, sort={}:{}, page={}/{}",
                 request.id(), request.nameLike(), request.type(),
                 request.pageInfo().sortBy(), request.pageInfo().sortOrder(),
                 request.pageInfo().pageNumber(), request.pageInfo().pageSize());
 
-        StringBuilder query = buildSelect();
+        StringBuilder query = buildSelect(userEmail);
         criteria.checkFilter(request);
         criteria.applyFilter(PREFIX, query, request);
         applySort(query, request);
@@ -75,6 +79,7 @@ public class AiDocumentQueryService {
 
         DatabaseClient.GenericExecuteSpec sql = criteria.bindCriteria(
                 databaseClient.sql(query.toString()), request);
+        sql = bindUserContext(sql, userEmail);
 
         var results = sql.map(mapAllFields()).all().collectList().block();
         log.debug("[AI-QUERY] Returned {} results", results != null ? results.size() : 0);
@@ -84,10 +89,11 @@ public class AiDocumentQueryService {
     /**
      * Count documents matching the filter (same filtering as query, no sort/pagination).
      */
-    public long count(ListFolderRequest request) {
+    public long count(ListFolderRequest request, String userEmail) {
         log.debug("[AI-QUERY] count: folder={}, nameLike={}, type={}", request.id(), request.nameLike(), request.type());
 
-        StringBuilder query = new StringBuilder("select count(*)").append(FROM_CLAUSE);
+        StringBuilder query = new StringBuilder("select count(*)");
+        appendFromClause(query, userEmail);
         criteria.checkFilter(request);
         criteria.applyFilter(PREFIX, query, request);
 
@@ -95,17 +101,35 @@ public class AiDocumentQueryService {
 
         DatabaseClient.GenericExecuteSpec sql = criteria.bindCriteria(
                 databaseClient.sql(query.toString()), request);
+        sql = bindUserContext(sql, userEmail);
 
         Long result = sql.map(row -> row.get(0, Long.class)).one().block();
         log.debug("[AI-QUERY] Count: {}", result);
         return result != null ? result : 0;
     }
 
-    private StringBuilder buildSelect() {
+    /**
+     * Append the FROM clause (and any per-user access joins) for the given user.
+     * Core default: a bare {@code from Documents d} — no per-document permissions.
+     */
+    protected void appendFromClause(StringBuilder query, String userEmail) {
+        query.append(FROM_CLAUSE);
+    }
+
+    /**
+     * Bind any per-user parameters the overridden FROM clause introduced.
+     * Core default: nothing to bind.
+     */
+    protected DatabaseClient.GenericExecuteSpec bindUserContext(
+            DatabaseClient.GenericExecuteSpec spec, String userEmail) {
+        return spec;
+    }
+
+    private StringBuilder buildSelect(String userEmail) {
         StringBuilder sb = new StringBuilder("select ");
         sb.append(String.join(", ", ALL_FIELDS.stream().map(f -> PREFIX + f).toList()));
         sb.append(CASE_FOLDER);
-        sb.append(FROM_CLAUSE);
+        appendFromClause(sb, userEmail);
         return sb;
     }
 
