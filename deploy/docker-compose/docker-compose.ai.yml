@@ -10,13 +10,23 @@
 #
 # For OpenAI instead of Ollama, skip this overlay and set the OPENAI_*
 # variables in .env along with OPENFILZ_AI_ACTIVE=true.
+#
+# NOTE: this intentionally reads POSTGRES_AI_IMAGE, not POSTGRES_IMAGE — if it
+# reused POSTGRES_IMAGE, a value already pinned in .env for the base (non-AI)
+# deployment (e.g. POSTGRES_IMAGE=postgres:17) would silently defeat this
+# override and postgres would come up without the vector extension, failing
+# Flyway's V1_4__add_ai_support.sql with "extension \"vector\" is not
+# available". If you're enabling AI on a deployment that was already running
+# without it, this override still applies on `docker-compose ... up -d` —
+# compose recreates the postgres container in place (same volume, no data
+# loss) once it sees the image changed.
 
 services:
   # =============================================================================
   # PostgreSQL — override to pgvector-enabled image
   # =============================================================================
   postgres:
-    image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg17}
+    image: ${POSTGRES_AI_IMAGE:-pgvector/pgvector:pg17}
 
   # =============================================================================
   # Ollama LLM Server (local AI inference)
