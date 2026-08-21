@@ -17,10 +17,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class SettingsServiceImplTest {
 
     private Settings getSettings(boolean aiActive) {
+        return getSettings(aiActive, false);
+    }
+
+    private Settings getSettings(boolean aiActive, boolean aiUserSettingsEnabled) {
         SettingsServiceImpl service = new SettingsServiceImpl(new RecycleBinProperties(), new QuotaProperties());
         ReflectionTestUtils.setField(service, "softDelete", false);
         ReflectionTestUtils.setField(service, "thumbnailActive", false);
         ReflectionTestUtils.setField(service, "aiActive", aiActive);
+        ReflectionTestUtils.setField(service, "aiUserSettingsEnabled", aiUserSettingsEnabled);
 
         Settings settings = service.getSettings().block();
         assertNotNull(settings);
@@ -35,5 +40,17 @@ class SettingsServiceImplTest {
     @Test
     void aiActive_isFalseWhenTheFeatureIsOff() {
         assertFalse(getSettings(false).aiActive());
+    }
+
+    @Test
+    void aiUserSettings_followsItsFlagWhenAiIsActive() {
+        assertTrue(getSettings(true, true).aiUserSettingsEnabled());
+        assertFalse(getSettings(true, false).aiUserSettingsEnabled());
+    }
+
+    /** BYOK without the AI feature makes no sense — the flag must stay off. */
+    @Test
+    void aiUserSettings_isFalseWhenAiIsInactive() {
+        assertFalse(getSettings(false, true).aiUserSettingsEnabled());
     }
 }

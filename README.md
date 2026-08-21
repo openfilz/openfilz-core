@@ -26,6 +26,7 @@ Pick the guide that matches your role:
 | **Use** OpenFilz (browse folders, upload files, search, favorites, etc.) | [User Guide](docs/user-guide.md) |
 | **Install & configure** OpenFilz (Docker, Helm, Keycloak, storage, feature toggles) | [Installation & Administration Guide](docs/admin-guide.md) |
 | **Integrate** with the REST / GraphQL API or use an SDK | [Developer Guide](docs/developer-guide.md) |
+| **Understand** the AI feature (config resolution, ingestion & indexing, chat pipeline, BYOK) | [AI Architecture](docs/ai.md) |
 | **Contribute** to the open-source codebase | [Contributor Guide](docs/contributor-guide.md) |
 
 ---

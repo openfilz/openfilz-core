@@ -294,11 +294,34 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-anthropic</artifactId>
+            <exclusions>
+                <!-- anthropic-java-core drags in the pre-Jakarta swagger-annotations — same
+                     springdoc-corrupting clash as openai-java-core above. -->
+                <exclusion>
+                    <groupId>io.swagger.core.v3</groupId>
+                    <artifactId>swagger-annotations</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- Google GenAI = Gemini Developer API (API-key auth). Chat only: embeddings stay on
+             the ollama/openai models (pgvector schema is pinned to their 768-dim output). -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-google-genai</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-vector-store-pgvector</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-tika-document-reader</artifactId>
+        </dependency>
+        <!-- Cache for per-user BYOK ChatClients (UserChatClientResolver); version managed by Boot -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
         </dependency>
 
         <!-- JWT Library for OnlyOffice tokens (versions managed in the parent pom) -->

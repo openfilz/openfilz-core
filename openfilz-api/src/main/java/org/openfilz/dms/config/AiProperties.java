@@ -43,6 +43,19 @@ public class AiProperties {
     private Provider openai = new Provider();
 
     /**
+     * Anthropic (Claude) provider switches. Chat only — Anthropic has no embeddings API,
+     * so {@code anthropic.embedding.enabled} is ignored (embeddings resolve to Ollama/OpenAI).
+     */
+    private Provider anthropic = new Provider();
+
+    /**
+     * Google Gemini provider switches (GenAI / Gemini Developer API, API-key auth).
+     * Chat only in OpenFilz: {@code google.embedding.enabled} is ignored — the pgvector
+     * schema is pinned to the 768-dim output of the Ollama/OpenAI embedding models.
+     */
+    private Provider google = new Provider();
+
+    /**
      * Per-provider switches deciding which Spring AI model auto-configuration is activated.
      * Consumed by {@link AiModelProviderEnvironmentPostProcessor}, which turns them into the
      * {@code spring.ai.model.chat} / {@code spring.ai.model.embedding} selectors Spring AI 2.0
@@ -88,5 +101,17 @@ public class AiProperties {
          * Minimum similarity threshold (0.0 - 1.0) for vector search results.
          */
         private double similarityThreshold = 0.7;
+
+        /**
+         * How {@link EmbeddingRegistryGuard} reacts when the configured embedding model no longer
+         * matches the one that indexed the existing vectors (or its dimensions don't fit the
+         * vector_store schema). FAIL_FAST (default) refuses to start; WARN logs an error and
+         * starts anyway, accepting degraded RAG results.
+         */
+        private Validation validation = Validation.FAIL_FAST;
+
+        public enum Validation {
+            FAIL_FAST, WARN
+        }
     }
 }

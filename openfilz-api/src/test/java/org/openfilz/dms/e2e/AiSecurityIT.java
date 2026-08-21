@@ -200,12 +200,14 @@ public class AiSecurityIT extends TestContainersKeyCloakConfig {
 
     @Test
     void getHistory_withReaderToken_thenAllowed() {
+        // 404 (not 401/403) proves the reader role passed authorization and the ownership-checked
+        // lookup ran — the random conversation simply doesn't exist.
         getWebTestClient().get()
                 .uri(AI_PREFIX + "/conversations/" + UUID.randomUUID())
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + readerAccessToken)
                 .accept(MediaType.APPLICATION_JSON)
                 .exchange()
-                .expectStatus().isOk();
+                .expectStatus().isNotFound();
     }
 
     // ========================= DELETE /ai/conversations/{id} =========================
@@ -253,11 +255,13 @@ public class AiSecurityIT extends TestContainersKeyCloakConfig {
 
     @Test
     void deleteConversation_withCleanerToken_thenAllowed() {
+        // 404 (not 401/403) proves the cleaner role passed authorization and the ownership-checked
+        // lookup ran — the random conversation simply doesn't exist.
         getWebTestClient().delete()
                 .uri(AI_PREFIX + "/conversations/" + UUID.randomUUID())
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + cleanerAccessToken)
                 .exchange()
-                .expectStatus().isOk();
+                .expectStatus().isNotFound();
     }
 
     // ========================= Multi-turn with auth =========================
