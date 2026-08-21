@@ -188,6 +188,19 @@
             <artifactId>httpclient5</artifactId>
         </dependency>
 
+        <!-- e-Sign: invitation / completion / OTP mails (JavaMailSender; inert without spring.mail.host) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
+        <!-- e-Sign: in-process CMS / PAdES-B-B seal (self-signed-dev, pkcs12 and openfilz-cloud providers) -->
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcpkix-jdk18on</artifactId>
+            <version>${bouncycastle.version}</version>
+        </dependency>
+
         <!-- Apache PDFBox for PDF thumbnail generation -->
         <!-- Version must match what Tika 3.3.1 expects (3.0.7) to avoid NoSuchMethodError -->
         <dependency>
@@ -342,6 +355,18 @@
         </dependency>
 
         <!-- Test Dependencies -->
+        <dependency>
+            <groupId>com.icegreen</groupId>
+            <artifactId>greenmail-junit5</artifactId>
+            <version>${greenmail.version}</version>
+            <scope>test</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.sun.mail</groupId>
+                    <artifactId>jakarta.mail</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

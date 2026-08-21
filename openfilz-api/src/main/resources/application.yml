@@ -38,6 +38,20 @@ spring:
     init:
       mode: always
 
+  # SMTP for e-Sign e-mails (invitations, reminders, OTP, completed document). Leave host empty to
+  # disable mail: signing links are then only logged (dev / evaluation).
+  mail:
+    host: ${SMTP_HOST:}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USER:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${SMTP_AUTH:true}
+          starttls:
+            enable: ${SMTP_STARTTLS:true}
+
   graphql:
     graphiql:
       enabled: true
@@ -96,6 +110,34 @@ openfilz:
     # Use host.docker.internal when OnlyOffice run in Docker and OpenFilz runs on host
     api-internal-base-url: ${OPENFILZ_INTERNAL_API_BASE_URL:http://host.docker.internal:8081}
     api-public-base-url: ${OPENFILZ_PUBLIC_API_BASE_URL:http://localhost:8081}
+    # Public URL of the web app — used to build the signing links sent by e-mail (e-Sign)
+    web-public-base-url: ${OPENFILZ_WEB_PUBLIC_BASE_URL:http://localhost:4200/}
+
+  # e-Sign (electronic signature) — see docs/esign.md
+  signature:
+    active: ${OPENFILZ_SIGNATURE_ACTIVE:false}   # runtime toggle: menus, endpoints, sweeper
+    default-expiry-days: ${OPENFILZ_SIGNATURE_DEFAULT_EXPIRY_DAYS:30}
+    web-base-url: ${OPENFILZ_SIGNATURE_WEB_BASE_URL:}   # overrides openfilz.common.web-public-base-url
+    sweep:
+      cron: "0 */5 * * * ?"
+    otp:
+      length: 6
+      valid-minutes: 10
+      max-attempts: 5
+    seal:
+      # self-signed-dev (default, ephemeral cert) | pkcs12 (your own .p12) | openfilz-cloud (sign.openfilz.com, API key)
+      provider: ${OPENFILZ_SIGNATURE_SEAL_PROVIDER:self-signed-dev}
+      keystore-path: ${OPENFILZ_SIGNATURE_SEAL_KEYSTORE_PATH:}
+      keystore-password: ${OPENFILZ_SIGNATURE_SEAL_KEYSTORE_PASSWORD:}
+      keystore-alias: ${OPENFILZ_SIGNATURE_SEAL_KEYSTORE_ALIAS:openfilz-seal}
+      cloud:
+        url: ${OPENFILZ_SIGNATURE_CLOUD_URL:https://sign.openfilz.com}
+        api-key: ${OPENFILZ_SIGNATURE_CLOUD_API_KEY:}
+    mail:
+      from: ${OPENFILZ_SIGNATURE_MAIL_FROM:no-reply@openfilz.com}
+      from-name: ${OPENFILZ_SIGNATURE_MAIL_FROM_NAME:OpenFilz e-Sign}
+      product-name: ${OPENFILZ_SIGNATURE_PRODUCT_NAME:OpenFilz}
+      logo-url: ${OPENFILZ_SIGNATURE_LOGO_URL:}
 
   # Quota Configuration
   quota:

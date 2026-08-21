@@ -31,6 +31,10 @@ public class SettingsServiceImpl implements SettingsService {
     @Value("${openfilz.ai.user-settings.enabled:false}")
     private Boolean aiUserSettingsEnabled;
 
+    // e-Sign master switch — the frontend shows the Signatures menu + "Request signature" action from this.
+    @Value("${openfilz.signature.active:false}")
+    private Boolean signatureActive;
+
     private final RecycleBinProperties recycleBinProperties;
 
     private final QuotaProperties quotaProperties;
@@ -59,6 +63,7 @@ public class SettingsServiceImpl implements SettingsService {
                .thumbnailsActive(thumbnailActive)
                .aiActive(aiActive)
                .aiUserSettingsEnabled(aiActive && aiUserSettingsEnabled)
+               .signatureActive(Boolean.TRUE.equals(signatureActive))
                .build());
 
     }

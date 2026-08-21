@@ -50,6 +50,12 @@ public abstract class AbstractSecurityService implements SecurityService {
         if (idx >= 0 && getContextPath(fullPath, idx).startsWith(RestApiVersion.ENDPOINT_AI)) {
             return isAuthorized((JwtAuthenticationToken) auth, of(Role.READER.toString(), Role.CONTRIBUTOR.toString(), Role.CLEANER.toString()));
         }
+        // e-Sign: initiators (CONTRIBUTOR) create/send/cancel/resend envelopes and own templates (incl. DELETE of
+        // their own templates); READER may list what waits for their signature. The signer-facing
+        // /public/signatures/** path never reaches here (dedicated permit-all chain).
+        if (idx >= 0 && isSignature(getContextPath(fullPath, idx))) {
+            return isSignatureAuthorized(auth, method, getContextPath(fullPath, idx));
+        }
         if(isDeleteAccess(request)) {
             return isAuthorized((JwtAuthenticationToken) auth, Role.CLEANER.toString());
         }
@@ -194,6 +200,21 @@ public abstract class AbstractSecurityService implements SecurityService {
     protected final boolean isVersionRestore(String path) {
         return path.startsWith(RestApiVersion.ENDPOINT_DOCUMENTS + FileConstants.SLASH)
                 && path.contains("/versions/") && path.endsWith("/restore");
+    }
+
+    /**
+     * e-Sign authorisation hook. Core: GET for READER/CONTRIBUTOR, everything else CONTRIBUTOR.
+     * Editions with a richer role model (e.g. share permissions) override this.
+     */
+    protected boolean isSignatureAuthorized(Authentication auth, HttpMethod method, String path) {
+        if (method.equals(HttpMethod.GET)) {
+            return isAuthorized((JwtAuthenticationToken) auth, of(Role.READER.toString(), Role.CONTRIBUTOR.toString()));
+        }
+        return isAuthorized((JwtAuthenticationToken) auth, Role.CONTRIBUTOR.toString());
+    }
+
+    protected final boolean isSignature(String path) {
+        return pathStartsWith(path, RestApiVersion.ENDPOINT_SIGNATURES, RestApiVersion.ENDPOINT_SIGNATURE_TEMPLATES);
     }
 
     protected final boolean isAudit(String path) {

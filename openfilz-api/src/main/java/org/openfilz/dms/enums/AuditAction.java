@@ -25,6 +25,17 @@ public enum AuditAction {
     PERMANENT_DELETE_FILE, // Permanently delete file from recycle bin
     PERMANENT_DELETE_FOLDER, // Permanently delete folder from recycle bin
     EMPTY_RECYCLE_BIN, // Empty entire recycle bin
+    // e-Sign (electronic signature) actions
+    SIGNATURE_ENVELOPE_CREATED,
+    SIGNATURE_ENVELOPE_SENT,
+    SIGNATURE_DOCUMENT_SIGNED,
+    SIGNATURE_ENVELOPE_COMPLETED,
+    SIGNATURE_ENVELOPE_DECLINED,
+    SIGNATURE_ENVELOPE_CANCELLED,
+    SIGNATURE_ENVELOPE_EXPIRED,
+    SIGNATURE_REMINDER_SENT,
+    SIGNATURE_TEMPLATE_CREATED,
+    SIGNATURE_TEMPLATE_DELETED,
     // Audit chain actions
     CHAIN_GENESIS // Marks the start of the hash chain
 }
