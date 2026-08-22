@@ -492,6 +492,38 @@ class AiFallbackChainTest {
                 .isTrue();
     }
 
+    // ------------------------------------------------------------------ local models are never failed over
+
+    @Test
+    @DisplayName("a local Ollama model is never failed over to a cloud provider")
+    void localModelsAreNeverFailedOver() {
+        chain("google:m1", "anthropic:c1");
+        keys(AiProvider.GOOGLE, GOOGLE_A);
+        keys(AiProvider.ANTHROPIC, ANTHROPIC_X);
+
+        ResolvedChat ollama = new ResolvedChat(mock(ChatModel.class), "ollama", "qwen2.5", AiKeyRef.UNKNOWN);
+
+        // Data residency, not performance: an operator running a local LLM does so because
+        // document content must not leave the deployment, and the RAG context sent with every
+        // question *is* document text. A local outage is to be fixed, not routed around.
+        assertThat(chain.candidates(ollama)).containsExactly(ollama);
+    }
+
+    @Test
+    @DisplayName("a BYOK user on a cloud provider still gets failover on an Ollama deployment")
+    void byokCloudUsersStillGetFailover() {
+        chain("google:m1", "anthropic:c1");
+        keys(AiProvider.GOOGLE, GOOGLE_A);
+        keys(AiProvider.ANTHROPIC, ANTHROPIC_X);
+
+        // Their content already leaves the building by their own choice, so the local-only rule
+        // does not apply to them — which is why the test is on the model in use, not on the
+        // server-wide selector.
+        ResolvedChat byok = entry(AiProvider.GOOGLE, "gemini-3.6-flash", "user-key");
+
+        assertThat(chain.candidates(byok)).hasSizeGreaterThan(1);
+    }
+
     @Test
     @DisplayName("provider spelling differences resolve to the same cooldown entry")
     void normalisesProviderSpelling() {

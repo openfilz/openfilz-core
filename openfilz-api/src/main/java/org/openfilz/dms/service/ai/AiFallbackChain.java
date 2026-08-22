@@ -72,7 +72,10 @@ import java.util.concurrent.ConcurrentHashMap;
 public class AiFallbackChain {
 
     /** One {@code provider:model} entry of the configured chain. */
-    private record ChainEntry(AiProvider provider, String model) {}
+    public record ChainEntry(AiProvider provider, String model) {}
+
+    /** Provider selector value Spring AI uses for a local Ollama install. */
+    static final String OLLAMA = "ollama";
 
     private final AiProperties aiProperties;
     private final UserChatClientResolver resolver;
@@ -102,10 +105,27 @@ public class AiFallbackChain {
      */
     public List<ResolvedChat> candidates(ResolvedChat primary) {
         AiProperties.Fallback config = aiProperties.getFallback();
-        if (!config.isEnabled() || config.getChain().isEmpty()) {
+        if (!config.isEnabled() || config.getChain().isEmpty() || isLocal(primary)) {
             return List.of(primary);
         }
         return candidates(primary, Instant.now());
+    }
+
+    /**
+     * Whether the model answering this request is a local Ollama one, in which case the chain is
+     * deliberately ignored.
+     * <p>
+     * This is a data-residency rule, not a performance one. An operator who runs a local LLM does
+     * so precisely because document content must not leave the deployment, and failing over would
+     * send the RAG context — actual document text — to a third-party API on a transient blip. A
+     * local model going down is an outage to fix, not something to silently route around.
+     * <p>
+     * The test is on the model actually in use rather than on the server-wide selector, so a BYOK
+     * user who deliberately picked a cloud provider still gets failover on a deployment whose
+     * default is Ollama: their content is already leaving the building by their own choice.
+     */
+    private static boolean isLocal(ResolvedChat chat) {
+        return OLLAMA.equals(canonicalProvider(chat.provider()));
     }
 
     /** Package-private seam so tests can drive cooldown expiry without sleeping. */
@@ -216,7 +236,12 @@ public class AiFallbackChain {
      * pool is set (so an existing single-key deployment keeps working untouched).
      */
     private List<String> keyPool(AiProvider provider) {
-        List<String> configured = aiProperties.getFallback().getKeys().get(provider);
+        return keyPool(aiProperties.getFallback(), provider, environment);
+    }
+
+    /** Bean-free form, shared with the startup validator (see {@link #parseChain}). */
+    public static List<String> keyPool(AiProperties.Fallback fallback, AiProvider provider, Environment environment) {
+        List<String> configured = fallback.getKeys().get(provider);
         List<String> pool = configured == null ? List.of() : configured.stream()
                 .filter(key -> key != null && !key.isBlank() && !"disabled".equalsIgnoreCase(key.trim()))
                 .map(String::trim)
@@ -224,7 +249,7 @@ public class AiFallbackChain {
                 .toList();
         if (!pool.isEmpty()) return pool;
 
-        String single = serverApiKey(provider);
+        String single = serverApiKey(provider, environment);
         return single == null ? List.of() : List.of(single);
     }
 
@@ -262,18 +287,30 @@ public class AiFallbackChain {
 
     /** Parse the configured chain, dropping (and reporting) entries we cannot act on. */
     private List<ChainEntry> parseChain() {
+        return parseChain(aiProperties.getFallback().getChain(), rejected -> {});
+    }
+
+    /**
+     * Parse {@code provider:model} entries, handing every unusable one to {@code onRejected}.
+     * <p>
+     * Static and bean-free on purpose: {@code AiFallbackValidator} runs at startup and must not
+     * pull in this component, whose {@code ChatModel} dependency does not exist when the AI
+     * feature is switched off.
+     */
+    public static List<ChainEntry> parseChain(List<String> chain, java.util.function.Consumer<String> onRejected) {
         List<ChainEntry> entries = new ArrayList<>();
-        for (String entry : aiProperties.getFallback().getChain()) {
+        if (chain == null) return entries;
+        for (String entry : chain) {
             if (entry == null || entry.isBlank()) continue;
             int separator = entry.indexOf(':');
             if (separator <= 0 || separator == entry.length() - 1) {
-                log.warn("[AI-FALLBACK] Ignoring malformed chain entry '{}' — expected 'provider:model'", entry);
+                onRejected.accept(entry + " (expected 'provider:model')");
                 continue;
             }
             AiProvider provider = provider(entry.substring(0, separator).trim());
             if (provider == null) {
-                log.warn("[AI-FALLBACK] Ignoring chain entry '{}' — unknown provider (expected one of "
-                        + "google, anthropic, openai, openai-compatible)", entry);
+                onRejected.accept(entry + " (unknown provider — expected google, anthropic, "
+                        + "openai or openai-compatible)");
                 continue;
             }
             entries.add(new ChainEntry(provider, entry.substring(separator + 1).trim()));
@@ -296,7 +333,7 @@ public class AiFallbackChain {
         return canonicalProvider(provider.name()) + ':' + keyRef;
     }
 
-    private static String canonicalProvider(String provider) {
+    static String canonicalProvider(String provider) {
         if (provider == null) return "";
         String normalised = provider.trim().toLowerCase(Locale.ROOT);
         return switch (normalised) {
@@ -310,7 +347,7 @@ public class AiFallbackChain {
     }
 
     /** Map a chain entry's provider token onto the enum, or null when it names nothing we can build. */
-    private static AiProvider provider(String token) {
+    static AiProvider provider(String token) {
         return switch (canonicalProvider(token)) {
             case "google" -> AiProvider.GOOGLE;
             case "anthropic" -> AiProvider.ANTHROPIC;
@@ -325,7 +362,7 @@ public class AiFallbackChain {
      * {@code disabled} is the sentinel application.yml uses to keep provider auto-configuration
      * from failing at startup, so it counts as "not configured" here too.
      */
-    private String serverApiKey(AiProvider provider) {
+    static String serverApiKey(AiProvider provider, Environment environment) {
         String property = switch (provider) {
             case GOOGLE -> "spring.ai.google.genai.api-key";
             case ANTHROPIC -> "spring.ai.anthropic.api-key";

@@ -128,7 +128,12 @@ openfilz:
       chat:
         enabled: ${GOOGLE_CHAT_ENABLED:false}     # chat only — embeddings stay on Ollama/OpenAI (768-dim pgvector)
     # Automatic failover when the active chat model refuses to answer — an exhausted free-tier
-    # quota, a retired model, or a provider that is down. The request is retried on the next
+    # quota, a retired model, or a provider that is down.
+    # A provider named in the chain needs no <PROVIDER>_CHAT_ENABLED switch: the chain builds its
+    # clients directly. When no switch is set, the chain's FIRST entry also names the primary chat
+    # provider, so AI_FALLBACK_CHAIN alone is enough to configure chat.
+    # Ignored entirely when the chat provider is Ollama — a local model is deployed to keep
+    # document content in-house, and failing over would send RAG context to a third-party API. The request is retried on the next
     # model in the chain, and the failed one is benched for a cooldown so later requests skip it
     # instead of each paying the same failing call. Credential failures never fail over.
     # Chain entries are 'provider:model', tried in order; each provider needs its API key set.
@@ -146,6 +151,10 @@ openfilz:
         anthropic: ${AI_FALLBACK_KEYS_ANTHROPIC:}
         openai: ${AI_FALLBACK_KEYS_OPENAI:}
         openai-compatible: ${AI_FALLBACK_KEYS_OPENAI_COMPATIBLE:}
+      # FAIL_FAST (default) refuses to start when the chain names a provider with no API key —
+      # the alternative is discovering it on the day the primary runs out of quota. WARN starts
+      # anyway with a shorter chain.
+      validation: ${AI_FALLBACK_VALIDATION:FAIL_FAST}
       quota-cooldown: ${AI_FALLBACK_QUOTA_COOLDOWN:5m}
       unavailable-cooldown: ${AI_FALLBACK_UNAVAILABLE_COOLDOWN:6h}
     # BYOK: users may override the chat LLM with their own provider + API key (personal settings).
@@ -296,7 +305,7 @@ spring.ai.openai:
   api-key: ${OPENAI_API_KEY:disabled}
   base-url: ${OPENAI_BASE_URL:https://api.openai.com}
   chat:
-    model: ${OPENAI_CHAT_MODEL:gpt-4o}
+    model: ${OPENAI_CHAT_MODEL:${openfilz-internal.ai.chat-model.openai:gpt-4o}}
   embedding:
     model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
     # vector_store's embedding column is fixed at vector(768), so ask OpenAI to shorten its
@@ -307,14 +316,14 @@ spring.ai.openai:
 spring.ai.anthropic:
   api-key: ${ANTHROPIC_API_KEY:disabled}
   chat:
-    model: ${ANTHROPIC_CHAT_MODEL:claude-opus-5}
+    model: ${ANTHROPIC_CHAT_MODEL:${openfilz-internal.ai.chat-model.anthropic:claude-opus-5}}
 
 # Google Gemini — GenAI / Gemini Developer API (activated via GOOGLE_CHAT_ENABLED=true;
 # free-tier key from aistudio.google.com)
 spring.ai.google.genai:
   api-key: ${GOOGLE_API_KEY:disabled}
   chat:
-    model: ${GOOGLE_CHAT_MODEL:gemini-3.6-flash}
+    model: ${GOOGLE_CHAT_MODEL:${openfilz-internal.ai.chat-model.google-genai:gemini-3.6-flash}}
 
 # PgVector Store (auto-configured when spring-ai-starter-vector-store-pgvector is on classpath)
 spring.ai.vectorstore.pgvector:

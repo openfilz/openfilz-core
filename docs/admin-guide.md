@@ -565,6 +565,7 @@ another model instead of failing the user.
 | `openfilz.ai.fallback.enabled` / `AI_FALLBACK_ENABLED` | `false` | Enable automatic failover to another chat model |
 | `openfilz.ai.fallback.chain` / `AI_FALLBACK_CHAIN` | *(empty)* | Comma-separated `provider:model` entries, tried in order (`google`, `anthropic`, `openai`, `openai-compatible`) |
 | `openfilz.ai.fallback.keys.<provider>` / `AI_FALLBACK_KEYS_GOOGLE`, `..._ANTHROPIC`, `..._OPENAI` | *(empty)* | Comma-separated pool of API keys for that provider, tried in order. Empty means "keep using the single key above" |
+| `openfilz.ai.fallback.validation` / `AI_FALLBACK_VALIDATION` | `FAIL_FAST` | `FAIL_FAST` refuses to start when the chain names a provider with no API key; `WARN` starts anyway with a shorter chain |
 | `openfilz.ai.fallback.quota-cooldown` / `AI_FALLBACK_QUOTA_COOLDOWN` | `5m` | How long a model is skipped after a spent quota or a provider outage |
 | `openfilz.ai.fallback.unavailable-cooldown` / `AI_FALLBACK_UNAVAILABLE_COOLDOWN` | `6h` | How long a model is skipped after a `404` (retired / not enabled for the key) |
 
@@ -573,8 +574,16 @@ AI_FALLBACK_ENABLED=true
 AI_FALLBACK_CHAIN=google:gemini-3.6-flash,anthropic:claude-haiku-4-5,openai:gpt-4o-mini
 ```
 
-Each provider in the chain needs its own API key configured above; entries without one are
-skipped with a warning. The active chat model is always tried first and needs no entry.
+**You do not need `<PROVIDER>_CHAT_ENABLED` for providers in the chain.** A chain entry is enough
+to use that provider, and when no switch is set the chain's **first entry becomes the primary chat
+model — both its provider and its model** — so the two lines above are a complete chat
+configuration, and reordering the chain changes which model answers first. An explicit
+`<PROVIDER>_CHAT_MODEL` still wins if you set one. Switches still win if you
+set them, so existing deployments are unchanged.
+
+Every provider in the chain must have an API key. This is checked **at startup**: a keyless entry
+refuses to boot with a message naming the variable to set, rather than failing silently on the day
+your quota runs out. Set `AI_FALLBACK_VALIDATION=WARN` to start anyway with a shorter chain.
 
 **Several keys per provider.** Quota is charged per API key, so a second key is a second
 allowance — the cheapest way to widen a free tier:
@@ -603,6 +612,13 @@ Watch for these in the logs:
 [AI] QUOTA_EXHAUSTED on google-genai (gemini-3.6-flash) — falling back to ANTHROPIC (claude-haiku-4-5)
 [AI-FALLBACK] QUOTA_EXHAUSTED on google:gemini-3.6-flash — benching it for PT5M
 ```
+
+> **Ollama is never failed over.** When the chat provider is a local Ollama model the chain is
+> ignored entirely, and configuring both logs a warning at startup. This is about data residency,
+> not speed: a local LLM is deployed so document content stays in-house, and the RAG context sent
+> with every question *is* document text — failing over would send it to a third-party API. A
+> local model going down is an outage to fix, not something to route around. (A BYOK user who
+> chose a cloud provider themselves still gets failover.)
 
 > **A bad API key never triggers failover.** Quietly answering from a different model would hide a
 > broken credential instead of surfacing it, so authentication and malformed-request errors are
