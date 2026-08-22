@@ -7,8 +7,10 @@ import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.AiProperties;
 import org.openfilz.dms.config.RestApiVersion;
+import org.openfilz.dms.dto.request.ListAiModelsRequest;
 import org.openfilz.dms.dto.request.SaveAiSettingsRequest;
 import org.openfilz.dms.dto.response.AiConnectionTestResult;
+import org.openfilz.dms.dto.response.AiModelsResponse;
 import org.openfilz.dms.dto.response.AiSettingsResponse;
 import org.openfilz.dms.service.AiSettingsService;
 import org.openfilz.dms.utils.UserInfoService;
@@ -82,5 +84,18 @@ public class AiSettingsController implements UserInfoService {
         requireAiActive();
         return getConnectedUserEmail()
                 .flatMap(email -> aiSettingsService.testConnection(email, request));
+    }
+
+    @PostMapping(value = "/models", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "List the provider's chat models",
+            description = "Ask the provider which chat models this key can use, so the picker "
+                    + "reflects what exists today rather than a list baked into a release. Falls "
+                    + "back to a built-in list (source=FALLBACK) when the provider cannot be "
+                    + "reached. POST rather than GET because the key travels in the body, never "
+                    + "in a query string; omit apiKey to use the stored key.")
+    public Mono<AiModelsResponse> listModels(@Valid @RequestBody ListAiModelsRequest request) {
+        requireAiActive();
+        return getConnectedUserEmail()
+                .flatMap(email -> aiSettingsService.listModels(email, request));
     }
 }

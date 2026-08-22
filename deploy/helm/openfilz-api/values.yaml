@@ -170,11 +170,14 @@ ai:
       enabled: false
       model: "claude-opus-5"
   # -- Google Gemini via the Gemini Developer API (chat only — embeddings stay on Ollama/OpenAI)
+  # Google retires model ids, and a retired one fails every chat with a 404 ("no longer
+  # available to new users"): set model to "gemini-flash-latest" to track the current flash
+  # model instead of pinning one.
   google:
     apiKey: ""
     chat:
       enabled: false
-      model: "gemini-2.5-flash"
+      model: "gemini-3.6-flash"
   # -- Per-user AI settings (BYOK): users override the chat LLM with their own provider + API key.
   # encryptionKey protects the stored keys (base64, 32 bytes): openssl rand -base64 32
   userSettings:
