@@ -544,9 +544,55 @@ Anthropic has no embeddings API — pair it with Ollama or OpenAI embeddings (e.
 |--------------------------|---------|-------------|
 | `spring.ai.google.genai.api-key` / `GOOGLE_API_KEY` | *(empty)* | API key from Google AI Studio (required when using Gemini) |
 | `openfilz.ai.google.chat.enabled` / `GOOGLE_CHAT_ENABLED` | `false` | Enable Gemini as the chat model provider |
-| `spring.ai.google.genai.chat.model` / `GOOGLE_CHAT_MODEL` | `gemini-2.5-flash` | Chat model name (`gemini-2.5-pro` for higher quality) |
+| `spring.ai.google.genai.chat.model` / `GOOGLE_CHAT_MODEL` | `gemini-3.6-flash` | Chat model name |
 
 Uses the Gemini Developer API (API-key auth, not Vertex AI). In OpenFilz, Gemini serves chat only — embeddings stay on Ollama/OpenAI so the pgvector schema keeps its 768 dimensions.
+
+> **Model ids get retired.** Google withdraws older ids, after which *every* chat fails with
+> `404 … This model models/<id> is no longer available to new users`. The fix is to update
+> `GOOGLE_CHAT_MODEL` (the error message names the replacement). Configuring
+> [model failover](#ai-model-failover-quota-and-availability) below keeps chat working while
+> you do.
+
+#### AI model failover (quota and availability)
+
+Free tiers allow only a handful of requests per minute and per day. When the configured model
+refuses — quota spent, model retired, provider down — OpenFilz can retry the same question on
+another model instead of failing the user.
+
+| Property / Env Variable | Default | Description |
+|--------------------------|---------|-------------|
+| `openfilz.ai.fallback.enabled` / `AI_FALLBACK_ENABLED` | `false` | Enable automatic failover to another chat model |
+| `openfilz.ai.fallback.chain` / `AI_FALLBACK_CHAIN` | *(empty)* | Comma-separated `provider:model` entries, tried in order (`google`, `anthropic`, `openai`, `openai-compatible`) |
+| `openfilz.ai.fallback.quota-cooldown` / `AI_FALLBACK_QUOTA_COOLDOWN` | `5m` | How long a model is skipped after a spent quota or a provider outage |
+| `openfilz.ai.fallback.unavailable-cooldown` / `AI_FALLBACK_UNAVAILABLE_COOLDOWN` | `6h` | How long a model is skipped after a `404` (retired / not enabled for the key) |
+
+```
+AI_FALLBACK_ENABLED=true
+AI_FALLBACK_CHAIN=google:gemini-3.6-flash,anthropic:claude-haiku-4-5,openai:gpt-4o-mini
+```
+
+Each provider in the chain needs its own API key configured above; entries without one are
+skipped with a warning. The active chat model is always tried first and needs no entry.
+
+Two things happen on a failure. The request itself is **retried** on the next model, so the user
+still gets an answer. The failed model is then **benched** for its cooldown, so the requests that
+follow skip it rather than each paying the same failing call first — which is what stops a spent
+*daily* quota from slowing every request for the rest of the day. Cooldowns expire on their own;
+nothing needs restarting.
+
+Watch for these in the logs:
+
+```
+[AI] QUOTA_EXHAUSTED on google-genai (gemini-3.6-flash) — falling back to ANTHROPIC (claude-haiku-4-5)
+[AI-FALLBACK] QUOTA_EXHAUSTED on google:gemini-3.6-flash — benching it for PT5M
+```
+
+> **A bad API key never triggers failover.** Quietly answering from a different model would hide a
+> broken credential instead of surfacing it, so authentication and malformed-request errors are
+> still returned as errors. Failover is also abandoned if the model already streamed part of an
+> answer, or if a tool already moved/renamed/deleted something — retrying either would show the
+> user a spliced answer or repeat the action.
 
 #### Getting an API key
 

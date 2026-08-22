@@ -292,11 +292,80 @@ Security properties:
 
 ---
 
+## 5b. Quota failover between chat models
+
+Free provider tiers (Google's especially) allow only a small number of requests per minute and
+per day, so a busy afternoon can exhaust the configured model. With
+`openfilz.ai.fallback.enabled=true` the chat pipeline retries the same question on the next model
+in `openfilz.ai.fallback.chain` instead of failing the user.
+
+```
+AI_FALLBACK_ENABLED=true
+AI_FALLBACK_CHAIN=google:gemini-3.6-flash,anthropic:claude-haiku-4-5,openai:gpt-4o-mini
+```
+
+Two mechanisms, and both matter:
+
+| Mechanism | What it does | Where |
+|---|---|---|
+| **Failover** | The request that hit the quota is retried on the next candidate, so the user still gets an answer. | `AiChatServiceImpl#streamWithFailover` |
+| **Cooldown** | The failed model is benched, so *subsequent* requests skip it instead of each paying a failing round-trip first. Cooldowns expire on their own, returning the model to rotation with no operator action. | `AiFallbackChain` |
+
+Without the cooldown, a spent **daily** quota would add a failing call to every request for the
+rest of the day; with it, the deployment pays that cost once.
+
+### What counts as a failover
+
+`AiFailoverPolicy.classify` walks the cause chain — Spring AI wraps every provider failure in a
+generic `RuntimeException("Failed to generate content")`, so the actionable signal is always
+further down — and matches on HTTP status, exception type name, and message keywords. No provider
+SDK types are referenced: OpenFilz must not compile against (nor reflect over, which GraalVM
+dislikes) `com.google.genai.errors.*` and friends.
+
+| Classification | Trigger | Cooldown |
+|---|---|---|
+| `QUOTA_EXHAUSTED` | 429 / `RESOURCE_EXHAUSTED` / rate-limit wording / typed `RateLimitException` | `quota-cooldown` (5m) |
+| `MODEL_UNAVAILABLE` | 404 — model retired, renamed, or not enabled for the key | `unavailable-cooldown` (6h) |
+| `PROVIDER_OVERLOADED` | 5xx, connection refused, unknown host, timeouts | `quota-cooldown` (5m) |
+| `NOT_FAILOVER` | **bad credentials**, malformed requests, OpenFilz bugs | none |
+
+Credential failures deliberately do *not* fail over. Answering from a different model when an API
+key is wrong or revoked would hide a misconfiguration an operator has to fix; those still surface
+as errors. A retired model gets the long cooldown because — unlike a quota — it is never coming
+back on its own.
+
+### When a retry is refused
+
+Failover is abandoned mid-request, and the error propagates, when either guard trips:
+
+- **Tokens already streamed.** Restarting on another model would splice two different answers
+  together in the user's browser.
+- **A tool already mutated something.** Read-only tools are safe to repeat; retrying after a
+  move/rename/delete would run it twice. `DocumentAiTools#getModifiedFolders` is empty exactly
+  when no mutating tool has fired this turn.
+
+In practice quota and 404 failures arrive before the first token, so both guards hold.
+
+### Scope
+
+Chain entries are limited to the API-key providers OpenFilz already builds programmatically
+(`google`, `anthropic`, `openai`, `openai-compatible`) — the same `buildChatModel` path BYOK uses.
+Ollama is deliberately absent: it is local, has no quota to exhaust, and its model comes from
+Spring AI auto-configuration rather than being built by hand. Entries whose provider has no
+server API key configured are skipped with a warning rather than failing the request.
+
+Cooldown state is per-instance and in-memory — a latency optimisation, not a correctness
+mechanism. A restart (or a second replica) simply costs one failed call per model before it
+re-learns.
+
+---
+
 ## 6. Where to look in the code
 
 | Area | Entry point |
 |---|---|
 | Selector derivation | `config/AiModelProviderEnvironmentPostProcessor` |
+| Quota failover / cooldowns | `service/ai/AiFallbackChain`, `service/ai/AiFailoverPolicy` |
 | Beans (DataSource, PgVectorStore) | `config/AiConfig` |
 | Embedding-change guard | `config/EmbeddingRegistryGuard` |
 | Ingestion fan-out | `service/impl/DefaultMetadataPostProcessor` |

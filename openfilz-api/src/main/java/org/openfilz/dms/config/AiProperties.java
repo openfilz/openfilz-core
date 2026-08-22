@@ -4,6 +4,10 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Configuration properties for the AI document chat feature.
  * Maps to openfilz.ai.* properties in application.yml.
@@ -39,6 +43,11 @@ public class AiProperties {
      * Embedding configuration.
      */
     private EmbeddingConfig embedding = new EmbeddingConfig();
+
+    /**
+     * Automatic failover to another chat model when the configured one runs out of quota.
+     */
+    private Fallback fallback = new Fallback();
 
     /**
      * Ollama provider switches.
@@ -83,6 +92,49 @@ public class AiProperties {
              */
             private boolean enabled = false;
         }
+    }
+
+    /**
+     * Chat-model failover: what to try when the configured model refuses to answer.
+     * <p>
+     * Aimed squarely at free provider tiers, whose per-minute and per-day allowances are small
+     * enough to hit during normal use. When a chat call fails with an exhausted quota, a retired
+     * model, or an unreachable provider, OpenFilz retries the same question on the next model in
+     * {@link #chain} and benches the failed one for a cooldown so later requests skip it outright.
+     * See {@code AiFallbackChain} and {@code AiFailoverPolicy}.
+     * <p>
+     * A credential failure never triggers failover — answering from a different model would hide
+     * a broken API key instead of surfacing it.
+     */
+    @Data
+    public static class Fallback {
+
+        /** Master switch; off by default so existing deployments behave exactly as before. */
+        private boolean enabled = false;
+
+        /**
+         * Models to fall back to, in order, as {@code provider:model} entries — for example
+         * {@code google:gemini-3.6-flash,anthropic:claude-haiku-4-5,openai:gpt-4o-mini}.
+         * Providers: {@code google}, {@code anthropic}, {@code openai}, {@code openai-compatible};
+         * each needs its server API key configured, and entries without one are skipped with a
+         * warning. The active chat model is always tried first and needs no entry here.
+         */
+        private List<String> chain = new ArrayList<>();
+
+        /**
+         * How long a model is benched after an exhausted quota, an overloaded provider, or a
+         * connection failure. Short by design: per-minute allowances refill quickly, and an
+         * expired cooldown silently returns the model to rotation.
+         */
+        private Duration quotaCooldown = Duration.ofMinutes(5);
+
+        /**
+         * How long a model is benched after a 404 (retired, renamed, or not enabled for this key).
+         * Much longer than {@link #quotaCooldown} because that model is not coming back on its
+         * own — the cooldown just stops every request paying for the same 404 until an operator
+         * updates the configuration.
+         */
+        private Duration unavailableCooldown = Duration.ofHours(6);
     }
 
     /**

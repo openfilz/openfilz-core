@@ -107,7 +107,16 @@ services:
       # Google Gemini (chat only — embeddings stay on Ollama/OpenAI)
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       GOOGLE_CHAT_ENABLED: ${GOOGLE_CHAT_ENABLED:-false}
-      GOOGLE_CHAT_MODEL: ${GOOGLE_CHAT_MODEL:-gemini-2.5-flash}
+      GOOGLE_CHAT_MODEL: ${GOOGLE_CHAT_MODEL:-gemini-3.6-flash}
+
+      # Automatic failover when the active chat model is out of quota, retired, or unreachable.
+      # Chain entries are 'provider:model' (google|anthropic|openai|openai-compatible), tried in
+      # order; each needs its API key above. Useful on free tiers, whose allowances run out fast.
+      #   AI_FALLBACK_CHAIN=google:gemini-3.6-flash,anthropic:claude-haiku-4-5,openai:gpt-4o-mini
+      AI_FALLBACK_ENABLED: ${AI_FALLBACK_ENABLED:-false}
+      AI_FALLBACK_CHAIN: ${AI_FALLBACK_CHAIN:-}
+      AI_FALLBACK_QUOTA_COOLDOWN: ${AI_FALLBACK_QUOTA_COOLDOWN:-5m}
+      AI_FALLBACK_UNAVAILABLE_COOLDOWN: ${AI_FALLBACK_UNAVAILABLE_COOLDOWN:-6h}
 
       # Per-user AI settings (BYOK) — needs an encryption key: openssl rand -base64 32
       AI_USER_SETTINGS_ENABLED: ${AI_USER_SETTINGS_ENABLED:-false}

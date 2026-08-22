@@ -1,5 +1,6 @@
 package org.openfilz.dms.service.ai;
 
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.dto.request.*;
@@ -53,7 +54,14 @@ public class DocumentAiTools {
     private final DocumentRepository documentRepository;
     private final StorageService storageService;
     private final AiDocumentQueryService queryService;
-    private final ChatModel chatModel;
+    /**
+     * Model backing the vision tool ({@code describeImage}). Not final: when a chat request fails
+     * over to another model (see {@code AiFallbackChain}), {@link #rebindChatModel} repoints the
+     * vision tool at the model that actually answered, so a benched model is not still called
+     * from inside a tool. {@code @NonNull} keeps it in Lombok's generated constructor.
+     */
+    @NonNull
+    private ChatModel chatModel;
     private final AiAccessPolicy accessPolicy;
 
     /**
@@ -165,6 +173,17 @@ public class DocumentAiTools {
             log.warn("Invalid UUID '{}', treating as null", value);
             return null;
         }
+    }
+
+    /**
+     * Repoint the vision tool at another model after a chat failover.
+     * <p>
+     * Safe to mutate: instances are created per request by {@code DocumentAiToolsFactory}, and
+     * failover happens between streaming attempts on that single request — never concurrently
+     * with a tool call.
+     */
+    public void rebindChatModel(ChatModel chatModel) {
+        this.chatModel = chatModel;
     }
 
     /** Clear the registry before each new user message. */
