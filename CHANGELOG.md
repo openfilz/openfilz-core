@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[0afc952ea06b0a2](https://github.com/openfilz/openfilz-core/commit/0afc952ea06b0a2) maven-release-bot[bot] *2026-08-22 11:15:33*
+[a328f7ded35b3bc](https://github.com/openfilz/openfilz-core/commit/a328f7ded35b3bc) maven-release-bot[bot] *2026-08-22 13:07:57*
 
 
-## v1.2.25
+## v1.2.26
 ### No issue
 
-**[maven-release-plugin] prepare release v1.2.25**
+**[maven-release-plugin] prepare release v1.2.26**
 
 
-[7bce3789999c8da](https://github.com/openfilz/openfilz-core/commit/7bce3789999c8da) maven-release-bot[bot] *2026-08-22 11:15:31*
+[b5042a2b0c58892](https://github.com/openfilz/openfilz-core/commit/b5042a2b0c58892) maven-release-bot[bot] *2026-08-22 13:07:55*
 
-**Merge pull request #194 from openfilz/develop**
+**Merge pull request #196 from openfilz/develop**
 
- * fix(ai): folder&#x3D;&quot;all&quot; searched only the root level
+ * feat(ai): ask the provider which chat models a BYOK key can use
 
-[8b8d6088bfd23ef](https://github.com/openfilz/openfilz-core/commit/8b8d6088bfd23ef) Yann Demel *2026-08-22 11:13:04*
+[8b532f8a94e44fe](https://github.com/openfilz/openfilz-core/commit/8b532f8a94e44fe) Yann Demel *2026-08-22 13:04:21*
 
 
