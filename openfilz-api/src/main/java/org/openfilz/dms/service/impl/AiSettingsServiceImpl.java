@@ -1,13 +1,17 @@
 package org.openfilz.dms.service.impl;
 
 import lombok.extern.slf4j.Slf4j;
+import org.openfilz.dms.dto.request.ListAiModelsRequest;
 import org.openfilz.dms.dto.request.SaveAiSettingsRequest;
 import org.openfilz.dms.dto.response.AiConnectionTestResult;
+import org.openfilz.dms.dto.response.AiModelsResponse;
 import org.openfilz.dms.dto.response.AiSettingsResponse;
 import org.openfilz.dms.entity.UserAiSettings;
 import org.openfilz.dms.enums.AiProvider;
 import org.openfilz.dms.repository.UserAiSettingsRepository;
 import org.openfilz.dms.service.AiSettingsService;
+import org.openfilz.dms.service.ai.AiModelCatalog;
+import org.openfilz.dms.service.ai.AiModelDirectory;
 import org.openfilz.dms.service.ai.UserChatClientResolver;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.context.annotation.Lazy;
@@ -20,6 +24,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.List;
 
 /**
  * Implementation of the per-user BYOK settings. Keys are stored AES-256-GCM encrypted
@@ -36,15 +41,18 @@ public class AiSettingsServiceImpl implements AiSettingsService {
     private final UserAiSettingsRepository repository;
     private final AiSettingsCipher cipher;
     private final UserChatClientResolver resolver;
+    private final AiModelDirectory modelDirectory;
     private final Environment environment;
 
     public AiSettingsServiceImpl(UserAiSettingsRepository repository,
                                  AiSettingsCipher cipher,
                                  UserChatClientResolver resolver,
+                                 AiModelDirectory modelDirectory,
                                  Environment environment) {
         this.repository = repository;
         this.cipher = cipher;
         this.resolver = resolver;
+        this.modelDirectory = modelDirectory;
         this.environment = environment;
     }
 
@@ -137,6 +145,41 @@ public class AiSettingsServiceImpl implements AiSettingsService {
                     log.debug("AI connection test failed for {}: {}", request.provider(), e.toString());
                     return Mono.just(new AiConnectionTestResult(false, friendlyMessage(e), 0));
                 });
+    }
+
+    @Override
+    public Mono<AiModelsResponse> listModels(String userEmail, ListAiModelsRequest request) {
+        requireEnabled();
+        if (request.provider() == null) {
+            throw badRequest("provider is required");
+        }
+        AiProvider provider = request.provider();
+        List<String> builtIn = AiModelCatalog.fallback(provider);
+
+        return storedOrSubmittedKey(userEmail, request.apiKey())
+                .flatMap(apiKey -> modelDirectory.listChatModels(provider, apiKey, request.baseUrl()))
+                .map(models -> models.isEmpty()
+                        // A provider that answers with nothing usable is not an outage, but it is
+                        // not an answer either — offer the built-in list rather than an empty picker.
+                        ? AiModelsResponse.fallback(provider, builtIn, "Provider returned no chat models")
+                        : AiModelsResponse.live(provider, models))
+                // No key yet: the settings page asks as soon as a provider is picked, before the
+                // user has typed anything, and that is a normal state rather than an error.
+                .switchIfEmpty(Mono.just(AiModelsResponse.fallback(provider, builtIn,
+                        "Enter an API key to list the models your account can use")))
+                .onErrorResume(e -> {
+                    log.debug("[AI-MODELS] {} could not list models: {}", provider, e.toString());
+                    return Mono.just(AiModelsResponse.fallback(provider, builtIn, friendlyMessage(e)));
+                });
+    }
+
+    /** The submitted key, else the stored one, else empty — never an error: see {@link #listModels}. */
+    private Mono<String> storedOrSubmittedKey(String userEmail, String submitted) {
+        if (!isBlank(submitted)) {
+            return Mono.just(submitted.trim());
+        }
+        return repository.findById(userEmail)
+                .map(settings -> cipher.decrypt(settings.getApiKeyEncrypted()));
     }
 
     private void requireEnabled() {
