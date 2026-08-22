@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[a328f7ded35b3bc](https://github.com/openfilz/openfilz-core/commit/a328f7ded35b3bc) maven-release-bot[bot] *2026-08-22 13:07:57*
+[8b3268265f57738](https://github.com/openfilz/openfilz-core/commit/8b3268265f57738) maven-release-bot[bot] *2026-08-22 15:55:06*
 
 
-## v1.2.26
+## v1.2.27
 ### No issue
 
-**[maven-release-plugin] prepare release v1.2.26**
+**[maven-release-plugin] prepare release v1.2.27**
 
 
-[b5042a2b0c58892](https://github.com/openfilz/openfilz-core/commit/b5042a2b0c58892) maven-release-bot[bot] *2026-08-22 13:07:55*
+[fa16419715d6785](https://github.com/openfilz/openfilz-core/commit/fa16419715d6785) maven-release-bot[bot] *2026-08-22 15:55:04*
 
-**Merge pull request #196 from openfilz/develop**
+**Merge pull request #198 from openfilz/develop**
 
- * feat(ai): ask the provider which chat models a BYOK key can use
+ * fix(ai): never widen the AI document scope around the criteria (security)
 
-[8b532f8a94e44fe](https://github.com/openfilz/openfilz-core/commit/8b532f8a94e44fe) Yann Demel *2026-08-22 13:04:21*
+[c866cc7e0986417](https://github.com/openfilz/openfilz-core/commit/c866cc7e0986417) Yann Demel *2026-08-22 15:52:35*
 
 
