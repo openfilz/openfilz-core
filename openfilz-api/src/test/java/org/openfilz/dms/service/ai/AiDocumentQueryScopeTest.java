@@ -10,6 +10,7 @@ import org.openfilz.dms.repository.graphql.ListFolderCriteria;
 import org.openfilz.dms.utils.SqlUtils;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -27,6 +28,12 @@ import static org.mockito.Mockito.mock;
  * <p>
  * These assert on the emitted SQL because the scope <em>is</em> the SQL: the parent-id predicate
  * (or its absence) is the whole behaviour under test.
+ * <p>
+ * The scope is decided inside {@link ListFolderCriteria}, never around it. An extension layer with
+ * per-document access control writes its access predicate in the same method that writes the
+ * parent one, so a caller that skipped the criteria to widen the scope would drop the access
+ * restriction with it — see {@code CollaborationListFolderCriteriaTest} in openfilz-enterprise,
+ * which asserts the enterprise predicate survives every scope including this one.
  */
 class AiDocumentQueryScopeTest {
 
@@ -43,20 +50,8 @@ class AiDocumentQueryScopeTest {
                 new PageCriteria("createdAt", SortOrder.DESC, 1, 50), recursive);
     }
 
-    /** Mirrors {@code AiDocumentQueryService#applyFilter}. */
+    /** Mirrors {@code AiDocumentQueryService#applyFilter} — straight through the criteria. */
     private String sql(ListFolderRequest request) {
-        StringBuilder query = new StringBuilder("select * from Documents d");
-        criteria.checkFilter(request);
-        if (request.id() == null && Boolean.TRUE.equals(request.recursive())) {
-            criteria.appendAllFilterExceptParentId(PREFIX, query, request, false);
-        } else {
-            criteria.applyFilter(PREFIX, query, request);
-        }
-        return query.toString();
-    }
-
-    /** What the shared criteria alone produces — the pre-fix behaviour. */
-    private String sqlFromSharedCriteriaAlone(ListFolderRequest request) {
         StringBuilder query = new StringBuilder("select * from Documents d");
         criteria.checkFilter(request);
         criteria.applyFilter(PREFIX, query, request);
@@ -75,9 +70,6 @@ class AiDocumentQueryScopeTest {
         // The remaining filters must still open the WHERE clause themselves.
         assertThat(sql).contains(" WHERE d.type").doesNotContain("WHERE AND");
         assertThat(sql.split(" WHERE ", -1)).hasSize(2);
-
-        // The production symptom this fixes: the shared criteria alone scoped it to the root.
-        assertThat(sqlFromSharedCriteriaAlone(all)).contains("d.parent_id is null");
     }
 
     @Test
@@ -86,7 +78,6 @@ class AiDocumentQueryScopeTest {
         ListFolderRequest root = request(null, false, null);
 
         assertThat(sql(root)).contains("d.parent_id is null");
-        assertThat(sql(root)).isEqualTo(sqlFromSharedCriteriaAlone(root));
     }
 
     @Test
@@ -95,7 +86,6 @@ class AiDocumentQueryScopeTest {
         ListFolderRequest named = request(FOLDER, false, null);
 
         assertThat(sql(named)).contains("d.parent_id = :parent_id");
-        assertThat(sql(named)).isEqualTo(sqlFromSharedCriteriaAlone(named));
     }
 
     @Test
@@ -104,7 +94,52 @@ class AiDocumentQueryScopeTest {
         ListFolderRequest deep = request(FOLDER, true, null);
 
         assertThat(sql(deep)).contains("WITH RECURSIVE descendants");
-        assertThat(sql(deep)).isEqualTo(sqlFromSharedCriteriaAlone(deep));
+    }
+
+    /**
+     * Stand-in for an extension layer with per-document access control, shaped exactly like
+     * {@code CollaborationListFolderCriteria} in openfilz-enterprise: the access predicate is
+     * written by the same method that writes the parent scope.
+     */
+    private static final class AccessControlledCriteria extends ListFolderCriteria {
+        static final String ACCESS = "(o.owner_id = :usrId or ds.user_id = :usrId) ";
+
+        AccessControlledCriteria(SqlUtils sqlUtils) { super(sqlUtils); }
+
+        @Override
+        public boolean appendParentIdFilter(String prefix, StringBuilder query, ListFolderRequest request) {
+            if (request.id() != null) {
+                query.append("d.parent_id = :parent_id and ").append(ACCESS);
+            } else if (Boolean.TRUE.equals(request.recursive())) {
+                query.append(ACCESS);
+            } else {
+                query.append("d.parent_id is null and ").append(ACCESS);
+            }
+            return true;
+        }
+    }
+
+    @Test
+    @DisplayName("an access-controlled layer keeps its predicate on every scope, the whole tree included")
+    void accessPredicateIsNeverBypassed() {
+        ListFolderCriteria secured = new AccessControlledCriteria(new SqlUtils(mock(ObjectMapper.class)));
+
+        // The whole-tree scope is the dangerous one: it has no parent predicate to hide behind,
+        // so an implementation that emitted nothing here would return every user's documents
+        // straight into the AI's prompt.
+        for (ListFolderRequest request : List.of(
+                request(null, true, "pdf"),      // folder="all"
+                request(null, false, null),      // root only
+                request(FOLDER, false, null),    // one folder
+                request(FOLDER, true, null))) {  // folder + subfolders
+            StringBuilder query = new StringBuilder("select * from Documents d");
+            secured.applyFilter(PREFIX, query, request);
+
+            assertThat(query.toString())
+                    .as("access predicate must survive every scope")
+                    .contains(AccessControlledCriteria.ACCESS);
+            assertThat(query.toString()).contains(" WHERE ").doesNotContain("WHERE AND");
+        }
     }
 
     @Test
@@ -115,7 +150,7 @@ class AiDocumentQueryScopeTest {
                 null, null, null, null, null, null, null, true, null, true);
 
         StringBuilder query = new StringBuilder("select count(*) from Documents d");
-        criteria.appendAllFilterExceptParentId(PREFIX, query, countAll, false);
+        criteria.applyFilter(PREFIX, query, countAll);
 
         assertThat(query.toString()).doesNotContain("parent_id");
         assertThat(query.toString()).contains("d.type = :type", "d.active = :active");
