@@ -17,9 +17,13 @@ import java.util.regex.Pattern;
  * any of those types. So classification walks the cause chain and matches on HTTP status,
  * exception simple name, and message keywords only.
  * <p>
- * The one failure kind that deliberately does <em>not</em> fail over is a credential problem:
- * silently answering with a different model when an API key is wrong or revoked would hide a
- * misconfiguration that an operator has to fix. Those surface to the caller as before.
+ * A credential problem is reported as its own verdict, {@link Failure#CREDENTIALS_REJECTED},
+ * rather than folded into {@link Failure#NOT_FAILOVER}: what to do about a refused key depends on
+ * <em>whose</em> key it is. The active model's key must surface — silently answering elsewhere
+ * would hide a misconfiguration an operator has to fix. A key from a fallback pool is the opposite
+ * case: the pool exists so that one key failing is survivable, so the caller disables that key and
+ * keeps going (see {@code AiChatServiceImpl}). Neither is decided here; this class only names the
+ * failure.
  */
 public final class AiFailoverPolicy {
 
@@ -38,7 +42,15 @@ public final class AiFailoverPolicy {
         /** 5xx, connection failures, timeouts — the provider is down or unreachable. Retry elsewhere. */
         PROVIDER_OVERLOADED(true),
 
-        /** Bad credentials, malformed request, or an OpenFilz bug — surface it, never mask it. */
+        /**
+         * The provider refused the API key itself (401/403 with no quota wording, or a typed
+         * authentication exception). Another <em>model</em> on the same key would fail
+         * identically, so {@link #shouldFailover()} is false; another <em>key</em> may well
+         * work, which is the caller's decision to make.
+         */
+        CREDENTIALS_REJECTED(false),
+
+        /** A malformed request or an OpenFilz bug — surface it, never mask it. */
         NOT_FAILOVER(false);
 
         private final boolean failover;
@@ -109,17 +121,24 @@ public final class AiFailoverPolicy {
      * <p>
      * The whole cause chain is inspected because Spring AI wraps provider exceptions in a
      * generic {@code RuntimeException}: the actionable signal is always further down. The first
-     * cause that yields a verdict other than {@link Failure#NOT_FAILOVER} wins, so a definite
-     * "429" deep in the chain is not masked by an uninformative wrapper at the top.
+     * cause that yields one of the three retryable verdicts wins, so a definite "429" deep in the
+     * chain is not masked by an uninformative wrapper at the top.
+     * <p>
+     * {@link Failure#CREDENTIALS_REJECTED} is the weakest verdict: it is remembered but does not
+     * stop the walk. Provider messages mention "API key" freely — a retired-model or quota error
+     * often does — and letting that wording short-circuit would turn a spent quota into a
+     * "your key is broken" verdict, which now has the side effect of disabling a pool key.
      */
     public static Failure classify(Throwable error) {
         Failure verdict = Failure.NOT_FAILOVER;
         Throwable current = error;
         for (int depth = 0; current != null && depth < MAX_CAUSE_DEPTH; depth++) {
             Failure found = classifySingle(current);
-            if (found != Failure.NOT_FAILOVER) {
+            if (found.shouldFailover()) {
+                return found;
+            }
+            if (found == Failure.CREDENTIALS_REJECTED && verdict == Failure.NOT_FAILOVER) {
                 verdict = found;
-                break;
             }
             Throwable cause = current.getCause();
             current = (cause == current) ? null : cause;
@@ -134,7 +153,7 @@ public final class AiFailoverPolicy {
 
         // Typed exceptions are unambiguous — prefer them over message archaeology.
         if (containsAny(type, QUOTA_TYPES)) return Failure.QUOTA_EXHAUSTED;
-        if (containsAny(type, AUTH_TYPES)) return Failure.NOT_FAILOVER;
+        if (containsAny(type, AUTH_TYPES)) return Failure.CREDENTIALS_REJECTED;
         if (containsAny(type, MODEL_GONE_TYPES)) return Failure.MODEL_UNAVAILABLE;
         if (containsAny(type, OVERLOAD_TYPES)) return Failure.PROVIDER_OVERLOADED;
 
@@ -145,7 +164,7 @@ public final class AiFailoverPolicy {
                 // Some providers report an exhausted quota as 402/403 rather than 429, so the
                 // message still decides; without quota wording these stay a credential problem.
                 case 401, 402, 403 -> containsAny(message, QUOTA_KEYWORDS)
-                        ? Failure.QUOTA_EXHAUSTED : Failure.NOT_FAILOVER;
+                        ? Failure.QUOTA_EXHAUSTED : Failure.CREDENTIALS_REJECTED;
                 case 404 -> Failure.MODEL_UNAVAILABLE;
                 case 408, 500, 502, 503, 504, 529 -> Failure.PROVIDER_OVERLOADED;
                 // Any other recognised status is a request we built wrong — our bug, not the
@@ -155,7 +174,7 @@ public final class AiFailoverPolicy {
         }
 
         if (containsAny(message, QUOTA_KEYWORDS)) return Failure.QUOTA_EXHAUSTED;
-        if (containsAny(message, AUTH_KEYWORDS)) return Failure.NOT_FAILOVER;
+        if (containsAny(message, AUTH_KEYWORDS)) return Failure.CREDENTIALS_REJECTED;
         if (containsAny(message, MODEL_GONE_KEYWORDS)) return Failure.MODEL_UNAVAILABLE;
         if (containsAny(message, OVERLOAD_KEYWORDS)) return Failure.PROVIDER_OVERLOADED;
         return Failure.NOT_FAILOVER;
@@ -182,10 +201,16 @@ public final class AiFailoverPolicy {
         return null;
     }
 
+    /**
+     * Case-insensitive on <em>both</em> sides: the keyword tables are lower case but the type
+     * tables are CamelCase, and comparing a lower-cased class name against {@code "RateLimit"}
+     * silently never matches — which would quietly reduce every typed-exception rule above to
+     * dead code and leave classification to message archaeology alone.
+     */
     private static boolean containsAny(String haystack, String[] needles) {
         String lower = haystack.toLowerCase(Locale.ROOT);
         for (String needle : needles) {
-            if (lower.contains(needle)) return true;
+            if (lower.contains(needle.toLowerCase(Locale.ROOT))) return true;
         }
         return false;
     }

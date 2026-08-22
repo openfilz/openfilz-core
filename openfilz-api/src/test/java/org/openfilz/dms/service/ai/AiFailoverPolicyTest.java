@@ -35,6 +35,15 @@ class AiFailoverPolicyTest {
         AuthenticationException(String message) { super(message); }
     }
 
+    private static class NotFoundException extends RuntimeException {
+        NotFoundException(String message) { super(message); }
+    }
+
+    /** Stand-in for the Google GenAI SDK's 5xx exception. */
+    private static class ServerException extends RuntimeException {
+        ServerException(String message) { super(message); }
+    }
+
     /** Spring AI wraps every provider failure in this generic runtime exception. */
     private static RuntimeException springAiWrapped(Throwable cause) {
         return new RuntimeException("Failed to generate content", cause);
@@ -75,7 +84,7 @@ class AiFailoverPolicyTest {
         assertThat(AiFailoverPolicy.classify(new ClientException("403 . Quota exceeded for this project")))
                 .isEqualTo(Failure.QUOTA_EXHAUSTED);
         assertThat(AiFailoverPolicy.classify(new ClientException("403 . PERMISSION_DENIED: caller lacks permission")))
-                .isEqualTo(Failure.NOT_FAILOVER);
+                .isEqualTo(Failure.CREDENTIALS_REJECTED);
     }
 
     @Test
@@ -95,12 +104,26 @@ class AiFailoverPolicyTest {
     }
 
     @Test
-    @DisplayName("credential and request errors never fail over — masking them hides the real fix")
-    void refusesToMaskConfigurationErrors() {
+    @DisplayName("a refused key is named as such — never as a retryable failure")
+    void classifiesRejectedCredentials() {
         assertThat(AiFailoverPolicy.classify(new ClientException("401 . API key not valid. Please pass a valid API key.")))
-                .isEqualTo(Failure.NOT_FAILOVER);
+                .isEqualTo(Failure.CREDENTIALS_REJECTED);
         assertThat(AiFailoverPolicy.classify(springAiWrapped(new AuthenticationException("invalid x-api-key"))))
-                .isEqualTo(Failure.NOT_FAILOVER);
+                .isEqualTo(Failure.CREDENTIALS_REJECTED);
+        // The production failure this whole path exists for: Google answers a key it will not
+        // accept on generativelanguage.googleapis.com with 401 ACCESS_TOKEN_TYPE_UNSUPPORTED.
+        assertThat(AiFailoverPolicy.classify(springAiWrapped(new ClientException(
+                "401 . Request had invalid authentication credentials. Expected OAuth 2 access "
+                        + "token, login cookie or other valid authentication credential."))))
+                .isEqualTo(Failure.CREDENTIALS_REJECTED);
+        // Retrying the same key on another model is pointless — only another key can help, and
+        // that decision belongs to the caller, which knows whether this key came from a pool.
+        assertThat(Failure.CREDENTIALS_REJECTED.shouldFailover()).isFalse();
+    }
+
+    @Test
+    @DisplayName("request errors and bugs never fail over — masking them hides the real fix")
+    void refusesToMaskConfigurationErrors() {
         assertThat(AiFailoverPolicy.classify(new ClientException("400 . Invalid JSON payload received.")))
                 .isEqualTo(Failure.NOT_FAILOVER);
         assertThat(AiFailoverPolicy.classify(new NullPointerException("boom")))
@@ -108,6 +131,40 @@ class AiFailoverPolicyTest {
         assertThat(AiFailoverPolicy.classify(new RuntimeException()))
                 .isEqualTo(Failure.NOT_FAILOVER);
         assertThat(Failure.NOT_FAILOVER.shouldFailover()).isFalse();
+    }
+
+    @Test
+    @DisplayName("'API key' wording in a wrapper does not mask a quota or retired model below it")
+    void credentialWordingLosesToADefiniteVerdictDeeper() {
+        // Providers mention the API key in errors that have nothing to do with the key being
+        // wrong. Short-circuiting on that wording would disable a perfectly good pool key.
+        assertThat(AiFailoverPolicy.classify(new RuntimeException(
+                "the API key could not complete the request",
+                new ClientException("429 . You exceeded your current quota"))))
+                .isEqualTo(Failure.QUOTA_EXHAUSTED);
+        assertThat(AiFailoverPolicy.classify(new RuntimeException(
+                "check that your api key has access",
+                new ClientException("404 . models/gemini-2.5-flash is no longer available"))))
+                .isEqualTo(Failure.MODEL_UNAVAILABLE);
+        assertThat(AiFailoverPolicy.classify(new RuntimeException(
+                "api key rejected",
+                new ClientException("503 . The model is overloaded"))))
+                .isEqualTo(Failure.PROVIDER_OVERLOADED);
+    }
+
+    @Test
+    @DisplayName("a typed provider exception classifies even when its message says nothing")
+    void classifiesFromExceptionTypeAlone() {
+        // These used to pass only because the messages happened to carry matching keywords; a
+        // provider that throws a typed exception with an unhelpful message has to work too.
+        assertThat(AiFailoverPolicy.classify(springAiWrapped(new RateLimitException("boom"))))
+                .isEqualTo(Failure.QUOTA_EXHAUSTED);
+        assertThat(AiFailoverPolicy.classify(springAiWrapped(new AuthenticationException("boom"))))
+                .isEqualTo(Failure.CREDENTIALS_REJECTED);
+        assertThat(AiFailoverPolicy.classify(springAiWrapped(new NotFoundException("boom"))))
+                .isEqualTo(Failure.MODEL_UNAVAILABLE);
+        assertThat(AiFailoverPolicy.classify(springAiWrapped(new ServerException("boom"))))
+                .isEqualTo(Failure.PROVIDER_OVERLOADED);
     }
 
     @Test

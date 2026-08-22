@@ -254,6 +254,48 @@ public class AiFallbackChain {
     }
 
     /**
+     * Take a whole API key out of rotation because the provider refused it.
+     * <p>
+     * Unlike a spent quota this has no cooldown: a key the provider rejects is a configuration
+     * error, and it will keep being rejected until an operator changes it — at which point the
+     * process restarts anyway and the registry is empty again. Every model already built on that
+     * key is dropped with it, since they all carry the same refused credential.
+     * <p>
+     * Reserved for keys that came from a <em>pool</em>: refusing the active model's own key is
+     * reported to the caller instead, so a single-key deployment cannot be silently rerouted.
+     *
+     * @return true when this call is what disabled the key (so the caller logs it once)
+     */
+    public boolean disableKey(ResolvedChat chat) {
+        String providerKey = providerKey(chat);
+        if (providerKey == null) {
+            return false;   // nothing identifiable to disable — do not bench an unrelated key
+        }
+        if (!unusable.add(providerKey)) {
+            return false;   // already disabled by this or a concurrent request
+        }
+        models.keySet().removeIf(modelKey -> modelKey.startsWith(providerKey + ':'));
+        return true;
+    }
+
+    /**
+     * Whether this candidate's key is still in rotation. The candidate list of a request is built
+     * once, up front, so a key disabled part-way through it is still listed for that request —
+     * the caller checks this before each attempt to avoid paying one refused call per model.
+     */
+    public boolean isUsable(ResolvedChat chat) {
+        String providerKey = providerKey(chat);
+        return providerKey == null || !unusable.contains(providerKey);
+    }
+
+    /** {@code provider:keyRef} for a resolved model, or null when its key has no fingerprint. */
+    private static String providerKey(ResolvedChat chat) {
+        String keyRef = chat.keyRef();
+        if (keyRef == null || keyRef.isBlank() || AiKeyRef.UNKNOWN.equals(keyRef)) return null;
+        return canonicalProvider(chat.provider()) + ':' + keyRef;
+    }
+
+    /**
      * Record that a candidate just failed, so subsequent requests skip that (model, key) pair
      * until its cooldown expires. A retired model gets the longer cooldown — unlike a spent quota
      * it will not come back.
