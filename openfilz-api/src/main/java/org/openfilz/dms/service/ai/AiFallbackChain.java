@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -21,52 +22,70 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * The ordered list of chat models to try for one request, plus the per-model cooldown registry
- * that remembers which ones are currently out of quota.
+ * The ordered list of (model, API key) candidates to try for one request, plus the cooldown
+ * registry that remembers which combinations are currently out of quota.
  * <p>
- * Free provider tiers (Google's especially) hand out small per-minute and per-day allowances, so
- * a busy afternoon can exhaust the primary model. With
- * {@code openfilz.ai.fallback.enabled=true} the chat pipeline then walks
- * {@code openfilz.ai.fallback.chain} — {@code provider:model} entries, tried in order — instead of
- * failing the user's question.
+ * Free provider tiers meter requests <em>per key</em>, per model, per minute and per day, so a
+ * busy afternoon exhausts the primary model. With {@code openfilz.ai.fallback.enabled=true} the
+ * chat pipeline walks {@code openfilz.ai.fallback.chain} — {@code provider:model} entries, tried
+ * in order — and each provider may carry a pool of keys in
+ * {@code openfilz.ai.fallback.keys.<provider>} instead of the single {@code spring.ai.*.api-key}.
+ *
+ * <h2>How candidates are ordered</h2>
+ * A provider is exhausted completely — every chain model on every key — before the next provider
+ * is touched:
+ * <pre>
+ *   google:     m1/keyA   m2/keyA   m1/keyB   m2/keyB
+ *   anthropic:  c1/keyX   c1/keyY
+ * </pre>
+ * So the key rotates as soon as a provider has nothing left to offer on the current one, and a
+ * different provider is only reached once the previous one is spent outright. Chain order decides
+ * <em>provider</em> priority (by first appearance) and model priority within a provider; an
+ * interleaved chain such as {@code google:m1,anthropic:c1,google:m2} is therefore grouped as
+ * {@code google:m1,google:m2} then {@code anthropic:c1}, because key rotation is inherently a
+ * per-provider decision.
  * <p>
- * Two distinct mechanisms, and both matter:
+ * Which key is "current" is derived from the cooldown registry rather than held in a pointer: a
+ * provider's usable keys are those with at least one chain model still healthy. A key that went
+ * out of quota an hour ago simply drops out of the list, and rejoins it when the cooldown lapses.
+ *
+ * <h2>Two mechanisms, both needed</h2>
  * <ul>
- *   <li><b>Failover</b> — the request that hits the quota is retried on the next model, so the
+ *   <li><b>Failover</b> — the request that hit the quota is retried on the next candidate, so the
  *       user still gets an answer (see {@code AiChatServiceImpl}).</li>
- *   <li><b>Cooldown</b> — the model that failed is marked unavailable for a while, so the
- *       <em>following</em> requests skip straight to a model that works instead of each paying a
- *       failing round-trip first. This is what stops a spent daily quota from adding latency to
- *       every request for the rest of the day. Cooldowns expire on their own, so the primary
- *       model comes back into rotation without an operator touching anything.</li>
+ *   <li><b>Cooldown</b> — the failed (model, key) pair is benched, so the <em>following</em>
+ *       requests skip it instead of each paying a failing round-trip. Without it a spent daily
+ *       quota would add a failing call to every request for the rest of the day. Cooldowns expire
+ *       on their own, returning the pair to rotation with no operator action.</li>
  * </ul>
- * Cooldown state is per-instance and in-memory: it is a latency optimisation, not a correctness
- * mechanism, so a restart (or a second replica warming up its own view) simply costs one failed
- * call per model before it re-learns.
+ * Cooldown state is per-instance and in-memory: a latency optimisation, not a correctness
+ * mechanism, so a restart (or a second replica) costs one failed call per pair before it relearns.
  * <p>
- * Chain entries are limited to the API-key providers OpenFilz already builds programmatically
- * ({@code GOOGLE}, {@code ANTHROPIC}, {@code OPENAI}, {@code OPENAI_COMPATIBLE}) — the same
- * {@link UserChatClientResolver#buildChatModel} path BYOK uses. Ollama is deliberately absent:
- * it is the server default's own business, has no quota to exhaust, and its model is built by
- * Spring AI auto-configuration rather than by hand.
+ * Chain entries are limited to the API-key providers OpenFilz already builds programmatically —
+ * the same {@link UserChatClientResolver#buildChatModel} path BYOK uses. Ollama is deliberately
+ * absent: it is local, has no quota to exhaust, and its model comes from Spring AI
+ * auto-configuration rather than being built by hand.
  */
 @Slf4j
 @Component
 @Lazy
 public class AiFallbackChain {
 
+    /** One {@code provider:model} entry of the configured chain. */
+    private record ChainEntry(AiProvider provider, String model) {}
+
     private final AiProperties aiProperties;
     private final UserChatClientResolver resolver;
     private final Environment environment;
 
-    /** Model key -> instant the cooldown expires. Absent (or past) means the model is usable. */
+    /** {@code provider:keyRef:model} -> instant the cooldown expires. Absent or past means usable. */
     private final Map<String, Instant> cooldowns = new ConcurrentHashMap<>();
 
-    /** Built fallback models, cached because each one carries a pooled HTTP client. */
+    /** Built models, cached because each carries a pooled HTTP client. Keyed like the cooldowns. */
     private final Map<String, ResolvedChat> models = new ConcurrentHashMap<>();
 
-    /** Provider keys whose API key is missing, so we stop rebuilding (and re-logging) them. */
-    private final Set<String> unconfigured = ConcurrentHashMap.newKeySet();
+    /** {@code provider:keyRef} pairs whose client refused to build, so we stop retrying them. */
+    private final Set<String> unusable = ConcurrentHashMap.newKeySet();
 
     public AiFallbackChain(AiProperties aiProperties, UserChatClientResolver resolver, Environment environment) {
         this.aiProperties = aiProperties;
@@ -94,7 +113,7 @@ public class AiFallbackChain {
         List<ResolvedChat> out = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
 
-        String primaryKey = key(primary.provider(), primary.model());
+        String primaryKey = cooldownKey(primary.provider(), primary.keyRef(), primary.model());
         seen.add(primaryKey);
         if (isHealthy(primaryKey, now)) {
             out.add(primary);
@@ -102,12 +121,22 @@ public class AiFallbackChain {
             log.debug("[AI-FALLBACK] Skipping primary {} — cooling down until {}", primaryKey, cooldowns.get(primaryKey));
         }
 
-        for (String entry : aiProperties.getFallback().getChain()) {
-            ResolvedChat candidate = parseAndBuild(entry, seen, now);
-            if (candidate != null) {
-                out.add(candidate);
+        // Group the chain by provider, keeping each provider's first appearance as its priority
+        // and the chain order of its own models. Key rotation is a per-provider decision, so a
+        // provider has to be handled as a unit rather than entry by entry.
+        Map<AiProvider, List<String>> chainModels = modelsByProvider(parseChain());
+        Map<AiProvider, List<String>> usableKeys = usableKeysByProvider(chainModels, now);
+
+        chainModels.forEach((provider, providerModels) -> {
+            for (String apiKey : usableKeys.getOrDefault(provider, List.of())) {
+                for (String model : providerModels) {
+                    ResolvedChat candidate = candidate(provider, model, apiKey, seen, now);
+                    if (candidate != null) {
+                        out.add(candidate);
+                    }
+                }
             }
-        }
+        });
 
         if (out.isEmpty()) {
             log.warn("[AI-FALLBACK] Every candidate is cooling down — retrying the primary {} anyway", primaryKey);
@@ -116,45 +145,21 @@ public class AiFallbackChain {
         return out;
     }
 
-    /** Parse one {@code provider:model} chain entry into a usable candidate, or null to skip it. */
-    private ResolvedChat parseAndBuild(String entry, Set<String> seen, Instant now) {
-        if (entry == null || entry.isBlank()) return null;
+    /** Build (or reuse) the candidate for one model on one key, or null when it is unusable. */
+    private ResolvedChat candidate(AiProvider provider, String model, String apiKey, Set<String> seen, Instant now) {
+        String keyRef = AiKeyRef.of(apiKey);
+        String modelKey = cooldownKey(provider.name(), keyRef, model);
 
-        int separator = entry.indexOf(':');
-        if (separator <= 0 || separator == entry.length() - 1) {
-            log.warn("[AI-FALLBACK] Ignoring malformed chain entry '{}' — expected 'provider:model'", entry);
-            return null;
-        }
-        AiProvider provider = provider(entry.substring(0, separator).trim());
-        String model = entry.substring(separator + 1).trim();
-        if (provider == null) {
-            log.warn("[AI-FALLBACK] Ignoring chain entry '{}' — unknown provider (expected one of "
-                    + "google, anthropic, openai, openai-compatible)", entry);
-            return null;
-        }
-
-        String modelKey = key(provider.name(), model);
         if (!seen.add(modelKey)) return null;          // already the primary, or listed twice
-        if (!isHealthy(modelKey, now)) {
-            log.debug("[AI-FALLBACK] Skipping {} — cooling down until {}", modelKey, cooldowns.get(modelKey));
-            return null;
-        }
-        if (unconfigured.contains(provider.name())) return null;
+        if (!isHealthy(modelKey, now)) return null;    // benched (usableKeys only checked the provider)
+        if (unusable.contains(providerKey(provider, keyRef))) return null;
 
         ResolvedChat cached = models.get(modelKey);
         if (cached != null) return cached;
 
-        String apiKey = apiKey(provider);
-        if (apiKey == null) {
-            // Remembered, so a chain listing a provider the deployment has no key for costs one
-            // warning rather than one per request.
-            unconfigured.add(provider.name());
-            log.warn("[AI-FALLBACK] Chain entry '{}' is unusable — no API key configured for {}", entry, provider);
-            return null;
-        }
         try {
             ChatModel chatModel = resolver.buildChatModel(provider, apiKey, baseUrl(provider), model);
-            ResolvedChat built = new ResolvedChat(chatModel, provider.name(), model);
+            ResolvedChat built = new ResolvedChat(chatModel, provider.name(), model, keyRef);
             models.put(modelKey, built);
             log.info("[AI-FALLBACK] Prepared fallback model {}", modelKey);
             return built;
@@ -162,14 +167,71 @@ public class AiFallbackChain {
             // A provider client that refuses to build must not take the whole chat request down:
             // the remaining candidates are still worth trying.
             log.warn("[AI-FALLBACK] Could not build fallback model {} — skipping it: {}", modelKey, e.toString());
-            unconfigured.add(provider.name());
+            unusable.add(providerKey(provider, keyRef));
             return null;
         }
     }
 
+    /** Chain models grouped by provider, both kept in chain order (providers by first appearance). */
+    private Map<AiProvider, List<String>> modelsByProvider(List<ChainEntry> entries) {
+        Map<AiProvider, List<String>> grouped = new LinkedHashMap<>();
+        for (ChainEntry entry : entries) {
+            List<String> models = grouped.computeIfAbsent(entry.provider(), p -> new ArrayList<>());
+            if (!models.contains(entry.model())) {
+                models.add(entry.model());
+            }
+        }
+        return grouped;
+    }
+
     /**
-     * Record that a model just failed, so subsequent requests skip it until its cooldown expires.
-     * A retired model gets the longer cooldown — unlike a spent quota it will not come back.
+     * Per provider, the keys still worth trying: those with at least one chain model not benched.
+     * <p>
+     * Filtering here (rather than per model) is what makes key rotation provider-wide — a key
+     * disappears from the list only once the provider has nothing left to offer on it.
+     */
+    private Map<AiProvider, List<String>> usableKeysByProvider(Map<AiProvider, List<String>> chainModels, Instant now) {
+        Map<AiProvider, List<String>> usable = new LinkedHashMap<>();
+        chainModels.forEach((provider, providerModels) -> {
+            List<String> keys = new ArrayList<>();
+            for (String apiKey : keyPool(provider)) {
+                String keyRef = AiKeyRef.of(apiKey);
+                if (unusable.contains(providerKey(provider, keyRef))) continue;
+                boolean anyModelHealthy = providerModels.stream()
+                        .anyMatch(model -> isHealthy(cooldownKey(provider.name(), keyRef, model), now));
+                if (anyModelHealthy) {
+                    keys.add(apiKey);
+                } else {
+                    log.debug("[AI-FALLBACK] {} key {} is spent for every chain model — rotating past it",
+                            provider, keyRef);
+                }
+            }
+            usable.put(provider, keys);
+        });
+        return usable;
+    }
+
+    /**
+     * The keys to try for a provider: its configured pool, or the single server API key when no
+     * pool is set (so an existing single-key deployment keeps working untouched).
+     */
+    private List<String> keyPool(AiProvider provider) {
+        List<String> configured = aiProperties.getFallback().getKeys().get(provider);
+        List<String> pool = configured == null ? List.of() : configured.stream()
+                .filter(key -> key != null && !key.isBlank() && !"disabled".equalsIgnoreCase(key.trim()))
+                .map(String::trim)
+                .distinct()
+                .toList();
+        if (!pool.isEmpty()) return pool;
+
+        String single = serverApiKey(provider);
+        return single == null ? List.of() : List.of(single);
+    }
+
+    /**
+     * Record that a candidate just failed, so subsequent requests skip that (model, key) pair
+     * until its cooldown expires. A retired model gets the longer cooldown — unlike a spent quota
+     * it will not come back.
      */
     public void trip(ResolvedChat chat, Failure failure) {
         trip(chat, failure, Instant.now());
@@ -184,12 +246,12 @@ public class AiFallbackChain {
                 : config.getQuotaCooldown();
         if (cooldown == null || cooldown.isZero() || cooldown.isNegative()) return;
 
-        String modelKey = key(chat.provider(), chat.model());
+        String modelKey = cooldownKey(chat.provider(), chat.keyRef(), chat.model());
         cooldowns.put(modelKey, now.plus(cooldown));
         log.warn("[AI-FALLBACK] {} on {} — benching it for {}", failure, modelKey, cooldown);
     }
 
-    /** Whether this model may be tried right now. */
+    /** Whether this (provider, key, model) may be tried right now. */
     boolean isHealthy(String modelKey, Instant now) {
         Instant until = cooldowns.get(modelKey);
         if (until == null) return true;
@@ -198,13 +260,40 @@ public class AiFallbackChain {
         return true;
     }
 
+    /** Parse the configured chain, dropping (and reporting) entries we cannot act on. */
+    private List<ChainEntry> parseChain() {
+        List<ChainEntry> entries = new ArrayList<>();
+        for (String entry : aiProperties.getFallback().getChain()) {
+            if (entry == null || entry.isBlank()) continue;
+            int separator = entry.indexOf(':');
+            if (separator <= 0 || separator == entry.length() - 1) {
+                log.warn("[AI-FALLBACK] Ignoring malformed chain entry '{}' — expected 'provider:model'", entry);
+                continue;
+            }
+            AiProvider provider = provider(entry.substring(0, separator).trim());
+            if (provider == null) {
+                log.warn("[AI-FALLBACK] Ignoring chain entry '{}' — unknown provider (expected one of "
+                        + "google, anthropic, openai, openai-compatible)", entry);
+                continue;
+            }
+            entries.add(new ChainEntry(provider, entry.substring(separator + 1).trim()));
+        }
+        return entries;
+    }
+
     /**
      * Canonical cooldown key. Needed because the same model reaches us under two different
      * provider spellings: Spring AI's selector name for the server default ({@code google-genai})
      * and the {@link AiProvider} name for BYOK and chain entries ({@code GOOGLE}).
      */
-    static String key(String provider, String model) {
-        return canonicalProvider(provider) + ':' + (model == null ? "" : model.trim().toLowerCase(Locale.ROOT));
+    static String cooldownKey(String provider, String keyRef, String model) {
+        return canonicalProvider(provider)
+                + ':' + (keyRef == null || keyRef.isBlank() ? AiKeyRef.UNKNOWN : keyRef)
+                + ':' + (model == null ? "" : model.trim().toLowerCase(Locale.ROOT));
+    }
+
+    private static String providerKey(AiProvider provider, String keyRef) {
+        return canonicalProvider(provider.name()) + ':' + keyRef;
     }
 
     private static String canonicalProvider(String provider) {
@@ -232,11 +321,11 @@ public class AiFallbackChain {
     }
 
     /**
-     * The server-configured API key for a provider, or null when there is none.
+     * The single server-configured API key for a provider, or null when there is none.
      * {@code disabled} is the sentinel application.yml uses to keep provider auto-configuration
      * from failing at startup, so it counts as "not configured" here too.
      */
-    private String apiKey(AiProvider provider) {
+    private String serverApiKey(AiProvider provider) {
         String property = switch (provider) {
             case GOOGLE -> "spring.ai.google.genai.api-key";
             case ANTHROPIC -> "spring.ai.anthropic.api-key";

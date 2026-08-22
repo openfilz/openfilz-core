@@ -564,6 +564,7 @@ another model instead of failing the user.
 |--------------------------|---------|-------------|
 | `openfilz.ai.fallback.enabled` / `AI_FALLBACK_ENABLED` | `false` | Enable automatic failover to another chat model |
 | `openfilz.ai.fallback.chain` / `AI_FALLBACK_CHAIN` | *(empty)* | Comma-separated `provider:model` entries, tried in order (`google`, `anthropic`, `openai`, `openai-compatible`) |
+| `openfilz.ai.fallback.keys.<provider>` / `AI_FALLBACK_KEYS_GOOGLE`, `..._ANTHROPIC`, `..._OPENAI` | *(empty)* | Comma-separated pool of API keys for that provider, tried in order. Empty means "keep using the single key above" |
 | `openfilz.ai.fallback.quota-cooldown` / `AI_FALLBACK_QUOTA_COOLDOWN` | `5m` | How long a model is skipped after a spent quota or a provider outage |
 | `openfilz.ai.fallback.unavailable-cooldown` / `AI_FALLBACK_UNAVAILABLE_COOLDOWN` | `6h` | How long a model is skipped after a `404` (retired / not enabled for the key) |
 
@@ -574,6 +575,21 @@ AI_FALLBACK_CHAIN=google:gemini-3.6-flash,anthropic:claude-haiku-4-5,openai:gpt-
 
 Each provider in the chain needs its own API key configured above; entries without one are
 skipped with a warning. The active chat model is always tried first and needs no entry.
+
+**Several keys per provider.** Quota is charged per API key, so a second key is a second
+allowance — the cheapest way to widen a free tier:
+
+```
+AI_FALLBACK_KEYS_GOOGLE=AIza-first-project-key,AIza-second-project-key
+```
+
+A provider is exhausted completely before the next one is used: every chain model on the first
+key, then every chain model on the second, and only then does the chain move to another provider
+— which of course uses that provider's own keys. A single spent model does not cost you the key;
+the provider's other models keep using it. Leave a provider's pool empty to keep its single key.
+
+Keys never appear in logs: each is identified by a short fingerprint (`a1b2c3d4`), which is also
+what keeps two BYOK users on the same model from sharing a cooldown.
 
 Two things happen on a failure. The request itself is **retried** on the next model, so the user
 still gets an answer. The failed model is then **benched** for its cooldown, so the requests that

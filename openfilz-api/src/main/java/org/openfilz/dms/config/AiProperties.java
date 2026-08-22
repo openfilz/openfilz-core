@@ -4,9 +4,13 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
+import org.openfilz.dms.enums.AiProvider;
+
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Configuration properties for the AI document chat feature.
@@ -120,6 +124,19 @@ public class AiProperties {
          * warning. The active chat model is always tried first and needs no entry here.
          */
         private List<String> chain = new ArrayList<>();
+
+        /**
+         * Additional API keys per provider, tried in order — the answer to a free tier whose
+         * quota is charged <em>per key</em> rather than per model.
+         * <p>
+         * Once every {@link #chain} model for a provider is out of quota on the key in use, the
+         * next key in that provider's pool takes over and those models are available again. Each
+         * provider keeps its own pool, so a chain that mixes providers always reaches for the key
+         * belonging to whichever provider it lands on.
+         * <p>
+         * Leave a provider's pool empty to keep using its single {@code spring.ai.*.api-key}.
+         */
+        private Map<AiProvider, List<String>> keys = new LinkedHashMap<>();
 
         /**
          * How long a model is benched after an exhausted quota, an overloaded provider, or a

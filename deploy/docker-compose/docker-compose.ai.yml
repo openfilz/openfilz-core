@@ -115,6 +115,12 @@ services:
       #   AI_FALLBACK_CHAIN=google:gemini-3.6-flash,anthropic:claude-haiku-4-5,openai:gpt-4o-mini
       AI_FALLBACK_ENABLED: ${AI_FALLBACK_ENABLED:-false}
       AI_FALLBACK_CHAIN: ${AI_FALLBACK_CHAIN:-}
+      # Extra API keys per provider (comma-separated, tried in order). Quota is charged per
+      # key, so a provider rotates to its next key once every chain model is spent on the
+      # current one. Leave empty to keep using the single key above.
+      AI_FALLBACK_KEYS_GOOGLE: ${AI_FALLBACK_KEYS_GOOGLE:-}
+      AI_FALLBACK_KEYS_ANTHROPIC: ${AI_FALLBACK_KEYS_ANTHROPIC:-}
+      AI_FALLBACK_KEYS_OPENAI: ${AI_FALLBACK_KEYS_OPENAI:-}
       AI_FALLBACK_QUOTA_COOLDOWN: ${AI_FALLBACK_QUOTA_COOLDOWN:-5m}
       AI_FALLBACK_UNAVAILABLE_COOLDOWN: ${AI_FALLBACK_UNAVAILABLE_COOLDOWN:-6h}
 

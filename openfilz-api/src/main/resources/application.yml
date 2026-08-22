@@ -136,6 +136,16 @@ openfilz:
     fallback:
       enabled: ${AI_FALLBACK_ENABLED:false}
       chain: ${AI_FALLBACK_CHAIN:}
+      # Extra API keys per provider, comma-separated and tried in order. Quota is charged per
+      # KEY, so once every chain model of a provider is spent on the key in use, the next key of
+      # that provider takes over and those models are available again. A provider left empty here
+      # keeps using its single spring.ai.*.api-key.
+      #   AI_FALLBACK_KEYS_GOOGLE=AIza-first,AIza-second
+      keys:
+        google: ${AI_FALLBACK_KEYS_GOOGLE:}
+        anthropic: ${AI_FALLBACK_KEYS_ANTHROPIC:}
+        openai: ${AI_FALLBACK_KEYS_OPENAI:}
+        openai-compatible: ${AI_FALLBACK_KEYS_OPENAI_COMPATIBLE:}
       quota-cooldown: ${AI_FALLBACK_QUOTA_COOLDOWN:5m}
       unavailable-cooldown: ${AI_FALLBACK_UNAVAILABLE_COOLDOWN:6h}
     # BYOK: users may override the chat LLM with their own provider + API key (personal settings).

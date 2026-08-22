@@ -302,6 +302,7 @@ in `openfilz.ai.fallback.chain` instead of failing the user.
 ```
 AI_FALLBACK_ENABLED=true
 AI_FALLBACK_CHAIN=google:gemini-3.6-flash,anthropic:claude-haiku-4-5,openai:gpt-4o-mini
+AI_FALLBACK_KEYS_GOOGLE=AIza-first-project,AIza-second-project
 ```
 
 Two mechanisms, and both matter:
@@ -313,6 +314,36 @@ Two mechanisms, and both matter:
 
 Without the cooldown, a spent **daily** quota would add a failing call to every request for the
 rest of the day; with it, the deployment pays that cost once.
+
+### Key pools and rotation
+
+Quota is charged **per API key**, per model — so a second key is a second allowance, and
+`openfilz.ai.fallback.keys.<provider>` gives each provider an ordered pool. A provider with no
+pool keeps using its single `spring.ai.*.api-key`, so existing deployments are unaffected.
+
+Candidates are laid out so that a provider is exhausted completely — every chain model on every
+key — before the next provider is touched:
+
+```
+google:     m1/keyA   m2/keyA   m1/keyB   m2/keyB
+anthropic:  c1/keyX   c1/keyY
+```
+
+The key therefore rotates as soon as the provider has nothing left on the current one, and a
+different provider is only reached once the previous one is spent outright. Chain order decides
+*provider* priority (by first appearance) and model priority within a provider; an interleaved
+chain like `google:m1,anthropic:c1,google:m2` is grouped as `google:m1,google:m2` then
+`anthropic:c1`, because key rotation is inherently a per-provider decision.
+
+Which key is "current" is **derived** from the cooldown registry rather than held in a pointer: a
+provider's usable keys are those with at least one chain model still healthy. A key spent an hour
+ago drops out of the list and rejoins it when its cooldowns lapse — no stored index to get stuck.
+A single spent *model* does not cost you the key: the other models keep using it, and only that
+model moves on.
+
+Keys are never held in cooldown maps, cache keys or logs. `AiKeyRef` reduces each to an 8-hex-char
+SHA-256 fingerprint, which is enough to tell keys apart and useless to anyone reading a log — and
+it is what keeps two BYOK users on the same provider and model from sharing a cooldown bucket.
 
 ### What counts as a failover
 
@@ -366,6 +397,7 @@ re-learns.
 |---|---|
 | Selector derivation | `config/AiModelProviderEnvironmentPostProcessor` |
 | Quota failover / cooldowns | `service/ai/AiFallbackChain`, `service/ai/AiFailoverPolicy` |
+| API-key fingerprints | `service/ai/AiKeyRef` |
 | Beans (DataSource, PgVectorStore) | `config/AiConfig` |
 | Embedding-change guard | `config/EmbeddingRegistryGuard` |
 | Ingestion fan-out | `service/impl/DefaultMetadataPostProcessor` |
