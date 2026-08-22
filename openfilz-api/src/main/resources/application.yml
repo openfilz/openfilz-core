@@ -127,6 +127,27 @@ openfilz:
     google:
       chat:
         enabled: ${GOOGLE_CHAT_ENABLED:false}     # chat only — embeddings stay on Ollama/OpenAI (768-dim pgvector)
+    # Automatic failover when the active chat model refuses to answer — an exhausted free-tier
+    # quota, a retired model, or a provider that is down. The request is retried on the next
+    # model in the chain, and the failed one is benched for a cooldown so later requests skip it
+    # instead of each paying the same failing call. Credential failures never fail over.
+    # Chain entries are 'provider:model', tried in order; each provider needs its API key set.
+    #   AI_FALLBACK_CHAIN=google:gemini-3.6-flash,anthropic:claude-haiku-4-5,openai:gpt-4o-mini
+    fallback:
+      enabled: ${AI_FALLBACK_ENABLED:false}
+      chain: ${AI_FALLBACK_CHAIN:}
+      # Extra API keys per provider, comma-separated and tried in order. Quota is charged per
+      # KEY, so once every chain model of a provider is spent on the key in use, the next key of
+      # that provider takes over and those models are available again. A provider left empty here
+      # keeps using its single spring.ai.*.api-key.
+      #   AI_FALLBACK_KEYS_GOOGLE=AIza-first,AIza-second
+      keys:
+        google: ${AI_FALLBACK_KEYS_GOOGLE:}
+        anthropic: ${AI_FALLBACK_KEYS_ANTHROPIC:}
+        openai: ${AI_FALLBACK_KEYS_OPENAI:}
+        openai-compatible: ${AI_FALLBACK_KEYS_OPENAI_COMPATIBLE:}
+      quota-cooldown: ${AI_FALLBACK_QUOTA_COOLDOWN:5m}
+      unavailable-cooldown: ${AI_FALLBACK_UNAVAILABLE_COOLDOWN:6h}
     # BYOK: users may override the chat LLM with their own provider + API key (personal settings).
     # Requires an encryption key for the stored API keys: openssl rand -base64 32
     user-settings:
@@ -293,7 +314,7 @@ spring.ai.anthropic:
 spring.ai.google.genai:
   api-key: ${GOOGLE_API_KEY:disabled}
   chat:
-    model: ${GOOGLE_CHAT_MODEL:gemini-2.5-flash}
+    model: ${GOOGLE_CHAT_MODEL:gemini-3.6-flash}
 
 # PgVector Store (auto-configured when spring-ai-starter-vector-store-pgvector is on classpath)
 spring.ai.vectorstore.pgvector:

@@ -10,13 +10,23 @@
 #
 # For OpenAI instead of Ollama, skip this overlay and set the OPENAI_*
 # variables in .env along with OPENFILZ_AI_ACTIVE=true.
+#
+# NOTE: this intentionally reads POSTGRES_AI_IMAGE, not POSTGRES_IMAGE — if it
+# reused POSTGRES_IMAGE, a value already pinned in .env for the base (non-AI)
+# deployment (e.g. POSTGRES_IMAGE=postgres:17) would silently defeat this
+# override and postgres would come up without the vector extension, failing
+# Flyway's V1_4__add_ai_support.sql with "extension \"vector\" is not
+# available". If you're enabling AI on a deployment that was already running
+# without it, this override still applies on `docker-compose ... up -d` —
+# compose recreates the postgres container in place (same volume, no data
+# loss) once it sees the image changed.
 
 services:
   # =============================================================================
   # PostgreSQL — override to pgvector-enabled image
   # =============================================================================
   postgres:
-    image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg17}
+    image: ${POSTGRES_AI_IMAGE:-pgvector/pgvector:pg17}
 
   # =============================================================================
   # Ollama LLM Server (local AI inference)
@@ -97,7 +107,22 @@ services:
       # Google Gemini (chat only — embeddings stay on Ollama/OpenAI)
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       GOOGLE_CHAT_ENABLED: ${GOOGLE_CHAT_ENABLED:-false}
-      GOOGLE_CHAT_MODEL: ${GOOGLE_CHAT_MODEL:-gemini-2.5-flash}
+      GOOGLE_CHAT_MODEL: ${GOOGLE_CHAT_MODEL:-gemini-3.6-flash}
+
+      # Automatic failover when the active chat model is out of quota, retired, or unreachable.
+      # Chain entries are 'provider:model' (google|anthropic|openai|openai-compatible), tried in
+      # order; each needs its API key above. Useful on free tiers, whose allowances run out fast.
+      #   AI_FALLBACK_CHAIN=google:gemini-3.6-flash,anthropic:claude-haiku-4-5,openai:gpt-4o-mini
+      AI_FALLBACK_ENABLED: ${AI_FALLBACK_ENABLED:-false}
+      AI_FALLBACK_CHAIN: ${AI_FALLBACK_CHAIN:-}
+      # Extra API keys per provider (comma-separated, tried in order). Quota is charged per
+      # key, so a provider rotates to its next key once every chain model is spent on the
+      # current one. Leave empty to keep using the single key above.
+      AI_FALLBACK_KEYS_GOOGLE: ${AI_FALLBACK_KEYS_GOOGLE:-}
+      AI_FALLBACK_KEYS_ANTHROPIC: ${AI_FALLBACK_KEYS_ANTHROPIC:-}
+      AI_FALLBACK_KEYS_OPENAI: ${AI_FALLBACK_KEYS_OPENAI:-}
+      AI_FALLBACK_QUOTA_COOLDOWN: ${AI_FALLBACK_QUOTA_COOLDOWN:-5m}
+      AI_FALLBACK_UNAVAILABLE_COOLDOWN: ${AI_FALLBACK_UNAVAILABLE_COOLDOWN:-6h}
 
       # Per-user AI settings (BYOK) — needs an encryption key: openssl rand -base64 32
       AI_USER_SETTINGS_ENABLED: ${AI_USER_SETTINGS_ENABLED:-false}

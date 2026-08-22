@@ -48,8 +48,21 @@ import java.util.List;
 @Lazy
 public class UserChatClientResolver {
 
-    /** A resolved chat model with display metadata for the frontend badge. */
-    public record ResolvedChat(ChatModel chatModel, String provider, String model) {}
+    /**
+     * A resolved chat model with display metadata for the frontend badge, plus a fingerprint of
+     * the API key behind it.
+     * <p>
+     * The fingerprint (never the key) lets {@link AiFallbackChain} bench a model <em>per key</em>:
+     * quota is charged per key, so "gemini-3.6-flash is out of quota" is only ever true of one
+     * key at a time, and two BYOK users on the same provider and model must not share a cooldown.
+     */
+    public record ResolvedChat(ChatModel chatModel, String provider, String model, String keyRef) {
+
+        /** For callers with no key to declare; the model is then benched under its own bucket. */
+        public ResolvedChat(ChatModel chatModel, String provider, String model) {
+            this(chatModel, provider, model, AiKeyRef.UNKNOWN);
+        }
+    }
 
     private record CachedModel(String configHash, ResolvedChat resolved) {}
 
@@ -117,7 +130,7 @@ public class UserChatClientResolver {
         AiProvider provider = AiProvider.valueOf(settings.getProvider());
         String apiKey = cipher.decrypt(settings.getApiKeyEncrypted());
         ChatModel model = buildChatModel(provider, apiKey, settings.getBaseUrl(), settings.getModel());
-        ResolvedChat resolved = new ResolvedChat(model, provider.name(), settings.getModel());
+        ResolvedChat resolved = new ResolvedChat(model, provider.name(), settings.getModel(), AiKeyRef.of(apiKey));
         cache.put(userEmail, new CachedModel(hash, resolved));
         log.debug("[AI] Built {} chat model ({}) for user {}", provider, settings.getModel(), userEmail);
         return resolved;
@@ -173,7 +186,26 @@ public class UserChatClientResolver {
 
     private ResolvedChat defaultChat() {
         String provider = environment.getProperty("spring.ai.model.chat", "none");
-        return new ResolvedChat(defaultChatModel, provider, defaultModelFor(provider));
+        return new ResolvedChat(defaultChatModel, provider, defaultModelFor(provider), defaultKeyRefFor(provider));
+    }
+
+    /**
+     * Fingerprint of the key the active provider's auto-configuration is using, so the server
+     * default and a fallback-chain entry naming the same provider+model+key are recognised as the
+     * same candidate instead of both being tried.
+     */
+    private String defaultKeyRefFor(String provider) {
+        String property = switch (provider) {
+            case "anthropic" -> "spring.ai.anthropic.api-key";
+            case "google-genai" -> "spring.ai.google.genai.api-key";
+            case "openai" -> "spring.ai.openai.api-key";
+            default -> null;   // ollama needs no key
+        };
+        if (property == null) return AiKeyRef.UNKNOWN;
+        String key = environment.getProperty(property);
+        // 'disabled' is the application.yml sentinel that keeps auto-configuration from failing.
+        return (key == null || key.isBlank() || "disabled".equalsIgnoreCase(key))
+                ? AiKeyRef.UNKNOWN : AiKeyRef.of(key);
     }
 
     /** Display model for the server default, resolved from the active provider's config. */

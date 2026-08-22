@@ -11,10 +11,13 @@ import org.openfilz.dms.repository.AiChatConversationRepository;
 import org.openfilz.dms.repository.AiChatMessageRepository;
 import org.openfilz.dms.service.AiChatService;
 import org.openfilz.dms.service.ai.AiAccessPolicy;
+import org.openfilz.dms.service.ai.AiFailoverPolicy;
+import org.openfilz.dms.service.ai.AiFallbackChain;
 import org.openfilz.dms.service.ai.ChatClientAssembler;
 import org.openfilz.dms.service.ai.DocumentAiTools;
 import org.openfilz.dms.service.ai.DocumentAiToolsFactory;
 import org.openfilz.dms.service.ai.UserChatClientResolver;
+import org.openfilz.dms.service.ai.UserChatClientResolver.ResolvedChat;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
@@ -56,6 +59,7 @@ import java.util.UUID;
 public class AiChatServiceImpl implements AiChatService {
 
     private final UserChatClientResolver chatResolver;
+    private final AiFallbackChain fallbackChain;
     private final ChatClientAssembler assembler;
     private final DocumentAiToolsFactory toolsFactory;
     private final VectorStore vectorStore;
@@ -89,10 +93,14 @@ public class AiChatServiceImpl implements AiChatService {
             // 2. Resolve the user's chat model (server default or BYOK) and build the
             //    per-request tool instance + client on top of it.
             return chatResolver.resolve(userEmail).flatMapMany(resolved -> {
-                DocumentAiTools tools = toolsFactory.create(resolved.chatModel(), userEmail, authentication);
-                ChatClient chatClient = assembler.assemble(resolved.chatModel(), tools);
+                // Models to try, best first: the user's own (or the server default) unless it is
+                // cooling down after a quota failure, then the configured fallbacks.
+                List<ResolvedChat> candidates = fallbackChain.candidates(resolved);
+                ResolvedChat first = candidates.getFirst();
+                DocumentAiTools tools = toolsFactory.create(first.chatModel(), userEmail, authentication);
                 Set<String> ragDocumentNames = new HashSet<>();
-                log.debug("[AI] Chat model: {} ({})", resolved.provider(), resolved.model());
+                log.debug("[AI] Chat model: {} ({}){}", first.provider(), first.model(),
+                        candidates.size() > 1 ? " (+" + (candidates.size() - 1) + " fallback)" : "");
 
                 // 3. Save user message
                 Mono<Void> saveUserMsg = saveMessage(conversationId, "USER", request.getMessage())
@@ -123,17 +131,7 @@ public class AiChatServiceImpl implements AiChatService {
                             StringBuilder fullResponse = new StringBuilder();
 
                             log.debug("[AI] Sending prompt to LLM (streaming)...");
-                            return chatClient.prompt()
-                                    .messages(history)
-                                    .user(augmentedMessage)
-                                    .stream()
-                                    .content()
-                                    .doOnNext(chunk -> {
-                                        fullResponse.append(chunk);
-                                        if (fullResponse.length() == chunk.length()) {
-                                            log.debug("[AI] LLM started streaming response");
-                                        }
-                                    })
+                            return streamWithFailover(candidates, 0, tools, history, augmentedMessage, fullResponse)
                                     .doOnComplete(() -> log.debug("[AI] LLM streaming complete, raw response: {} chars", fullResponse.length()))
                                     .then(Mono.defer(() -> {
                                         // Post-process: enrich response with document links
@@ -180,6 +178,67 @@ public class AiChatServiceImpl implements AiChatService {
                         });
             });
         });
+    }
+
+    /**
+     * Stream the answer from {@code candidates[index]}, falling over to the next candidate when
+     * the model refuses for a reason another model could survive (quota exhausted, model retired,
+     * provider down — see {@link AiFailoverPolicy}).
+     * <p>
+     * Two conditions must hold before a retry, and both are about not showing the user something
+     * wrong:
+     * <ul>
+     *   <li><b>Nothing streamed yet.</b> Once tokens have reached the client, restarting on another
+     *       model would splice two different answers together, so a mid-stream failure propagates.</li>
+     *   <li><b>No tool has mutated anything.</b> Read-only tools are safe to repeat, but a retry
+     *       after a move/rename/delete would run it twice. {@code modifiedFolders} is empty exactly
+     *       when no mutating tool has fired this turn.</li>
+     * </ul>
+     * The failed model is benched in {@link AiFallbackChain} on the way out, so the requests that
+     * follow skip it instead of each paying the same failing call.
+     */
+    private Flux<String> streamWithFailover(List<ResolvedChat> candidates, int index, DocumentAiTools tools,
+                                            List<Message> history, String augmentedMessage, StringBuilder fullResponse) {
+        ResolvedChat candidate = candidates.get(index);
+        tools.rebindChatModel(candidate.chatModel());
+        ChatClient chatClient = assembler.assemble(candidate.chatModel(), tools);
+
+        return chatClient.prompt()
+                .messages(history)
+                .user(augmentedMessage)
+                .stream()
+                .content()
+                .doOnNext(chunk -> {
+                    fullResponse.append(chunk);
+                    if (fullResponse.length() == chunk.length()) {
+                        log.debug("[AI] LLM started streaming response");
+                    }
+                })
+                .onErrorResume(error -> {
+                    AiFailoverPolicy.Failure failure = AiFailoverPolicy.classify(error);
+                    fallbackChain.trip(candidate, failure);
+
+                    boolean hasNextCandidate = index + 1 < candidates.size();
+                    boolean nothingStreamed = fullResponse.isEmpty();
+                    boolean nothingMutated = tools.getModifiedFolders().isEmpty();
+
+                    if (!failure.shouldFailover() || !hasNextCandidate || !nothingStreamed || !nothingMutated) {
+                        if (failure.shouldFailover() && !hasNextCandidate) {
+                            log.error("[AI] {} on {} ({}) and no fallback model left",
+                                    failure, candidate.provider(), candidate.model());
+                        } else if (failure.shouldFailover()) {
+                            log.error("[AI] {} on {} ({}) but cannot retry safely (streamed={}, mutated={})",
+                                    failure, candidate.provider(), candidate.model(),
+                                    !nothingStreamed, !nothingMutated);
+                        }
+                        return Flux.error(error);
+                    }
+
+                    ResolvedChat next = candidates.get(index + 1);
+                    log.warn("[AI] {} on {} ({}) — falling back to {} ({})", failure,
+                            candidate.provider(), candidate.model(), next.provider(), next.model());
+                    return streamWithFailover(candidates, index + 1, tools, history, augmentedMessage, fullResponse);
+                });
     }
 
     @Override
