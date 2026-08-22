@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[bf90f7ee7c7b904](https://github.com/openfilz/openfilz-core/commit/bf90f7ee7c7b904) maven-release-bot[bot] *2026-08-22 01:24:53*
+[bf9503b36e62a15](https://github.com/openfilz/openfilz-core/commit/bf9503b36e62a15) maven-release-bot[bot] *2026-08-22 02:01:28*
 
 
-## v1.2.22
+## v1.2.23
 ### No issue
 
-**[maven-release-plugin] prepare release v1.2.22**
+**[maven-release-plugin] prepare release v1.2.23**
 
 
-[9b4aa439a083efe](https://github.com/openfilz/openfilz-core/commit/9b4aa439a083efe) maven-release-bot[bot] *2026-08-22 01:24:50*
+[a55f4563b3edf68](https://github.com/openfilz/openfilz-core/commit/a55f4563b3edf68) maven-release-bot[bot] *2026-08-22 02:01:26*
 
-**Merge pull request #189 from openfilz/develop**
+**Merge pull request #190 from openfilz/develop**
 
- * release: pgvector image override fix + AI chat-model failover with per-provider key pools
+ * release: AI fallback chain names the primary model, validates keys at startup, never fails over Ollama
 
-[295d78cc927ed6a](https://github.com/openfilz/openfilz-core/commit/295d78cc927ed6a) Yann Demel *2026-08-22 01:22:14*
+[2e7bf3448df2ee2](https://github.com/openfilz/openfilz-core/commit/2e7bf3448df2ee2) Yann Demel *2026-08-22 01:58:44*
 
 
