@@ -64,14 +64,13 @@ public class AiDocumentQueryService {
      * restrict results to the user's own and shared documents.
      */
     public List<FullDocumentInfo> query(ListFolderRequest request, String userEmail) {
-        log.debug("[AI-QUERY] query: folder={}, nameLike={}, type={}, sort={}:{}, page={}/{}",
-                request.id(), request.nameLike(), request.type(),
+        log.debug("[AI-QUERY] query: scope={}, nameLike={}, type={}, sort={}:{}, page={}/{}",
+                scope(request), request.nameLike(), request.type(),
                 request.pageInfo().sortBy(), request.pageInfo().sortOrder(),
                 request.pageInfo().pageNumber(), request.pageInfo().pageSize());
 
         StringBuilder query = buildSelect(userEmail);
-        criteria.checkFilter(request);
-        criteria.applyFilter(PREFIX, query, request);
+        applyFilter(query, request);
         applySort(query, request);
         appendOffsetLimit(query, request);
 
@@ -90,12 +89,11 @@ public class AiDocumentQueryService {
      * Count documents matching the filter (same filtering as query, no sort/pagination).
      */
     public long count(ListFolderRequest request, String userEmail) {
-        log.debug("[AI-QUERY] count: folder={}, nameLike={}, type={}", request.id(), request.nameLike(), request.type());
+        log.debug("[AI-QUERY] count: scope={}, nameLike={}, type={}", scope(request), request.nameLike(), request.type());
 
         StringBuilder query = new StringBuilder("select count(*)");
         appendFromClause(query, userEmail);
-        criteria.checkFilter(request);
-        criteria.applyFilter(PREFIX, query, request);
+        applyFilter(query, request);
 
         log.debug("[AI-QUERY] SQL: {}", query);
 
@@ -106,6 +104,45 @@ public class AiDocumentQueryService {
         Long result = sql.map(row -> row.get(0, Long.class)).one().block();
         log.debug("[AI-QUERY] Count: {}", result);
         return result != null ? result : 0;
+    }
+
+    /**
+     * Apply the request's filters, honouring a whole-tree search.
+     * <p>
+     * {@link ListFolderCriteria} is written for a folder <em>listing</em>, where a null id means
+     * "the root level" and {@code recursive} only widens an id that was given. An AI search for
+     * {@code folder="all"} means something else entirely — every document at every depth — and
+     * arrives here as exactly that combination: no id, recursive true. Left to the shared
+     * criteria it silently became {@code parent_id IS NULL}, so a global search only ever saw
+     * root-level documents and the model had to walk the tree folder by folder, one LLM call per
+     * folder. Here that combination emits no parent predicate at all.
+     * <p>
+     * Handled in this service rather than in the shared criteria on purpose: the GraphQL contract
+     * documents {@code recursive} as "when true and id is set", and other callers rely on a null
+     * id meaning the root level.
+     */
+    private void applyFilter(StringBuilder query, ListFolderRequest request) {
+        criteria.checkFilter(request);
+        if (searchesWholeTree(request)) {
+            criteria.appendAllFilterExceptParentId(PREFIX, query, request, false);
+        } else {
+            criteria.applyFilter(PREFIX, query, request);
+        }
+    }
+
+    /**
+     * The folder scope, for logs. {@code folder=null} was ambiguous between "the root level" and
+     * "everywhere" — the two the parent-id bug conflated — so it names them apart.
+     */
+    private static String scope(ListFolderRequest request) {
+        if (searchesWholeTree(request)) return "all folders";
+        if (request.id() == null) return "root level only";
+        return (Boolean.TRUE.equals(request.recursive()) ? "folder+subfolders " : "folder ") + request.id();
+    }
+
+    /** Whether this request asks for every document at every depth, rather than one folder's contents. */
+    private static boolean searchesWholeTree(ListFolderRequest request) {
+        return request.id() == null && Boolean.TRUE.equals(request.recursive());
     }
 
     /**
