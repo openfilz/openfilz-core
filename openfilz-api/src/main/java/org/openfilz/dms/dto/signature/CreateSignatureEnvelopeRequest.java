@@ -29,7 +29,7 @@ public record CreateSignatureEnvelopeRequest(
         @NotNull UUID sourceDocId,
         @NotBlank @Size(max = 255) String title,
         @Size(max = 2000) String message,
-        @NotEmpty @Valid List<SignatureRecipientInput> recipients,
+        @NotEmpty List<@Valid SignatureRecipientInput> recipients,
         @Min(1) @Max(365) Integer expiresInDays,
         Boolean sequential,
         @Min(1) @Max(90) Integer reminderDays,

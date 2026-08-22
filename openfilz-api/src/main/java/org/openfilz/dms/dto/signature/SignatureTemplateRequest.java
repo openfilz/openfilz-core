@@ -15,8 +15,8 @@ public record SignatureTemplateRequest(
         @NotBlank @Size(max = 255) String name,
         @Size(max = 2000) String description,
         UUID sourceDocId,
-        @NotEmpty @Valid List<SignatureTemplateRole> roles,
-        @NotEmpty @Valid List<SignatureTemplateField> fields,
+        @NotEmpty List<@Valid SignatureTemplateRole> roles,
+        @NotEmpty List<@Valid SignatureTemplateField> fields,
         @Size(max = 2000) String message,
         @Min(1) @Max(365) Integer expiresInDays,
         Boolean sequential

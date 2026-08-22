@@ -30,7 +30,7 @@ public record SignatureRecipientInput(
         SignatureAuthMethod authMethod,
         @Size(max = 32) String phone,
         @Size(max = 8) String locale,
-        @Valid List<SignatureFieldInput> fields,
+        List<@Valid SignatureFieldInput> fields,
         @Valid SignatureFieldPlacement field
 ) {
     public List<SignatureFieldInput> effectiveFields() {

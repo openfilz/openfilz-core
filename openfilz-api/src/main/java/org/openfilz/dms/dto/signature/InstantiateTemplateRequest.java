@@ -21,7 +21,7 @@ public record InstantiateTemplateRequest(
         UUID sourceDocId,
         @Size(max = 255) String title,
         @Size(max = 2000) String message,
-        @NotEmpty @Valid List<RoleBinding> recipients,
+        @NotEmpty List<@Valid RoleBinding> recipients,
         @Min(1) @Max(365) Integer expiresInDays,
         @Min(1) @Max(90) Integer reminderDays,
         @Size(max = 8) String locale,

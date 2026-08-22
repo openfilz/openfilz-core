@@ -15,7 +15,7 @@ import java.util.List;
 public record ApplySignatureRequest(
         String signatureImage,
         @Size(max = 255) String typedName,
-        @Valid List<SignatureFieldValue> fields
+        List<@Valid SignatureFieldValue> fields
 ) {
     public boolean isLegacy() {
         return fields == null || fields.isEmpty();
