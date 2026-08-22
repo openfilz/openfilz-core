@@ -234,7 +234,21 @@ services:
       ANTHROPIC_CHAT_MODEL: ${ANTHROPIC_CHAT_MODEL:-claude-opus-5}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       GOOGLE_CHAT_ENABLED: ${GOOGLE_CHAT_ENABLED:-false}
-      GOOGLE_CHAT_MODEL: ${GOOGLE_CHAT_MODEL:-gemini-2.5-flash}
+      GOOGLE_CHAT_MODEL: ${GOOGLE_CHAT_MODEL:-gemini-3.6-flash}
+      # Automatic failover when the active chat model is out of quota, retired, or unreachable
+      # (see openfilz.ai.fallback). Chain entries are 'provider:model', tried in order.
+      AI_FALLBACK_ENABLED: ${AI_FALLBACK_ENABLED:-false}
+      AI_FALLBACK_CHAIN: ${AI_FALLBACK_CHAIN:-}
+      # Extra API keys per provider (comma-separated, tried in order). Quota is charged per
+      # key, so a provider rotates to its next key once every chain model is spent on the
+      # current one. Leave empty to keep using the single key above.
+      AI_FALLBACK_KEYS_GOOGLE: ${AI_FALLBACK_KEYS_GOOGLE:-}
+      AI_FALLBACK_KEYS_ANTHROPIC: ${AI_FALLBACK_KEYS_ANTHROPIC:-}
+      AI_FALLBACK_KEYS_OPENAI: ${AI_FALLBACK_KEYS_OPENAI:-}
+      # FAIL_FAST refuses to start when a chain provider has no key; WARN starts anyway.
+      AI_FALLBACK_VALIDATION: ${AI_FALLBACK_VALIDATION:-FAIL_FAST}
+      AI_FALLBACK_QUOTA_COOLDOWN: ${AI_FALLBACK_QUOTA_COOLDOWN:-5m}
+      AI_FALLBACK_UNAVAILABLE_COOLDOWN: ${AI_FALLBACK_UNAVAILABLE_COOLDOWN:-6h}
       # Per-user AI settings (BYOK) — needs an encryption key: openssl rand -base64 32
       AI_USER_SETTINGS_ENABLED: ${AI_USER_SETTINGS_ENABLED:-false}
       AI_SETTINGS_ENCRYPTION_KEY: ${AI_SETTINGS_ENCRYPTION_KEY:-}

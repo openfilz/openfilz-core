@@ -10,6 +10,7 @@ import org.openfilz.dms.service.DocumentService;
 import org.openfilz.dms.service.StorageService;
 import org.openfilz.dms.service.ai.AiAccessPolicy;
 import org.openfilz.dms.service.ai.AiDocumentQueryService;
+import org.openfilz.dms.service.ai.AiFallbackChain;
 import org.openfilz.dms.service.ai.ChatClientAssembler;
 import org.openfilz.dms.service.ai.DocumentAiTools;
 import org.openfilz.dms.service.ai.DocumentAiToolsFactory;
@@ -57,6 +58,7 @@ class AiRagAccessFilterTest {
     private AiChatServiceImpl service(AiAccessPolicy policy) {
         return new AiChatServiceImpl(
                 mock(UserChatClientResolver.class),
+                mock(AiFallbackChain.class),
                 mock(ChatClientAssembler.class),
                 mock(DocumentAiToolsFactory.class),
                 vectorStore,

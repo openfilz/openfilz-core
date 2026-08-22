@@ -64,14 +64,13 @@ public class AiDocumentQueryService {
      * restrict results to the user's own and shared documents.
      */
     public List<FullDocumentInfo> query(ListFolderRequest request, String userEmail) {
-        log.debug("[AI-QUERY] query: folder={}, nameLike={}, type={}, sort={}:{}, page={}/{}",
-                request.id(), request.nameLike(), request.type(),
+        log.debug("[AI-QUERY] query: scope={}, nameLike={}, type={}, sort={}:{}, page={}/{}",
+                scope(request), request.nameLike(), request.type(),
                 request.pageInfo().sortBy(), request.pageInfo().sortOrder(),
                 request.pageInfo().pageNumber(), request.pageInfo().pageSize());
 
         StringBuilder query = buildSelect(userEmail);
-        criteria.checkFilter(request);
-        criteria.applyFilter(PREFIX, query, request);
+        applyFilter(query, request);
         applySort(query, request);
         appendOffsetLimit(query, request);
 
@@ -90,12 +89,11 @@ public class AiDocumentQueryService {
      * Count documents matching the filter (same filtering as query, no sort/pagination).
      */
     public long count(ListFolderRequest request, String userEmail) {
-        log.debug("[AI-QUERY] count: folder={}, nameLike={}, type={}", request.id(), request.nameLike(), request.type());
+        log.debug("[AI-QUERY] count: scope={}, nameLike={}, type={}", scope(request), request.nameLike(), request.type());
 
         StringBuilder query = new StringBuilder("select count(*)");
         appendFromClause(query, userEmail);
-        criteria.checkFilter(request);
-        criteria.applyFilter(PREFIX, query, request);
+        applyFilter(query, request);
 
         log.debug("[AI-QUERY] SQL: {}", query);
 
@@ -106,6 +104,35 @@ public class AiDocumentQueryService {
         Long result = sql.map(row -> row.get(0, Long.class)).one().block();
         log.debug("[AI-QUERY] Count: {}", result);
         return result != null ? result : 0;
+    }
+
+    /**
+     * Apply the request's filters.
+     * <p>
+     * Always through {@link ListFolderCriteria#applyFilter}, never around it. A whole-tree search
+     * ({@code folder="all"}) needs no parent predicate, but in a layer with per-document access
+     * control the access predicate is written by the same method that writes the parent one — so
+     * skipping it to drop the parent scope would drop the access restriction with it, and hand
+     * the model every user's documents. The criteria owns that decision; this service only asks.
+     */
+    private void applyFilter(StringBuilder query, ListFolderRequest request) {
+        criteria.checkFilter(request);
+        criteria.applyFilter(PREFIX, query, request);
+    }
+
+    /**
+     * The folder scope, for logs. {@code folder=null} was ambiguous between "the root level" and
+     * "everywhere" — the two the parent-id bug conflated — so it names them apart.
+     */
+    private static String scope(ListFolderRequest request) {
+        if (searchesWholeTree(request)) return "all folders";
+        if (request.id() == null) return "root level only";
+        return (Boolean.TRUE.equals(request.recursive()) ? "folder+subfolders " : "folder ") + request.id();
+    }
+
+    /** Whether this request asks for every document at every depth, rather than one folder's contents. */
+    private static boolean searchesWholeTree(ListFolderRequest request) {
+        return request.id() == null && Boolean.TRUE.equals(request.recursive());
     }
 
     /**

@@ -544,9 +544,103 @@ Anthropic has no embeddings API — pair it with Ollama or OpenAI embeddings (e.
 |--------------------------|---------|-------------|
 | `spring.ai.google.genai.api-key` / `GOOGLE_API_KEY` | *(empty)* | API key from Google AI Studio (required when using Gemini) |
 | `openfilz.ai.google.chat.enabled` / `GOOGLE_CHAT_ENABLED` | `false` | Enable Gemini as the chat model provider |
-| `spring.ai.google.genai.chat.model` / `GOOGLE_CHAT_MODEL` | `gemini-2.5-flash` | Chat model name (`gemini-2.5-pro` for higher quality) |
+| `spring.ai.google.genai.chat.model` / `GOOGLE_CHAT_MODEL` | `gemini-3.6-flash` | Chat model name |
 
 Uses the Gemini Developer API (API-key auth, not Vertex AI). In OpenFilz, Gemini serves chat only — embeddings stay on Ollama/OpenAI so the pgvector schema keeps its 768 dimensions.
+
+> **Model ids get retired.** Google withdraws older ids, after which *every* chat fails with
+> `404 … This model models/<id> is no longer available to new users`. The fix is to update
+> `GOOGLE_CHAT_MODEL` (the error message names the replacement). Configuring
+> [model failover](#ai-model-failover-quota-and-availability) below keeps chat working while
+> you do.
+
+#### AI model failover (quota and availability)
+
+Free tiers allow only a handful of requests per minute and per day. When the configured model
+refuses — quota spent, model retired, provider down — OpenFilz can retry the same question on
+another model instead of failing the user.
+
+| Property / Env Variable | Default | Description |
+|--------------------------|---------|-------------|
+| `openfilz.ai.fallback.enabled` / `AI_FALLBACK_ENABLED` | `false` | Enable automatic failover to another chat model |
+| `openfilz.ai.fallback.chain` / `AI_FALLBACK_CHAIN` | *(empty)* | Comma-separated `provider:model` entries, tried in order (`google`, `anthropic`, `openai`, `openai-compatible`) |
+| `openfilz.ai.fallback.keys.<provider>` / `AI_FALLBACK_KEYS_GOOGLE`, `..._ANTHROPIC`, `..._OPENAI` | *(empty)* | Comma-separated pool of API keys for that provider, tried in order. Empty means "keep using the single key above" |
+| `openfilz.ai.fallback.validation` / `AI_FALLBACK_VALIDATION` | `FAIL_FAST` | `FAIL_FAST` refuses to start when the chain names a provider with no API key; `WARN` starts anyway with a shorter chain |
+| `openfilz.ai.fallback.quota-cooldown` / `AI_FALLBACK_QUOTA_COOLDOWN` | `5m` | How long a model is skipped after a spent quota or a provider outage |
+| `openfilz.ai.fallback.unavailable-cooldown` / `AI_FALLBACK_UNAVAILABLE_COOLDOWN` | `6h` | How long a model is skipped after a `404` (retired / not enabled for the key) |
+
+```
+AI_FALLBACK_ENABLED=true
+AI_FALLBACK_CHAIN=google:gemini-3.6-flash,anthropic:claude-haiku-4-5,openai:gpt-4o-mini
+```
+
+**You do not need `<PROVIDER>_CHAT_ENABLED` for providers in the chain.** A chain entry is enough
+to use that provider, and when no switch is set the chain's **first entry becomes the primary chat
+model — both its provider and its model** — so the two lines above are a complete chat
+configuration, and reordering the chain changes which model answers first. An explicit
+`<PROVIDER>_CHAT_MODEL` still wins if you set one. Switches still win if you
+set them, so existing deployments are unchanged.
+
+Every provider in the chain must have an API key. This is checked **at startup**: a keyless entry
+refuses to boot with a message naming the variable to set, rather than failing silently on the day
+your quota runs out. Set `AI_FALLBACK_VALIDATION=WARN` to start anyway with a shorter chain.
+
+**Several keys per provider.** Quota is charged per API key, so a second key is a second
+allowance — the cheapest way to widen a free tier:
+
+```
+AI_FALLBACK_KEYS_GOOGLE=AIza-first-project-key,AIza-second-project-key
+```
+
+A provider is exhausted completely before the next one is used: every chain model on the first
+key, then every chain model on the second, and only then does the chain move to another provider
+— which of course uses that provider's own keys. A single spent model does not cost you the key;
+the provider's other models keep using it. Leave a provider's pool empty to keep its single key.
+
+Keys never appear in logs: each is identified by a short fingerprint (`a1b2c3d4`), which is also
+what keeps two BYOK users on the same model from sharing a cooldown.
+
+Two things happen on a failure. The request itself is **retried** on the next model, so the user
+still gets an answer. The failed model is then **benched** for its cooldown, so the requests that
+follow skip it rather than each paying the same failing call first — which is what stops a spent
+*daily* quota from slowing every request for the rest of the day. Cooldowns expire on their own;
+nothing needs restarting.
+
+Watch for these in the logs:
+
+```
+[AI] QUOTA_EXHAUSTED on google-genai (gemini-3.6-flash) — falling back to ANTHROPIC (claude-haiku-4-5)
+[AI-FALLBACK] QUOTA_EXHAUSTED on google:gemini-3.6-flash — benching it for PT5M
+```
+
+> **Ollama is never failed over.** When the chat provider is a local Ollama model the chain is
+> ignored entirely, and configuring both logs a warning at startup. This is about data residency,
+> not speed: a local LLM is deployed so document content stays in-house, and the RAG context sent
+> with every question *is* document text — failing over would send it to a third-party API. A
+> local model going down is an outage to fix, not something to route around. (A BYOK user who
+> chose a cloud provider themselves still gets failover.)
+
+> **A bad API key never reroutes the model you chose.** When the provider refuses the credentials
+> of the model actually in use — the server default, or a BYOK user's own — the error is returned
+> as an error: quietly answering from somewhere else would hide a broken credential instead of
+> surfacing it. Malformed requests are treated the same way.
+>
+> **A refused key from a *pool* is dropped instead.** `AI_FALLBACK_KEYS_<PROVIDER>` exists so that
+> one key failing is survivable, so a key the provider rejects is removed from rotation for the
+> rest of the process and the next key takes over. It is not silent: it is logged at ERROR with
+> the key's fingerprint, and the key is not retried until you fix it and restart.
+>
+> ```
+> [AI] GOOGLE rejected the fallback API key c59be430 — dropping it from the pool for the rest of
+> this process; fix or remove it in AI_FALLBACK_KEYS_GOOGLE
+> ```
+>
+> The fingerprint is a short hash of the key, never the key itself — it identifies *which* entry of
+> the pool to fix without putting a secret in the logs.
+
+> **Failover is abandoned mid-answer.** If the model already streamed part of a response, or a tool
+> already moved/renamed/deleted something, the error propagates rather than retrying — the user
+> would otherwise see a spliced answer or have the action repeated.
 
 #### Getting an API key
 

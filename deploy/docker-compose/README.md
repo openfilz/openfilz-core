@@ -39,6 +39,7 @@ See the [architecture diagram](../README.md#architecture) in the main deploy REA
 | `docker-compose.fulltext.yml` | OpenSearch full-text search |
 | `docker-compose-thumbnails.yml` | Gotenberg for thumbnail generation (PDF, Office documents) |
 | `docker-compose-gotenberg-dev.yml` | Gotenberg standalone for local development (IDE + npm workflow) |
+| `docker-compose.ai.yml` | AI document chat: Ollama + pgvector-enabled PostgreSQL |
 
 ---
 
@@ -86,6 +87,9 @@ make up-onlyoffice
 # Start with OpenSearch full-text search
 make up-fulltext
 
+# Start with AI document chat (Ollama)
+make up-ai
+
 # Start all CE features (no auth) for demo
 make up-demo
 
@@ -104,6 +108,9 @@ make up-auth-fulltext
 
 # Auth + OnlyOffice
 make up-auth-onlyoffice
+
+# Auth + AI chat
+make up-auth-ai
 ```
 
 ### Utility Commands
@@ -161,6 +168,26 @@ docker-compose -f docker-compose.yml -f docker-compose.fulltext.yml up -d
 docker-compose -f docker-compose.yml -f docker-compose-thumbnails.yml --profile thumbnails up -d
 ```
 
+### With AI Document Chat
+
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.ai.yml up -d
+```
+
+This overlay switches the `postgres` image to a pgvector-enabled one (`pgvector/pgvector:pg17`
+by default) — AI's Flyway migration (`V1_4__add_ai_support.sql`) needs the `vector` extension,
+which a plain `postgres` image doesn't ship. It reads `POSTGRES_AI_IMAGE`, not `POSTGRES_IMAGE`,
+so it isn't defeated by a `POSTGRES_IMAGE` you've already pinned for a non-AI deployment.
+
+**Enabling AI on a deployment that was already running:** re-running `up` with this overlay is
+enough — Compose recreates the `postgres` container in place (same volume, no data loss) once it
+sees the image changed. If `openfilz-api` still fails migration with
+`extension "vector" is not available`, the `postgres` container didn't actually get the new
+image — check with `docker inspect openfilz-postgres --format '{{.Config.Image}}'` (should print
+`pgvector/pgvector:pg17`, not `postgres:17`); if it's still `postgres:17`, either `POSTGRES_IMAGE`
+is pinned in your `.env` (leave it commented out, or set `POSTGRES_AI_IMAGE` explicitly instead)
+or the overlay flag was dropped from the `up` command.
+
 ### Full Stack (All Features)
 
 ```bash
@@ -206,7 +233,8 @@ cp .env.example .env
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `POSTGRES_IMAGE` | `postgres:17` | PostgreSQL Docker image |
+| `POSTGRES_IMAGE` | `postgres:17` | PostgreSQL Docker image (base, non-AI deployments) |
+| `POSTGRES_AI_IMAGE` | `pgvector/pgvector:pg17` | PostgreSQL image used by `docker-compose.ai.yml` (`make up-ai`); must have the `vector` extension. Deliberately a separate variable from `POSTGRES_IMAGE` — see [With AI Document Chat](#with-ai-document-chat) |
 | `DB_NAME` | `dms_db` | PostgreSQL database name |
 | `DB_USER` | `dms_user` | PostgreSQL username |
 | `DB_PASSWORD` | `dms_password` | PostgreSQL password |
@@ -466,6 +494,16 @@ make clean
 
 # Start fresh
 make up
+```
+
+### AI Migration Fails: `extension "vector" is not available`
+
+The `postgres` container is running a plain `postgres` image instead of a pgvector-enabled one.
+See [With AI Document Chat](#with-ai-document-chat) above — check `POSTGRES_IMAGE` isn't pinned
+in `.env`, and confirm the running image with:
+
+```bash
+docker inspect openfilz-postgres --format '{{.Config.Image}}'
 ```
 
 ### Check Service Health

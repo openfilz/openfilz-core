@@ -292,11 +292,181 @@ Security properties:
 
 ---
 
+## 5b. Quota failover between chat models
+
+Free provider tiers (Google's especially) allow only a small number of requests per minute and
+per day, so a busy afternoon can exhaust the configured model. With
+`openfilz.ai.fallback.enabled=true` the chat pipeline retries the same question on the next model
+in `openfilz.ai.fallback.chain` instead of failing the user.
+
+```
+AI_FALLBACK_ENABLED=true
+AI_FALLBACK_CHAIN=google:gemini-3.6-flash,anthropic:claude-haiku-4-5,openai:gpt-4o-mini
+AI_FALLBACK_KEYS_GOOGLE=AIza-first-project,AIza-second-project
+```
+
+Two mechanisms, and both matter:
+
+| Mechanism | What it does | Where |
+|---|---|---|
+| **Failover** | The request that hit the quota is retried on the next candidate, so the user still gets an answer. | `AiChatServiceImpl#streamWithFailover` |
+| **Cooldown** | The failed model is benched, so *subsequent* requests skip it instead of each paying a failing round-trip first. Cooldowns expire on their own, returning the model to rotation with no operator action. | `AiFallbackChain` |
+
+Without the cooldown, a spent **daily** quota would add a failing call to every request for the
+rest of the day; with it, the deployment pays that cost once.
+
+### Enabling a provider
+
+A provider named in the chain needs **no `<PROVIDER>_CHAT_ENABLED` switch**. The chain builds its
+clients programmatically through the same `buildChatModel` path BYOK uses, bypassing Spring AI's
+auto-configuration, so it never consulted those switches in the first place.
+
+What the switches actually decide is which single provider gets **auto-configured as the primary**
+— Spring AI 2.0 gates that on one `spring.ai.model.chat` selector, and exactly one `ChatModel`
+bean must exist. So the chain now names it too:
+
+| Precedence | Source |
+|---|---|
+| 1 | an explicit `spring.ai.model.chat` |
+| 2 | `<PROVIDER>_CHAT_ENABLED` (Ollama > Anthropic > Google > OpenAI) |
+| 3 | **the fallback chain's first entry** |
+| 4 | Ollama (stock local install) |
+
+`AI_FALLBACK_CHAIN=google:gemini-3.6-flash,anthropic:claude-haiku-4-5` is therefore a complete
+chat configuration on its own. Existing deployments that set switches are unaffected — they keep
+precedence.
+
+The chain's first entry supplies the primary's **model** as well as its provider, so
+`AI_FALLBACK_CHAIN` is the single source of truth and reordering it does what it looks like it
+does. Overriding `spring.ai.<provider>.chat.model` from the post-processor would not work — its
+property source is added last, so `application.yml` shadows it — so the derived value is offered
+as a nested placeholder default instead:
+
+```yaml
+model: ${GOOGLE_CHAT_MODEL:${openfilz-internal.ai.chat-model.google-genai:gemini-3.6-flash}}
+```
+
+Spring's own precedence resolves it: an explicit `<PROVIDER>_CHAT_MODEL` wins, the chain supplies
+the value when that is unset, and the hard-coded default applies when there is no chain either.
+The `openfilz-internal.*` namespace sits outside the `@ConfigurationProperties` prefixes on
+purpose, so it can never be mistaken for user-facing configuration.
+
+Since chain[0] then *is* the primary, the two are the same candidate and get de-duplicated.
+
+### Startup validation
+
+`AiFallbackValidator` checks the chain once at boot: every provider it names must have a key
+(pool or single), entries must parse, and `openai-compatible` must have a base URL. A chain entry
+that can never be built is a typo, not a decision — and left unchecked it stays invisible until
+the day the primary runs out of quota, which is exactly when the fallback was supposed to save the
+request.
+
+`openfilz.ai.fallback.validation` is `FAIL_FAST` (default) or `WARN`, mirroring
+`openfilz.ai.embedding.validation`. Fail-fast is safe as a default because failover is opt-in.
+
+The validator deliberately depends on configuration only — never on `AiFallbackChain`, whose
+`ChatModel` dependency does not exist when the AI feature is off, and whose eager instantiation
+would defeat the runtime toggle.
+
+### Ollama is never failed over
+
+When the model answering a request is a local Ollama one, the chain is **ignored outright**.
+
+This is a data-residency rule, not a performance one. An operator running a local LLM is doing it
+so document content never leaves the deployment — and the RAG context sent with every question
+*is* document text. Failing over on a transient blip would ship that text to a third-party API and
+break the guarantee they deployed Ollama for. A local model going down is an outage to fix, not
+something to silently route around.
+
+The test is on the model **in use**, not on the server-wide selector, so a BYOK user who
+deliberately picked a cloud provider still gets failover on an Ollama deployment: their content is
+already leaving the building by their own choice. Configuring both logs a startup warning rather
+than failing — contradictory configuration, not broken.
+
+### Key pools and rotation
+
+Quota is charged **per API key**, per model — so a second key is a second allowance, and
+`openfilz.ai.fallback.keys.<provider>` gives each provider an ordered pool. A provider with no
+pool keeps using its single `spring.ai.*.api-key`, so existing deployments are unaffected.
+
+Candidates are laid out so that a provider is exhausted completely — every chain model on every
+key — before the next provider is touched:
+
+```
+google:     m1/keyA   m2/keyA   m1/keyB   m2/keyB
+anthropic:  c1/keyX   c1/keyY
+```
+
+The key therefore rotates as soon as the provider has nothing left on the current one, and a
+different provider is only reached once the previous one is spent outright. Chain order decides
+*provider* priority (by first appearance) and model priority within a provider; an interleaved
+chain like `google:m1,anthropic:c1,google:m2` is grouped as `google:m1,google:m2` then
+`anthropic:c1`, because key rotation is inherently a per-provider decision.
+
+Which key is "current" is **derived** from the cooldown registry rather than held in a pointer: a
+provider's usable keys are those with at least one chain model still healthy. A key spent an hour
+ago drops out of the list and rejoins it when its cooldowns lapse — no stored index to get stuck.
+A single spent *model* does not cost you the key: the other models keep using it, and only that
+model moves on.
+
+Keys are never held in cooldown maps, cache keys or logs. `AiKeyRef` reduces each to an 8-hex-char
+SHA-256 fingerprint, which is enough to tell keys apart and useless to anyone reading a log — and
+it is what keeps two BYOK users on the same provider and model from sharing a cooldown bucket.
+
+### What counts as a failover
+
+`AiFailoverPolicy.classify` walks the cause chain — Spring AI wraps every provider failure in a
+generic `RuntimeException("Failed to generate content")`, so the actionable signal is always
+further down — and matches on HTTP status, exception type name, and message keywords. No provider
+SDK types are referenced: OpenFilz must not compile against (nor reflect over, which GraalVM
+dislikes) `com.google.genai.errors.*` and friends.
+
+| Classification | Trigger | Cooldown |
+|---|---|---|
+| `QUOTA_EXHAUSTED` | 429 / `RESOURCE_EXHAUSTED` / rate-limit wording / typed `RateLimitException` | `quota-cooldown` (5m) |
+| `MODEL_UNAVAILABLE` | 404 — model retired, renamed, or not enabled for the key | `unavailable-cooldown` (6h) |
+| `PROVIDER_OVERLOADED` | 5xx, connection refused, unknown host, timeouts | `quota-cooldown` (5m) |
+| `NOT_FAILOVER` | **bad credentials**, malformed requests, OpenFilz bugs | none |
+
+Credential failures deliberately do *not* fail over. Answering from a different model when an API
+key is wrong or revoked would hide a misconfiguration an operator has to fix; those still surface
+as errors. A retired model gets the long cooldown because — unlike a quota — it is never coming
+back on its own.
+
+### When a retry is refused
+
+Failover is abandoned mid-request, and the error propagates, when either guard trips:
+
+- **Tokens already streamed.** Restarting on another model would splice two different answers
+  together in the user's browser.
+- **A tool already mutated something.** Read-only tools are safe to repeat; retrying after a
+  move/rename/delete would run it twice. `DocumentAiTools#getModifiedFolders` is empty exactly
+  when no mutating tool has fired this turn.
+
+In practice quota and 404 failures arrive before the first token, so both guards hold.
+
+### Scope
+
+Chain entries are limited to the API-key providers OpenFilz already builds programmatically
+(`google`, `anthropic`, `openai`, `openai-compatible`) — the same `buildChatModel` path BYOK uses.
+Ollama is deliberately absent: it is local, has no quota to exhaust, and its model comes from
+Spring AI auto-configuration rather than being built by hand. Entries whose provider has no
+server API key configured are skipped with a warning rather than failing the request.
+
+Cooldown state is per-instance and in-memory — a latency optimisation, not a correctness
+mechanism. A restart (or a second replica) simply costs one failed call per model before it
+re-learns.
+
+---
+
 ## 6. Where to look in the code
 
 | Area | Entry point |
 |---|---|
 | Selector derivation | `config/AiModelProviderEnvironmentPostProcessor` |
+| Quota failover / cooldowns | `service/ai/AiFallbackChain`, `service/ai/AiFailoverPolicy` |
+| Fallback startup validation | `service/ai/AiFallbackValidator` |
+| API-key fingerprints | `service/ai/AiKeyRef` |
 | Beans (DataSource, PgVectorStore) | `config/AiConfig` |
 | Embedding-change guard | `config/EmbeddingRegistryGuard` |
 | Ingestion fan-out | `service/impl/DefaultMetadataPostProcessor` |

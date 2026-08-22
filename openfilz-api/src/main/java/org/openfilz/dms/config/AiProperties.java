@@ -4,6 +4,14 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
+import org.openfilz.dms.enums.AiProvider;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
 /**
  * Configuration properties for the AI document chat feature.
  * Maps to openfilz.ai.* properties in application.yml.
@@ -39,6 +47,11 @@ public class AiProperties {
      * Embedding configuration.
      */
     private EmbeddingConfig embedding = new EmbeddingConfig();
+
+    /**
+     * Automatic failover to another chat model when the configured one runs out of quota.
+     */
+    private Fallback fallback = new Fallback();
 
     /**
      * Ollama provider switches.
@@ -82,6 +95,76 @@ public class AiProperties {
              * Whether this provider serves that kind of model.
              */
             private boolean enabled = false;
+        }
+    }
+
+    /**
+     * Chat-model failover: what to try when the configured model refuses to answer.
+     * <p>
+     * Aimed squarely at free provider tiers, whose per-minute and per-day allowances are small
+     * enough to hit during normal use. When a chat call fails with an exhausted quota, a retired
+     * model, or an unreachable provider, OpenFilz retries the same question on the next model in
+     * {@link #chain} and benches the failed one for a cooldown so later requests skip it outright.
+     * See {@code AiFallbackChain} and {@code AiFailoverPolicy}.
+     * <p>
+     * A credential failure never triggers failover — answering from a different model would hide
+     * a broken API key instead of surfacing it.
+     */
+    @Data
+    public static class Fallback {
+
+        /** Master switch; off by default so existing deployments behave exactly as before. */
+        private boolean enabled = false;
+
+        /**
+         * Models to fall back to, in order, as {@code provider:model} entries — for example
+         * {@code google:gemini-3.6-flash,anthropic:claude-haiku-4-5,openai:gpt-4o-mini}.
+         * Providers: {@code google}, {@code anthropic}, {@code openai}, {@code openai-compatible};
+         * each needs its server API key configured, and entries without one are skipped with a
+         * warning. The active chat model is always tried first and needs no entry here.
+         */
+        private List<String> chain = new ArrayList<>();
+
+        /**
+         * Additional API keys per provider, tried in order — the answer to a free tier whose
+         * quota is charged <em>per key</em> rather than per model.
+         * <p>
+         * Once every {@link #chain} model for a provider is out of quota on the key in use, the
+         * next key in that provider's pool takes over and those models are available again. Each
+         * provider keeps its own pool, so a chain that mixes providers always reaches for the key
+         * belonging to whichever provider it lands on.
+         * <p>
+         * Leave a provider's pool empty to keep using its single {@code spring.ai.*.api-key}.
+         */
+        private Map<AiProvider, List<String>> keys = new LinkedHashMap<>();
+
+        /**
+         * How long a model is benched after an exhausted quota, an overloaded provider, or a
+         * connection failure. Short by design: per-minute allowances refill quickly, and an
+         * expired cooldown silently returns the model to rotation.
+         */
+        private Duration quotaCooldown = Duration.ofMinutes(5);
+
+        /**
+         * How long a model is benched after a 404 (retired, renamed, or not enabled for this key).
+         * Much longer than {@link #quotaCooldown} because that model is not coming back on its
+         * own — the cooldown just stops every request paying for the same 404 until an operator
+         * updates the configuration.
+         */
+        private Duration unavailableCooldown = Duration.ofHours(6);
+
+        /**
+         * How startup reacts when the chain names a provider the deployment has no API key for.
+         * FAIL_FAST (default) refuses to start; WARN logs and carries on with a shorter chain.
+         * <p>
+         * Fail-fast is safe as a default because failover is opt-in: only a deployment that
+         * configured a chain can trip it, and a chain entry that can never be built is a typo,
+         * not a decision — better caught at boot than on the first exhausted quota.
+         */
+        private Validation validation = Validation.FAIL_FAST;
+
+        public enum Validation {
+            FAIL_FAST, WARN
         }
     }
 
