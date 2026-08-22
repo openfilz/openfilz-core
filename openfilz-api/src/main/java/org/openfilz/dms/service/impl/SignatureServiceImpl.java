@@ -803,10 +803,18 @@ public class SignatureServiceImpl implements SignatureService {
                 throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                         "Signer " + in.email() + " needs at least one SIGNATURE or INITIALS field");
             }
-            if (in.effectiveAuthMethod() == SignatureAuthMethod.SMS_OTP
+            SignatureAuthMethod auth = in.effectiveAuthMethod();
+            if (auth == SignatureAuthMethod.SMS_OTP
                     && (in.phone() == null || !PHONE.matcher(in.phone()).matches())) {
                 throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                         "Signer " + in.email() + " requires a valid phone number for SMS_OTP");
+            }
+            // Refuse a channel this deployment cannot deliver, rather than creating an envelope
+            // whose recipient could never pass the OTP step (the request would 501 forever).
+            if (auth != SignatureAuthMethod.NONE
+                    && otpSenders.stream().noneMatch(sender -> sender.supports(auth))) {
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        auth + " delivery is not available on this server — see openfilz.signature");
             }
             for (SignatureFieldInput f : fields) {
                 if (f.page() >= pages) {

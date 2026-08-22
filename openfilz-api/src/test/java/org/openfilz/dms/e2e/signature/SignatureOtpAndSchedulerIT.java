@@ -2,6 +2,7 @@ package org.openfilz.dms.e2e.signature;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.openfilz.dms.dto.response.Settings;
 import org.openfilz.dms.dto.signature.ApplySignatureRequest;
 import org.openfilz.dms.dto.signature.CreateSignatureEnvelopeRequest;
 import org.openfilz.dms.dto.signature.PublicSignatureView;
@@ -118,19 +119,24 @@ class SignatureOtpAndSchedulerIT extends AbstractSignatureIT {
     }
 
     @Test
-    void sms_otp_without_provider_is_not_implemented_but_requires_a_phone() {
+    void sms_otp_is_refused_when_the_server_cannot_deliver_it() {
         UUID docId = uploadPdf(contributor);
-        // SMS_OTP without phone → 422 at creation
+        // SMS_OTP without phone → 422 (bad input)
         createEnvelopeRaw(contributor, request(docId, "SMS", List.of(new SignatureRecipientInput(null, "S", "sms@example.com", 0,
                 null, SignatureAuthMethod.SMS_OTP, null, null, List.of(signatureField(0, 0.1, 0.1)), null))))
                 .expectStatus().isEqualTo(422);
-        SignatureEnvelopeDTO env = createEnvelope(contributor, request(docId, "SMS", List.of(new SignatureRecipientInput(null, "S",
+        // …and with a valid phone it is still refused, because no SMS sender is registered here:
+        // creating it would strand the signer on a /otp/request that can only ever answer 501.
+        createEnvelopeRaw(contributor, request(docId, "SMS", List.of(new SignatureRecipientInput(null, "S",
                 "sms@example.com", 0, null, SignatureAuthMethod.SMS_OTP, "+33612345678", null,
-                List.of(signatureField(0, 0.1, 0.1)), null))));
-        String token = mails().tokenFor(env.id(), "sms@example.com");
-        // Core has no SMS sender → 501
-        getWebTestClient().post().uri(u -> u.path(PUB + "/otp/request").queryParam("token", token).build())
-                .exchange().expectStatus().isEqualTo(501);
+                List.of(signatureField(0, 0.1, 0.1)), null))))
+                .expectStatus().isEqualTo(422);
+        // The settings endpoint advertises exactly what the server can deliver.
+        Settings settings = getWebTestClient().get().uri("/api/v1/settings")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + contributor)
+                .exchange().expectStatus().isOk()
+                .expectBody(Settings.class).returnResult().getResponseBody();
+        assertThat(settings.signatureAuthMethods()).containsExactly("NONE", "EMAIL_OTP");
     }
 
     @Test

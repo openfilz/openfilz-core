@@ -4,11 +4,16 @@ import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.config.QuotaProperties;
 import org.openfilz.dms.config.RecycleBinProperties;
 import org.openfilz.dms.dto.response.Settings;
+import org.openfilz.dms.enums.SignatureAuthMethod;
 import org.openfilz.dms.service.SettingsService;
+import org.openfilz.dms.service.signature.SignatureOtpSender;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -39,6 +44,25 @@ public class SettingsServiceImpl implements SettingsService {
 
     private final QuotaProperties quotaProperties;
 
+    /** Senders registered for the e-Sign OTP channels — drives what the UI may offer. */
+    private final List<SignatureOtpSender> otpSenders;
+
+    /**
+     * NONE always works; the OTP channels are advertised only when a sender is registered
+     * <em>and</em> configured, so the UI never offers a method the server would refuse.
+     */
+    protected List<String> deliverableAuthMethods() {
+        List<String> methods = new ArrayList<>();
+        methods.add(SignatureAuthMethod.NONE.name());
+        for (SignatureAuthMethod method : SignatureAuthMethod.values()) {
+            if (method != SignatureAuthMethod.NONE
+                    && otpSenders.stream().anyMatch(sender -> sender.supports(method))) {
+                methods.add(method.name());
+            }
+        }
+        return methods;
+    }
+
     @Override
     public Mono<Settings> getSettings() {
         Integer emptyBinInterval = null;
@@ -64,6 +88,7 @@ public class SettingsServiceImpl implements SettingsService {
                .aiActive(aiActive)
                .aiUserSettingsEnabled(aiActive && aiUserSettingsEnabled)
                .signatureActive(Boolean.TRUE.equals(signatureActive))
+               .signatureAuthMethods(deliverableAuthMethods())
                .build());
 
     }
