@@ -152,6 +152,20 @@ public class AiProperties {
          * updates the configuration.
          */
         private Duration unavailableCooldown = Duration.ofHours(6);
+
+        /**
+         * How startup reacts when the chain names a provider the deployment has no API key for.
+         * FAIL_FAST (default) refuses to start; WARN logs and carries on with a shorter chain.
+         * <p>
+         * Fail-fast is safe as a default because failover is opt-in: only a deployment that
+         * configured a chain can trip it, and a chain entry that can never be built is a typo,
+         * not a decision — better caught at boot than on the first exhausted quota.
+         */
+        private Validation validation = Validation.FAIL_FAST;
+
+        public enum Validation {
+            FAIL_FAST, WARN
+        }
     }
 
     /**

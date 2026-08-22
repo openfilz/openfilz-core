@@ -128,7 +128,12 @@ openfilz:
       chat:
         enabled: ${GOOGLE_CHAT_ENABLED:false}     # chat only — embeddings stay on Ollama/OpenAI (768-dim pgvector)
     # Automatic failover when the active chat model refuses to answer — an exhausted free-tier
-    # quota, a retired model, or a provider that is down. The request is retried on the next
+    # quota, a retired model, or a provider that is down.
+    # A provider named in the chain needs no <PROVIDER>_CHAT_ENABLED switch: the chain builds its
+    # clients directly. When no switch is set, the chain's FIRST entry also names the primary chat
+    # provider, so AI_FALLBACK_CHAIN alone is enough to configure chat.
+    # Ignored entirely when the chat provider is Ollama — a local model is deployed to keep
+    # document content in-house, and failing over would send RAG context to a third-party API. The request is retried on the next
     # model in the chain, and the failed one is benched for a cooldown so later requests skip it
     # instead of each paying the same failing call. Credential failures never fail over.
     # Chain entries are 'provider:model', tried in order; each provider needs its API key set.
@@ -146,6 +151,10 @@ openfilz:
         anthropic: ${AI_FALLBACK_KEYS_ANTHROPIC:}
         openai: ${AI_FALLBACK_KEYS_OPENAI:}
         openai-compatible: ${AI_FALLBACK_KEYS_OPENAI_COMPATIBLE:}
+      # FAIL_FAST (default) refuses to start when the chain names a provider with no API key —
+      # the alternative is discovering it on the day the primary runs out of quota. WARN starts
+      # anyway with a shorter chain.
+      validation: ${AI_FALLBACK_VALIDATION:FAIL_FAST}
       quota-cooldown: ${AI_FALLBACK_QUOTA_COOLDOWN:5m}
       unavailable-cooldown: ${AI_FALLBACK_UNAVAILABLE_COOLDOWN:6h}
     # BYOK: users may override the chat LLM with their own provider + API key (personal settings).

@@ -173,6 +173,87 @@ class AiModelProviderEnvironmentPostProcessorTest {
         assertEquals("anthropic", environment.getProperty("spring.ai.model.chat"));
     }
 
+    // ---------------------------------------------------------------- chain-derived chat provider
+
+    /**
+     * A provider listed in the fallback chain is already usable as a fallback (the chain builds
+     * its clients programmatically, bypassing auto-configuration), so requiring a second switch
+     * just to make it the primary was redundant. Setting a chain is enough.
+     */
+    @Test
+    void fallbackChain_namesTheChatProviderWhenNoSwitchIsSet() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.fallback.enabled", "true",
+                "openfilz.ai.fallback.chain", "google:gemini-3.6-flash,anthropic:claude-haiku-4-5");
+
+        assertEquals("google-genai", environment.getProperty("spring.ai.model.chat"));
+    }
+
+    @Test
+    void fallbackChain_isIgnoredWhenFailoverIsDisabled() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.fallback.chain", "anthropic:claude-haiku-4-5");
+
+        assertEquals("ollama", environment.getProperty("spring.ai.model.chat"));
+    }
+
+    /** Existing deployments set switches; they must keep deciding, so nothing changes for them. */
+    @Test
+    void explicitSwitch_beatsTheFallbackChain() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.openai.chat.enabled", "true",
+                "openfilz.ai.fallback.enabled", "true",
+                "openfilz.ai.fallback.chain", "google:gemini-3.6-flash");
+
+        assertEquals("openai", environment.getProperty("spring.ai.model.chat"));
+    }
+
+    @Test
+    void explicitSelector_beatsTheFallbackChain() {
+        MockEnvironment environment = process(
+                "spring.ai.model.chat", "anthropic",
+                "openfilz.ai.active", "true",
+                "openfilz.ai.fallback.enabled", "true",
+                "openfilz.ai.fallback.chain", "google:gemini-3.6-flash");
+
+        assertEquals("anthropic", environment.getProperty("spring.ai.model.chat"));
+    }
+
+    /** An unusable leading entry must not strand the whole chain on Ollama. */
+    @Test
+    void fallbackChain_skipsEntriesItCannotRecognise() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.fallback.enabled", "true",
+                "openfilz.ai.fallback.chain", "mystery:x,no-separator,anthropic:claude-haiku-4-5");
+
+        assertEquals("anthropic", environment.getProperty("spring.ai.model.chat"));
+    }
+
+    @Test
+    void fallbackChain_withNothingRecognisable_fallsBackToOllama() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.fallback.enabled", "true",
+                "openfilz.ai.fallback.chain", "mystery:x");
+
+        assertEquals("ollama", environment.getProperty("spring.ai.model.chat"));
+    }
+
+    /** Embedding is unaffected by the chain — it is chat-only configuration. */
+    @Test
+    void fallbackChain_doesNotAffectEmbedding() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.fallback.enabled", "true",
+                "openfilz.ai.fallback.chain", "google:gemini-3.6-flash");
+
+        assertEquals("ollama", environment.getProperty("spring.ai.model.embedding"));
+    }
+
     @Test
     void unusedModelKinds_areDisabled() {
         MockEnvironment environment = process(

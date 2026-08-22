@@ -33,9 +33,19 @@ import java.util.Map;
  *       is pinned to 768 dims). When a kind has no switch set it falls back to Ollama, whose
  *       defaults point at a stock local install (localhost:11434, qwen2.5, nomic-embed-text) —
  *       so turning the feature on is enough.</li>
+ *   <li>When no chat switch is set but {@code openfilz.ai.fallback.chain} is, the chain's first
+ *       entry names the chat provider. A provider listed in the chain is already usable as a
+ *       fallback — the chain builds its clients programmatically, bypassing auto-configuration —
+ *       so requiring a second switch just to make the same provider the <em>primary</em> was
+ *       redundant. Setting a chain is now enough.</li>
  *   <li>An explicitly-set {@code spring.ai.model.*} property always wins — the escape hatch for
  *       providers OpenFilz exposes no switch for.</li>
  * </ul>
+ * Note that only the <em>provider</em> is derived from the chain, not the model: the primary's
+ * model still comes from {@code <PROVIDER>_CHAT_MODEL}, which application.yml always defines (with
+ * a default), so there is no way to tell "operator chose this" from "nobody set it". Keeping
+ * chain[0]'s model equal to that value — the defaults already line up — makes the primary and the
+ * first chain entry the same candidate, which is then de-duplicated.
  * The ordering matters: the switches read here come from {@code application.yml}, so this has to
  * run after {@code ConfigDataEnvironmentPostProcessor} has contributed the config data — otherwise
  * every switch would read as absent.
@@ -48,6 +58,8 @@ public class AiModelProviderEnvironmentPostProcessor implements EnvironmentPostP
     private static final String AI_ACTIVE = "openfilz.ai.active";
     private static final String CHAT_SELECTOR = "spring.ai.model.chat";
     private static final String EMBEDDING_SELECTOR = "spring.ai.model.embedding";
+    private static final String FALLBACK_ENABLED = "openfilz.ai.fallback.enabled";
+    private static final String FALLBACK_CHAIN = "openfilz.ai.fallback.chain";
 
     /** Model kinds OpenFilz never uses; left enabled they would build clients we don't need. */
     private static final String[] UNUSED_SELECTORS = {
@@ -90,7 +102,7 @@ public class AiModelProviderEnvironmentPostProcessor implements EnvironmentPostP
         Map<String, Object> selectors = new LinkedHashMap<>();
 
         putIfAbsent(environment, selectors, CHAT_SELECTOR, aiActive
-                ? provider(environment, CHAT_PROVIDERS)
+                ? chatProvider(environment)
                 : NONE);
         putIfAbsent(environment, selectors, EMBEDDING_SELECTOR, aiActive
                 ? provider(environment, EMBEDDING_PROVIDERS)
@@ -102,6 +114,55 @@ public class AiModelProviderEnvironmentPostProcessor implements EnvironmentPostP
         if (!selectors.isEmpty()) {
             environment.getPropertySources().addLast(new MapPropertySource(PROPERTY_SOURCE_NAME, selectors));
         }
+    }
+
+    /**
+     * The chat provider: an explicit switch first, then the fallback chain's first entry, then
+     * Ollama. Switches keep precedence so an existing deployment that sets both is unaffected.
+     */
+    private String chatProvider(ConfigurableEnvironment environment) {
+        for (String[] candidate : CHAT_PROVIDERS) {
+            if (environment.getProperty(candidate[0], Boolean.class, false)) {
+                return candidate[1];
+            }
+        }
+        String fromChain = firstChainProvider(environment);
+        if (fromChain != null) {
+            return fromChain;
+        }
+        // Nothing configured: Ollama, whose defaults target a stock local install, so
+        // `openfilz.ai.active=true` alone is a working setup.
+        return OLLAMA;
+    }
+
+    /**
+     * Selector named by the first usable {@code provider:model} entry of the fallback chain, or
+     * null when failover is off, unset, or the chain names nothing we recognise.
+     * <p>
+     * Parsed by hand rather than through the bound {@code AiProperties}: an EnvironmentPostProcessor
+     * runs long before any bean exists. The chain binds a comma-separated string to a list, so the
+     * raw property is read the same way here.
+     */
+    private String firstChainProvider(ConfigurableEnvironment environment) {
+        if (!environment.getProperty(FALLBACK_ENABLED, Boolean.class, false)) {
+            return null;
+        }
+        String chain = environment.getProperty(FALLBACK_CHAIN);
+        if (chain == null || chain.isBlank()) {
+            return null;
+        }
+        for (String entry : chain.split(",")) {
+            int separator = entry.indexOf(':');
+            if (separator <= 0) continue;
+            String selector = switch (entry.substring(0, separator).trim().toLowerCase(java.util.Locale.ROOT)) {
+                case "google", "google-genai", "gemini" -> GOOGLE_GENAI;
+                case "anthropic", "claude" -> ANTHROPIC;
+                case "openai", "openai-compatible", "openai_compatible" -> OPENAI;
+                default -> null;
+            };
+            if (selector != null) return selector;
+        }
+        return null;
     }
 
     private String provider(ConfigurableEnvironment environment, String[][] candidates) {

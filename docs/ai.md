@@ -315,6 +315,62 @@ Two mechanisms, and both matter:
 Without the cooldown, a spent **daily** quota would add a failing call to every request for the
 rest of the day; with it, the deployment pays that cost once.
 
+### Enabling a provider
+
+A provider named in the chain needs **no `<PROVIDER>_CHAT_ENABLED` switch**. The chain builds its
+clients programmatically through the same `buildChatModel` path BYOK uses, bypassing Spring AI's
+auto-configuration, so it never consulted those switches in the first place.
+
+What the switches actually decide is which single provider gets **auto-configured as the primary**
+— Spring AI 2.0 gates that on one `spring.ai.model.chat` selector, and exactly one `ChatModel`
+bean must exist. So the chain now names it too:
+
+| Precedence | Source |
+|---|---|
+| 1 | an explicit `spring.ai.model.chat` |
+| 2 | `<PROVIDER>_CHAT_ENABLED` (Ollama > Anthropic > Google > OpenAI) |
+| 3 | **the fallback chain's first entry** |
+| 4 | Ollama (stock local install) |
+
+`AI_FALLBACK_CHAIN=google:gemini-3.6-flash,anthropic:claude-haiku-4-5` is therefore a complete
+chat configuration on its own. Existing deployments that set switches are unaffected — they keep
+precedence.
+
+Only the *provider* is derived, not the model: `<PROVIDER>_CHAT_MODEL` always has a value in
+`application.yml`, so there is no way to tell "the operator chose this" from "nobody set it".
+The defaults line up, so chain[0] and the primary are normally the same candidate and are
+de-duplicated.
+
+### Startup validation
+
+`AiFallbackValidator` checks the chain once at boot: every provider it names must have a key
+(pool or single), entries must parse, and `openai-compatible` must have a base URL. A chain entry
+that can never be built is a typo, not a decision — and left unchecked it stays invisible until
+the day the primary runs out of quota, which is exactly when the fallback was supposed to save the
+request.
+
+`openfilz.ai.fallback.validation` is `FAIL_FAST` (default) or `WARN`, mirroring
+`openfilz.ai.embedding.validation`. Fail-fast is safe as a default because failover is opt-in.
+
+The validator deliberately depends on configuration only — never on `AiFallbackChain`, whose
+`ChatModel` dependency does not exist when the AI feature is off, and whose eager instantiation
+would defeat the runtime toggle.
+
+### Ollama is never failed over
+
+When the model answering a request is a local Ollama one, the chain is **ignored outright**.
+
+This is a data-residency rule, not a performance one. An operator running a local LLM is doing it
+so document content never leaves the deployment — and the RAG context sent with every question
+*is* document text. Failing over on a transient blip would ship that text to a third-party API and
+break the guarantee they deployed Ollama for. A local model going down is an outage to fix, not
+something to silently route around.
+
+The test is on the model **in use**, not on the server-wide selector, so a BYOK user who
+deliberately picked a cloud provider still gets failover on an Ollama deployment: their content is
+already leaving the building by their own choice. Configuring both logs a startup warning rather
+than failing — contradictory configuration, not broken.
+
 ### Key pools and rotation
 
 Quota is charged **per API key**, per model — so a second key is a second allowance, and
@@ -397,6 +453,7 @@ re-learns.
 |---|---|
 | Selector derivation | `config/AiModelProviderEnvironmentPostProcessor` |
 | Quota failover / cooldowns | `service/ai/AiFallbackChain`, `service/ai/AiFailoverPolicy` |
+| Fallback startup validation | `service/ai/AiFallbackValidator` |
 | API-key fingerprints | `service/ai/AiKeyRef` |
 | Beans (DataSource, PgVectorStore) | `config/AiConfig` |
 | Embedding-change guard | `config/EmbeddingRegistryGuard` |
