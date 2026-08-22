@@ -39,6 +39,7 @@ import reactor.core.scheduler.Schedulers;
 import java.time.OffsetDateTime;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -131,7 +132,7 @@ public class AiChatServiceImpl implements AiChatService {
                             StringBuilder fullResponse = new StringBuilder();
 
                             log.debug("[AI] Sending prompt to LLM (streaming)...");
-                            return streamWithFailover(candidates, 0, tools, history, augmentedMessage, fullResponse)
+                            return streamWithFailover(candidates, 0, resolved, tools, history, augmentedMessage, fullResponse)
                                     .doOnComplete(() -> log.debug("[AI] LLM streaming complete, raw response: {} chars", fullResponse.length()))
                                     .then(Mono.defer(() -> {
                                         // Post-process: enrich response with document links
@@ -196,9 +197,18 @@ public class AiChatServiceImpl implements AiChatService {
      * </ul>
      * The failed model is benched in {@link AiFallbackChain} on the way out, so the requests that
      * follow skip it instead of each paying the same failing call.
+     * <p>
+     * A refused API key is handled separately from those retryable failures. When the provider
+     * rejects the credentials of the model the user is actually on ({@code primary} — their BYOK
+     * choice or the server default), the error surfaces: rerouting would hide a broken key an
+     * operator has to fix. When it rejects a key that came from a fallback <em>pool</em>, the
+     * whole key is disabled and the next candidate is tried instead — a pool of keys exists
+     * precisely so one of them failing is survivable. It is logged at ERROR with the key's
+     * fingerprint either way, so a bad pool key is loud rather than silent.
      */
-    private Flux<String> streamWithFailover(List<ResolvedChat> candidates, int index, DocumentAiTools tools,
-                                            List<Message> history, String augmentedMessage, StringBuilder fullResponse) {
+    private Flux<String> streamWithFailover(List<ResolvedChat> candidates, int index, ResolvedChat primary,
+                                            DocumentAiTools tools, List<Message> history,
+                                            String augmentedMessage, StringBuilder fullResponse) {
         ResolvedChat candidate = candidates.get(index);
         tools.rebindChatModel(candidate.chatModel());
         ChatClient chatClient = assembler.assemble(candidate.chatModel(), tools);
@@ -218,27 +228,56 @@ public class AiChatServiceImpl implements AiChatService {
                     AiFailoverPolicy.Failure failure = AiFailoverPolicy.classify(error);
                     fallbackChain.trip(candidate, failure);
 
-                    boolean hasNextCandidate = index + 1 < candidates.size();
+                    // A pool key the provider refuses is retryable on the *next key*, though not
+                    // on another model of the same key — so it gets its own path rather than
+                    // Failure.shouldFailover().
+                    boolean pooledKeyRefused = failure == AiFailoverPolicy.Failure.CREDENTIALS_REJECTED
+                            && candidate != primary;
+                    if (pooledKeyRefused && fallbackChain.disableKey(candidate)) {
+                        log.error("[AI] {} rejected the fallback API key {} — dropping it from the pool "
+                                        + "for the rest of this process; fix or remove it in "
+                                        + "AI_FALLBACK_KEYS_{}",
+                                candidate.provider(), candidate.keyRef(),
+                                candidate.provider().toUpperCase(Locale.ROOT));
+                    }
+
+                    boolean mayRetry = failure.shouldFailover() || pooledKeyRefused;
+                    // Skip past any candidate whose key was disabled — including by the line
+                    // above — so a dead key costs one refused call, not one per model on it.
+                    int nextIndex = nextUsable(candidates, index);
+                    boolean hasNextCandidate = nextIndex >= 0;
                     boolean nothingStreamed = fullResponse.isEmpty();
                     boolean nothingMutated = tools.getModifiedFolders().isEmpty();
 
-                    if (!failure.shouldFailover() || !hasNextCandidate || !nothingStreamed || !nothingMutated) {
-                        if (failure.shouldFailover() && !hasNextCandidate) {
-                            log.error("[AI] {} on {} ({}) and no fallback model left",
-                                    failure, candidate.provider(), candidate.model());
-                        } else if (failure.shouldFailover()) {
-                            log.error("[AI] {} on {} ({}) but cannot retry safely (streamed={}, mutated={})",
-                                    failure, candidate.provider(), candidate.model(),
+                    if (!mayRetry || !hasNextCandidate || !nothingStreamed || !nothingMutated) {
+                        if (mayRetry && !hasNextCandidate) {
+                            log.error("[AI] {} on {} ({}, key {}) and no fallback model left",
+                                    failure, candidate.provider(), candidate.model(), candidate.keyRef());
+                        } else if (mayRetry) {
+                            log.error("[AI] {} on {} ({}, key {}) but cannot retry safely (streamed={}, mutated={})",
+                                    failure, candidate.provider(), candidate.model(), candidate.keyRef(),
                                     !nothingStreamed, !nothingMutated);
                         }
                         return Flux.error(error);
                     }
 
-                    ResolvedChat next = candidates.get(index + 1);
-                    log.warn("[AI] {} on {} ({}) — falling back to {} ({})", failure,
-                            candidate.provider(), candidate.model(), next.provider(), next.model());
-                    return streamWithFailover(candidates, index + 1, tools, history, augmentedMessage, fullResponse);
+                    ResolvedChat next = candidates.get(nextIndex);
+                    log.warn("[AI] {} on {} ({}, key {}) — falling back to {} ({}, key {})", failure,
+                            candidate.provider(), candidate.model(), candidate.keyRef(),
+                            next.provider(), next.model(), next.keyRef());
+                    return streamWithFailover(candidates, nextIndex, primary, tools, history,
+                            augmentedMessage, fullResponse);
                 });
+    }
+
+    /** Index of the next candidate still worth an attempt, or -1 when the chain is spent. */
+    private int nextUsable(List<ResolvedChat> candidates, int index) {
+        for (int i = index + 1; i < candidates.size(); i++) {
+            if (fallbackChain.isUsable(candidates.get(i))) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     @Override

@@ -261,12 +261,22 @@ class AiFallbackChainTest {
     /** One chat request, mirroring {@code AiChatServiceImpl#streamWithFailover}. */
     private String ask(ResolvedChat primary, Instant now) {
         for (ResolvedChat candidate : chain.candidates(primary, now)) {
+            if (!chain.isUsable(candidate)) {
+                continue;   // its key was disabled earlier in this same walk
+            }
             try {
                 return providers.call(candidate);
             } catch (RuntimeException e) {
                 Failure failure = AiFailoverPolicy.classify(e);
                 chain.trip(candidate, failure, now);
-                if (!failure.shouldFailover()) {
+                // Mirrors AiChatServiceImpl#streamWithFailover: a key the provider refuses is
+                // dropped and the walk continues when it came from a pool; on the primary it
+                // surfaces, so a single-key deployment sees its own broken key.
+                boolean pooledKeyRefused = failure == Failure.CREDENTIALS_REJECTED && candidate != primary;
+                if (pooledKeyRefused) {
+                    chain.disableKey(candidate);
+                }
+                if (!failure.shouldFailover() && !pooledKeyRefused) {
                     return "ERROR:" + e.getCause().getMessage();
                 }
             }
@@ -350,16 +360,45 @@ class AiFallbackChainTest {
     }
 
     @Test
-    @DisplayName("a revoked key surfaces as an error instead of quietly rotating to the next one")
-    void revokedKeyDoesNotFailOver() {
-        chain("google:m1");
+    @DisplayName("a refused pool key is dropped for good and the next key of that provider answers")
+    void refusedPoolKeyIsDroppedAndTheNextKeyAnswers() {
+        chain("google:m1", "google:m2");
         keys(AiProvider.GOOGLE, GOOGLE_A, GOOGLE_B);
         ResolvedChat primary = benchedPrimary();
         providers.revokedKeys.add(AiKeyRef.of(GOOGLE_A));
 
+        assertThat(ask(primary, T0.plusSeconds(10))).isEqualTo("GOOGLE|" + AiKeyRef.of(GOOGLE_B) + "|m1");
+        // Gone from the pool, not merely benched: a key the provider refuses will not recover on
+        // its own, so no cooldown would ever be the right length.
+        assertThat(view(chain.candidates(primary, T0.plusSeconds(11))))
+                .doesNotContain("GOOGLE/m1/google-key-A", "GOOGLE/m2/google-key-A");
+        // And exactly one refused call was paid for it — not one per model on that key.
+        assertThat(ask(primary, T0.plusSeconds(12))).endsWith("|m1");
+        assertThat(providers.callsMatching(AiKeyRef.of(GOOGLE_A))).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("a refused key on the model in use surfaces — a broken key must never be masked")
+    void refusedPrimaryKeyDoesNotFailOver() {
+        chain("google:m1");
+        keys(AiProvider.GOOGLE, GOOGLE_A, GOOGLE_B);
+        // The model the user is actually on, carrying the broken key: the single-key deployment.
+        ResolvedChat primary = new ResolvedChat(mock(ChatModel.class), "google-genai", "m0", AiKeyRef.of(GOOGLE_A));
+        providers.revokedKeys.add(AiKeyRef.of(GOOGLE_A));
+
         assertThat(ask(primary, T0.plusSeconds(10))).startsWith("ERROR:401");
-        // Not benched either — the operator must keep seeing the real error until they fix the key.
         assertThat(view(chain.candidates(primary, T0.plusSeconds(11)))).contains("GOOGLE/m1/google-key-A");
+    }
+
+    @Test
+    @DisplayName("a key with no fingerprint cannot be disabled — it would take unrelated keys with it")
+    void unfingerprintedKeyIsNeverDisabled() {
+        chain("google:m1");
+        keys(AiProvider.GOOGLE, GOOGLE_A);
+
+        ResolvedChat anonymous = new ResolvedChat(mock(ChatModel.class), "GOOGLE", "m1", AiKeyRef.UNKNOWN);
+        assertThat(chain.disableKey(anonymous)).isFalse();
+        assertThat(chain.isUsable(anonymous)).isTrue();
     }
 
     // ------------------------------------------------------------------ configuration handling

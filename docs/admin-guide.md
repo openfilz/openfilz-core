@@ -620,11 +620,27 @@ Watch for these in the logs:
 > local model going down is an outage to fix, not something to route around. (A BYOK user who
 > chose a cloud provider themselves still gets failover.)
 
-> **A bad API key never triggers failover.** Quietly answering from a different model would hide a
-> broken credential instead of surfacing it, so authentication and malformed-request errors are
-> still returned as errors. Failover is also abandoned if the model already streamed part of an
-> answer, or if a tool already moved/renamed/deleted something — retrying either would show the
-> user a spliced answer or repeat the action.
+> **A bad API key never reroutes the model you chose.** When the provider refuses the credentials
+> of the model actually in use — the server default, or a BYOK user's own — the error is returned
+> as an error: quietly answering from somewhere else would hide a broken credential instead of
+> surfacing it. Malformed requests are treated the same way.
+>
+> **A refused key from a *pool* is dropped instead.** `AI_FALLBACK_KEYS_<PROVIDER>` exists so that
+> one key failing is survivable, so a key the provider rejects is removed from rotation for the
+> rest of the process and the next key takes over. It is not silent: it is logged at ERROR with
+> the key's fingerprint, and the key is not retried until you fix it and restart.
+>
+> ```
+> [AI] GOOGLE rejected the fallback API key c59be430 — dropping it from the pool for the rest of
+> this process; fix or remove it in AI_FALLBACK_KEYS_GOOGLE
+> ```
+>
+> The fingerprint is a short hash of the key, never the key itself — it identifies *which* entry of
+> the pool to fix without putting a secret in the logs.
+
+> **Failover is abandoned mid-answer.** If the model already streamed part of a response, or a tool
+> already moved/renamed/deleted something, the error propagates rather than retrying — the user
+> would otherwise see a spliced answer or have the action repeated.
 
 #### Getting an API key
 
