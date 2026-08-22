@@ -243,6 +243,48 @@ class AiModelProviderEnvironmentPostProcessorTest {
         assertEquals("ollama", environment.getProperty("spring.ai.model.chat"));
     }
 
+    /** Both OpenAI-shaped providers share one auto-configuration, hence one selector. */
+    @Test
+    void fallbackChain_mapsOpenAiCompatibleOntoTheOpenaiSelector() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.fallback.enabled", "true",
+                "openfilz.ai.fallback.chain", "openai-compatible:mistral-small");
+
+        assertEquals("openai", environment.getProperty("spring.ai.model.chat"));
+    }
+
+    /** Operators space out comma-separated lists; that must not silently disable the derivation. */
+    @Test
+    void fallbackChain_toleratesWhitespaceAroundEntries() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.fallback.enabled", "true",
+                "openfilz.ai.fallback.chain", " google : gemini-3.6-flash , anthropic:claude-haiku-4-5 ");
+
+        assertEquals("google-genai", environment.getProperty("spring.ai.model.chat"));
+    }
+
+    @Test
+    void fallbackChain_blankChainFallsBackToOllama() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.fallback.enabled", "true",
+                "openfilz.ai.fallback.chain", "  ");
+
+        assertEquals("ollama", environment.getProperty("spring.ai.model.chat"));
+    }
+
+    /** The chain must not switch anything on while the feature itself is off. */
+    @Test
+    void fallbackChain_isIgnoredWhileAiIsInactive() {
+        MockEnvironment environment = process(
+                "openfilz.ai.fallback.enabled", "true",
+                "openfilz.ai.fallback.chain", "google:gemini-3.6-flash");
+
+        assertEquals("none", environment.getProperty("spring.ai.model.chat"));
+    }
+
     /** Embedding is unaffected by the chain — it is chat-only configuration. */
     @Test
     void fallbackChain_doesNotAffectEmbedding() {
