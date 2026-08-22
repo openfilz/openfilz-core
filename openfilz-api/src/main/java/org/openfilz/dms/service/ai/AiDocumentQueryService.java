@@ -107,27 +107,17 @@ public class AiDocumentQueryService {
     }
 
     /**
-     * Apply the request's filters, honouring a whole-tree search.
+     * Apply the request's filters.
      * <p>
-     * {@link ListFolderCriteria} is written for a folder <em>listing</em>, where a null id means
-     * "the root level" and {@code recursive} only widens an id that was given. An AI search for
-     * {@code folder="all"} means something else entirely — every document at every depth — and
-     * arrives here as exactly that combination: no id, recursive true. Left to the shared
-     * criteria it silently became {@code parent_id IS NULL}, so a global search only ever saw
-     * root-level documents and the model had to walk the tree folder by folder, one LLM call per
-     * folder. Here that combination emits no parent predicate at all.
-     * <p>
-     * Handled in this service rather than in the shared criteria on purpose: the GraphQL contract
-     * documents {@code recursive} as "when true and id is set", and other callers rely on a null
-     * id meaning the root level.
+     * Always through {@link ListFolderCriteria#applyFilter}, never around it. A whole-tree search
+     * ({@code folder="all"}) needs no parent predicate, but in a layer with per-document access
+     * control the access predicate is written by the same method that writes the parent one — so
+     * skipping it to drop the parent scope would drop the access restriction with it, and hand
+     * the model every user's documents. The criteria owns that decision; this service only asks.
      */
     private void applyFilter(StringBuilder query, ListFolderRequest request) {
         criteria.checkFilter(request);
-        if (searchesWholeTree(request)) {
-            criteria.appendAllFilterExceptParentId(PREFIX, query, request, false);
-        } else {
-            criteria.applyFilter(PREFIX, query, request);
-        }
+        criteria.applyFilter(PREFIX, query, request);
     }
 
     /**

@@ -168,11 +168,35 @@ public class ListFolderCriteria {
         }
     }
 
+    /**
+     * Emit the folder-scope predicate, opening the WHERE clause only if there is one to emit.
+     * <p>
+     * The predicate is built aside first because {@link #appendParentIdFilter} may legitimately
+     * produce nothing — a search across every folder has no parent to scope by. Appending WHERE
+     * up front would then leave a dangling {@code WHERE} for the next filter to trip over.
+     *
+     * @return whether a predicate was written, i.e. whether the next filter must join with AND
+     */
     public boolean appendWhereParentIdFilter(String prefix, StringBuilder query, ListFolderRequest request) {
-        query.append(WHERE);
-        return appendParentIdFilter(prefix, query, request);
+        StringBuilder scope = new StringBuilder();
+        if(!appendParentIdFilter(prefix, scope, request)) {
+            return false;
+        }
+        query.append(WHERE).append(scope);
+        return true;
     }
 
+    /**
+     * The folder scope of a listing, and — in layers that have per-document access control — the
+     * access predicate that goes with it.
+     * <p>
+     * <b>Extension layers restricting documents per user must put that restriction here</b>, in
+     * every branch including the whole-tree one. This is the single method every caller routes
+     * through for scoping, which is why the enterprise overrides live here rather than in a
+     * separate hook that a new branch could forget to call.
+     *
+     * @return whether anything was written; false means "no scope predicate", not "no rows"
+     */
     public boolean appendParentIdFilter(String prefix, StringBuilder query, ListFolderRequest request) {
         if(request.id() != null) {
             if(Boolean.TRUE.equals(request.recursive())) {
@@ -190,6 +214,11 @@ public class ListFolderCriteria {
             } else {
                 sqlUtils.appendEqualsCriteria(prefix, PARENT_ID, query);
             }
+        } else if(Boolean.TRUE.equals(request.recursive())) {
+            // Every folder at every depth: no parent scope at all. Core has no per-document
+            // access control, so there is nothing else to constrain it by either — an extension
+            // layer that does MUST override this branch, or its documents go unfiltered.
+            return false;
         } else {
             sqlUtils.appendIsNullCriteria(prefix, PARENT_ID, query);
         }
