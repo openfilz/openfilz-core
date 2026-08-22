@@ -7,6 +7,7 @@ import org.springframework.core.annotation.OrderUtils;
 import org.springframework.mock.env.MockEnvironment;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -283,6 +284,60 @@ class AiModelProviderEnvironmentPostProcessorTest {
                 "openfilz.ai.fallback.chain", "google:gemini-3.6-flash");
 
         assertEquals("none", environment.getProperty("spring.ai.model.chat"));
+    }
+
+    // ---------------------------------------------------------------- chain-derived chat model
+
+    /**
+     * application.yml consults {@code openfilz-internal.ai.chat-model.<selector>} as a nested
+     * placeholder default, so contributing it is what makes the chain authoritative over the
+     * primary's model. A drifted key would silently do nothing, hence the exact-name assertions.
+     */
+    @Test
+    void fallbackChain_suppliesThePrimaryModelForTheChosenProvider() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.fallback.enabled", "true",
+                "openfilz.ai.fallback.chain", "google:gemini-2.0-flash,anthropic:claude-haiku-4-5");
+
+        assertEquals("google-genai", environment.getProperty("spring.ai.model.chat"));
+        assertEquals("gemini-2.0-flash",
+                environment.getProperty("openfilz-internal.ai.chat-model.google-genai"));
+        // Only the primary's model is derived; later entries are built by the chain itself.
+        assertNull(environment.getProperty("openfilz-internal.ai.chat-model.anthropic"));
+    }
+
+    @Test
+    void fallbackChain_derivesNoModelWhenASwitchPicksTheProvider() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.openai.chat.enabled", "true",
+                "openfilz.ai.fallback.enabled", "true",
+                "openfilz.ai.fallback.chain", "google:gemini-2.0-flash");
+
+        assertEquals("openai", environment.getProperty("spring.ai.model.chat"));
+        assertNull(environment.getProperty("openfilz-internal.ai.chat-model.google-genai"));
+    }
+
+    @Test
+    void fallbackChain_skipsEntriesWithNoModel() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.fallback.enabled", "true",
+                "openfilz.ai.fallback.chain", "google:,anthropic:claude-haiku-4-5");
+
+        assertEquals("anthropic", environment.getProperty("spring.ai.model.chat"));
+        assertEquals("claude-haiku-4-5",
+                environment.getProperty("openfilz-internal.ai.chat-model.anthropic"));
+    }
+
+    @Test
+    void fallbackChain_derivesNoModelWhileAiIsInactive() {
+        MockEnvironment environment = process(
+                "openfilz.ai.fallback.enabled", "true",
+                "openfilz.ai.fallback.chain", "google:gemini-2.0-flash");
+
+        assertNull(environment.getProperty("openfilz-internal.ai.chat-model.google-genai"));
     }
 
     /** Embedding is unaffected by the chain — it is chat-only configuration. */

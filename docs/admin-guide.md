@@ -575,8 +575,10 @@ AI_FALLBACK_CHAIN=google:gemini-3.6-flash,anthropic:claude-haiku-4-5,openai:gpt-
 ```
 
 **You do not need `<PROVIDER>_CHAT_ENABLED` for providers in the chain.** A chain entry is enough
-to use that provider, and when no switch is set the chain's **first entry also becomes the primary
-chat model** — so the two lines above are a complete chat configuration. Switches still win if you
+to use that provider, and when no switch is set the chain's **first entry becomes the primary chat
+model — both its provider and its model** — so the two lines above are a complete chat
+configuration, and reordering the chain changes which model answers first. An explicit
+`<PROVIDER>_CHAT_MODEL` still wins if you set one. Switches still win if you
 set them, so existing deployments are unchanged.
 
 Every provider in the chain must have an API key. This is checked **at startup**: a keyless entry

@@ -305,7 +305,7 @@ spring.ai.openai:
   api-key: ${OPENAI_API_KEY:disabled}
   base-url: ${OPENAI_BASE_URL:https://api.openai.com}
   chat:
-    model: ${OPENAI_CHAT_MODEL:gpt-4o}
+    model: ${OPENAI_CHAT_MODEL:${openfilz-internal.ai.chat-model.openai:gpt-4o}}
   embedding:
     model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
     # vector_store's embedding column is fixed at vector(768), so ask OpenAI to shorten its
@@ -316,14 +316,14 @@ spring.ai.openai:
 spring.ai.anthropic:
   api-key: ${ANTHROPIC_API_KEY:disabled}
   chat:
-    model: ${ANTHROPIC_CHAT_MODEL:claude-opus-5}
+    model: ${ANTHROPIC_CHAT_MODEL:${openfilz-internal.ai.chat-model.anthropic:claude-opus-5}}
 
 # Google Gemini — GenAI / Gemini Developer API (activated via GOOGLE_CHAT_ENABLED=true;
 # free-tier key from aistudio.google.com)
 spring.ai.google.genai:
   api-key: ${GOOGLE_API_KEY:disabled}
   chat:
-    model: ${GOOGLE_CHAT_MODEL:gemini-3.6-flash}
+    model: ${GOOGLE_CHAT_MODEL:${openfilz-internal.ai.chat-model.google-genai:gemini-3.6-flash}}
 
 # PgVector Store (auto-configured when spring-ai-starter-vector-store-pgvector is on classpath)
 spring.ai.vectorstore.pgvector:

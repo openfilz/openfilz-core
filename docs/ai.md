@@ -336,10 +336,22 @@ bean must exist. So the chain now names it too:
 chat configuration on its own. Existing deployments that set switches are unaffected — they keep
 precedence.
 
-Only the *provider* is derived, not the model: `<PROVIDER>_CHAT_MODEL` always has a value in
-`application.yml`, so there is no way to tell "the operator chose this" from "nobody set it".
-The defaults line up, so chain[0] and the primary are normally the same candidate and are
-de-duplicated.
+The chain's first entry supplies the primary's **model** as well as its provider, so
+`AI_FALLBACK_CHAIN` is the single source of truth and reordering it does what it looks like it
+does. Overriding `spring.ai.<provider>.chat.model` from the post-processor would not work — its
+property source is added last, so `application.yml` shadows it — so the derived value is offered
+as a nested placeholder default instead:
+
+```yaml
+model: ${GOOGLE_CHAT_MODEL:${openfilz-internal.ai.chat-model.google-genai:gemini-3.6-flash}}
+```
+
+Spring's own precedence resolves it: an explicit `<PROVIDER>_CHAT_MODEL` wins, the chain supplies
+the value when that is unset, and the hard-coded default applies when there is no chain either.
+The `openfilz-internal.*` namespace sits outside the `@ConfigurationProperties` prefixes on
+purpose, so it can never be mistaken for user-facing configuration.
+
+Since chain[0] then *is* the primary, the two are the same candidate and get de-duplicated.
 
 ### Startup validation
 
