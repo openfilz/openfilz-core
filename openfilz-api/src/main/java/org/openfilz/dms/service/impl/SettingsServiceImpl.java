@@ -7,6 +7,7 @@ import org.openfilz.dms.dto.response.Settings;
 import org.openfilz.dms.enums.SignatureAuthMethod;
 import org.openfilz.dms.service.SettingsService;
 import org.openfilz.dms.service.signature.SignatureOtpSender;
+import org.openfilz.dms.service.signature.SignatureReminderSender;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
@@ -46,6 +47,12 @@ public class SettingsServiceImpl implements SettingsService {
 
     /** Senders registered for the e-Sign OTP channels — drives what the UI may offer. */
     private final List<SignatureOtpSender> otpSenders;
+
+    /**
+     * Empty in the core: it records an envelope's reminder cadence but has no scheduler to act on
+     * it. The Enterprise edition contributes one, which is what turns the setting on.
+     */
+    private final List<SignatureReminderSender> reminderSenders;
 
     /**
      * NONE always works; the OTP channels are advertised only when a sender is registered
@@ -89,6 +96,7 @@ public class SettingsServiceImpl implements SettingsService {
                .aiUserSettingsEnabled(aiActive && aiUserSettingsEnabled)
                .signatureActive(Boolean.TRUE.equals(signatureActive))
                .signatureAuthMethods(deliverableAuthMethods())
+               .signatureRemindersActive(Boolean.TRUE.equals(signatureActive) && !reminderSenders.isEmpty())
                .build());
 
     }

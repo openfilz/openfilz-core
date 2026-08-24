@@ -21,7 +21,7 @@ class SettingsServiceImplTest {
     }
 
     private Settings getSettings(boolean aiActive, boolean aiUserSettingsEnabled) {
-        SettingsServiceImpl service = new SettingsServiceImpl(new RecycleBinProperties(), new QuotaProperties(), java.util.List.of());
+        SettingsServiceImpl service = new SettingsServiceImpl(new RecycleBinProperties(), new QuotaProperties(), java.util.List.of(), java.util.List.of());
         ReflectionTestUtils.setField(service, "softDelete", false);
         ReflectionTestUtils.setField(service, "thumbnailActive", false);
         ReflectionTestUtils.setField(service, "aiActive", aiActive);
