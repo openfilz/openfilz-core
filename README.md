@@ -27,6 +27,7 @@ Pick the guide that matches your role:
 | **Install & configure** OpenFilz (Docker, Helm, Keycloak, storage, feature toggles) | [Installation & Administration Guide](docs/admin-guide.md) |
 | **Integrate** with the REST / GraphQL API or use an SDK | [Developer Guide](docs/developer-guide.md) |
 | **Understand** the AI feature (config resolution, ingestion & indexing, chat pipeline, BYOK) | [AI Architecture](docs/ai.md) |
+| **Send documents for electronic signature** (envelopes, fields, templates, seals, configuration) | [e-Sign Guide](docs/esign.md) |
 | **Contribute** to the open-source codebase | [Contributor Guide](docs/contributor-guide.md) |
 
 ---
@@ -94,6 +95,19 @@ Pick the guide that matches your role:
 - **Conversation History** - Multi-turn conversations are persisted with full message history.
 - **Streaming Responses** - Server-Sent Events (SSE) for real-time AI response streaming.
 - **Fully Optional** - Disabled by default. When disabled, no AI beans, endpoints, or database tables are created.
+
+### Electronic Signature (e-Sign)
+
+- **Signature Envelopes** - Send any stored PDF to one or more recipients for signature, sequentially or in parallel, with drafts, cancellation, resend and per-envelope expiry.
+- **12 Typed Fields** - Signature, initials, date, text, number, email, phone, checkbox, radio, select, image and stamp - placed per recipient and per page.
+- **Reusable Templates** - Define roles and field placements once, then instantiate an envelope for a new set of recipients in a single call.
+- **Signer Authentication** - Tokenised links with no account required (stored only as a SHA-256 hash, rotated on resend), plus an optional email one-time code per recipient.
+- **Certificate of Completion** - An audit page appended to the signed PDF: signers, timestamps, IP addresses, authentication method, the SHA-256 of the original and the full event trail.
+- **Cryptographic Seal** - PAdES signature applied with PDFBox + Bouncy Castle, using a self-signed development certificate or your own PKCS#12 / AATL certificate.
+- **8 Locales** - Signing screen and notification emails in English, French, German, Spanish, Italian, Dutch, Portuguese and Arabic (RTL).
+- **Fully Optional** - Disabled by default (`openfilz.signature.active`). When disabled, every e-Sign endpoint answers 404 and the scheduler idles.
+
+> Full configuration reference: **[e-Sign Guide](docs/esign.md)**.
 
 ### Security
 

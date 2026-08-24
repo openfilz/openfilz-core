@@ -5,5 +5,9 @@ import lombok.Builder;
 @Builder
 public record Settings(Integer emptyBinInterval, Integer fileQuotaMB, Integer userQuotaMB,
                        String language, String theme, boolean thumbnailsActive, boolean aiActive,
-                       boolean aiUserSettingsEnabled) {
+                       boolean aiUserSettingsEnabled, boolean signatureActive,
+                       /** Recipient authentication methods this deployment can actually deliver. */
+                       java.util.List<String> signatureAuthMethods,
+                       /** True only when something in this deployment actually sends the reminders. */
+                       boolean signatureRemindersActive) {
 }

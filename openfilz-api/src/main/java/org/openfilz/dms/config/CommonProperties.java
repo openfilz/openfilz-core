@@ -24,4 +24,7 @@ public class CommonProperties {
 
     private String apiPublicBaseUrl = "http://localhost:8081";
 
+    /** Public URL of the web app, used to build links sent by email (e-Sign signing links). */
+    private String webPublicBaseUrl = "http://localhost:4200/";
+
 }
