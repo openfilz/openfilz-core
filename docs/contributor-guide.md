@@ -268,6 +268,11 @@ Roles are extracted from the JWT token by `DefaultJwtTokenParser`, reading eithe
 | `AuditLog` | `audit_logs` | Immutable operation history with hash chain |
 | `AiChatConversation` | `ai_chat_conversations` | AI chat conversation metadata |
 | `AiChatMessage` | `ai_chat_messages` | AI chat message history (user + assistant) |
+| `SignatureEnvelope` | `signature_envelope` | e-Sign envelope: source document, status, routing, expiry |
+| `SignatureRecipient` | `signature_recipient` | One recipient of an envelope: role, token hash, OTP state |
+| `SignatureField` | `signature_field` | A typed field placed on a page for one recipient |
+| `SignatureTemplate` | `signature_template` | Reusable roles + field placements |
+| `SignatureEvent` | `signature_event` | Append-only e-Sign event trail |
 
 ---
 
@@ -283,6 +288,17 @@ Roles are extracted from the JWT token by `DefaultJwtTokenParser`, reading eithe
 | **Conditional Bean** | `@ConditionalOnProperty` activates entire feature modules (e.g., AI) only when their toggle is `true` |
 | **RAG** | Retrieval-Augmented Generation for AI chat — document chunks retrieved from pgvector are injected into the LLM prompt |
 | **Tool Callback** | Spring AI function calling — `DocumentAiTools` methods are exposed as LLM-callable tools via `@Tool` annotations |
+| **Open-core Seam** | e-Sign exposes seven interfaces in `service/signature/` with permissive or no-op defaults; a downstream edition registers its own `@Primary` bean instead of forking the engine |
+
+### Feature deep dives
+
+Two features have their own architecture document — read them before changing anything in
+those packages:
+
+| Feature | Document | Covers |
+|---------|----------|--------|
+| AI Document Chat | [AI Architecture](ai.md) | Configuration resolution at startup, ingestion → indexing (OpenSearch + pgvector), the chat pipeline (RAG + tool calling), BYOK |
+| Electronic Signature | [e-Sign Guide](esign.md) | Envelope lifecycle, the 12 field types, seal providers, the security model of the signing tokens, and the seven extension seams |
 
 ---
 

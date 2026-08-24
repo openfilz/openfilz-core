@@ -34,6 +34,22 @@ public class SignatureProperties {
     private final Otp otp = new Otp();
     private final Seal seal = new Seal();
     private final Mail mail = new Mail();
+    private final Quota quota = new Quota();
+
+    /**
+     * Fair-use limits. Meant for deployments that expose e-Sign to people who do not pay for it
+     * yet — a public demo, a trial tenant — where an unbounded feature is an invitation to abuse
+     * and removes any reason to buy. Off by default: a self-hosted instance is nobody's demo.
+     */
+    @Getter
+    @Setter
+    public static class Quota {
+        /**
+         * Envelopes one initiator may create per calendar month. {@code 0} (default) = unlimited.
+         * Reaching the limit answers {@code 429}; drafts count, since they can be sent later.
+         */
+        private int envelopesPerMonth = 0;
+    }
 
     @Getter
     @Setter

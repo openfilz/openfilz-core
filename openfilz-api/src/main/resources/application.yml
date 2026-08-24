@@ -120,6 +120,10 @@ openfilz:
     web-base-url: ${OPENFILZ_SIGNATURE_WEB_BASE_URL:}   # overrides openfilz.common.web-public-base-url
     sweep:
       cron: "0 */5 * * * ?"
+    quota:
+      # Envelopes one user may create per calendar month. 0 = unlimited (default).
+      # Meant for public demo / trial deployments; a paying self-hosted instance leaves it off.
+      envelopes-per-month: ${OPENFILZ_SIGNATURE_QUOTA_ENVELOPES_PER_MONTH:0}
     otp:
       length: 6
       valid-minutes: 10

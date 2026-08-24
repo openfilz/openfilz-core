@@ -5,6 +5,7 @@ import org.openfilz.dms.enums.SignatureEnvelopeStatus;
 import org.springframework.data.r2dbc.repository.Query;
 import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -27,6 +28,14 @@ public interface SignatureEnvelopeRepository extends ReactiveCrudRepository<Sign
              AND COALESCE(last_reminded_at, sent_at, created_at) + (reminder_days * INTERVAL '1 day') < :now
            """)
     Flux<SignatureEnvelope> findDueForReminder(OffsetDateTime now);
+
+    /**
+     * Fair-use quota: envelopes this initiator has created since a point in time. Drafts are
+     * counted too — they can be sent later, so excluding them would leave the limit trivially
+     * bypassable.
+     */
+    @Query("SELECT COUNT(*) FROM signature_envelope WHERE initiator_email = :initiatorEmail AND created_at >= :since")
+    Mono<Long> countByInitiatorSince(String initiatorEmail, OffsetDateTime since);
 
     Flux<SignatureEnvelope> findBySourceDocId(UUID sourceDocId);
 }

@@ -163,9 +163,29 @@ public class SignatureServiceImpl implements SignatureService {
     //  Initiator side
     // ═════════════════════════════════════════════════════════════════════
 
+    /**
+     * Fair-use gate for deployments that hand e-Sign to people who have not paid for it — a
+     * public demo, a trial tenant. Counts what this initiator created since the first of the
+     * month and refuses beyond the configured ceiling. Disabled (0) by default, so a normal
+     * self-hosted instance never pays for this query.
+     */
+    private Mono<Void> enforceEnvelopeQuota(String initiatorEmail) {
+        int max = props.getQuota().getEnvelopesPerMonth();
+        if (max <= 0) {
+            return Mono.empty();
+        }
+        OffsetDateTime since = OffsetDateTime.now().withDayOfMonth(1).truncatedTo(ChronoUnit.DAYS);
+        return envelopeRepo.countByInitiatorSince(initiatorEmail, since)
+                .filter(used -> used >= max)
+                .flatMap(used -> Mono.<Void>error(new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                        "Signature quota reached: this deployment allows " + max
+                                + " envelope(s) per month and you have created " + used + " this month")));
+    }
+
     @Override
     public Mono<SignatureEnvelopeDTO> create(CreateSignatureEnvelopeRequest req, Actor actor) {
-        return documentRepository.findByIdAndActive(req.sourceDocId(), true)
+        return enforceEnvelopeQuota(actor.email())
+                .then(documentRepository.findByIdAndActive(req.sourceDocId(), true))
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Source document not found")))
                 .flatMap(doc -> accessPolicy.canInitiate(doc, actor.email())
                         .flatMap(ok -> Boolean.TRUE.equals(ok) ? Mono.just(doc)
