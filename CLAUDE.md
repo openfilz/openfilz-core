@@ -268,6 +268,9 @@ Optional audit chain verification (hash chain for integrity): `openfilz.audit.ch
 - **OnlyOfficeJwtService** — JWT token generation for OnlyOffice
 - Configuration: `onlyoffice.enabled`, `onlyoffice.document-server.url`, `onlyoffice.jwt.secret`
 
+### e-Sign (electronic signatures)
+See `docs/esign.md`. Envelope engine in core (`SignatureService`/`SignatureTemplateService`/`SignaturePdfService`, controllers `SignatureController`/`SignatureTemplateController`/`PublicSignatureController`, Flyway `V1_7`). Runtime toggle `openfilz.signature.active` (controllers answer 404 when off, `SignaturePublicSecurityConfig` uses the sentinel-path trick, surfaced as `Settings.signatureActive`). Edition seams live in `service/signature/` (`SignatureAccessPolicy`, `SignatureActorResolver`, `SignatureNotifier`, `SignatureMailer`, `SignatureSealer`, `SignatureOtpSender`, `SignatureCompletionListener`) with permissive/no-op core defaults — EE overrides them `@Primary`; `AbstractSecurityService.isSignatureAuthorized` is the role hook. Sealers (`InProcessSignatureSealer` self-signed/pkcs12, `CloudSignatureSealer` hash-only to sign.openfilz.com) are plain classes chosen at runtime in `SignatureConfig` so exactly one core `SignatureSealer` bean exists (EE injects it as fallback via `@Qualifier(SignatureConfig.CORE_SEALER)`). `spring-boot-starter-mail` + Bouncy Castle were added for it; mails are localised from `signature-mail/messages_*.properties`. ITs under `e2e/signature` capture signing links through a `@Primary` test `SignatureMailer`; they also run inside the EE build, so they use `admin-user` (has the EE `EDIT_SHARE` role) as initiator.
+
 ### Settings API
 - **SettingsController** (`/api/v1/settings`) — exposes app config and user preferences to frontend
 

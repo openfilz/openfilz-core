@@ -23,6 +23,7 @@ This guide is intended for developers who want to **integrate with OpenFilz** �
   - [Audit Trail](#audit-trail)
   - [Dashboard](#dashboard)
   - [AI Chat](#ai-chat)
+  - [e-Sign (Electronic Signature)](#e-sign-electronic-signature)
 - [GraphQL API](#graphql-api)
   - [Endpoint and Explorer](#endpoint-and-explorer)
   - [Queries](#queries)
@@ -558,6 +559,60 @@ The AI assistant can invoke the following document management tools during a con
 | `getDocumentPath` | Get the full path of a document from root |
 
 These tools are invoked automatically by the LLM when the user's request requires an action. The results are incorporated into the AI response.
+
+### e-Sign (Electronic Signature)
+
+> **Requires `openfilz.signature.active=true`**. Every endpoint below answers `404` when e-Sign
+> is disabled.
+
+Three groups: the initiator API and the template API (OIDC — `READER` to read, `CONTRIBUTOR` to
+write), and the public signer API, where a one-time `?token=` replaces the session entirely.
+
+**Initiator — `/api/v1/signatures`**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/signatures` | Create an envelope; `"send": false` keeps it a `DRAFT` |
+| POST | `/signatures/{id}/send` | `DRAFT → SENT`; re-issues every token and emails the invitations |
+| GET | `/signatures?status=` | Envelopes you sent, newest first |
+| GET | `/signatures/to-sign` | Envelopes waiting on *you* as a signer |
+| GET | `/signatures/{id}` | Detail: recipients, their fields and values |
+| GET | `/signatures/{id}/events` | The append-only event trail |
+| POST | `/signatures/{id}/cancel` | Cancel a non-terminal envelope |
+| POST | `/signatures/{id}/recipients/{rid}/resend` | New token; the previous link dies immediately |
+| GET | `/signatures/{id}/signed-document` | Stream the sealed PDF (initiator only) |
+
+**Templates — `/api/v1/signature-templates`**: `POST`, `GET`, `GET /{id}`, `PUT /{id}`,
+`DELETE /{id}`, and `POST /{id}/envelopes` to instantiate — bind each template role to a real
+person and get an envelope back.
+
+**Signer — `/api/v1/public/signatures`** (no session; `?token=` is the credential): `GET` for
+what to fill in, `POST /viewed`, `GET /document`, `POST /otp/request`, `POST /otp/verify`,
+`POST /sign`, `POST /decline`.
+
+```bash
+curl -X POST "$API/api/v1/signatures"   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{
+  "sourceDocId": "6f1e0f2c-1f2a-4b7d-9d4e-2a5c0e7b1a33",
+  "title": "Service agreement",
+  "sequential": true,
+  "expiresInDays": 14,
+  "recipients": [
+    { "name": "Ada Lovelace", "email": "ada@example.com",
+      "orderIndex": 0, "authMethod": "EMAIL_OTP",
+      "fields": [
+        { "type": "SIGNATURE",   "page": 2, "x": 0.10, "y": 0.12, "w": 0.30, "h": 0.08 },
+        { "type": "DATE_SIGNED", "page": 2, "x": 0.50, "y": 0.12, "w": 0.20, "h": 0.04 }
+      ] },
+    { "name": "Legal", "email": "legal@example.com", "role": "CC" }
+  ]
+}'
+```
+
+Field coordinates are normalised to the page media box (`0..1`, PDF origin bottom-left) and
+`page` is 0-based, so a placement survives the PDF being re-exported at another size.
+
+> **Full reference:** [e-Sign Guide](esign.md) — every property, the three seal providers, the
+> security model behind the signing tokens, and the seven extension points for integrators.
 
 ---
 

@@ -52,7 +52,7 @@ openfilz:
     worm-mode: false
     cors-allowed-origins: http://localhost:4200, http://localhost:4201, http://localhost:4900 # Comma-separated list of authorized origins
   thumbnail:
-    active: false
+    active: true
 
 onlyoffice:
   enabled: false

@@ -77,6 +77,8 @@
         <!-- graphql-java itself is managed by Spring Boot 4 (25.0) -->
         <graphql-java-scalars.version>24.0</graphql-java-scalars.version>
         <tika.version>3.3.1</tika.version>
+        <bouncycastle.version>1.82</bouncycastle.version> <!-- e-Sign in-process PAdES seal -->
+        <greenmail.version>2.1.6</greenmail.version> <!-- e-Sign mail ITs -->
         <commons-io.version>2.22.0</commons-io.version>
         <opensearch.version>3.9.0</opensearch.version>
         <httpcore.version>5.4.2</httpcore.version>

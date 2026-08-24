@@ -4,11 +4,17 @@ import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.config.QuotaProperties;
 import org.openfilz.dms.config.RecycleBinProperties;
 import org.openfilz.dms.dto.response.Settings;
+import org.openfilz.dms.enums.SignatureAuthMethod;
 import org.openfilz.dms.service.SettingsService;
+import org.openfilz.dms.service.signature.SignatureOtpSender;
+import org.openfilz.dms.service.signature.SignatureReminderSender;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -31,9 +37,38 @@ public class SettingsServiceImpl implements SettingsService {
     @Value("${openfilz.ai.user-settings.enabled:false}")
     private Boolean aiUserSettingsEnabled;
 
+    // e-Sign master switch — the frontend shows the Signatures menu + "Request signature" action from this.
+    @Value("${openfilz.signature.active:false}")
+    private Boolean signatureActive;
+
     private final RecycleBinProperties recycleBinProperties;
 
     private final QuotaProperties quotaProperties;
+
+    /** Senders registered for the e-Sign OTP channels — drives what the UI may offer. */
+    private final List<SignatureOtpSender> otpSenders;
+
+    /**
+     * Empty in the core: it records an envelope's reminder cadence but has no scheduler to act on
+     * it. The Enterprise edition contributes one, which is what turns the setting on.
+     */
+    private final List<SignatureReminderSender> reminderSenders;
+
+    /**
+     * NONE always works; the OTP channels are advertised only when a sender is registered
+     * <em>and</em> configured, so the UI never offers a method the server would refuse.
+     */
+    protected List<String> deliverableAuthMethods() {
+        List<String> methods = new ArrayList<>();
+        methods.add(SignatureAuthMethod.NONE.name());
+        for (SignatureAuthMethod method : SignatureAuthMethod.values()) {
+            if (method != SignatureAuthMethod.NONE
+                    && otpSenders.stream().anyMatch(sender -> sender.supports(method))) {
+                methods.add(method.name());
+            }
+        }
+        return methods;
+    }
 
     @Override
     public Mono<Settings> getSettings() {
@@ -59,6 +94,9 @@ public class SettingsServiceImpl implements SettingsService {
                .thumbnailsActive(thumbnailActive)
                .aiActive(aiActive)
                .aiUserSettingsEnabled(aiActive && aiUserSettingsEnabled)
+               .signatureActive(Boolean.TRUE.equals(signatureActive))
+               .signatureAuthMethods(deliverableAuthMethods())
+               .signatureRemindersActive(Boolean.TRUE.equals(signatureActive) && !reminderSenders.isEmpty())
                .build());
 
     }

@@ -27,6 +27,7 @@ This guide is intended for DevOps engineers and system administrators who instal
   - [Soft Delete and Recycle Bin](#soft-delete-and-recycle-bin)
   - [CORS](#cors)
   - [AI Document Chat](#ai-document-chat)
+  - [Electronic Signature (e-Sign)](#electronic-signature-e-sign)
 - [Feature Toggles](#feature-toggles)
 - [Keycloak Administration](#keycloak-administration)
 - [Monitoring and Health Checks](#monitoring-and-health-checks)
@@ -757,6 +758,55 @@ The AI migrations (`V1_4__add_ai_support.sql`, `V1_5__add_embedding_registry.sql
 | `ai_embedding_registry` | Records which embedding model produced the stored vectors (one-time deployment decision, enforced at startup) |
 | `user_ai_settings` | Per-user BYOK chat-LLM overrides (provider, model, AES-256-GCM-encrypted API key) |
 
+### Electronic Signature (e-Sign)
+
+OpenFilz can send a stored PDF to one or more recipients for electronic signature and file the
+sealed result back into the DMS. The feature is **disabled by default**; while it is off, every
+`/api/v1/signatures/**`, `/api/v1/signature-templates/**` and `/api/v1/public/signatures/**`
+endpoint answers `404`, the expiry sweeper idles, and `GET /api/v1/settings` reports
+`signatureActive: false` so the web UI hides the menu.
+
+Minimum working configuration:
+
+```yaml
+openfilz:
+  signature:
+    active: true                                    # OPENFILZ_SIGNATURE_ACTIVE
+  common:
+    web-public-base-url: https://app.example.com/   # OPENFILZ_WEB_PUBLIC_BASE_URL
+spring:
+  mail:
+    host: smtp.example.com                          # SMTP_HOST
+    port: 587                                       # SMTP_PORT
+    username: apikey                                # SMTP_USER
+    password: ${SMTP_PASSWORD}
+```
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `openfilz.signature.active` | `false` | Master switch (endpoints, public chain, sweeper). Requires a restart. |
+| `openfilz.signature.web-base-url` | *(empty)* | Base of the signing links; falls back to `openfilz.common.web-public-base-url` |
+| `openfilz.signature.default-expiry-days` | `30` | Envelope lifetime when the request does not set one |
+| `openfilz.signature.otp.length` | `6` | Digits in the email one-time code |
+| `openfilz.signature.otp.valid-minutes` | `10` | Validity of a one-time code |
+| `openfilz.signature.otp.max-attempts` | `5` | Failed verifications before the code is locked out |
+| `openfilz.signature.seal.provider` | `self-signed-dev` | `self-signed-dev`, `pkcs12` or `openfilz-cloud` |
+| `openfilz.signature.seal.keystore-path` | *(empty)* | PKCS#12 keystore holding the seal certificate |
+| `openfilz.signature.mail.from` | `no-reply@openfilz.com` | Sender address of every e-Sign email |
+| `openfilz.signature.sweep.cron` | `0 */5 * * * ?` | Expiry sweeper cadence |
+| `openfilz.signature.quota.envelopes-per-month` | `0` | Envelopes one user may create per calendar month; `0` = unlimited. `429` beyond it. |
+
+> **Without SMTP** (`spring.mail.host` empty) nothing is emailed: signing links and one-time
+> codes are written to the application log instead. That is enough to try the flow locally, and
+> unsuitable for real signers.
+
+> **Seal certificate:** the default `self-signed-dev` certificate is regenerated at every
+> startup, so Adobe Acrobat reports *"signature validity is unknown"*. For production, load your
+> own certificate through `openfilz.signature.seal.keystore-path`.
+
+> **Full reference:** [e-Sign Guide](esign.md) documents every property, the three seal
+> providers, the security model, the REST API and the extension points.
+
 ### CORS
 
 | Property / Env Variable | Default | Description |
@@ -800,6 +850,7 @@ Summary of all toggleable features:
 | Audit chain | `openfilz.audit.chain.enabled` | `true` | Cryptographic hash chain |
 | Checksums | `openfilz.calculate-checksum` | `false` | SHA-256 on upload |
 | AI chat | `openfilz.ai.active` | `false` | Requires LLM provider (Ollama or OpenAI) and pgvector |
+| e-Sign | `openfilz.signature.active` | `false` | Electronic signature envelopes; needs SMTP to email signing links |
 
 ---
 
