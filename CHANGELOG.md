@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[a01251f8150d9a7](https://github.com/openfilz/openfilz-core/commit/a01251f8150d9a7) maven-release-bot[bot] *2026-08-24 17:46:03*
+[b78f7211553c050](https://github.com/openfilz/openfilz-core/commit/b78f7211553c050) maven-release-bot[bot] *2026-08-25 12:48:26*
 
 
-## v1.2.28
+## v1.2.29
 ### No issue
 
-**[maven-release-plugin] prepare release v1.2.28**
+**[maven-release-plugin] prepare release v1.2.29**
 
 
-[1ca817a98249514](https://github.com/openfilz/openfilz-core/commit/1ca817a98249514) maven-release-bot[bot] *2026-08-24 17:45:59*
+[6cc64fa21d31c41](https://github.com/openfilz/openfilz-core/commit/6cc64fa21d31c41) maven-release-bot[bot] *2026-08-25 12:48:23*
 
-**Merge pull request #200 from openfilz/develop**
+**Merge pull request #201 from openfilz/develop**
 
- * Release: e-Sign in the Community Edition
+ * Develop
 
-[63da050c53dd2ad](https://github.com/openfilz/openfilz-core/commit/63da050c53dd2ad) Yann Demel *2026-08-24 17:42:18*
+[a35e2b9c128e665](https://github.com/openfilz/openfilz-core/commit/a35e2b9c128e665) Yann Demel *2026-08-25 12:45:24*
 
 
