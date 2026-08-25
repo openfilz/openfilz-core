@@ -4,6 +4,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.flyway.autoconfigure.FlywayConfigurationCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 
 import java.util.Arrays;
 import java.util.stream.Stream;
@@ -25,7 +27,15 @@ public class AiFlywayConfig {
 
     private static final String DEFAULT_MIGRATION_LOCATION = "classpath:db/migration";
 
+    // Runs before every other FlywayConfigurationCustomizer so the AI location is present in
+    // configuration.getLocations() by the time they read it. The GraalVM native-image workaround
+    // (NativeFlywayMigrationConfig, enterprise modules) enumerates the locations itself and hands
+    // Flyway an explicit file list; if it ran first it would never see db/ai-migration, and
+    // Flyway's own scanner cannot recover it in a native image ("unsupported protocol: resource").
+    // The AI migrations would then be silently skipped and the app would fail at startup on the
+    // missing ai_embedding_registry / vector_store tables.
     @Bean
+    @Order(Ordered.HIGHEST_PRECEDENCE)
     public FlywayConfigurationCustomizer aiFlywayCustomizer(
             // Runtime property read (not a bean condition) — native-image safe
             @Value("${openfilz.ai.active:false}") boolean aiActive) {
