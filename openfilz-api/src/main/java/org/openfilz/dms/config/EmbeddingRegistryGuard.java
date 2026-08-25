@@ -35,6 +35,11 @@ import java.util.Map;
  * <p>
  * When the {@code spring.ai.model.embedding} selector is {@code none} or absent, the embedding
  * model's identity cannot be established (mocked or externally-managed setups) and the guard skips.
+ * <p>
+ * Only a <em>detected</em> violation fails startup. If the registry cannot be reached at all (JDBC
+ * pool down, table missing), that is logged at ERROR and startup continues: an unreachable database
+ * is no evidence that the model changed, and crash-looping the whole DMS over an unverifiable AI
+ * invariant costs far more than the degraded RAG it would prevent.
  */
 @Slf4j
 @Component
@@ -75,6 +80,26 @@ public class EmbeddingRegistryGuard implements ApplicationRunner {
             return;
         }
 
+        try {
+            checkRegistry(provider);
+        } catch (IllegalStateException e) {
+            // A real violation (model mismatch / wrong dimensions) — startup MUST fail, that is
+            // the whole point of this guard.
+            throw e;
+        } catch (RuntimeException e) {
+            // The registry could not be read/written at all (JDBC pool down, table missing, ...).
+            // That says nothing about whether the embedding model changed, so it is not a reason
+            // to take the whole DMS down: degrade like resolveDimensions() does and let the API
+            // serve documents. AI stays configured; the one-time-decision guard is simply not
+            // enforced on this boot.
+            log.error("[AI-EMBED] Could not verify the embedding registry — the DMS is starting anyway, but the "
+                    + "embedding-model change guard is NOT enforced this boot. If the cause below is a bare "
+                    + "NullPointerException from HikariPool, the underlying connection error was dropped by "
+                    + "HikariCP 7.x and is only visible with logging.level.com.zaxxer.hikari=DEBUG.", e);
+        }
+    }
+
+    private void checkRegistry(String provider) {
         String model = environment.getProperty("spring.ai." + provider + ".embedding.model", "unknown");
         Integer dimensions = resolveDimensions();
         validateSchemaDimensions(provider, model, dimensions);
