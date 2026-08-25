@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.SimpleDriverDataSource;
 
 import javax.sql.DataSource;
 
@@ -48,6 +49,28 @@ public class AiConfig {
     // the ChatModel resolved for the user — the server-default model bean, or a BYOK model from
     // UserChatClientResolver. Assembly is cheap; the models carry the pooled HTTP clients.
 
+    /**
+     * The AI JDBC DataSource, pinned to {@link SimpleDriverDataSource}.
+     * <p>
+     * {@code DataSourceBuilder.create()} without an explicit {@code type()} resolves to
+     * HikariDataSource, because HikariCP is on the classpath transitively via
+     * spring-boot-starter-flyway. That pool cannot open a connection inside the EE native image:
+     * it fails as a bare NullPointerException, because HikariCP 7.x logs the real cause at DEBUG
+     * and then drops it (createPoolEntry returns null without recording the failure, so
+     * checkFailFast ends up at PoolInitializationException(null)). EE v1.8.5 crash-looped on this.
+     * <p>
+     * SimpleDriverDataSource is what Spring Boot itself hands Flyway, and Flyway connects happily
+     * in the very image where the pool fails — so this type is known to work there, on the same
+     * URL and credentials. Pinning it removes the dependency on Hikari working under native-image.
+     * <p>
+     * Two caveats, deliberately recorded rather than papered over:
+     * <ul>
+     *   <li>It is unpooled — every borrow opens a connection. Fine for the startup guard, worth
+     *       revisiting if PgVectorStore gets heavy traffic.</li>
+     *   <li>Why Hikari fails here is still unknown, and it reportedly works in the CE image. Find
+     *       that out (logging.level.com.zaxxer.hikari=DEBUG) before switching the type back.</li>
+     * </ul>
+     */
     @Bean
     @Lazy
     DataSource aiDataSource(
@@ -55,6 +78,7 @@ public class AiConfig {
             @Value("${spring.flyway.user}") String username,
             @Value("${spring.flyway.password}") String password) {
         return DataSourceBuilder.create()
+                .type(SimpleDriverDataSource.class)
                 .url(jdbcUrl)
                 .username(username)
                 .password(password)
