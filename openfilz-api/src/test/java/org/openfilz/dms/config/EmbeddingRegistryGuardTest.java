@@ -57,6 +57,27 @@ class EmbeddingRegistryGuardTest {
         when(embeddingModel.dimensions()).thenReturn(AiConfig.EMBEDDING_DIMENSIONS);
     }
 
+    @Test
+    void startupSurvivesAnUnreachableRegistry() {
+        // The v1.8.5 production crash-loop: HikariCP 7.x fails to build the AI pool and surfaces a
+        // bare NPE (it drops the real cause). An unverifiable registry must not take the DMS down.
+        givenOllamaNomic();
+        when(jdbcTemplate.queryForList(SELECT_REGISTRY)).thenThrow(new NullPointerException());
+
+        assertDoesNotThrow(() -> guard.run(null));
+    }
+
+    @Test
+    void startupSurvivesAWriteFailureOnTheRegistry() {
+        givenOllamaNomic();
+        givenEmptyRegistry();
+        when(jdbcTemplate.queryForObject(COUNT_VECTORS, Long.class)).thenReturn(0L);
+        when(jdbcTemplate.update(startsWith("INSERT INTO ai_embedding_registry"), any(), any(), any()))
+                .thenThrow(new org.springframework.dao.DataAccessResourceFailureException("pool down"));
+
+        assertDoesNotThrow(() -> guard.run(null));
+    }
+
     private void givenOllamaNomic() {
         environment.setProperty("spring.ai.model.embedding", "ollama");
         environment.setProperty("spring.ai.ollama.embedding.model", "nomic-embed-text");
