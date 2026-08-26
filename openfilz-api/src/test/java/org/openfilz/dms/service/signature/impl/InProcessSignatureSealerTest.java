@@ -3,7 +3,6 @@ package org.openfilz.dms.service.signature.impl;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.interactive.digitalsignature.PDSignature;
-import org.bouncycastle.cms.CMSProcessableByteArray;
 import org.bouncycastle.cms.CMSSignedData;
 import org.bouncycastle.cms.SignerInformation;
 import org.bouncycastle.cms.jcajce.JcaSimpleSignerInfoVerifierBuilder;
@@ -73,7 +72,7 @@ class InProcessSignatureSealerTest {
 
             byte[] signedContent = sig.getSignedContent(result.bytes());
             byte[] cms = sig.getContents(result.bytes());
-            CMSSignedData signedData = new CMSSignedData(new CMSProcessableByteArray(signedContent), cms);
+            CMSSignedData signedData = SignatureTestKeys.parseCms(signedContent, cms);
             assertThat(signedData.getSignerInfos().getSigners()).hasSize(1);
             SignerInformation signer = signedData.getSignerInfos().getSigners().iterator().next();
             assertThat(signer.verify(new JcaSimpleSignerInfoVerifierBuilder().build(sealer.certificate()))).isTrue();
@@ -107,8 +106,8 @@ class InProcessSignatureSealerTest {
         assertThat(result.provider()).isEqualTo("pkcs12");
         try (PDDocument doc = Loader.loadPDF(result.bytes())) {
             PDSignature sig = doc.getSignatureDictionaries().getFirst();
-            CMSSignedData signedData = new CMSSignedData(
-                    new CMSProcessableByteArray(sig.getSignedContent(result.bytes())), sig.getContents(result.bytes()));
+            CMSSignedData signedData = SignatureTestKeys.parseCms(
+                    sig.getSignedContent(result.bytes()), sig.getContents(result.bytes()));
             SignerInformation signer = signedData.getSignerInfos().getSigners().iterator().next();
             assertThat(signer.verify(new JcaSimpleSignerInfoVerifierBuilder().build(material.certificate()))).isTrue();
             // the embedded certificate is the customer's one
