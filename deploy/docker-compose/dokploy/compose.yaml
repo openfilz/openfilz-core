@@ -216,6 +216,34 @@ services:
       OPENFILZ_QUOTA_FILE_UPLOAD: ${OPENFILZ_QUOTA_FILE_UPLOAD:-1024}
       OPENFILZ_QUOTA_USER: ${OPENFILZ_QUOTA_USER:-2048}
 
+      # e-Sign electronic signatures (optional - set OPENFILZ_SIGNATURE_ACTIVE=true to enable)
+      # Master switch over the Signatures menu, /api/v1/signatures/**, the public signing
+      # chain and the expiry sweeper. Read at runtime, but the public security chain reads
+      # it once at startup, so flipping it needs a restart. Reference: docs/esign.md
+      OPENFILZ_SIGNATURE_ACTIVE: ${OPENFILZ_SIGNATURE_ACTIVE:-false}
+      OPENFILZ_SIGNATURE_DEFAULT_EXPIRY_DAYS: ${OPENFILZ_SIGNATURE_DEFAULT_EXPIRY_DAYS:-30}
+      # Envelopes one initiator may create per calendar month; 0 = unlimited.
+      OPENFILZ_SIGNATURE_QUOTA_ENVELOPES_PER_MONTH: ${OPENFILZ_SIGNATURE_QUOTA_ENVELOPES_PER_MONTH:-0}
+      # Signing links are built from OPENFILZ_COMMON_WEBPUBLICBASEURL above (keep the trailing /).
+      # Seal identity: self-signed-dev (ephemeral dev cert) | pkcs12 | openfilz-cloud.
+      # A .p12 must be mounted into the container for the keystore path to resolve.
+      OPENFILZ_SIGNATURE_SEAL_PROVIDER: ${OPENFILZ_SIGNATURE_SEAL_PROVIDER:-self-signed-dev}
+      OPENFILZ_SIGNATURE_SEAL_KEYSTORE_PATH: ${OPENFILZ_SIGNATURE_SEAL_KEYSTORE_PATH:-}
+      OPENFILZ_SIGNATURE_SEAL_KEYSTORE_PASSWORD: ${OPENFILZ_SIGNATURE_SEAL_KEYSTORE_PASSWORD:-}
+      OPENFILZ_SIGNATURE_SEAL_KEYSTORE_ALIAS: ${OPENFILZ_SIGNATURE_SEAL_KEYSTORE_ALIAS:-openfilz-seal}
+      OPENFILZ_SIGNATURE_CLOUD_API_KEY: ${OPENFILZ_SIGNATURE_CLOUD_API_KEY:-}
+      # e-Sign e-mails reuse the SMTP_* settings shared with Keycloak. With SMTP_HOST empty,
+      # invitations, reminders and OTP codes are only written to the application log
+      # ([e-sign][no-smtp] ...) and EMAIL_OTP recipients are refused at envelope creation.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_AUTH: ${SMTP_AUTH:-true}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+      OPENFILZ_SIGNATURE_MAIL_FROM: ${OPENFILZ_SIGNATURE_MAIL_FROM:-noreply@openfilz.com}
+      OPENFILZ_SIGNATURE_MAIL_FROM_NAME: ${OPENFILZ_SIGNATURE_MAIL_FROM_NAME:-OpenFilz e-Sign}
+
       # AI Document Chat (optional — set OPENFILZ_AI_ACTIVE=true to enable)
       OPENFILZ_AI_ACTIVE: ${OPENFILZ_AI_ACTIVE:-false}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
