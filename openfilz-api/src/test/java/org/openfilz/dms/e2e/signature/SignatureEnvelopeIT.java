@@ -407,4 +407,17 @@ class SignatureEnvelopeIT extends AbstractSignatureIT {
                 .expectBodyList(SignatureEnvelopeDTO.class).returnResult().getResponseBody();
         assertThat(completed).extracting(SignatureEnvelopeDTO::id).doesNotContain(env.id());
     }
+
+    @Test
+    void cloud_subscription_is_404_when_the_cloud_provider_is_not_configured() {
+        // This context runs the default self-signed-dev seal provider.
+        getWebTestClient().get().uri(SIG + "/cloud-subscription")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + contributor)
+                .exchange().expectStatus().isNotFound();
+
+        getWebTestClient().get().uri(org.openfilz.dms.config.RestApiVersion.API_PREFIX + "/settings")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + contributor)
+                .exchange().expectStatus().isOk()
+                .expectBody().jsonPath("$.signatureCloudActive").isEqualTo(false);
+    }
 }

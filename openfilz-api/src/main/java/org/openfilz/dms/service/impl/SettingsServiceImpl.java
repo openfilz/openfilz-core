@@ -41,6 +41,12 @@ public class SettingsServiceImpl implements SettingsService {
     @Value("${openfilz.signature.active:false}")
     private Boolean signatureActive;
 
+    @Value("${openfilz.signature.seal.provider:self-signed-dev}")
+    private String signatureSealProvider;
+
+    @Value("${openfilz.signature.seal.cloud.api-key:}")
+    private String signatureCloudApiKey;
+
     private final RecycleBinProperties recycleBinProperties;
 
     private final QuotaProperties quotaProperties;
@@ -97,6 +103,9 @@ public class SettingsServiceImpl implements SettingsService {
                .signatureActive(Boolean.TRUE.equals(signatureActive))
                .signatureAuthMethods(deliverableAuthMethods())
                .signatureRemindersActive(Boolean.TRUE.equals(signatureActive) && !reminderSenders.isEmpty())
+               .signatureCloudActive(Boolean.TRUE.equals(signatureActive)
+                       && "openfilz-cloud".equals(signatureSealProvider)
+                       && signatureCloudApiKey != null && !signatureCloudApiKey.isBlank())
                .build());
 
     }
