@@ -1,8 +1,12 @@
 package org.openfilz.dms.service.signature.impl;
 
+import org.bouncycastle.asn1.ASN1InputStream;
+import org.bouncycastle.asn1.cms.ContentInfo;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
+import org.bouncycastle.cms.CMSProcessableByteArray;
+import org.bouncycastle.cms.CMSSignedData;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 
@@ -34,6 +38,15 @@ final class SignatureTestKeys {
         var signer = new JcaContentSignerBuilder("SHA256withRSA").build(kp.getPrivate());
         X509Certificate cert = new JcaX509CertificateConverter().getCertificate(builder.build(signer));
         return new Material(kp, cert);
+    }
+
+    /** Parse the CMS from a PDF /Contents field. The field is zero-padded to its reserved size,
+     *  and BC 1.84+ rejects trailing data in ASN1Primitive.fromByteArray (used by the byte[]
+     *  CMSSignedData constructor) — read exactly one ASN.1 object instead. */
+    static CMSSignedData parseCms(byte[] signedContent, byte[] paddedCms) throws Exception {
+        try (ASN1InputStream in = new ASN1InputStream(paddedCms)) {
+            return new CMSSignedData(new CMSProcessableByteArray(signedContent), ContentInfo.getInstance(in.readObject()));
+        }
     }
 
     static byte[] fixturePdf() throws Exception {
