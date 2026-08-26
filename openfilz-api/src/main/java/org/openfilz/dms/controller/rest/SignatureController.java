@@ -6,11 +6,14 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.config.SignatureProperties;
+import org.openfilz.dms.dto.signature.CloudSignatureSubscription;
 import org.openfilz.dms.dto.signature.CreateSignatureEnvelopeRequest;
 import org.openfilz.dms.dto.signature.SignatureEnvelopeDTO;
 import org.openfilz.dms.dto.signature.SignatureEventDTO;
 import org.openfilz.dms.enums.SignatureEnvelopeStatus;
 import org.openfilz.dms.service.SignatureService;
+import org.openfilz.dms.service.signature.CloudSubscriptionClient;
+import org.openfilz.dms.service.signature.impl.CloudSignatureSealer;
 import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -44,6 +47,7 @@ public class SignatureController implements UserInfoService {
 
     private final SignatureService service;
     private final SignatureProperties props;
+    private final CloudSubscriptionClient cloudSubscriptionClient;
 
     @PostMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Create an envelope (sent immediately unless send=false)")
@@ -93,6 +97,13 @@ public class SignatureController implements UserInfoService {
         return email().flatMap(e -> service.resend(id, recipientId, e));
     }
 
+    @GetMapping(value = "/cloud-subscription", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Cloud Signing subscription and month-to-date usage (openfilz-cloud seal provider only)")
+    public Mono<CloudSignatureSubscription> cloudSubscription() {
+        requireCloudSealing();
+        return email().then(Mono.defer(cloudSubscriptionClient::fetch));
+    }
+
     @GetMapping(value = "/{id}/signed-document", produces = MediaType.APPLICATION_PDF_VALUE)
     @Operation(summary = "Download the sealed PDF of a completed envelope")
     public Mono<ResponseEntity<Resource>> signedDocument(@PathVariable UUID id) {
@@ -130,6 +141,15 @@ public class SignatureController implements UserInfoService {
     private void requireActive() {
         if (!props.isActive()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "e-Sign feature is disabled");
+        }
+    }
+
+    private void requireCloudSealing() {
+        requireActive();
+        SignatureProperties.Seal.Cloud cloud = props.getSeal().getCloud();
+        if (!CloudSignatureSealer.ID.equals(props.getSeal().getProvider())
+                || cloud.getApiKey() == null || cloud.getApiKey().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Cloud Signing is not enabled");
         }
     }
 }
