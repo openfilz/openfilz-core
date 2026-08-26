@@ -74,6 +74,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -116,6 +117,9 @@ public class SignatureServiceImpl implements SignatureService {
     private final SignatureCompletionListener completionListener;
     private final List<SignatureOtpSender> otpSenders;
     private final ObjectProvider<MetadataPostProcessor> metadataPostProcessorProvider;
+
+    /** Envelopes with an in-flight finalization retry — guards {@link #healStuckEnvelope} against double page loads. */
+    private final Set<UUID> healing = ConcurrentHashMap.newKeySet();
 
     public SignatureServiceImpl(SignatureEnvelopeRepository envelopeRepo,
                                 SignatureRecipientRepository recipientRepo,
@@ -451,9 +455,37 @@ public class SignatureServiceImpl implements SignatureService {
                                 .as(tx::transactional)
                                 .thenReturn(r);
                     }
-                    return Mono.just(r);
+                    return healStuckEnvelope(r).thenReturn(r);
                 })
                 .flatMap(this::publicView);
+    }
+
+    /**
+     * Recovery path for envelopes wedged by a historical finalization failure (seal provider
+     * outage after the recipient row was already committed as SIGNED): every signer is SIGNED
+     * but the envelope is still SENT and nothing can ever retry it. Detected when a signer
+     * re-opens their link; errors are swallowed so the page still renders the current state.
+     */
+    private Mono<Void> healStuckEnvelope(SignatureRecipient r) {
+        if (r.getStatus() != SignatureRecipientStatus.SIGNED) {
+            return Mono.empty();
+        }
+        return envelopeRepo.findById(r.getEnvelopeId())
+                .filter(env -> env.getStatus() == SignatureEnvelopeStatus.SENT)
+                .filter(env -> healing.add(env.getId()))
+                .flatMap(env -> recipientRepo.findByEnvelopeIdOrderByOrderIndexAscSortOrderAscIdAsc(env.getId()).collectList()
+                        .filter(recipients -> recipients.stream().filter(SignatureRecipient::isSigner)
+                                .allMatch(x -> x.getStatus() == SignatureRecipientStatus.SIGNED))
+                        .flatMap(recipients -> {
+                            log.warn("[e-sign] envelope {} is fully signed but never completed — retrying finalization",
+                                    env.getId());
+                            return finalizeEnvelope(env, recipients);
+                        })
+                        .onErrorResume(e -> {
+                            log.error("[e-sign] finalization retry failed for envelope {}: {}", env.getId(), e.toString());
+                            return Mono.empty();
+                        })
+                        .doFinally(sig -> healing.remove(env.getId())));
     }
 
     @Override
@@ -552,8 +584,12 @@ public class SignatureServiceImpl implements SignatureService {
                                         .then(auditService.logAction(AuditAction.SIGNATURE_DOCUMENT_SIGNED, DocumentType.FILE, env.getSourceDocId())
                                                 .contextWrite(ReactiveSecurityContextHolder.withAuthentication(
                                                         actorResolver.signerAuthentication(r))))
-                                        .as(tx::transactional)
+                                        // Single transaction with advance/completion: if sealing (or any other
+                                        // finalization step) fails, the SIGNED status rolls back too, so the
+                                        // signer can retry — otherwise the envelope is stuck SENT forever with
+                                        // an unretryable "already signed" recipient.
                                         .then(Mono.defer(() -> advanceOrComplete(env)))
+                                        .as(tx::transactional)
                                         .thenReturn(r);
                             });
                 }))
