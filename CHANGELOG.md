@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[5aa382f37aa95c8](https://github.com/openfilz/openfilz-core/commit/5aa382f37aa95c8) maven-release-bot[bot] *2026-08-26 16:06:53*
+[41bb67e111f9031](https://github.com/openfilz/openfilz-core/commit/41bb67e111f9031) maven-release-bot[bot] *2026-08-26 19:50:12*
 
 
-## v1.2.31
+## v1.2.32
 ### No issue
 
-**[maven-release-plugin] prepare release v1.2.31**
+**[maven-release-plugin] prepare release v1.2.32**
 
 
-[039187407f011cd](https://github.com/openfilz/openfilz-core/commit/039187407f011cd) maven-release-bot[bot] *2026-08-26 16:06:50*
+[66a1291e31fac8f](https://github.com/openfilz/openfilz-core/commit/66a1291e31fac8f) maven-release-bot[bot] *2026-08-26 19:50:09*
 
-**Merge pull request #203 from openfilz/develop**
+**Merge pull request #204 from openfilz/develop**
 
- * Develop
+ * e-Sign: atomic finalization with self-heal + Cloud Signing subscription endpoint
 
-[ece5e0db2af1ca0](https://github.com/openfilz/openfilz-core/commit/ece5e0db2af1ca0) Yann Demel *2026-08-26 15:45:56*
+[96a17c6cb655df5](https://github.com/openfilz/openfilz-core/commit/96a17c6cb655df5) Yann Demel *2026-08-26 19:46:39*
 
 
