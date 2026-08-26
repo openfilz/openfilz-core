@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[ef8a7d619d212c7](https://github.com/openfilz/openfilz-core/commit/ef8a7d619d212c7) maven-release-bot[bot] *2026-08-25 20:51:12*
+[5aa382f37aa95c8](https://github.com/openfilz/openfilz-core/commit/5aa382f37aa95c8) maven-release-bot[bot] *2026-08-26 16:06:53*
 
 
-## v1.2.30
+## v1.2.31
 ### No issue
 
-**[maven-release-plugin] prepare release v1.2.30**
+**[maven-release-plugin] prepare release v1.2.31**
 
 
-[02954a836ddc6cc](https://github.com/openfilz/openfilz-core/commit/02954a836ddc6cc) maven-release-bot[bot] *2026-08-25 20:51:09*
+[039187407f011cd](https://github.com/openfilz/openfilz-core/commit/039187407f011cd) maven-release-bot[bot] *2026-08-26 16:06:50*
 
-**Merge pull request #202 from openfilz/develop**
+**Merge pull request #203 from openfilz/develop**
 
- * fix(flyway): run the AI migrations in GraalVM native images
+ * Develop
 
-[e77b3b39bf71274](https://github.com/openfilz/openfilz-core/commit/e77b3b39bf71274) Yann Demel *2026-08-25 20:48:11*
+[ece5e0db2af1ca0](https://github.com/openfilz/openfilz-core/commit/ece5e0db2af1ca0) Yann Demel *2026-08-26 15:45:56*
 
 
