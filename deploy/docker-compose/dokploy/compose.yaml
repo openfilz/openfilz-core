@@ -201,6 +201,9 @@ services:
       ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET}
 
       # Feature toggles
+      # Public shared demo: the web app shows the demo disclaimers (shared-visibility
+      # warning + upsell links). Leave false for every real installation.
+      OPENFILZ_DEMO_MODE: ${OPENFILZ_DEMO_MODE:-false}
       OPENFILZ_THUMBNAIL_ACTIVE: ${OPENFILZ_THUMBNAIL_ACTIVE:-true}
       OPENFILZ_SOFTDELETE_ACTIVE: ${OPENFILZ_SOFTDELETE_ACTIVE:-true}
       OPENFILZ_CALCULATECHECKSUM: ${OPENFILZ_CALCULATECHECKSUM:-true}
