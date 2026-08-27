@@ -17,18 +17,25 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.google.genai.GoogleGenAiChatModel;
 import org.springframework.ai.google.genai.GoogleGenAiChatOptions;
 import org.springframework.ai.model.tool.ToolCallingManager;
+import org.springframework.ai.ollama.OllamaChatModel;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.setup.OpenAiSetup;
+import org.springframework.ai.retry.TransientAiException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.core.env.Environment;
+import org.springframework.core.retry.RetryPolicy;
+import org.springframework.core.retry.RetryTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Resolves the {@link ChatModel} to use for a given user's chat request.
@@ -68,6 +75,25 @@ public class UserChatClientResolver {
 
     private static final Duration PROVIDER_TIMEOUT = Duration.ofSeconds(120);
 
+    /**
+     * Retry policy for the programmatically built Google model. Spring AI's default template
+     * retries transient failures (429s, I/O errors) 10 times with exponential backoff capped at
+     * 3 minutes per wait — behind which a single spent free-tier key stalls a chat request for
+     * many minutes before {@link AiFallbackChain} even sees the failure. The template guards the
+     * blocking call path (tool-execution rounds); streaming errors already surface immediately.
+     * The fallback chain is this application's retry mechanism — the right response to a spent
+     * key is the <em>next candidate</em>, not more waiting on the same one — so in-model retries
+     * are kept to two quick attempts. Anthropic and OpenAI need no equivalent: their models take
+     * no template, and their vendor SDK clients are built below with {@code maxRetries} 1.
+     */
+    static final RetryTemplate SHORT_RETRY_TEMPLATE = new RetryTemplate(RetryPolicy.builder()
+            .maxRetries(2)
+            .includes(TransientAiException.class, ResourceAccessException.class)
+            .delay(Duration.ofMillis(500))
+            .multiplier(2.0)
+            .maxDelay(Duration.ofSeconds(2))
+            .build());
+
     private final ChatModel defaultChatModel;
     private final ToolCallingManager toolCallingManager;
     private final UserAiSettingsRepository repository;
@@ -79,6 +105,14 @@ public class UserChatClientResolver {
             .maximumSize(500)
             .expireAfterAccess(Duration.ofMinutes(30))
             .build();
+
+    /**
+     * The server-default primary rebuilt to match the runtime provider selector (see
+     * {@link #runtimeSwitchedDefault}), evaluated once: {@code null} until first asked, then
+     * empty when the injected bean already matches or nothing can be rebuilt. Selector and keys
+     * come from the environment, so the answer cannot change while the process lives.
+     */
+    private final AtomicReference<Optional<ResolvedChat>> runtimeSwitchedDefault = new AtomicReference<>();
 
     public UserChatClientResolver(ChatModel defaultChatModel,
                                   ToolCallingManager toolCallingManager,
@@ -164,6 +198,7 @@ public class UserChatClientResolver {
                             .model(model)
                             .build())
                     .toolCallingManager(toolCallingManager)
+                    .retryTemplate(SHORT_RETRY_TEMPLATE)
                     .build();
             case OPENAI, OPENAI_COMPATIBLE -> OpenAiChatModel.builder()
                     .openAiClient(OpenAiSetup.setupSyncClient(
@@ -186,7 +221,87 @@ public class UserChatClientResolver {
 
     private ResolvedChat defaultChat() {
         String provider = environment.getProperty("spring.ai.model.chat", "none");
-        return new ResolvedChat(defaultChatModel, provider, defaultModelFor(provider), defaultKeyRefFor(provider));
+        Optional<ResolvedChat> switched = runtimeSwitchedDefault.get();
+        if (switched == null) {
+            // A lost race just builds the same model twice; the extra one is garbage-collected.
+            switched = Optional.ofNullable(runtimeSwitchedDefault(provider));
+            runtimeSwitchedDefault.set(switched);
+        }
+        return switched.orElseGet(() -> new ResolvedChat(
+                defaultChatModel, provider, defaultModelFor(provider), defaultKeyRefFor(provider)));
+    }
+
+    /**
+     * The server-default primary rebuilt to match the runtime provider selector, or null when
+     * the injected bean already matches (every JVM deployment) or nothing can be rebuilt.
+     * <p>
+     * In the GraalVM native image, Spring AI's provider auto-configurations are bean
+     * <em>conditions</em>, evaluated at build time: the AOT run bakes a single {@code ChatModel}
+     * bean — Ollama, the selector's default at that point — and setting
+     * {@code spring.ai.model.chat} at runtime can no longer swap it. Without this seam the
+     * "chain's first entry names the primary" contract silently breaks natively: the primary
+     * keeps calling Ollama while wearing the runtime provider's name, pays a failing call on
+     * every chat request, and — worse — its failures are benched in {@link AiFallbackChain}'s
+     * cooldown registry under the <em>real</em> provider:key:model of a healthy chain candidate.
+     * So when the selector names a provider this resolver can build programmatically and the
+     * bean is visibly a different provider, the primary is built here, through the same
+     * native-safe {@link #buildChatModel} path BYOK and the chain already use.
+     * <p>
+     * Rebuilt from the provider's single server key ({@code spring.ai.*.api-key}). A deployment
+     * that only has pool keys ({@code AI_FALLBACK_KEYS_*}) keeps the baked bean as primary and
+     * is carried by the chain, exactly as before. The label deliberately stays the selector's
+     * name in every fallback-to-the-bean case: relabelling the primary as the bean's own
+     * provider ("ollama") would trip the chain's data-residency rule and turn failover off in
+     * precisely the deployment being rescued by it.
+     */
+    private ResolvedChat runtimeSwitchedDefault(String selector) {
+        AiProvider wanted = buildableProvider(selector);
+        String actual = beanProvider(defaultChatModel);
+        if (wanted == null || actual == null || actual.equals(selector)) {
+            return null;
+        }
+        String apiKey = AiFallbackChain.serverApiKey(wanted, environment);
+        String model = defaultModelFor(selector);
+        if (apiKey == null || model.isBlank()) {
+            log.warn("[AI] Chat provider selector '{}' does not match the {} compiled into this image, "
+                            + "and there is no server API key + model to rebuild it from — keeping the "
+                            + "compiled bean; the fallback chain (if configured) still applies",
+                    selector, defaultChatModel.getClass().getSimpleName());
+            return null;
+        }
+        try {
+            ChatModel built = buildChatModel(wanted, apiKey, null, model);
+            log.info("[AI] Runtime chat provider '{}' differs from the {} compiled into this image — "
+                            + "built the {} ({}) primary programmatically (native-image runtime switch)",
+                    selector, defaultChatModel.getClass().getSimpleName(), wanted, model);
+            return new ResolvedChat(built, selector, model, AiKeyRef.of(apiKey));
+        } catch (Exception e) {
+            log.warn("[AI] Could not build the '{}' primary programmatically — keeping the compiled {}: {}",
+                    selector, defaultChatModel.getClass().getSimpleName(), e.toString());
+            return null;
+        }
+    }
+
+    /** {@link AiProvider} the selector names, or null when it names nothing we can build (ollama, none). */
+    private static AiProvider buildableProvider(String selector) {
+        return switch (selector) {
+            case "google-genai" -> AiProvider.GOOGLE;
+            case "anthropic" -> AiProvider.ANTHROPIC;
+            case "openai" -> AiProvider.OPENAI;
+            default -> null;
+        };
+    }
+
+    /**
+     * Selector name of the provider a {@code ChatModel} bean belongs to, or null for a class we
+     * don't map — an unrecognised model (or a test mock) is trusted as-is rather than replaced.
+     */
+    private static String beanProvider(ChatModel model) {
+        if (model instanceof OllamaChatModel) return "ollama";
+        if (model instanceof GoogleGenAiChatModel) return "google-genai";
+        if (model instanceof AnthropicChatModel) return "anthropic";
+        if (model instanceof OpenAiChatModel) return "openai";
+        return null;
     }
 
     /**
