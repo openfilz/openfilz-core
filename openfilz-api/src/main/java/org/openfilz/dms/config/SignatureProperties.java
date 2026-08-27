@@ -31,6 +31,15 @@ public class SignatureProperties {
     /** Max size in bytes of a base64 field image (signature / initials / image / stamp). */
     private int maxImageBytes = 512 * 1024;
 
+    /**
+     * When {@code true}, initiating e-Sign requests (envelope / template writes) additionally
+     * requires the {@link org.openfilz.dms.enums.Role#SIGN_REQUESTER} role, so a deployment can
+     * grant or withhold the feature per user. Off by default: every CONTRIBUTOR may initiate,
+     * which keeps existing realms (whose users don't have the role yet) working unchanged.
+     * Runtime toggle — read per request, never a bean condition.
+     */
+    private boolean requireRequesterRole = false;
+
     private final Otp otp = new Otp();
     private final Seal seal = new Seal();
     private final Mail mail = new Mail();

@@ -541,6 +541,10 @@
       {
         "name": "CLEANER",
         "description": "CLEANER role"
+      },
+      {
+        "name": "SIGN_REQUESTER",
+        "description": "May initiate e-Sign requests (enforced when OPENFILZ_SIGNATURE_REQUIRE_REQUESTER_ROLE=true)"
       }
     ]
   },
@@ -564,6 +568,10 @@
         {
           "name": "CLEANER",
           "path": "/OPENFILZ/CLEANER"
+        },
+        {
+          "name": "SIGN_REQUESTER",
+          "path": "/OPENFILZ/SIGN_REQUESTER"
         }
       ]
     }

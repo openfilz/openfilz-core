@@ -316,7 +316,7 @@ Used with `docker-compose.auth.yml`:
 | `KEYCLOAK_DEFAULT_GROUP_3` | `/OPENFILZ/READER` | 3rd default group (set to an already-used group if unused) |
 | `KEYCLOAK_DEFAULT_GROUP_4` | `/OPENFILZ/READER` | 4th default group (set to an already-used group if unused) |
 
-> **Note**: Up to 4 default roles and 4 default groups can be assigned to new users. Available roles: `READER`, `CONTRIBUTOR`, `AUDITOR`, `CLEANER`. Available groups: `/OPENFILZ/READER`, `/OPENFILZ/CONTRIBUTOR`, `/OPENFILZ/AUDITOR`, `/OPENFILZ/CLEANER`. If you need fewer than 4, set unused slots to an already-used value — duplicates are ignored by Keycloak. For example, to grant all permissions:
+> **Note**: Up to 4 default roles and 4 default groups can be assigned to new users. Available roles: `READER`, `CONTRIBUTOR`, `AUDITOR`, `CLEANER`, `SIGN_REQUESTER`. Available groups: `/OPENFILZ/READER`, `/OPENFILZ/CONTRIBUTOR`, `/OPENFILZ/AUDITOR`, `/OPENFILZ/CLEANER`, `/OPENFILZ/SIGN_REQUESTER`. If you need fewer than 4, set unused slots to an already-used value — duplicates are ignored by Keycloak. For example, to grant all permissions:
 > ```
 > KEYCLOAK_DEFAULT_ROLE_1=CONTRIBUTOR
 > KEYCLOAK_DEFAULT_ROLE_2=AUDITOR

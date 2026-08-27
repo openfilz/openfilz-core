@@ -531,12 +531,14 @@
         "default-roles-openfilz",
         "CONTRIBUTOR",
         "CLEANER",
-        "AUDITOR"
+        "AUDITOR",
+        "SIGN_REQUESTER"
       ],
       "groups": [
         "/OPENFILZ/CONTRIBUTOR",
         "/OPENFILZ/CLEANER",
-        "/OPENFILZ/AUDITOR"
+        "/OPENFILZ/AUDITOR",
+        "/OPENFILZ/SIGN_REQUESTER"
       ]
     },
     {
@@ -574,6 +576,10 @@
       {
         "name": "CLEANER",
         "description": "CLEANER role"
+      },
+      {
+        "name": "SIGN_REQUESTER",
+        "description": "SIGN_REQUESTER role"
       }
     ]
   },
@@ -597,6 +603,10 @@
         {
           "name": "CLEANER",
           "path": "/OPENFILZ/CLEANER"
+        },
+        {
+          "name": "SIGN_REQUESTER",
+          "path": "/OPENFILZ/SIGN_REQUESTER"
         }
       ]
     }

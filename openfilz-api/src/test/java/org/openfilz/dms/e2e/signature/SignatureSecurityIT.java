@@ -100,5 +100,7 @@ class SignatureSecurityIT extends AbstractSignatureIT {
                 .exchange().expectStatus().isOk()
                 .expectBody(Settings.class).returnResult().getResponseBody();
         assertThat(settings.signatureActive()).isTrue();
+        // Default: the SIGN_REQUESTER role is not required — every CONTRIBUTOR may initiate.
+        assertThat(settings.signatureRequesterRoleRequired()).isFalse();
     }
 }

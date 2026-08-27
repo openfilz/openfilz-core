@@ -41,6 +41,11 @@ public class SettingsServiceImpl implements SettingsService {
     @Value("${openfilz.signature.active:false}")
     private Boolean signatureActive;
 
+    // When on, initiating signature requests also needs the SIGN_REQUESTER role — surfaced so the
+    // frontend can hide the request/template actions from users without it (backend still enforces).
+    @Value("${openfilz.signature.require-requester-role:false}")
+    private Boolean signatureRequireRequesterRole;
+
     @Value("${openfilz.signature.seal.provider:self-signed-dev}")
     private String signatureSealProvider;
 
@@ -124,6 +129,7 @@ public class SettingsServiceImpl implements SettingsService {
                .aiActive(aiActive)
                .aiUserSettingsEnabled(aiActive && aiUserSettingsEnabled)
                .signatureActive(Boolean.TRUE.equals(signatureActive))
+               .signatureRequesterRoleRequired(Boolean.TRUE.equals(signatureActive) && Boolean.TRUE.equals(signatureRequireRequesterRole))
                .signatureAuthMethods(deliverableAuthMethods())
                .signatureRemindersActive(Boolean.TRUE.equals(signatureActive) && !reminderSenders.isEmpty())
                .signatureCloudActive(Boolean.TRUE.equals(signatureActive) && isCloudSealConfigured())

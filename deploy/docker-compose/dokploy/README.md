@@ -121,7 +121,7 @@ KEYCLOAK_ADMIN=admin
 KEYCLOAK_ADMIN_PASSWORD=your-strong-admin-password
 
 # Default roles for new users (up to 4, set unused slots to an already-used role)
-# Available roles: READER, CONTRIBUTOR, AUDITOR, CLEANER
+# Available roles: READER, CONTRIBUTOR, AUDITOR, CLEANER, SIGN_REQUESTER
 KEYCLOAK_DEFAULT_ROLE_1=READER
 KEYCLOAK_DEFAULT_ROLE_2=READER
 KEYCLOAK_DEFAULT_ROLE_3=READER
