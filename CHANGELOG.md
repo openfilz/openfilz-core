@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[82d2b9f5554c3c2](https://github.com/openfilz/openfilz-core/commit/82d2b9f5554c3c2) maven-release-bot[bot] *2026-08-27 17:38:44*
+[17cd1d0d5fa4a8e](https://github.com/openfilz/openfilz-core/commit/17cd1d0d5fa4a8e) maven-release-bot[bot] *2026-08-27 23:12:50*
 
 
-## v1.2.35
+## v1.2.36
 ### No issue
 
-**[maven-release-plugin] prepare release v1.2.35**
+**[maven-release-plugin] prepare release v1.2.36**
 
 
-[163d78f92524462](https://github.com/openfilz/openfilz-core/commit/163d78f92524462) maven-release-bot[bot] *2026-08-27 17:38:41*
+[11dced8d31258d5](https://github.com/openfilz/openfilz-core/commit/11dced8d31258d5) maven-release-bot[bot] *2026-08-27 23:12:47*
 
-**Merge pull request #209 from openfilz/develop**
+**Merge pull request #211 from openfilz/develop**
 
- * Release: native-safe AI primary runtime switch + short retry for built Google models
+ * Develop → main: SIGN_REQUESTER role gating e-Sign initiation
 
-[3f496fb8fab5544](https://github.com/openfilz/openfilz-core/commit/3f496fb8fab5544) Yann Demel *2026-08-27 17:35:00*
+[5552d1ef29b55fb](https://github.com/openfilz/openfilz-core/commit/5552d1ef29b55fb) Yann Demel *2026-08-27 23:09:22*
 
 
