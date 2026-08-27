@@ -202,11 +202,11 @@
         </dependency>
 
         <!-- Apache PDFBox for PDF thumbnail generation -->
-        <!-- Version must match what Tika 3.3.1 expects (3.0.7) to avoid NoSuchMethodError -->
+        <!-- Version must match what Tika 3.3.2 expects (3.0.8) to avoid NoSuchMethodError -->
         <dependency>
             <groupId>org.apache.pdfbox</groupId>
             <artifactId>pdfbox</artifactId>
-            <version>3.0.7</version>
+            <version>3.0.8</version>
         </dependency>
 
         <!-- Lecture étendue des formats (jpeg, png, tiff, etc.) -->
