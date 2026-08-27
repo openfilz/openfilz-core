@@ -113,6 +113,10 @@ openfilz:
     # Public URL of the web app — used to build the signing links sent by e-mail (e-Sign)
     web-public-base-url: ${OPENFILZ_WEB_PUBLIC_BASE_URL:http://localhost:4200/}
 
+  # Shared public demo deployment: the frontend shows the demo disclaimers (shared-visibility
+  # warning, upsell links). Leave off for every real installation.
+  demo-mode: ${OPENFILZ_DEMO_MODE:false}
+
   # e-Sign (electronic signature) — see docs/esign.md
   signature:
     active: ${OPENFILZ_SIGNATURE_ACTIVE:false}   # runtime toggle: menus, endpoints, sweeper

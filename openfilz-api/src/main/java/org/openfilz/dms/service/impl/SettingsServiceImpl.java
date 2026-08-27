@@ -47,6 +47,11 @@ public class SettingsServiceImpl implements SettingsService {
     @Value("${openfilz.signature.seal.cloud.api-key:}")
     private String signatureCloudApiKey;
 
+    // Shared public demo deployments set this so the frontend can show the demo disclaimers
+    // (shared-visibility warning, upsell links). Plain runtime flag — never a bean condition.
+    @Value("${openfilz.demo-mode:false}")
+    private Boolean demoMode;
+
     private final RecycleBinProperties recycleBinProperties;
 
     private final QuotaProperties quotaProperties;
@@ -76,6 +81,24 @@ public class SettingsServiceImpl implements SettingsService {
         return methods;
     }
 
+    /**
+     * The seal provider that will actually sign completed envelopes. Defaults to this
+     * application's own sealer config; deployments where another component applies the
+     * seal override this to report that component's provider instead.
+     */
+    protected String effectiveSealProvider() {
+        return signatureSealProvider;
+    }
+
+    /**
+     * True when the openfilz-cloud seal is configured end-to-end. The in-process cloud
+     * sealer needs its API key; overrides may rely on the sealing component's own config.
+     */
+    protected boolean isCloudSealConfigured() {
+        return "openfilz-cloud".equals(effectiveSealProvider())
+                && signatureCloudApiKey != null && !signatureCloudApiKey.isBlank();
+    }
+
     @Override
     public Mono<Settings> getSettings() {
         Integer emptyBinInterval = null;
@@ -103,9 +126,9 @@ public class SettingsServiceImpl implements SettingsService {
                .signatureActive(Boolean.TRUE.equals(signatureActive))
                .signatureAuthMethods(deliverableAuthMethods())
                .signatureRemindersActive(Boolean.TRUE.equals(signatureActive) && !reminderSenders.isEmpty())
-               .signatureCloudActive(Boolean.TRUE.equals(signatureActive)
-                       && "openfilz-cloud".equals(signatureSealProvider)
-                       && signatureCloudApiKey != null && !signatureCloudApiKey.isBlank())
+               .signatureCloudActive(Boolean.TRUE.equals(signatureActive) && isCloudSealConfigured())
+               .demoMode(Boolean.TRUE.equals(demoMode))
+               .sealProvider(Boolean.TRUE.equals(signatureActive) ? effectiveSealProvider() : null)
                .build());
 
     }
