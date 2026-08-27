@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[8c7f7766fb098ab](https://github.com/openfilz/openfilz-core/commit/8c7f7766fb098ab) maven-release-bot[bot] *2026-08-27 07:37:01*
+[1cb4e6c3f3677fa](https://github.com/openfilz/openfilz-core/commit/1cb4e6c3f3677fa) maven-release-bot[bot] *2026-08-27 11:42:31*
 
 
-## v1.2.33
+## v1.2.34
 ### No issue
 
-**[maven-release-plugin] prepare release v1.2.33**
+**[maven-release-plugin] prepare release v1.2.34**
 
 
-[68207c5b436c8e0](https://github.com/openfilz/openfilz-core/commit/68207c5b436c8e0) maven-release-bot[bot] *2026-08-27 07:36:57*
+[e5125ef7e7c1f18](https://github.com/openfilz/openfilz-core/commit/e5125ef7e7c1f18) maven-release-bot[bot] *2026-08-27 11:42:28*
 
-**Merge pull request #206 from openfilz/develop**
+**Merge pull request #207 from openfilz/develop**
 
- * Upgrade to Spring Boot 4.1.1 and align dependency versions
+ * Add demo banners and JaCoCo coverage badge
 
-[28f00429fff322e](https://github.com/openfilz/openfilz-core/commit/28f00429fff322e) Yann Demel *2026-08-27 07:33:51*
+[33348d9341a52c8](https://github.com/openfilz/openfilz-core/commit/33348d9341a52c8) Yann Demel *2026-08-27 11:39:32*
 
 
