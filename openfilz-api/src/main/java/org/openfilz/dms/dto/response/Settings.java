@@ -6,6 +6,8 @@ import lombok.Builder;
 public record Settings(Integer emptyBinInterval, Integer fileQuotaMB, Integer userQuotaMB,
                        String language, String theme, boolean thumbnailsActive, boolean aiActive,
                        boolean aiUserSettingsEnabled, boolean signatureActive,
+                       /** True when initiating signature requests additionally requires the SIGN_REQUESTER role — the frontend hides the request/template actions from users without it. */
+                       boolean signatureRequesterRoleRequired,
                        /** Recipient authentication methods this deployment can actually deliver. */
                        java.util.List<String> signatureAuthMethods,
                        /** True only when something in this deployment actually sends the reminders. */

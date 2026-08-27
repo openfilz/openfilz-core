@@ -19,6 +19,7 @@ import org.springframework.util.CollectionUtils;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -36,6 +37,14 @@ public abstract class AbstractSecurityService implements SecurityService {
 
     @Value("${spring.graphql.http.path:/graphql}")
     protected String graphQlBaseUrl;
+
+    /**
+     * Runtime toggle ({@code openfilz.signature.require-requester-role}): when on, e-Sign
+     * writes additionally require {@link Role#SIGN_REQUESTER}. Off by default so realms
+     * that predate the role keep working unchanged.
+     */
+    @Value("${openfilz.signature.require-requester-role:false}")
+    protected boolean requireSignatureRequesterRole;
 
     protected final AutorizationMode autorizationMode;
     protected final OnlyOfficeProperties onlyOfficeProperties;
@@ -175,6 +184,32 @@ public abstract class AbstractSecurityService implements SecurityService {
         return false;
     }
 
+    /** All-of counterpart of {@link #isAuthorized(JwtAuthenticationToken, List)} — same group/realm-role duality. */
+    protected boolean hasAllRoles(JwtAuthenticationToken auth, List<String> requiredRoles) {
+        if (autorizationMode.areRolesBasedOnGroups()) {
+            return isInAllGroups(auth, requiredRoles);
+        }
+        return isInAllRealmRoles(auth, requiredRoles);
+    }
+
+    protected boolean isInAllGroups(JwtAuthenticationToken auth, List<String> requiredRoles) {
+        List<String> groups = auth.getToken().getClaim(GROUPS);
+        if (groups != null && !groups.isEmpty()) {
+            return requiredRoles.stream().allMatch(r -> isInGroups(r, groups));
+        }
+        return false;
+    }
+
+    protected boolean isInAllRealmRoles(JwtAuthenticationToken auth, List<String> requiredRoles) {
+        Map<String, Object> realmAccess = auth.getToken().getClaim(REALM_ACCESS);
+        if (!CollectionUtils.isEmpty(realmAccess)) {
+            @SuppressWarnings("unchecked")
+            List<String> roles = (List<String>) realmAccess.getOrDefault(ROLES, Collections.emptyList());
+            return new HashSet<>(roles).containsAll(requiredRoles);
+        }
+        return false;
+    }
+
     protected boolean isDeleteAccess(ServerHttpRequest request) {
         return request.getMethod().equals(HttpMethod.DELETE);
     }
@@ -203,12 +238,18 @@ public abstract class AbstractSecurityService implements SecurityService {
     }
 
     /**
-     * e-Sign authorisation hook. Core: GET for READER/CONTRIBUTOR, everything else CONTRIBUTOR.
+     * e-Sign authorisation hook. Core: GET for READER/CONTRIBUTOR, everything else CONTRIBUTOR —
+     * plus {@link Role#SIGN_REQUESTER} when {@link #requireSignatureRequesterRole} is on, so a
+     * deployment can restrict who may initiate signature requests. GETs are never gated by the
+     * requester role: recipients without it must still list what waits for their signature.
      * Editions with a richer role model (e.g. share permissions) override this.
      */
     protected boolean isSignatureAuthorized(Authentication auth, HttpMethod method, String path) {
         if (method.equals(HttpMethod.GET)) {
             return isAuthorized((JwtAuthenticationToken) auth, of(Role.READER.toString(), Role.CONTRIBUTOR.toString()));
+        }
+        if (requireSignatureRequesterRole) {
+            return hasAllRoles((JwtAuthenticationToken) auth, of(Role.CONTRIBUTOR.toString(), Role.SIGN_REQUESTER.toString()));
         }
         return isAuthorized((JwtAuthenticationToken) auth, Role.CONTRIBUTOR.toString());
     }

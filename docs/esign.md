@@ -91,6 +91,7 @@ Boot relaxed binding, using the canonical uppercase form of the property name.
 | Property | Env var | Default | What it does |
 |---|---|---|---|
 | `openfilz.signature.active` | `OPENFILZ_SIGNATURE_ACTIVE` | `false` | Master switch: endpoints, public chain, sweeper, `Settings.signatureActive`. |
+| `openfilz.signature.require-requester-role` | `OPENFILZ_SIGNATURE_REQUIRE_REQUESTER_ROLE` | `false` | When `true`, initiating signature requests (envelope / template writes) additionally requires the `SIGN_REQUESTER` realm role (or `/OPENFILZ/SIGN_REQUESTER` group in groups mode), so the feature can be granted per user. Reads and the signer-facing public chain are never gated by it. Surfaced as `Settings.signatureRequesterRoleRequired` so the frontend hides the request/template actions from users without the role. Off = every CONTRIBUTOR may initiate (pre-existing behaviour; realms that predate the role keep working unchanged). |
 | `openfilz.signature.default-expiry-days` | `OPENFILZ_SIGNATURE_DEFAULT_EXPIRY_DAYS` | `30` | Envelope TTL when the create request omits `expiresInDays` (which itself accepts 1..365). |
 | `openfilz.signature.web-base-url` | `OPENFILZ_SIGNATURE_WEB_BASE_URL` | *(empty)* | Overrides `openfilz.common.web-public-base-url` for signing links only. |
 | `openfilz.common.web-public-base-url` | `OPENFILZ_WEB_PUBLIC_BASE_URL` | `http://localhost:4200/` | Public URL of the web app; base of every signing link. |
@@ -222,7 +223,9 @@ the chain's matcher points at `/_disabled-public-signatures-chain`, so it stays 
 
 **Roles.** `AbstractSecurityService.isSignatureAuthorized` maps `GET` on `/signatures/**` and
 `/signature-templates/**` to `READER` *or* `CONTRIBUTOR`, and every other method to
-`CONTRIBUTOR`. Which documents a user may send is a separate decision, delegated to
+`CONTRIBUTOR` — plus `SIGN_REQUESTER` when `openfilz.signature.require-requester-role=true`
+(see §3.1), which lets a deployment restrict per user who may initiate signature requests.
+Which documents a user may send is a separate decision, delegated to
 `SignatureAccessPolicy`: the CE default (`DefaultSignatureAccessPolicy`) allows any
 CONTRIBUTOR to send any active document, because core has no per-document permission model.
 Envelope management (`canManage`) is restricted to the initiator's e-mail.
