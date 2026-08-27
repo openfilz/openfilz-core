@@ -224,6 +224,7 @@ services:
       # chain and the expiry sweeper. Read at runtime, but the public security chain reads
       # it once at startup, so flipping it needs a restart. Reference: docs/esign.md
       OPENFILZ_SIGNATURE_ACTIVE: ${OPENFILZ_SIGNATURE_ACTIVE:-false}
+      OPENFILZ_SIGNATURE_REQUIRE_REQUESTER_ROLE: ${OPENFILZ_SIGNATURE_REQUIRE_REQUESTER_ROLE:-false}
       OPENFILZ_SIGNATURE_DEFAULT_EXPIRY_DAYS: ${OPENFILZ_SIGNATURE_DEFAULT_EXPIRY_DAYS:-30}
       # Envelopes one initiator may create per calendar month; 0 = unlimited.
       OPENFILZ_SIGNATURE_QUOTA_ENVELOPES_PER_MONTH: ${OPENFILZ_SIGNATURE_QUOTA_ENVELOPES_PER_MONTH:-0}

@@ -120,6 +120,9 @@ openfilz:
   # e-Sign (electronic signature) — see docs/esign.md
   signature:
     active: ${OPENFILZ_SIGNATURE_ACTIVE:false}   # runtime toggle: menus, endpoints, sweeper
+    # When true, initiating signature requests (envelope/template writes) also requires the
+    # SIGN_REQUESTER role — lets a deployment grant e-Sign per user. Off = every CONTRIBUTOR may.
+    require-requester-role: ${OPENFILZ_SIGNATURE_REQUIRE_REQUESTER_ROLE:false}
     default-expiry-days: ${OPENFILZ_SIGNATURE_DEFAULT_EXPIRY_DAYS:30}
     web-base-url: ${OPENFILZ_SIGNATURE_WEB_BASE_URL:}   # overrides openfilz.common.web-public-base-url
     sweep:
