@@ -328,13 +328,21 @@ persisted in CE but nothing acts on it there).
   `ENVELOPE_CREATED`, `ENVELOPE_SENT`, `RECIPIENT_VIEWED`, `RECIPIENT_OTP_VERIFIED`,
   `RECIPIENT_SIGNED`, `RECIPIENT_DECLINED`, `RECIPIENT_REMINDED`, `RECIPIENT_LINK_RESENT`,
   `ENVELOPE_COMPLETED`, `ENVELOPE_CANCELLED`, `ENVELOPE_EXPIRED`.
-* **`GET /api/v1/settings`** exposes two e-Sign fields, and the web app depends on both:
+* **`GET /api/v1/settings`** exposes the e-Sign fields the web app depends on:
   `signatureActive` (boolean) drives the *Signatures* menu and the *Request signature*
   document action; `signatureAuthMethods` (string list) is the set of recipient
   authentication methods this deployment can actually deliver — always `NONE`, plus
   `EMAIL_OTP` and/or `SMS_OTP` when a matching `SignatureOtpSender` bean is registered *and*
   configured. The UI offers only those, which keeps it from proposing a channel the API would
-  refuse at create time.
+  refuse at create time. `sealProvider` (string, null when e-Sign is off) reports the seal
+  identity that will actually sign completed envelopes, via the protected
+  `SettingsServiceImpl.effectiveSealProvider()` hook (the EE overrides it to report
+  archiving-api's provider): while it is `self-signed-dev` the web app shows a dismissible
+  "untrusted demo seal" notice on the signature screens. `signatureCloudActive` turns on the
+  Cloud Signing subscription card on the Settings page. Unrelated to e-Sign but delivered on
+  the same endpoint: `demoMode` (`openfilz.demo-mode` / `OPENFILZ_DEMO_MODE`, default false)
+  marks shared public demo deployments — the web app then shows the demo disclaimers
+  (shared-visibility warning on CE, demo note + trial CTA on EE).
 * **Schema.** Flyway `V1_7__create_signature_schema.sql`, fully idempotent
   (`CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS`): `signature_envelope`,
   `signature_recipient`, `signature_field`, `signature_template`, `signature_event`.
