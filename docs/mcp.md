@@ -127,8 +127,40 @@ is scoped to the caller's permissions.
 
 ## 4. Connecting a client
 
-All examples assume a Keycloak access token in `$TOKEN` and the API at `http://localhost:8081`.
-In production use your real hostname over HTTPS (e.g. `https://api.openfilz.com/mcp`).
+There are **two ways a client authenticates** to `/mcp`, and which one you use decides the rest of
+this section:
+
+- **Hand the client a bearer token** — for Claude Code, n8n, Spring AI, scripts, and any client you
+  configure with an `Authorization` header. You mint a token from Keycloak once (below) and give it
+  to the client. This is the common path today.
+- **Let the host log in via OAuth** — for Claude Desktop, claude.ai and IDE connectors, which run
+  their own login and will not accept a pasted token. Nothing to mint; see
+  [Remote connectors that log in for themselves](#remote-connectors-that-log-in-for-themselves-oauth-21).
+
+The snippets below assume the API at `http://localhost:8081`; in production use your real hostname
+over HTTPS (e.g. `https://api.openfilz.com/mcp`).
+
+### Getting a bearer token
+
+For the bearer-token path, mint a token from your Keycloak realm with a **service-account client**
+(client-credentials grant) and export it as `$TOKEN`:
+
+```bash
+export TOKEN=$(curl -s -X POST \
+  "https://auth.openfilz.com/realms/openfilz/protocol/openid-connect/token" \
+  -d grant_type=client_credentials \
+  -d client_id=my-agent \
+  -d client_secret=<your-client-secret> \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+```
+
+The client must be a **dedicated user or service account** with only the roles the agent needs
+(a READER-only agent can search and read but not write — see the security model above), and its
+token must carry `realm_access.roles`, which the default `openfilz` realm's mappers already do.
+The full walkthrough — creating the client, assigning roles, verifying the mappers — is in the
+[developer guide → Service Account Tokens](developer-guide.md#service-account-tokens-server-to-server).
+Tokens are short-lived (5 min by default); a long-running agent refreshes, which its MCP client
+library handles, or re-mints.
 
 ### Claude Code
 
@@ -137,7 +169,9 @@ claude mcp add --transport http openfilz https://api.openfilz.com/mcp \
   --header "Authorization: Bearer $TOKEN"
 ```
 
-### `mcp.json` (Claude Desktop, Cursor, and other config-file hosts)
+### `mcp.json` (config-file hosts)
+
+For any host configured from an `mcp.json`-style file that lets you set a static header:
 
 ```json
 {
@@ -150,6 +184,10 @@ claude mcp add --transport http openfilz https://api.openfilz.com/mcp \
   }
 }
 ```
+
+> Claude Desktop, claude.ai and IDE connectors can also connect **without a pasted token** by
+> logging in — see [Remote connectors](#remote-connectors-that-log-in-for-themselves-oauth-21).
+> Use whichever your host supports; the static header is the simplest when it is available.
 
 > Hosts that only speak **stdio**, or that cannot send a custom header, need a small bridge
 > process in front of `/mcp`. Prefer a host that supports streamable HTTP with headers where you
