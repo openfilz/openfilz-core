@@ -660,8 +660,10 @@ external agents (Claude Code/Desktop, n8n, custom agents, Spring AI clients) ove
   Core is JVM-only, but these classes are compiled into the enterprise native image. A GraalVM
   tracing-agent run (`openfilz-enterprise/docker/trace-mcp-native-hints.sh`) confirmed the residue
   is exactly those two ServiceLoader SPI files — **no further reflection hints are needed**.
-- **Tool surface (core):** 15 document tools in `DocumentAiTools` — query/read/path/vision, write/
-  create/move/rename, metadata get/search/update/delete, delete (CLEANER), version list/restore.
+- **Tool surface (core):** 16 document tools in `DocumentAiTools` — query/read/path/vision, write/
+  create/move/rename, metadata get/search/update/delete, delete (CLEANER), version list/restore,
+  downloadDocument (text inline or a REST download link for binary; shares `extractText` with
+  readDocumentContent).
   Each is classified in `DocumentAiToolsContributor.CAPABILITIES` (a `Map.ofEntries`, since >10)
   and driven by `McpProtocolIT.everyAdvertisedToolIsCallable`, which now authenticates as
   `admin-user` (holds CONTRIBUTOR+CLEANER+AUDITOR+SIGN_REQUESTER) so every tool — including the

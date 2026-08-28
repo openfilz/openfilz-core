@@ -248,6 +248,8 @@ public class McpProtocolIT extends AbstractMcpIT {
                     {"documentName":"%s"}""".formatted(probe);
             case "restoreVersion" -> """
                     {"documentName":"%s","versionId":"v1"}""".formatted(probe);
+            case "downloadDocument" -> """
+                    {"documentName":"%s"}""".formatted(probe);
             default -> throw new AssertionError("""
                     Unknown MCP tool '%s'. A tool was added to DocumentAiTools without being \
                     classified here — add arguments for it (and list it in \

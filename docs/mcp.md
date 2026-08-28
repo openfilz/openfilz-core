@@ -105,7 +105,7 @@ opened it, and horizontal scaling needs no sticky sessions.
 
 ## 3. The tool surface
 
-Fifteen document tools, curated rather than generated. (A 60-operation auto-generated tool list from the
+Sixteen document tools, curated rather than generated. (A 60-operation auto-generated tool list from the
 OpenAPI spec would make agents *worse*, not better — the small, well-described surface is the point.)
 
 | Tool | Mode | What it does |
@@ -125,6 +125,7 @@ OpenAPI spec would make agents *worse*, not better — the small, well-described
 | `deleteDocument` | delete | Delete a document or folder (to the recycle bin when soft-delete is on). Requires the CLEANER role. |
 | `listVersions` | read | List a document's stored versions (versioned storage). |
 | `restoreVersion` | write | Restore a previous version as the current content. |
+| `downloadDocument` | read | Get a document's content — extracted text for text/PDF/Office, or a download link for binary files. |
 
 The server also advertises usage guidance in its `initialize` response (the MCP `instructions`
 field), telling the calling agent to resolve names with `queryDocuments` first and that everything

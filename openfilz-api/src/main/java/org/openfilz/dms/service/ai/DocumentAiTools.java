@@ -11,6 +11,8 @@ import org.openfilz.dms.dto.request.UpdateMetadataRequest;
 import org.openfilz.dms.dto.response.DocumentVersionInfo;
 import org.openfilz.dms.dto.response.RestoreVersionResponse;
 import org.openfilz.dms.enums.DocumentType;
+import org.openfilz.dms.config.CommonProperties;
+import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.service.DocumentVersionService;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -90,6 +92,9 @@ public class DocumentAiTools {
      *  selected at runtime when versioning is off, so this is safe to inject unconditionally. */
     private final DocumentVersionService versionService;
 
+    /** Public API base URL, for building the download link downloadDocument hands back. */
+    private final CommonProperties commonProperties;
+
     /** For parsing the metadata-map tool arguments, which arrive as a JSON object string. */
     private static final JsonMapper JSON = JsonMapper.builder().build();
     /**
@@ -109,7 +114,8 @@ public class DocumentAiTools {
                            ChatModel chatModel,
                            AiAccessPolicy accessPolicy,
                            AiToolRolePolicy rolePolicy,
-                           DocumentVersionService versionService) {
+                           DocumentVersionService versionService,
+                           CommonProperties commonProperties) {
         this.documentService = documentService;
         this.documentRepository = documentRepository;
         this.storageService = storageService;
@@ -118,6 +124,7 @@ public class DocumentAiTools {
         this.accessPolicy = accessPolicy;
         this.rolePolicy = rolePolicy;
         this.versionService = versionService;
+        this.commonProperties = commonProperties;
     }
 
     /**
@@ -654,6 +661,32 @@ public class DocumentAiTools {
      * Only ever resolves to documents the requesting user can read — a name or id the
      * user has no access to behaves exactly like a non-existent one.
      */
+    /**
+     * Resolve a document reference (UUID or name) to an id the caller may read — <b>file or
+     * folder</b>. {@link #resolveToId} is folder-biased (its DB fallback matches folders only,
+     * which is correct for the folder-argument tools); the document-targeting tools below
+     * (metadata, delete, versions, download) use this instead so a file name resolves too.
+     */
+    private UUID resolveDocumentToId(String nameOrId) {
+        if (nameOrId == null || nameOrId.isBlank()) {
+            return null;
+        }
+        UUID id = parseUuid(nameOrId);
+        if (id != null) {
+            return canRead(id) ? id : null;
+        }
+        var ref = documentRegistry.get(nameOrId);
+        if (ref != null) {
+            return ref.id();
+        }
+        var found = blockWithAuth(
+                documentRepository.findByNameContainingIgnoreCaseAndActiveTrue(nameOrId).collectList());
+        if (found == null) {
+            return null;
+        }
+        return found.stream().map(Document::getId).filter(this::canRead).findFirst().orElse(null);
+    }
+
     private UUID resolveToId(String nameOrId) {
         if (isRootFolderName(nameOrId)) {
             return null; // root folder
@@ -685,7 +718,7 @@ public class DocumentAiTools {
         if (roleDenial != null) return roleDenial;
         log.debug("[AI-TOOL] renameDocument called with: '{}' -> '{}'", documentName, newName);
         try {
-            UUID id = resolveToId(documentName);
+            UUID id = resolveDocumentToId(documentName);
             if (id == null) {
                 // Also try searching files — skip candidates the user cannot see
                 var found = documentRepository.findByNameContainingIgnoreCaseAndActiveTrue(documentName)
@@ -796,23 +829,10 @@ public class DocumentAiTools {
             Resource resource = blockWithAuth(storageService.loadFile(doc.getStoragePath()));
             if (resource == null) return "Could not load the file from storage.";
 
-            var tikaReader = new TikaDocumentReader(resource);
-            var tikaDocuments = tikaReader.get();
-
-            if (tikaDocuments == null || tikaDocuments.isEmpty()) {
+            String fullText = extractText(resource);
+            if (fullText == null) {
                 return "Could not extract text from this file. It may be a binary or image file.";
             }
-
-            // Concatenate all text content (truncate to avoid huge context)
-            String fullText = tikaDocuments.stream()
-                    .map(d -> d.getText())
-                    .collect(Collectors.joining("\n\n"));
-
-            // Limit to ~8000 characters to avoid overwhelming the LLM context
-            if (fullText.length() > 8000) {
-                fullText = fullText.substring(0, 8000) + "\n\n[... content truncated, document is longer ...]";
-            }
-
             return "Content of '%s':\n\n%s".formatted(doc.getName(), fullText);
         } catch (Exception e) {
             log.error("Error reading document content", e);
@@ -999,7 +1019,7 @@ public class DocumentAiTools {
             @ToolParam(description = "The name or reference of the document or folder") String documentName) {
         String roleDenial = denyIfNotAllowed("getMetadata", ToolCapability.DOCUMENT_READ);
         if (roleDenial != null) return roleDenial;
-        UUID id = resolveToId(documentName);
+        UUID id = resolveDocumentToId(documentName);
         if (id == null || !canRead(id)) {
             return toolResult("getMetadata", "No document named '%s' is visible to you.".formatted(documentName));
         }
@@ -1019,7 +1039,7 @@ public class DocumentAiTools {
                     + "e.g. {\"status\":\"reviewed\",\"year\":2026}") String metadataJson) {
         String roleDenial = denyIfNotAllowed("updateMetadata", ToolCapability.DOCUMENT_WRITE);
         if (roleDenial != null) return roleDenial;
-        UUID id = resolveToId(documentName);
+        UUID id = resolveDocumentToId(documentName);
         if (id == null || !canModify(id)) {
             return toolResult("updateMetadata", "You cannot modify '%s'.".formatted(documentName));
         }
@@ -1038,7 +1058,7 @@ public class DocumentAiTools {
             @ToolParam(description = "Comma-separated list of metadata keys to remove") String keys) {
         String roleDenial = denyIfNotAllowed("deleteMetadata", ToolCapability.DOCUMENT_WRITE);
         if (roleDenial != null) return roleDenial;
-        UUID id = resolveToId(documentName);
+        UUID id = resolveDocumentToId(documentName);
         if (id == null || !canModify(id)) {
             return toolResult("deleteMetadata", "You cannot modify '%s'.".formatted(documentName));
         }
@@ -1091,7 +1111,7 @@ public class DocumentAiTools {
             @ToolParam(description = "The name or reference of the document or folder to delete") String documentName) {
         String roleDenial = denyIfNotAllowed("deleteDocument", ToolCapability.DOCUMENT_DELETE);
         if (roleDenial != null) return roleDenial;
-        UUID id = resolveToId(documentName);
+        UUID id = resolveDocumentToId(documentName);
         if (id == null || !canModify(id)) {
             return toolResult("deleteDocument", "You cannot delete '%s'.".formatted(documentName));
         }
@@ -1114,7 +1134,7 @@ public class DocumentAiTools {
             @ToolParam(description = "The name or reference of the document") String documentName) {
         String roleDenial = denyIfNotAllowed("listVersions", ToolCapability.DOCUMENT_READ);
         if (roleDenial != null) return roleDenial;
-        UUID id = resolveToId(documentName);
+        UUID id = resolveDocumentToId(documentName);
         if (id == null || !canRead(id)) {
             return toolResult("listVersions", "No document named '%s' is visible to you.".formatted(documentName));
         }
@@ -1138,7 +1158,7 @@ public class DocumentAiTools {
             @ToolParam(description = "The versionId to restore (from listVersions)") String versionId) {
         String roleDenial = denyIfNotAllowed("restoreVersion", ToolCapability.DOCUMENT_WRITE);
         if (roleDenial != null) return roleDenial;
-        UUID id = resolveToId(documentName);
+        UUID id = resolveDocumentToId(documentName);
         if (id == null || !canModify(id)) {
             return toolResult("restoreVersion", "You cannot modify '%s'.".formatted(documentName));
         }
@@ -1148,6 +1168,77 @@ public class DocumentAiTools {
         RestoreVersionResponse response = blockWithAuth(versionService.restoreVersion(id, versionId.trim()));
         return toolResult("restoreVersion", "Restored '%s' from version %s (new current version %s)."
                 .formatted(documentName, response.restoredFromVersionId(), response.newVersionId()));
+    }
+
+    @Tool(description = "Get a document's content: the extracted text for text/PDF/Office files, or "
+            + "a download link for binary files (images, archives, …). The link is fetched with the "
+            + "same OpenFilz bearer token.")
+    public String downloadDocument(
+            @ToolParam(description = "The name or reference of the document") String documentName) {
+        String roleDenial = denyIfNotAllowed("downloadDocument", ToolCapability.DOCUMENT_READ);
+        if (roleDenial != null) return roleDenial;
+        UUID id = resolveDocumentToId(documentName);
+        if (id == null || !canRead(id)) {
+            return toolResult("downloadDocument", "No document named '%s' is visible to you.".formatted(documentName));
+        }
+        Document doc = blockWithAuth(documentRepository.findById(id));
+        if (doc == null) {
+            return toolResult("downloadDocument", "Document '%s' not found.".formatted(documentName));
+        }
+        if (doc.getType() == DocumentType.FOLDER) {
+            return toolResult("downloadDocument", "'%s' is a folder, not a downloadable file.".formatted(documentName));
+        }
+        String url = downloadUrl(id);
+        Resource resource = blockWithAuth(storageService.loadFile(doc.getStoragePath()));
+        String text = extractText(resource);
+        if (text != null) {
+            return toolResult("downloadDocument", ("Content of '%s' (%s, %d bytes):\n\n%s\n\n"
+                    + "Download the original file: %s").formatted(
+                    doc.getName(), contentTypeOf(doc), sizeOf(doc), text, url));
+        }
+        return toolResult("downloadDocument", ("'%s' is a %s file (%d bytes); its content is not text. "
+                + "Download it with your OpenFilz bearer token: %s").formatted(
+                doc.getName(), contentTypeOf(doc), sizeOf(doc), url));
+    }
+
+    /** Extract text from a file with Tika, truncated for context, or null if none is extractable. */
+    private String extractText(Resource resource) {
+        if (resource == null) {
+            return null;
+        }
+        try {
+            var tikaDocuments = new TikaDocumentReader(resource).get();
+            if (tikaDocuments == null || tikaDocuments.isEmpty()) {
+                return null;
+            }
+            String fullText = tikaDocuments.stream().map(d -> d.getText()).collect(Collectors.joining("\n\n"));
+            if (fullText == null || fullText.isBlank()) {
+                return null;
+            }
+            return fullText.length() > 8000
+                    ? fullText.substring(0, 8000) + "\n\n[... content truncated, document is longer ...]"
+                    : fullText;
+        } catch (Exception e) {
+            log.debug("[AI-TOOL] no extractable text from {}: {}", resource, e.getMessage());
+            return null;
+        }
+    }
+
+    /** Absolute download URL for a document, against the configured public API base. */
+    private String downloadUrl(UUID documentId) {
+        String base = commonProperties.getApiPublicBaseUrl();
+        if (base.endsWith("/")) {
+            base = base.substring(0, base.length() - 1);
+        }
+        return base + RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_DOCUMENTS + "/" + documentId + "/download";
+    }
+
+    private static String contentTypeOf(Document doc) {
+        return doc.getContentType() == null ? "unknown type" : doc.getContentType();
+    }
+
+    private static long sizeOf(Document doc) {
+        return doc.getSize() == null ? 0L : doc.getSize();
     }
 
     /** Parse an optional FILE/FOLDER type argument, or null for both. */

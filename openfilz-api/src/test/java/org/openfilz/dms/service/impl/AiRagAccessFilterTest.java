@@ -75,7 +75,8 @@ class AiRagAccessFilterTest {
                 // no Authentication is bound in this unit test, so the role policy is a no-op here;
                 // the capability gate is covered by DefaultAiToolRolePolicyTest and McpRoleEnforcementIT.
                 (authentication, capability) -> true,
-                mock(org.openfilz.dms.service.DocumentVersionService.class));
+                mock(org.openfilz.dms.service.DocumentVersionService.class),
+                new org.openfilz.dms.config.CommonProperties());
     }
 
     private static Document chunk(UUID documentId, String name, String text, double score) {
