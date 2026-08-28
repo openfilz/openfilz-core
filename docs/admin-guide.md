@@ -796,9 +796,13 @@ there is none.)
 
 - `/mcp` is **never anonymous**: it sits on the normal OAuth2 resource-server chain, so a request
   without a valid bearer token gets `401` before reaching any tool.
+- **The OpenFilz role model applies unchanged.** A READER may search and read; only a CONTRIBUTOR
+  may write. An MCP call is authorised exactly as the equivalent REST call is, and a test fails the
+  build if the two ever diverge. (`tools/list` is built per deployment, not per caller, so a READER
+  still sees the write tools advertised and is refused when calling one.)
 - The caller's identity comes from the **token**, never from tool arguments — an agent cannot ask
   to act as another user — and every document access is checked against the same policy the chat
-  assistant uses. In the Enterprise edition that means agents are constrained by the real ownership
+  assistant uses. Roles and document scope are independent gates and both must pass. In the Enterprise edition that means agents are constrained by the real ownership
   and sharing rules, with nothing extra to configure.
 - Mutations are recorded in the audit trail under the authentic user.
 - **Read-only is the default deliberately**: an MCP client is an autonomous agent acting on a

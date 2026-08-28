@@ -600,8 +600,26 @@ external agents (Claude Code/Desktop, n8n, custom agents, Spring AI clients) ove
   `ToolContext.getContext().get("exchange")` and builds a fresh user-bound `DocumentAiTools`
   through `DocumentAiToolsFactory`. Identity is never read from tool arguments, and a call
   without it is refused rather than run unbound.
-- **No security config needed:** `DefaultAuthSecurityConfig` ends with
-  `anyExchange().authenticated()`, so `/mcp` is JWT-protected simply by not being whitelisted.
+- **`/mcp` is JWT-protected simply by not being whitelisted** (`DefaultAuthSecurityConfig` ends
+  with `anyExchange().authenticated()`) — but that chain performs **no role check** on it: its
+  `.access(...)` manager is scoped to `/api/v1/**` + the GraphQL path. Roles are therefore enforced
+  in the **tool layer** instead, and must be: without it a READER-only token was refused
+  `POST /api/v1/folders` with 403 while `tools/call createFolder` created the folder (confirmed
+  against a live server). Tools call `DocumentService` in-process on a tool thread, so no request
+  is ever matched by the security chain.
+- **Two independent gates, both must pass.** `AiToolRolePolicy` (+ `ToolCapability`) answers *may
+  this caller perform this kind of operation* — mirroring `AbstractSecurityService`, including its
+  `hasAllRoles` cases (e-Sign needs CONTRIBUTOR **and** SIGN_REQUESTER; EE share writes need
+  CONTRIBUTOR **and** EDIT_SHARE). `AiAccessPolicy` answers *which documents*. The gate lives in
+  `DocumentAiTools`, so the **chat assistant is covered too** — it had the same hole, since
+  `/api/v1/ai/**` admits READER and the tools checked nothing. `McpToolCallbackProvider` refuses
+  earlier via `TOOL_CAPABILITIES` and fails closed on an unclassified tool.
+- **`ToolRoleParityWithRestTest` is the anti-drift guard**: it drives both the tool policy and the
+  REST `SecurityService.authorize(...)` over every role set and fails if they disagree. Change a
+  REST role and it fails until the tool mapping follows.
+- **`SecurityService` is injected as `Optional`** — the bean is `@Conditional` and absent under
+  `openfilz.security.no-auth=true`. Absent means "authorization is off here", not "no roles";
+  requiring it broke every no-auth deployment's tools.
 - **Read-only by default** (`openfilz.mcp.mode`, `READ_ONLY` | `READ_WRITE`): an autonomous
   agent mutating a DMS is an explicit opt-in. Mutating tools are withheld from `tools/list`.
 - **`@ToolParam(required = false)` matters here in a way it never did for chat.** Spring AI
@@ -629,7 +647,8 @@ external agents (Claude Code/Desktop, n8n, custom agents, Spring AI clients) ove
   tracing-agent run (`openfilz-enterprise/docker/trace-mcp-native-hints.sh`) confirmed the residue
   is exactly those two ServiceLoader SPI files — **no further reflection hints are needed**.
 - **Tests:** `McpRuntimeHintsTest` (hints), `McpProtocolIT` (read-write, full protocol),
-  `McpReadOnlyModeIT` (default posture) and `McpWithChatModelIT` (MCP + a real `ChatModel`),
+  `McpReadOnlyModeIT` (default posture), `McpWithChatModelIT` (MCP + a real `ChatModel`),
+  `DefaultAiToolRolePolicyTest` + `ToolRoleParityWithRestTest` + `McpRoleEnforcementIT` (roles),
   sharing `AbstractMcpIT`'s JSON-RPC client.
   `McpProtocolIT.everyAdvertisedToolIsCallable` deliberately drives *every* tool and asserts
   `isError == false` — it doubles as the trace driver for deriving native-image metadata.

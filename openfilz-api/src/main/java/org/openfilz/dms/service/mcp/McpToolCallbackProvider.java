@@ -5,7 +5,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.McpProperties;
 import org.openfilz.dms.service.ai.DocumentAiTools;
+import org.openfilz.dms.service.ai.AiToolRolePolicy;
 import org.openfilz.dms.service.ai.DocumentAiToolsFactory;
+import org.openfilz.dms.service.ai.ToolCapability;
 import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ToolContext;
@@ -20,7 +22,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.openfilz.dms.security.JwtTokenParser.EMAIL;
 
@@ -54,20 +58,39 @@ import static org.openfilz.dms.security.JwtTokenParser.EMAIL;
 public class McpToolCallbackProvider implements ToolCallbackProvider, UserInfoService {
 
     /**
-     * Tools that create or change content. Withheld in {@code READ_ONLY} mode.
-     * Kept as an explicit allow-list rather than inferred: a new mutating tool added to
-     * {@code DocumentAiTools} must be classified deliberately, and
-     * {@code McpToolCallbackProviderTest} fails if an unknown tool name appears.
+     * What each advertised tool needs permission to do. Every tool must appear here: an entry is
+     * how a tool gets both its role requirement and its read-only classification, and a tool
+     * missing from the map is refused rather than run (fail closed). Classification is deliberate,
+     * never inferred from the method name.
      */
-    public static final Set<String> MUTATING_TOOLS = Set.of(
-            "writeFile", "createFolder", "moveDocuments", "renameDocument");
+    public static final Map<String, ToolCapability> TOOL_CAPABILITIES = Map.of(
+            "queryDocuments", ToolCapability.DOCUMENT_READ,
+            "readDocumentContent", ToolCapability.DOCUMENT_READ,
+            "getDocumentPath", ToolCapability.DOCUMENT_READ,
+            "describeImage", ToolCapability.DOCUMENT_READ,
+            "writeFile", ToolCapability.DOCUMENT_WRITE,
+            "createFolder", ToolCapability.DOCUMENT_WRITE,
+            "moveDocuments", ToolCapability.DOCUMENT_WRITE,
+            "renameDocument", ToolCapability.DOCUMENT_WRITE);
 
-    /** Every tool name this provider expects to find on {@link DocumentAiTools}. */
-    public static final Set<String> READ_ONLY_TOOLS = Set.of(
-            "queryDocuments", "readDocumentContent", "getDocumentPath", "describeImage");
+    /**
+     * Tools withheld in {@code READ_ONLY} mode — derived from the capability map so the two can
+     * never drift. A capability other than {@code DOCUMENT_READ} changes something, by definition.
+     */
+    public static final Set<String> MUTATING_TOOLS = TOOL_CAPABILITIES.entrySet().stream()
+            .filter(e -> e.getValue() != ToolCapability.DOCUMENT_READ)
+            .map(Map.Entry::getKey)
+            .collect(Collectors.toUnmodifiableSet());
+
+    /** Every read-only tool name this provider expects to find on {@link DocumentAiTools}. */
+    public static final Set<String> READ_ONLY_TOOLS = TOOL_CAPABILITIES.entrySet().stream()
+            .filter(e -> e.getValue() == ToolCapability.DOCUMENT_READ)
+            .map(Map.Entry::getKey)
+            .collect(Collectors.toUnmodifiableSet());
 
     private final DocumentAiToolsFactory toolsFactory;
     private final McpProperties mcpProperties;
+    private final AiToolRolePolicy rolePolicy;
 
     /**
      * Optional: a deployment can serve MCP tools with no OpenFilz-side chat model configured at
@@ -181,6 +204,20 @@ public class McpToolCallbackProvider implements ToolCallbackProvider, UserInfoSe
             if (authentication == null) {
                 log.warn("MCP tool '{}' called without an authenticated caller — refused", toolDefinition.name());
                 return "Not authenticated: this MCP server requires a bearer token identifying an OpenFilz user.";
+            }
+            ToolCapability capability = TOOL_CAPABILITIES.get(toolDefinition.name());
+            if (capability == null) {
+                // A tool reached the wire without being classified. Refuse: guessing its
+                // capability from the name is exactly how a write would get a read's role.
+                log.error("MCP tool '{}' has no ToolCapability mapping — refused. Add it to "
+                        + "TOOL_CAPABILITIES.", toolDefinition.name());
+                return "This tool is not available: it has no capability classification on this server.";
+            }
+            if (!rolePolicy.isAllowed(authentication, capability)) {
+                log.warn("MCP tool '{}' refused for {}: role does not grant {}",
+                        toolDefinition.name(), authentication.getName(), capability);
+                return "Not permitted: your OpenFilz role does not allow this operation (%s)."
+                        .formatted(capability);
             }
             // Fresh, user-bound tools per call: the document registry inside DocumentAiTools is
             // per-turn state, and the access policy has to see this caller and no other.

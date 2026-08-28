@@ -68,11 +68,30 @@ opened it, and horizontal scaling needs no sticky sessions.
 - **Identity comes from the token, never from tool arguments.** An agent cannot ask to act as
   someone else. The already-validated `Authentication` is carried onto the tool thread, and a call
   that arrives without one is refused rather than run unbound.
+- **Your roles apply, unchanged.** An MCP call is authorised exactly as the equivalent REST call
+  is — a READER may search and read, only a CONTRIBUTOR may write. This is not a parallel rule set:
+  a test drives both the MCP capability check and the REST security chain and fails the build if
+  they ever disagree.
+
+  | Role | What it can do over MCP |
+  |---|---|
+  | `READER` | search and read documents |
+  | `CONTRIBUTOR` | search, read **and** write (create, move, rename) |
+  | `CLEANER` | delete *(no tool exposes deletion yet)* |
+  | `AUDITOR` | read the audit trail *(no tool yet)* |
+  | `SIGN_REQUESTER` | initiate e-Sign requests, together with `CONTRIBUTOR` *(no tool yet)* |
+  | `VIEW_SHARE` / `EDIT_SHARE` *(Enterprise)* | read / manage shares *(no tool yet)* |
+
+  Because `tools/list` is built once per deployment rather than per caller, a READER still *sees*
+  the write tools advertised and is refused when calling one — the same behaviour as `READ_ONLY`
+  mode.
 - **Tools are bound to the calling user per call.** Every document the tools touch is checked
   against the same access policy the chat assistant uses. In OpenFilz Community that policy permits
   all documents (CE has no per-document permissions); in Enterprise it is backed by the real
   ownership/share model, so **an agent sees exactly what its user can see** — no extra
   configuration.
+  <br>Roles and document scope are **two independent gates and both must pass**: roles decide
+  *what kind* of operation is allowed, the access policy decides *which documents* it may touch.
 - **Mutations stay traceable.** The audit trail records the authentic user, so MCP-driven changes
   are attributed like any other action.
 - **No token, no access.** A request without a bearer token — or with an invalid one — gets `401`
@@ -177,6 +196,7 @@ with `401` — if it does not, `/mcp` is not protected and something is very wro
 | `tools/list` returns nothing | `openfilz.mcp.active` is `false`. |
 | Only 4 tools listed | `READ_ONLY` mode (the default). Set `OPENFILZ_MCP_MODE=READ_WRITE`. |
 | *"This OpenFilz MCP server is read-only"* | A mutating tool was called in `READ_ONLY` mode. |
+| *"Not permitted: your OpenFilz role does not allow this operation"* | The user lacks the role — e.g. a READER calling `createFolder`. Grant CONTRIBUTOR, or use a `READ_ONLY` deployment. |
 | *"Not authenticated: this MCP server requires a bearer token…"* | The token did not reach the tool. Check that a proxy in front of OpenFilz forwards the `Authorization` header. |
 | *"Vision analysis is unavailable…"* from `describeImage` | No chat model configured. Either enable one (`openfilz.ai.active=true` + a provider) or let the calling agent analyse the file itself. |
 | Agent keeps saying a document does not exist | It is scoped to the caller's permissions. In Enterprise, the document may simply not be shared with that user. |
