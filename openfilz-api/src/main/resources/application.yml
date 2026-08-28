@@ -344,6 +344,11 @@ openfilz:
     # READ_ONLY (default) exposes query/read tools only. READ_WRITE also exposes
     # writeFile / createFolder / moveDocuments / renameDocument.
     mode: ${OPENFILZ_MCP_MODE:READ_ONLY}
+    # OAuth 2.1 discovery: the authorization server (Keycloak realm URL) advertised in the
+    # /.well-known/oauth-protected-resource metadata so remote MCP hosts (Claude Desktop,
+    # claude.ai, IDE connectors) can discover where to log in. Same realm the resource server
+    # validates tokens against — defaults to KEYCLOAK_REALM_URL, so nothing extra to set.
+    authorization-server-url: ${KEYCLOAK_REALM_URL:http://localhost:8180/realms/openfilz}
 
 # OnlyOffice DocumentServer Integration
 onlyoffice:

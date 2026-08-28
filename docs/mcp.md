@@ -155,6 +155,39 @@ claude mcp add --transport http openfilz https://api.openfilz.com/mcp \
 > process in front of `/mcp`. Prefer a host that supports streamable HTTP with headers where you
 > have the choice.
 
+### Remote connectors that log in for themselves (OAuth 2.1)
+
+Claude Desktop, claude.ai and IDE connectors do not want a pasted token — they run an OAuth login.
+OpenFilz supports this out of the box: it advertises **where to authenticate** and ships a ready
+Keycloak client, so a user just picks OpenFilz and signs in.
+
+How it works — nothing for you to build:
+
+1. The host calls `/mcp` with no token and gets `401` carrying
+   `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"`.
+2. It reads that metadata (served unauthenticated) and learns the authorization server — your
+   Keycloak realm.
+3. It runs an authorization-code + PKCE login against Keycloak using the pre-registered public
+   client **`openfilz-mcp`**, and calls `/mcp` with the resulting token.
+
+The token carries the user's OpenFilz roles, so everything in the security section above still
+applies — an OAuth-logged-in agent is scoped exactly like any other.
+
+**Adding a host whose callback is not pre-registered.** The `openfilz-mcp` client already lists
+loopback callbacks (`http://localhost/*`, `http://127.0.0.1/*` — these cover Cursor, VS Code /
+Copilot, Windsurf, Zed and most desktop tools), the IDE schemes (`vscode://`, `cursor://`, …) and
+`https://claude.ai/api/mcp/auth_callback`. A **hosted** connector with a fixed HTTPS callback that
+is not on that list (for example ChatGPT or Gemini connectors) needs its callback added once, in
+Keycloak → Clients → `openfilz-mcp` → *Valid redirect URIs*. No OpenFilz change and no restart —
+find the exact callback URL in that provider's connector documentation.
+
+> **Dynamic Client Registration (DCR) is intentionally off.** OpenFilz uses one shared public
+> client rather than letting every host register its own, which keeps the realm clean (DCR
+> accumulates a client per connecting app). The trade-off: **claude.ai's *hosted* connector
+> directory currently expects DCR**, so the automatic web-directory listing may not apply — but
+> Claude Desktop, Claude Code, Cursor, VS Code, n8n and any client that accepts a `client_id`
+> (use `openfilz-mcp`) all work. DCR can be enabled in Keycloak later with no code change.
+
 ### n8n
 
 Use the **MCP Client** node: transport `HTTP Streamable`, URL `https://api.openfilz.com/mcp`,

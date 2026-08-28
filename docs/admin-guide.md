@@ -778,6 +778,15 @@ configure or keep in sync.
 |--------------------------|---------|-------------|
 | `openfilz.mcp.active` / `OPENFILZ_MCP_ACTIVE` | `false` | Master switch for the MCP server |
 | `openfilz.mcp.mode` / `OPENFILZ_MCP_MODE` | `READ_ONLY` | `READ_ONLY` exposes query/read tools only; `READ_WRITE` also exposes `writeFile`, `createFolder`, `moveDocuments`, `renameDocument` |
+| `openfilz.mcp.authorization-server-url` / `KEYCLOAK_REALM_URL` | Keycloak realm URL | Advertised in the OAuth discovery metadata so remote hosts know where to log in. Defaults to the realm the API already validates tokens against — normally nothing to set. |
+
+**Remote connectors (Claude Desktop, claude.ai, IDE connectors)** log in via OAuth rather than a
+pasted token. This works out of the box: OpenFilz serves `/.well-known/oauth-protected-resource`
+(pointing at your Keycloak realm) and the realm ships a pre-registered public PKCE client
+`openfilz-mcp`. Loopback and the common IDE/claude.ai callbacks are already registered; to support
+a hosted connector with a different fixed callback (e.g. ChatGPT, Gemini), add its URL to
+Keycloak → Clients → `openfilz-mcp` → *Valid redirect URIs* (no restart, no code change). See the
+[MCP guide](mcp.md#remote-connectors-that-log-in-for-themselves-oauth-21).
 
 ```bash
 OPENFILZ_MCP_ACTIVE=true

@@ -600,6 +600,14 @@ external agents (Claude Code/Desktop, n8n, custom agents, Spring AI clients) ove
   `ToolContext.getContext().get("exchange")` and builds a fresh user-bound `DocumentAiTools`
   through `DocumentAiToolsFactory`. Identity is never read from tool arguments, and a call
   without it is refused rather than run unbound.
+- **OAuth 2.1 discovery** (`McpDiscoveryController`): `/.well-known/oauth-protected-resource`
+  (RFC 9728) names `/mcp` + the Keycloak realm as its authorization server; the `/mcp` 401 carries
+  `WWW-Authenticate: … resource_metadata="…"` so remote hosts (Claude Desktop, claude.ai, IDE
+  connectors) discover it. `/.well-known/oauth-authorization-server` 302-redirects to Keycloak's
+  own OIDC document. Both whitelisted, both 404 when `openfilz.mcp.active=false`. A shared public
+  PKCE client `openfilz-mcp` (in both realm-exports) is what hosts authenticate with — DCR is
+  deliberately off (one client, not one per connecting app); its token carries `realm_access.roles`
+  so role enforcement applies. `authorization-server-url` defaults to `KEYCLOAK_REALM_URL`.
 - **`/mcp` is JWT-protected simply by not being whitelisted** (`DefaultAuthSecurityConfig` ends
   with `anyExchange().authenticated()`) — but that chain performs **no role check** on it: its
   `.access(...)` manager is scoped to `/api/v1/**` + the GraphQL path. Roles are therefore enforced

@@ -43,6 +43,16 @@ public class McpProperties {
         READ_WRITE
     }
 
+    /**
+     * The OAuth 2.0 authorization server that protects this MCP endpoint — the Keycloak realm URL
+     * (e.g. {@code https://auth.openfilz.com/realms/openfilz}). Advertised in the RFC 9728
+     * protected-resource metadata so a remote MCP host can discover where to authenticate.
+     * <p>
+     * Defaults in {@code application.yml} to the same {@code KEYCLOAK_REALM_URL} the resource
+     * server already validates tokens against, so a standard deployment sets nothing extra.
+     */
+    private String authorizationServerUrl = "http://localhost:8180/realms/openfilz";
+
     public boolean isReadOnly() {
         return mode == Mode.READ_ONLY;
     }
