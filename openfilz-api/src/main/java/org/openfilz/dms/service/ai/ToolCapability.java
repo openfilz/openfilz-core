@@ -27,33 +27,62 @@ package org.openfilz.dms.service.ai;
 public enum ToolCapability {
 
     /** Read or search documents. Mirrors the REST read/search endpoints: READER or CONTRIBUTOR. */
-    DOCUMENT_READ,
+    DOCUMENT_READ(false),
 
     /** Create or modify documents and folders. Mirrors REST insert/update: CONTRIBUTOR. */
-    DOCUMENT_WRITE,
+    DOCUMENT_WRITE(true),
 
-    /** Delete or trash documents. Mirrors REST delete: CLEANER. No tool exposes this yet. */
-    DOCUMENT_DELETE,
+    /** Delete or trash documents. Mirrors REST delete: CLEANER. */
+    DOCUMENT_DELETE(true),
 
     /** Read or search the audit trail. Mirrors {@code /api/v1/audit}: AUDITOR. No tool yet. */
-    AUDIT_READ,
+    AUDIT_READ(false),
+
+    /** Read the status of e-Sign envelopes. Mirrors the REST e-Sign GETs: READER or CONTRIBUTOR. */
+    SIGNATURE_READ(false),
 
     /**
      * Initiate e-Sign requests (envelopes, templates). Mirrors the REST e-Sign writes:
      * CONTRIBUTOR, and additionally SIGN_REQUESTER when
-     * {@code openfilz.signature.require-requester-role} is on. No tool exposes this yet.
+     * {@code openfilz.signature.require-requester-role} is on.
      */
-    SIGNATURE_WRITE,
+    SIGNATURE_WRITE(true),
 
     /**
      * Read sharing information on the caller's documents. <b>Enterprise only</b> (VIEW_SHARE) —
-     * Community has no sharing model, so the core policy refuses it. No tool exposes this yet.
+     * Community has no sharing model, so the core policy refuses it.
      */
-    SHARE_READ,
+    SHARE_READ(false),
 
     /**
      * Create or change shares on the caller's documents. <b>Enterprise only</b> (EDIT_SHARE) —
-     * refused by the core policy. No tool exposes this yet.
+     * refused by the core policy.
      */
-    SHARE_WRITE
+    SHARE_WRITE(true),
+
+    /**
+     * Read comments on the caller's documents. <b>Enterprise only</b> (COMMENTER / any web user) —
+     * refused by the core policy.
+     */
+    COMMENT_READ(false),
+
+    /**
+     * Add or change comments on the caller's documents. <b>Enterprise only</b>
+     * (CONTRIBUTOR or COMMENTER) — refused by the core policy.
+     */
+    COMMENT_WRITE(true);
+
+    private final boolean mutating;
+
+    ToolCapability(boolean mutating) {
+        this.mutating = mutating;
+    }
+
+    /**
+     * Whether a tool with this capability changes state. Read capabilities are exposed in
+     * {@code READ_ONLY} mode; mutating ones are withheld unless {@code openfilz.mcp.mode=READ_WRITE}.
+     */
+    public boolean isMutating() {
+        return mutating;
+    }
 }

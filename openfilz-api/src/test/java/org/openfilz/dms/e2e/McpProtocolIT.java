@@ -3,6 +3,7 @@ package org.openfilz.dms.e2e;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.openfilz.dms.service.mcp.DocumentAiToolsContributor;
 import org.openfilz.dms.service.mcp.McpToolCallbackProvider;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
@@ -82,8 +83,8 @@ public class McpProtocolIT extends AbstractMcpIT {
     @Test
     @DisplayName("tools/list advertises the whole DocumentAiTools surface in read-write mode")
     void toolsListAdvertisesEveryTool() {
-        Set<String> expected = new HashSet<>(McpToolCallbackProvider.READ_ONLY_TOOLS);
-        expected.addAll(McpToolCallbackProvider.MUTATING_TOOLS);
+        Set<String> expected = new HashSet<>(DocumentAiToolsContributor.READ_ONLY_TOOLS);
+        expected.addAll(DocumentAiToolsContributor.MUTATING_TOOLS);
 
         assertThat(advertisedToolNames()).containsExactlyInAnyOrderElementsOf(expected);
     }
@@ -236,7 +237,7 @@ public class McpProtocolIT extends AbstractMcpIT {
             default -> throw new AssertionError("""
                     Unknown MCP tool '%s'. A tool was added to DocumentAiTools without being \
                     classified here — add arguments for it (and list it in \
-                    McpToolCallbackProvider.MUTATING_TOOLS if it changes anything), otherwise \
+                    DocumentAiToolsContributor.MUTATING_TOOLS if it changes anything), otherwise \
                     layer 2 never traces it and it fails in the EE native image."""
                     .formatted(tool));
         };

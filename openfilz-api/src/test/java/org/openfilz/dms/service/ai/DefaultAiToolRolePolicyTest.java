@@ -185,7 +185,9 @@ class DefaultAiToolRolePolicyTest {
         DefaultAiToolRolePolicy policy = (DefaultAiToolRolePolicy) policyFor(false);
         Map<ToolCapability, Boolean> enterpriseOnly = Map.of(
                 ToolCapability.SHARE_READ, true,
-                ToolCapability.SHARE_WRITE, true);
+                ToolCapability.SHARE_WRITE, true,
+                ToolCapability.COMMENT_READ, true,
+                ToolCapability.COMMENT_WRITE, true);
 
         for (ToolCapability capability : ToolCapability.values()) {
             DefaultAiToolRolePolicy.RoleRequirement required = policy.rolesFor(capability);

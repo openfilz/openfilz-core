@@ -123,6 +123,22 @@ The server also advertises usage guidance in its `initialize` response (the MCP 
 field), telling the calling agent to resolve names with `queryDocuments` first and that everything
 is scoped to the caller's permissions.
 
+### Enterprise tools
+
+The Enterprise edition adds tools for its collaboration features, advertised automatically
+alongside the document tools (no configuration — they appear when the enterprise API is running):
+
+| Tool | Mode | What it does | Role needed |
+|---|---|---|---|
+| `shareDocument` | write | Share a document with a user by email as READER / COMMENTER / EDITOR | CONTRIBUTOR + EDIT_SHARE |
+| `unshareDocument` | write | Revoke a user's access to a document | CONTRIBUTOR + EDIT_SHARE |
+| `addComment` | write | Add a comment to a document | CONTRIBUTOR or COMMENTER |
+| `listComments` | read | List a document's comments | READER or CONTRIBUTOR |
+
+A client discovers these at runtime through `tools/list` — an agent talking to a Community
+deployment simply sees fewer tools. They carry the same per-user scoping as the document tools: an
+agent can only share or comment on documents its user may act on.
+
 ---
 
 ## 4. Connecting a client

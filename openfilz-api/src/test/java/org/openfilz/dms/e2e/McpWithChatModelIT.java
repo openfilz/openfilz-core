@@ -3,6 +3,7 @@ package org.openfilz.dms.e2e;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.openfilz.dms.service.mcp.DocumentAiToolsContributor;
 import org.openfilz.dms.service.mcp.McpToolCallbackProvider;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -88,8 +89,8 @@ public class McpWithChatModelIT extends AbstractMcpIT {
     @DisplayName("the MCP tool surface still comes up when a ChatModel is configured")
     void mcpServesItsToolsAlongsideAChatModel() {
         // The context starting at all is most of the assertion: the cycle aborts the refresh.
-        Set<String> expected = new HashSet<>(McpToolCallbackProvider.READ_ONLY_TOOLS);
-        expected.addAll(McpToolCallbackProvider.MUTATING_TOOLS);
+        Set<String> expected = new HashSet<>(DocumentAiToolsContributor.READ_ONLY_TOOLS);
+        expected.addAll(DocumentAiToolsContributor.MUTATING_TOOLS);
 
         assertThat(advertisedToolNames()).containsExactlyInAnyOrderElementsOf(expected);
     }

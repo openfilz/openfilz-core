@@ -3,6 +3,7 @@ package org.openfilz.dms.e2e;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.openfilz.dms.service.mcp.DocumentAiToolsContributor;
 import org.openfilz.dms.service.mcp.McpToolCallbackProvider;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.codec.json.JacksonJsonEncoder;
@@ -49,8 +50,8 @@ public class McpReadOnlyModeIT extends AbstractMcpIT {
     @DisplayName("mutating tools are withheld from tools/list")
     void mutatingToolsAreNotAdvertised() {
         assertThat(advertisedToolNames())
-                .doesNotContainAnyElementsOf(McpToolCallbackProvider.MUTATING_TOOLS)
-                .containsExactlyInAnyOrderElementsOf(McpToolCallbackProvider.READ_ONLY_TOOLS);
+                .doesNotContainAnyElementsOf(DocumentAiToolsContributor.MUTATING_TOOLS)
+                .containsExactlyInAnyOrderElementsOf(DocumentAiToolsContributor.READ_ONLY_TOOLS);
     }
 
     @Test

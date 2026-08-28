@@ -588,9 +588,15 @@ external agents (Claude Code/Desktop, n8n, custom agents, Spring AI clients) ove
 `POST /mcp`, via `spring-ai-starter-mcp-server-webflux`.
 
 - **The MCP layer never defines a tool** — `McpToolCallbackProvider` only adapts the
-  `ToolCallback`s harvested from `DocumentAiTools`. Any capability added there is gained by
-  both the chat assistant and every external agent at once. Adding an MCP-only tool class
-  would fork the surface; don't.
+  `ToolCallback`s harvested from the registered `McpToolContributor` beans. Any capability added
+  to a tool object is gained by both the chat assistant and every external agent at once.
+- **New tools arrive as an `McpToolContributor`, not by editing the provider.** A contributor
+  supplies `bind(userEmail, authentication)` (a `@Tool` object, or `bind(null,null)` for the
+  definitions template — which must resolve no `ChatModel`, see the cycle note below) and a
+  `name → ToolCapability` map. `DocumentAiToolsContributor` is the core one; the provider merges
+  all contributors and applies auth + role + read-only enforcement uniformly, so a new contributor
+  inherits every guarantee. This is the seam the EE `CollaborationMcpToolContributor` (share /
+  comment tools) plugs into with no core change.
 - **Stateless transport** (`spring.ai.mcp.server.protocol=STATELESS`): every request carries
   its own bearer token, so no MCP session outlives the JWT that opened it and scaling needs
   no sticky sessions. SSE is deprecated since Spring AI 2.0.0.

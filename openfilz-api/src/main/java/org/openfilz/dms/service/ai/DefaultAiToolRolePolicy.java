@@ -90,12 +90,15 @@ public class DefaultAiToolRolePolicy implements AiToolRolePolicy {
             case DOCUMENT_WRITE -> RoleRequirement.any(Role.CONTRIBUTOR.toString());
             case DOCUMENT_DELETE -> RoleRequirement.any(Role.CLEANER.toString());
             case AUDIT_READ -> RoleRequirement.any(Role.AUDITOR.toString());
+            // e-Sign GETs are READER/CONTRIBUTOR, matching AbstractSecurityService.isSignatureAuthorized.
+            case SIGNATURE_READ -> RoleRequirement.any(Role.READER.toString(), Role.CONTRIBUTOR.toString());
             // Mirrors AbstractSecurityService.isSignatureAuthorized: the requester role is an
             // ADDITIONAL requirement on top of CONTRIBUTOR, never a substitute for it.
             case SIGNATURE_WRITE -> signatureProperties.isRequireRequesterRole()
                     ? RoleRequirement.all(Role.CONTRIBUTOR.toString(), Role.SIGN_REQUESTER.toString())
                     : RoleRequirement.any(Role.CONTRIBUTOR.toString());
-            case SHARE_READ, SHARE_WRITE -> RoleRequirement.never();
+            // Enterprise-only: no sharing or comment model in Community, so refuse outright.
+            case SHARE_READ, SHARE_WRITE, COMMENT_READ, COMMENT_WRITE -> RoleRequirement.never();
         };
     }
 
