@@ -41,6 +41,7 @@ public class McpReadOnlyModeIT extends AbstractMcpIT {
 
     @DynamicPropertySource
     static void useReadOnlyMode(DynamicPropertyRegistry registry) {
+        registerModelSelectors(registry, "none");
         registry.add("openfilz.mcp.mode", () -> "READ_ONLY");
     }
 

@@ -93,10 +93,27 @@ public class McpToolCallbackProvider implements ToolCallbackProvider, UserInfoSe
     /**
      * Tool definitions (name, description, JSON input schema) harvested from an unbound tools
      * instance. Definitions are static — only the execution needs a user.
+     * <p>
+     * <b>Built with a {@code null} ChatModel on purpose, and deliberately not through
+     * {@link #newTools}.</b> Spring AI calls {@code getToolCallbacks()} from two beans while the
+     * context is still refreshing — {@code toolCallbackResolver} and {@code syncTools} — so
+     * anything this method touches is resolved mid-startup. Asking the {@code ObjectProvider} for
+     * a ChatModel here instantiates it at that moment and closes a cycle:
+     * <pre>
+     * toolCallbackResolver → McpToolCallbackProvider.getToolCallbacks()
+     *                      → ollamaChatModel → toolCallingManager → toolCallbackResolver
+     * </pre>
+     * which aborts the context with "dependencies of some of the beans form a cycle". It bites
+     * hardest in the EE native image, where the ChatModel bean definition is baked in at build
+     * time by AOT and therefore exists whatever {@code openfilz.ai.active} says at runtime.
+     * <p>
+     * Nothing is lost: a ChatModel cannot change a tool's name, description or schema. Only
+     * {@code describeImage}'s <em>execution</em> consumes one, and that happens on the call path
+     * below, long after startup.
      */
     private ToolCallback[] templateCallbacks() {
         return MethodToolCallbackProvider.builder()
-                .toolObjects(newTools(null))
+                .toolObjects(toolsFactory.create(null, null, null))
                 .build()
                 .getToolCallbacks();
     }

@@ -51,6 +51,9 @@ public class McpProtocolIT extends AbstractMcpIT {
 
     @DynamicPropertySource
     static void useReadWriteMode(DynamicPropertyRegistry registry) {
+        // "none": this suite also proves the tool surface stands up with no ChatModel bean at
+        // all. McpWithChatModelIT covers the opposite case.
+        registerModelSelectors(registry, "none");
         registry.add("openfilz.mcp.mode", () -> "READ_WRITE");
     }
 

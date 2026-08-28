@@ -48,18 +48,33 @@ public abstract class AbstractMcpIT extends TestContainersKeyCloakConfig {
                 () -> keycloak.getAuthServerUrl() + "/realms/openfilz/protocol/openid-connect/certs");
         registry.add("openfilz.security.no-auth", () -> false);
         registry.add("openfilz.mcp.active", () -> true);
-        // The MCP server needs no OpenFilz-side LLM — the calling agent brings its own model.
-        // Pinning the selectors to "none" keeps the real provider models out of the context and
-        // proves the tool surface stands up with no ChatModel bean at all.
-        registry.add("spring.ai.model.chat", () -> "none");
+        registry.add("spring.ai.vectorstore.pgvector.initialize-schema", () -> false);
+        registry.add("spring.autoconfigure.exclude",
+                () -> "org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration");
+    }
+
+    /**
+     * Registers the {@code spring.ai.model.*} selectors. Deliberately <b>not</b> called from this
+     * class's own {@code @DynamicPropertySource}: each concrete suite calls it, because a
+     * subclass cannot override a value the superclass registers.
+     * <p>
+     * Spring builds the context customizer from the whole class hierarchy and the superclass
+     * method registers last, so a subclass that "overrides" {@code spring.ai.model.chat} silently
+     * loses and ends up testing the parent's configuration instead of its own — which is exactly
+     * how a chat-model-specific regression test would quietly become vacuous. Passing the value
+     * in makes the choice explicit at every call site and leaves no ordering to reason about.
+     *
+     * @param chat the chat-model selector — {@code "none"} for the suites that prove the MCP tool
+     *             surface needs no OpenFilz-side LLM (the calling agent brings its own), or a real
+     *             provider for {@link McpWithChatModelIT}, which pins the coexistence wiring.
+     */
+    protected static void registerModelSelectors(DynamicPropertyRegistry registry, String chat) {
+        registry.add("spring.ai.model.chat", () -> chat);
         registry.add("spring.ai.model.embedding", () -> "none");
         registry.add("spring.ai.model.image", () -> "none");
         registry.add("spring.ai.model.moderation", () -> "none");
         registry.add("spring.ai.model.audio.speech", () -> "none");
         registry.add("spring.ai.model.audio.transcription", () -> "none");
-        registry.add("spring.ai.vectorstore.pgvector.initialize-schema", () -> false);
-        registry.add("spring.autoconfigure.exclude",
-                () -> "org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration");
     }
 
     @BeforeEach

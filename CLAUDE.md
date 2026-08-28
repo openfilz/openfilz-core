@@ -612,14 +612,34 @@ external agents (Claude Code/Desktop, n8n, custom agents, Spring AI clients) ove
   own. Only `describeImage` uses it, and it degrades with a message. The class therefore
   declares its constructor explicitly — two candidate constructors (Lombok's plus one written
   out) leave Spring looking for a default one.
+- **Never resolve a `ChatModel` while building the tool *definitions*.** Spring AI calls
+  `ToolCallbackProvider.getToolCallbacks()` from `toolCallbackResolver` **and** `syncTools`,
+  both while those beans are still being created. `McpToolCallbackProvider.templateCallbacks()`
+  therefore passes a `null` chat model: asking the `ObjectProvider` for one there instantiates it
+  mid-refresh and closes a cycle — `toolCallbackResolver → getToolCallbacks() → ollamaChatModel →
+  toolCallingManager → toolCallbackResolver` — which aborts startup with *"dependencies of some
+  of the beans form a cycle"*. Definitions are static; only `describeImage`'s *execution* needs a
+  model, and that happens on the call path long after startup. It bites hardest in the EE native
+  image (AOT bakes the ChatModel bean definition in whatever `openfilz.ai.active` says at runtime),
+  but any deployment running the chat assistant and MCP together hits it.
 - **Native image:** `spring-ai-mcp` registers the `McpSchema` inner classes itself via
   `META-INF/spring/aot.factories`; `McpRuntimeHints` only covers the ServiceLoader-resolved
   JSON layer. `McpRuntimeHintsTest` fails if that upstream registration ever disappears.
-  Core is JVM-only, but these classes are compiled into the enterprise native image.
-- **Tests:** `McpRuntimeHintsTest` (hints), `McpProtocolIT` (read-write, full protocol) and
-  `McpReadOnlyModeIT` (default posture), sharing `AbstractMcpIT`'s JSON-RPC client.
+  Core is JVM-only, but these classes are compiled into the enterprise native image. A GraalVM
+  tracing-agent run (`openfilz-enterprise/docker/trace-mcp-native-hints.sh`) confirmed the residue
+  is exactly those two ServiceLoader SPI files — **no further reflection hints are needed**.
+- **Tests:** `McpRuntimeHintsTest` (hints), `McpProtocolIT` (read-write, full protocol),
+  `McpReadOnlyModeIT` (default posture) and `McpWithChatModelIT` (MCP + a real `ChatModel`),
+  sharing `AbstractMcpIT`'s JSON-RPC client.
   `McpProtocolIT.everyAdvertisedToolIsCallable` deliberately drives *every* tool and asserts
   `isError == false` — it doubles as the trace driver for deriving native-image metadata.
+- **The `spring.ai.model.*` selectors are registered per-suite, not in `AbstractMcpIT`.** A
+  superclass `@DynamicPropertySource` registration **wins** over a subclass one, so a suite that
+  "overrides" `spring.ai.model.chat` silently keeps the parent's value and tests nothing. Each
+  suite calls `registerModelSelectors(registry, chat)` explicitly; `McpWithChatModelIT` asserts a
+  `ChatModel` bean is really present so it can never go vacuous again.
+- **Run them:** `-Dtest=none` also needs `-Dsurefire.failIfNoSpecifiedTests=false` on surefire
+  3.5.3, or the build fails before failsafe starts.
 
 ### Release / publish CI
 The TypeScript SDK (`@openfilz-sdk/typescript`) publishes to npm via **OIDC Trusted Publishing** (no `NPM_TOKEN`): the publish job needs `permissions: id-token: write` (plus `contents: write` / `packages: write`, since declaring permissions zeroes the rest), Node 24 (whose **bundled** npm 11.16+ already satisfies OIDC auto-detection's npm ≥ 11.5.1 requirement), and no `_authToken` line in `.npmrc`.
