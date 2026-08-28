@@ -581,6 +581,46 @@ Four chat providers ship: **Ollama, Anthropic (Claude), Google Gemini (GenAI/Dev
 - **Assert on side effects, not wording.** Embeddings are deterministic so those assertions are exact; generation is not, so the tool tests check that the folder really exists afterwards and retry through `eventually(...)` — a single unlucky sampling isn't a defect, three in a row is. Chat temperature is pinned to 0.
 - **`@DynamicPropertySource` can't drive the provider selectors.** `AiModelProviderEnvironmentPostProcessor` runs during `prepareEnvironment`, before those values exist, so it would read `openfilz.ai.active` as absent and pin everything to `none`, leaving no `ChatModel`. The test sets `spring.ai.model.chat`/`.embedding` explicitly — the documented override.
 
+### MCP server (external AI agents)
+
+`openfilz.mcp.active=true` exposes the **same `@Tool` methods the AI assistant uses** to
+external agents (Claude Code/Desktop, n8n, custom agents, Spring AI clients) over
+`POST /mcp`, via `spring-ai-starter-mcp-server-webflux`.
+
+- **The MCP layer never defines a tool** — `McpToolCallbackProvider` only adapts the
+  `ToolCallback`s harvested from `DocumentAiTools`. Any capability added there is gained by
+  both the chat assistant and every external agent at once. Adding an MCP-only tool class
+  would fork the surface; don't.
+- **Stateless transport** (`spring.ai.mcp.server.protocol=STATELESS`): every request carries
+  its own bearer token, so no MCP session outlives the JWT that opened it and scaling needs
+  no sticky sessions. SSE is deprecated since Spring AI 2.0.0.
+- **Per-call user binding.** `McpAuthenticationWebFilter` parks the already-validated
+  `Authentication` in the exchange attributes; `McpConfig`'s `contextExtractor` forwards it
+  into the `McpTransportContext`; the tool callback reads it back from
+  `ToolContext.getContext().get("exchange")` and builds a fresh user-bound `DocumentAiTools`
+  through `DocumentAiToolsFactory`. Identity is never read from tool arguments, and a call
+  without it is refused rather than run unbound.
+- **No security config needed:** `DefaultAuthSecurityConfig` ends with
+  `anyExchange().authenticated()`, so `/mcp` is JWT-protected simply by not being whitelisted.
+- **Read-only by default** (`openfilz.mcp.mode`, `READ_ONLY` | `READ_WRITE`): an autonomous
+  agent mutating a DMS is an explicit opt-in. Mutating tools are withheld from `tools/list`.
+- **`@ToolParam(required = false)` matters here in a way it never did for chat.** Spring AI
+  defaults `required` to `true`, and the MCP server validates arguments against the generated
+  JSON Schema *before* the tool body runs — so an unmarked optional parameter makes the tool
+  effectively uncallable (`null trouvé, string attendu`). Mark every optional parameter.
+- **`DocumentAiTools.chatModel` is nullable**: an MCP deployment need not run an LLM of its
+  own. Only `describeImage` uses it, and it degrades with a message. The class therefore
+  declares its constructor explicitly — two candidate constructors (Lombok's plus one written
+  out) leave Spring looking for a default one.
+- **Native image:** `spring-ai-mcp` registers the `McpSchema` inner classes itself via
+  `META-INF/spring/aot.factories`; `McpRuntimeHints` only covers the ServiceLoader-resolved
+  JSON layer. `McpRuntimeHintsTest` fails if that upstream registration ever disappears.
+  Core is JVM-only, but these classes are compiled into the enterprise native image.
+- **Tests:** `McpRuntimeHintsTest` (hints), `McpProtocolIT` (read-write, full protocol) and
+  `McpReadOnlyModeIT` (default posture), sharing `AbstractMcpIT`'s JSON-RPC client.
+  `McpProtocolIT.everyAdvertisedToolIsCallable` deliberately drives *every* tool and asserts
+  `isError == false` — it doubles as the trace driver for deriving native-image metadata.
+
 ### Release / publish CI
 The TypeScript SDK (`@openfilz-sdk/typescript`) publishes to npm via **OIDC Trusted Publishing** (no `NPM_TOKEN`): the publish job needs `permissions: id-token: write` (plus `contents: write` / `packages: write`, since declaring permissions zeroes the rest), Node 24 (whose **bundled** npm 11.16+ already satisfies OIDC auto-detection's npm ≥ 11.5.1 requirement), and no `_authToken` line in `.npmrc`.
 - **Do NOT `npm install -g npm@latest` in the release workflow.** The self-upgrade currently ships a broken tree whose bundled `sigstore` is missing, so `npm publish` (which auto-enables provenance under OIDC) dies with `npm error Cannot find module 'sigstore'` … `libnpmpublish/lib/provenance.js` (npm/cli#9722). Rely on the pristine Node-bundled npm — it has `sigstore` intact and is already ≥ 11.5.1. Removed the upgrade step from `release-backend.yml` 2026-07-09. The npmjs Trusted Publisher config must match the repo + workflow **filename** exactly — renaming the release workflow file requires updating it on npmjs too. The Python (twine) and C# (NuGet) SDKs still publish via API tokens.

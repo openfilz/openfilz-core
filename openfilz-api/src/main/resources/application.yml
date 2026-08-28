@@ -58,6 +58,31 @@ spring:
     http:
       path: /graphql/v1
 
+  # MCP server transport. The feature itself is toggled by openfilz.mcp.active (runtime,
+  # native-safe); these are wire-level settings only.
+  ai:
+    mcp:
+      server:
+        name: openfilz
+        version: ${OPENFILZ_MCP_SERVER_VERSION:1.0.0}
+        # Advertised in the initialize response — the "system prompt" of the tool surface,
+        # telling the calling agent how to use OpenFilz well.
+        instructions: >-
+          OpenFilz document management. Use queryDocuments to find files and folders before
+          acting on them: most tools accept a document or folder NAME, and queryDocuments is what
+          resolves an ambiguous name to the right item. readDocumentContent extracts the text of a
+          file. All operations are scoped to the calling user's own permissions — a document that
+          queryDocuments does not return is not visible to this user.
+        # STATELESS: every request carries its own bearer token, so no MCP session outlives
+        # the JWT that opened it and scaling needs no sticky sessions. SSE is deprecated.
+        protocol: STATELESS
+        # Tools come from McpToolCallbackProvider (adapting DocumentAiTools); nothing in this
+        # codebase uses @McpTool, so the annotation scan is pure startup cost.
+        annotation-scanner:
+          enabled: false
+        streamable-http:
+          mcp-endpoint: /mcp
+
 # Storage Configuration
 storage:
   type: local # local or minio
@@ -310,6 +335,15 @@ openfilz:
     dimensions:
       width: 100
       height: 100
+
+  # MCP (Model Context Protocol) server — exposes the AI assistant's tools to external agents
+  # (Claude Code, Claude Desktop, n8n, custom agents) over POST /mcp, authenticated with the
+  # same Keycloak bearer token as the REST API. Runtime toggle, never a bean condition.
+  mcp:
+    active: ${OPENFILZ_MCP_ACTIVE:false}
+    # READ_ONLY (default) exposes query/read tools only. READ_WRITE also exposes
+    # writeFile / createFolder / moveDocuments / renameDocument.
+    mode: ${OPENFILZ_MCP_MODE:READ_ONLY}
 
 # OnlyOffice DocumentServer Integration
 onlyoffice:
