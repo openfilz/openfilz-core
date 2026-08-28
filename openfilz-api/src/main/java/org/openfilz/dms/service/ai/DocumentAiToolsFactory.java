@@ -33,6 +33,7 @@ public class DocumentAiToolsFactory {
     private final AiDocumentQueryService queryService;
     private final AiAccessPolicy accessPolicy;
     private final AiToolRolePolicy rolePolicy;
+    private final org.openfilz.dms.service.DocumentVersionService versionService;
 
     /**
      * Create a tools instance bound to the requesting user: every document access inside
@@ -41,7 +42,7 @@ public class DocumentAiToolsFactory {
      * DAO overrides in extension layers see the caller's identity.
      */
     public DocumentAiTools create(ChatModel chatModel, String userEmail, org.springframework.security.core.Authentication authentication) {
-        return new DocumentAiTools(documentService, documentRepository, storageService, queryService, chatModel, accessPolicy, rolePolicy)
+        return new DocumentAiTools(documentService, documentRepository, storageService, queryService, chatModel, accessPolicy, rolePolicy, versionService)
                 .forUser(userEmail, authentication);
     }
 }

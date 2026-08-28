@@ -79,7 +79,7 @@ public abstract class AbstractMcpIT extends TestContainersKeyCloakConfig {
 
     @BeforeEach
     void authenticate() {
-        accessToken = getAccessToken("contributor-user");
+        accessToken = getAccessToken("admin-user");
     }
 
     // ---------------------------------------------------------------- helpers

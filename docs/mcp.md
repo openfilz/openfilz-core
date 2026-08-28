@@ -105,7 +105,7 @@ opened it, and horizontal scaling needs no sticky sessions.
 
 ## 3. The tool surface
 
-Eight tools, curated rather than generated. (A 60-operation auto-generated tool list from the
+Fifteen document tools, curated rather than generated. (A 60-operation auto-generated tool list from the
 OpenAPI spec would make agents *worse*, not better — the small, well-described surface is the point.)
 
 | Tool | Mode | What it does |
@@ -118,6 +118,13 @@ OpenAPI spec would make agents *worse*, not better — the small, well-described
 | `createFolder` | write | Create a folder. |
 | `moveDocuments` | write | Move files or folders into another folder. |
 | `renameDocument` | write | Rename a file or folder. |
+| `getMetadata` | read | Read a document's metadata (custom key/value properties). |
+| `searchByMetadata` | read | Find documents by their metadata. |
+| `updateMetadata` | write | Add or update metadata keys on a document. |
+| `deleteMetadata` | write | Remove metadata keys from a document. |
+| `deleteDocument` | delete | Delete a document or folder (to the recycle bin when soft-delete is on). Requires the CLEANER role. |
+| `listVersions` | read | List a document's stored versions (versioned storage). |
+| `restoreVersion` | write | Restore a previous version as the current content. |
 
 The server also advertises usage guidance in its `initialize` response (the MCP `instructions`
 field), telling the calling agent to resolve names with `queryDocuments` first and that everything

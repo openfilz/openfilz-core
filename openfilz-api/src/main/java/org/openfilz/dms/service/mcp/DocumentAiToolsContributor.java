@@ -11,6 +11,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
+
+import static java.util.Map.entry;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -30,15 +32,22 @@ public class DocumentAiToolsContributor implements McpToolContributor {
      * The document tools and what each needs permission to do. Kept here, next to the tools it
      * classifies, rather than in the provider — the provider merges the maps of all contributors.
      */
-    public static final Map<String, ToolCapability> CAPABILITIES = Map.of(
-            "queryDocuments", ToolCapability.DOCUMENT_READ,
-            "readDocumentContent", ToolCapability.DOCUMENT_READ,
-            "getDocumentPath", ToolCapability.DOCUMENT_READ,
-            "describeImage", ToolCapability.DOCUMENT_READ,
-            "writeFile", ToolCapability.DOCUMENT_WRITE,
-            "createFolder", ToolCapability.DOCUMENT_WRITE,
-            "moveDocuments", ToolCapability.DOCUMENT_WRITE,
-            "renameDocument", ToolCapability.DOCUMENT_WRITE);
+    public static final Map<String, ToolCapability> CAPABILITIES = Map.ofEntries(
+            entry("queryDocuments", ToolCapability.DOCUMENT_READ),
+            entry("readDocumentContent", ToolCapability.DOCUMENT_READ),
+            entry("getDocumentPath", ToolCapability.DOCUMENT_READ),
+            entry("describeImage", ToolCapability.DOCUMENT_READ),
+            entry("writeFile", ToolCapability.DOCUMENT_WRITE),
+            entry("createFolder", ToolCapability.DOCUMENT_WRITE),
+            entry("moveDocuments", ToolCapability.DOCUMENT_WRITE),
+            entry("renameDocument", ToolCapability.DOCUMENT_WRITE),
+            entry("getMetadata", ToolCapability.DOCUMENT_READ),
+            entry("searchByMetadata", ToolCapability.DOCUMENT_READ),
+            entry("updateMetadata", ToolCapability.DOCUMENT_WRITE),
+            entry("deleteMetadata", ToolCapability.DOCUMENT_WRITE),
+            entry("deleteDocument", ToolCapability.DOCUMENT_DELETE),
+            entry("listVersions", ToolCapability.DOCUMENT_READ),
+            entry("restoreVersion", ToolCapability.DOCUMENT_WRITE));
 
     /** The read/search tools — advertised in every mode. Derived so it cannot drift from the map. */
     public static final Set<String> READ_ONLY_TOOLS = CAPABILITIES.entrySet().stream()
