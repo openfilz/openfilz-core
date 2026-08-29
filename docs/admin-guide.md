@@ -27,6 +27,7 @@ This guide is intended for DevOps engineers and system administrators who instal
   - [Soft Delete and Recycle Bin](#soft-delete-and-recycle-bin)
   - [CORS](#cors)
   - [AI Document Chat](#ai-document-chat)
+  - [MCP Server (External AI Agents)](#mcp-server-external-ai-agents)
   - [Electronic Signature (e-Sign)](#electronic-signature-e-sign)
 - [Feature Toggles](#feature-toggles)
 - [Keycloak Administration](#keycloak-administration)
@@ -758,6 +759,71 @@ The AI migrations (`V1_4__add_ai_support.sql`, `V1_5__add_embedding_registry.sql
 | `ai_embedding_registry` | Records which embedding model produced the stored vectors (one-time deployment decision, enforced at startup) |
 | `user_ai_settings` | Per-user BYOK chat-LLM overrides (provider, model, AES-256-GCM-encrypted API key) |
 
+### MCP Server (External AI Agents)
+
+OpenFilz can expose its document tools over the
+[Model Context Protocol](https://modelcontextprotocol.io) so that AI agents running **outside**
+OpenFilz — Claude Code, Claude Desktop, n8n, LangChain, custom agents — can search, read and
+organise documents on behalf of the signed-in user, at `POST /mcp`.
+
+It serves **the same tools the built-in AI assistant uses**, so there is no second tool surface to
+configure or keep in sync.
+
+> **Full guide:** [MCP Server](mcp.md) — client setup snippets (Claude Code, `mcp.json`, n8n,
+> Spring AI), the tool list, the security model and troubleshooting.
+
+#### Feature Toggle
+
+| Property / Env Variable | Default | Description |
+|--------------------------|---------|-------------|
+| `openfilz.mcp.active` / `OPENFILZ_MCP_ACTIVE` | `false` | Master switch for the MCP server |
+| `openfilz.mcp.mode` / `OPENFILZ_MCP_MODE` | `READ_ONLY` | `READ_ONLY` exposes query/read tools only; `READ_WRITE` also exposes `writeFile`, `createFolder`, `moveDocuments`, `renameDocument` |
+| `openfilz.mcp.authorization-server-url` / `KEYCLOAK_REALM_URL` | Keycloak realm URL | Advertised in the OAuth discovery metadata so remote hosts know where to log in. Defaults to the realm the API already validates tokens against — normally nothing to set. |
+
+**Remote connectors (Claude Desktop, claude.ai, IDE connectors)** log in via OAuth rather than a
+pasted token. This works out of the box: OpenFilz serves `/.well-known/oauth-protected-resource`
+(pointing at your Keycloak realm) and the realm ships a pre-registered public PKCE client
+`openfilz-mcp`. Loopback and the common IDE/claude.ai callbacks are already registered; to support
+a hosted connector with a different fixed callback (e.g. ChatGPT, Gemini), add its URL to
+Keycloak → Clients → `openfilz-mcp` → *Valid redirect URIs* (no restart, no code change). See the
+[MCP guide](mcp.md#remote-connectors-that-log-in-for-themselves-oauth-21).
+
+```bash
+OPENFILZ_MCP_ACTIVE=true
+OPENFILZ_MCP_MODE=READ_ONLY      # raise to READ_WRITE deliberately
+```
+
+#### This is independent of AI Document Chat
+
+`openfilz.mcp.active` and `openfilz.ai.active` are **separate switches**. The MCP server needs no
+LLM provider, no embeddings and no pgvector — the calling agent brings its own model. You can
+therefore enable MCP on a deployment with AI chat entirely off. (The one exception is the
+`describeImage` tool, which uses a local vision model and reports that it is unavailable when
+there is none.)
+
+#### Security
+
+- `/mcp` is **never anonymous**: it sits on the normal OAuth2 resource-server chain, so a request
+  without a valid bearer token gets `401` before reaching any tool.
+- **The OpenFilz role model applies unchanged.** A READER may search and read; only a CONTRIBUTOR
+  may write. An MCP call is authorised exactly as the equivalent REST call is, and a test fails the
+  build if the two ever diverge. (`tools/list` is built per deployment, not per caller, so a READER
+  still sees the write tools advertised and is refused when calling one.)
+- The caller's identity comes from the **token**, never from tool arguments — an agent cannot ask
+  to act as another user — and every document access is checked against the same policy the chat
+  assistant uses. Roles and document scope are independent gates and both must pass. In the Enterprise edition that means agents are constrained by the real ownership
+  and sharing rules, with nothing extra to configure.
+- Mutations are recorded in the audit trail under the authentic user.
+- **Read-only is the default deliberately**: an MCP client is an autonomous agent acting on a
+  document management system, so write access is an explicit opt-in. In `READ_ONLY` the mutating
+  tools are not advertised *and* are refused if called anyway.
+
+> Give an agent a **dedicated user or service account** with only the roles it needs rather than
+> reusing a person's credentials — see the developer guide's
+> [Service Account Tokens](developer-guide.md#service-account-tokens-server-to-server).
+
+---
+
 ### Electronic Signature (e-Sign)
 
 OpenFilz can send a stored PDF to one or more recipients for electronic signature and file the
@@ -850,6 +916,8 @@ Summary of all toggleable features:
 | Audit chain | `openfilz.audit.chain.enabled` | `true` | Cryptographic hash chain |
 | Checksums | `openfilz.calculate-checksum` | `false` | SHA-256 on upload |
 | AI chat | `openfilz.ai.active` | `false` | Requires LLM provider (Ollama or OpenAI) and pgvector |
+| MCP server | `openfilz.mcp.active` | `false` | Exposes the document tools to external AI agents at `/mcp`; needs no LLM of its own |
+| MCP write access | `openfilz.mcp.mode` | `READ_ONLY` | Set `READ_WRITE` to let agents create/modify documents |
 | e-Sign | `openfilz.signature.active` | `false` | Electronic signature envelopes; needs SMTP to email signing links |
 
 ---

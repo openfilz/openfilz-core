@@ -1,0 +1,3 @@
+# OpenFilz MCP examples — Python
+mcp>=1.2.0
+anthropic>=0.40.0   # only needed for agent.py (the LLM-driven example)

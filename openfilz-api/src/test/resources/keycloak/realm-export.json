@@ -3,6 +3,41 @@
   "enabled": true,
   "clients": [
     {
+      "clientId": "openfilz-mcp",
+      "name": "OpenFilz MCP connectors",
+      "description": "Shared public PKCE client for external MCP hosts (Claude, Cursor, VS Code, n8n, agents). Add a hosted provider callback to redirectUris if not covered by loopback - see docs/mcp.md.",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "fullScopeAllowed": true,
+      "redirectUris": [
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "https://claude.ai/api/mcp/auth_callback",
+        "vscode://*",
+        "vscode-insiders://*",
+        "cursor://*",
+        "windsurf://*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "oauth2.device.authorization.grant.enabled": "false",
+        "oidc.ciba.grant.enabled": "false"
+      },
+      "defaultClientScopes": [
+        "roles",
+        "profile",
+        "basic",
+        "email"
+      ]
+    },
+    {
       "clientId": "test-client",
       "secret": "test-client-secret",
       "enabled": true,

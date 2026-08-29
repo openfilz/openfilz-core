@@ -27,6 +27,7 @@ Pick the guide that matches your role:
 | **Install & configure** OpenFilz (Docker, Helm, Keycloak, storage, feature toggles) | [Installation & Administration Guide](docs/admin-guide.md) |
 | **Integrate** with the REST / GraphQL API or use an SDK | [Developer Guide](docs/developer-guide.md) |
 | **Understand** the AI feature (config resolution, ingestion & indexing, chat pipeline, BYOK) | [AI Architecture](docs/ai.md) |
+| **Connect an AI agent** (Claude Code/Desktop, n8n, custom agents) over MCP | [MCP Server](docs/mcp.md) |
 | **Send documents for electronic signature** (envelopes, fields, templates, seals, configuration) | [e-Sign Guide](docs/esign.md) |
 | **Contribute** to the open-source codebase | [Contributor Guide](docs/contributor-guide.md) |
 
@@ -94,6 +95,7 @@ Pick the guide that matches your role:
 - **Function Calling** - The AI can search, organize, create folders, move, and rename documents on behalf of the user.
 - **Conversation History** - Multi-turn conversations are persisted with full message history.
 - **Streaming Responses** - Server-Sent Events (SSE) for real-time AI response streaming.
+- **MCP Server** - Optionally exposes the same document tools to AI agents running *outside* OpenFilz (Claude Code, Claude Desktop, n8n, custom agents) over `POST /mcp`. Read-only by default, scoped to the calling user's permissions, and needs no LLM of its own — the agent brings its own model. See the [MCP Server guide](docs/mcp.md).
 - **Fully Optional** - Disabled by default. When disabled, no AI beans, endpoints, or database tables are created.
 
 ### Electronic Signature (e-Sign)
@@ -156,6 +158,7 @@ type Query {
 | `DashboardController` | Statistics and metrics |
 | `ThumbnailController` | Thumbnail generation and serving |
 | `AiChatController` | AI document chat (SSE streaming, conversations) |
+| MCP server (`/mcp`) | Same tools, served to external AI agents (`service/mcp/**`) |
 | `AuditController` | Audit trail queries |
 | `OnlyOfficeController` | OnlyOffice editor integration |
 | `DocumentSuggestionController` | Document suggestions |

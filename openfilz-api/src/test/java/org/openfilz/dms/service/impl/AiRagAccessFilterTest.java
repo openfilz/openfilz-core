@@ -71,7 +71,12 @@ class AiRagAccessFilterTest {
     private DocumentAiTools tools() {
         return new DocumentAiTools(
                 mock(DocumentService.class), mock(DocumentRepository.class), mock(StorageService.class),
-                mock(AiDocumentQueryService.class), mock(ChatModel.class), new PermitAllAiAccessPolicy());
+                mock(AiDocumentQueryService.class), mock(ChatModel.class), new PermitAllAiAccessPolicy(),
+                // no Authentication is bound in this unit test, so the role policy is a no-op here;
+                // the capability gate is covered by DefaultAiToolRolePolicyTest and McpRoleEnforcementIT.
+                (authentication, capability) -> true,
+                mock(org.openfilz.dms.service.DocumentVersionService.class),
+                new org.openfilz.dms.config.CommonProperties());
     }
 
     private static Document chunk(UUID documentId, String name, String text, double score) {

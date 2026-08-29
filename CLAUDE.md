@@ -581,6 +581,107 @@ Four chat providers ship: **Ollama, Anthropic (Claude), Google Gemini (GenAI/Dev
 - **Assert on side effects, not wording.** Embeddings are deterministic so those assertions are exact; generation is not, so the tool tests check that the folder really exists afterwards and retry through `eventually(...)` — a single unlucky sampling isn't a defect, three in a row is. Chat temperature is pinned to 0.
 - **`@DynamicPropertySource` can't drive the provider selectors.** `AiModelProviderEnvironmentPostProcessor` runs during `prepareEnvironment`, before those values exist, so it would read `openfilz.ai.active` as absent and pin everything to `none`, leaving no `ChatModel`. The test sets `spring.ai.model.chat`/`.embedding` explicitly — the documented override.
 
+### MCP server (external AI agents)
+
+`openfilz.mcp.active=true` exposes the **same `@Tool` methods the AI assistant uses** to
+external agents (Claude Code/Desktop, n8n, custom agents, Spring AI clients) over
+`POST /mcp`, via `spring-ai-starter-mcp-server-webflux`.
+
+- **The MCP layer never defines a tool** — `McpToolCallbackProvider` only adapts the
+  `ToolCallback`s harvested from the registered `McpToolContributor` beans. Any capability added
+  to a tool object is gained by both the chat assistant and every external agent at once.
+- **New tools arrive as an `McpToolContributor`, not by editing the provider.** A contributor
+  supplies `bind(userEmail, authentication)` (a `@Tool` object, or `bind(null,null)` for the
+  definitions template — which must resolve no `ChatModel`, see the cycle note below) and a
+  `name → ToolCapability` map. `DocumentAiToolsContributor` is the core one; the provider merges
+  all contributors and applies auth + role + read-only enforcement uniformly, so a new contributor
+  inherits every guarantee. This is the seam the EE `CollaborationMcpToolContributor` (share /
+  comment tools) plugs into with no core change.
+- **Stateless transport** (`spring.ai.mcp.server.protocol=STATELESS`): every request carries
+  its own bearer token, so no MCP session outlives the JWT that opened it and scaling needs
+  no sticky sessions. SSE is deprecated since Spring AI 2.0.0.
+- **Per-call user binding.** `McpAuthenticationWebFilter` parks the already-validated
+  `Authentication` in the exchange attributes; `McpConfig`'s `contextExtractor` forwards it
+  into the `McpTransportContext`; the tool callback reads it back from
+  `ToolContext.getContext().get("exchange")` and builds a fresh user-bound `DocumentAiTools`
+  through `DocumentAiToolsFactory`. Identity is never read from tool arguments, and a call
+  without it is refused rather than run unbound.
+- **OAuth 2.1 discovery** (`McpDiscoveryController`): `/.well-known/oauth-protected-resource`
+  (RFC 9728) names `/mcp` + the Keycloak realm as its authorization server; the `/mcp` 401 carries
+  `WWW-Authenticate: … resource_metadata="…"` so remote hosts (Claude Desktop, claude.ai, IDE
+  connectors) discover it. `/.well-known/oauth-authorization-server` 302-redirects to Keycloak's
+  own OIDC document. Both whitelisted, both 404 when `openfilz.mcp.active=false`. A shared public
+  PKCE client `openfilz-mcp` (in both realm-exports) is what hosts authenticate with — DCR is
+  deliberately off (one client, not one per connecting app); its token carries `realm_access.roles`
+  so role enforcement applies. `authorization-server-url` defaults to `KEYCLOAK_REALM_URL`.
+- **`/mcp` is JWT-protected simply by not being whitelisted** (`DefaultAuthSecurityConfig` ends
+  with `anyExchange().authenticated()`) — but that chain performs **no role check** on it: its
+  `.access(...)` manager is scoped to `/api/v1/**` + the GraphQL path. Roles are therefore enforced
+  in the **tool layer** instead, and must be: without it a READER-only token was refused
+  `POST /api/v1/folders` with 403 while `tools/call createFolder` created the folder (confirmed
+  against a live server). Tools call `DocumentService` in-process on a tool thread, so no request
+  is ever matched by the security chain.
+- **Two independent gates, both must pass.** `AiToolRolePolicy` (+ `ToolCapability`) answers *may
+  this caller perform this kind of operation* — mirroring `AbstractSecurityService`, including its
+  `hasAllRoles` cases (e-Sign needs CONTRIBUTOR **and** SIGN_REQUESTER; EE share writes need
+  CONTRIBUTOR **and** EDIT_SHARE). `AiAccessPolicy` answers *which documents*. The gate lives in
+  `DocumentAiTools`, so the **chat assistant is covered too** — it had the same hole, since
+  `/api/v1/ai/**` admits READER and the tools checked nothing. `McpToolCallbackProvider` refuses
+  earlier via `TOOL_CAPABILITIES` and fails closed on an unclassified tool.
+- **`ToolRoleParityWithRestTest` is the anti-drift guard**: it drives both the tool policy and the
+  REST `SecurityService.authorize(...)` over every role set and fails if they disagree. Change a
+  REST role and it fails until the tool mapping follows.
+- **`SecurityService` is injected as `Optional`** — the bean is `@Conditional` and absent under
+  `openfilz.security.no-auth=true`. Absent means "authorization is off here", not "no roles";
+  requiring it broke every no-auth deployment's tools.
+- **Read-only by default** (`openfilz.mcp.mode`, `READ_ONLY` | `READ_WRITE`): an autonomous
+  agent mutating a DMS is an explicit opt-in. Mutating tools are withheld from `tools/list`.
+- **`@ToolParam(required = false)` matters here in a way it never did for chat.** Spring AI
+  defaults `required` to `true`, and the MCP server validates arguments against the generated
+  JSON Schema *before* the tool body runs — so an unmarked optional parameter makes the tool
+  effectively uncallable (`null trouvé, string attendu`). Mark every optional parameter.
+- **`DocumentAiTools.chatModel` is nullable**: an MCP deployment need not run an LLM of its
+  own. Only `describeImage` uses it, and it degrades with a message. The class therefore
+  declares its constructor explicitly — two candidate constructors (Lombok's plus one written
+  out) leave Spring looking for a default one.
+- **Never resolve a `ChatModel` while building the tool *definitions*.** Spring AI calls
+  `ToolCallbackProvider.getToolCallbacks()` from `toolCallbackResolver` **and** `syncTools`,
+  both while those beans are still being created. `McpToolCallbackProvider.templateCallbacks()`
+  therefore passes a `null` chat model: asking the `ObjectProvider` for one there instantiates it
+  mid-refresh and closes a cycle — `toolCallbackResolver → getToolCallbacks() → ollamaChatModel →
+  toolCallingManager → toolCallbackResolver` — which aborts startup with *"dependencies of some
+  of the beans form a cycle"*. Definitions are static; only `describeImage`'s *execution* needs a
+  model, and that happens on the call path long after startup. It bites hardest in the EE native
+  image (AOT bakes the ChatModel bean definition in whatever `openfilz.ai.active` says at runtime),
+  but any deployment running the chat assistant and MCP together hits it.
+- **Native image:** `spring-ai-mcp` registers the `McpSchema` inner classes itself via
+  `META-INF/spring/aot.factories`; `McpRuntimeHints` only covers the ServiceLoader-resolved
+  JSON layer. `McpRuntimeHintsTest` fails if that upstream registration ever disappears.
+  Core is JVM-only, but these classes are compiled into the enterprise native image. A GraalVM
+  tracing-agent run (`openfilz-enterprise/docker/trace-mcp-native-hints.sh`) confirmed the residue
+  is exactly those two ServiceLoader SPI files — **no further reflection hints are needed**.
+- **Tool surface (core):** 16 document tools in `DocumentAiTools` — query/read/path/vision, write/
+  create/move/rename, metadata get/search/update/delete, delete (CLEANER), version list/restore,
+  downloadDocument (text inline or a REST download link for binary; shares `extractText` with
+  readDocumentContent).
+  Each is classified in `DocumentAiToolsContributor.CAPABILITIES` (a `Map.ofEntries`, since >10)
+  and driven by `McpProtocolIT.everyAdvertisedToolIsCallable`, which now authenticates as
+  `admin-user` (holds CONTRIBUTOR+CLEANER+AUDITOR+SIGN_REQUESTER) so every tool — including the
+  CLEANER-gated `deleteDocument` — actually dispatches for the layer-2 trace.
+- **Tests:** `McpRuntimeHintsTest` (hints), `McpProtocolIT` (read-write, full protocol),
+  `McpReadOnlyModeIT` (default posture), `McpWithChatModelIT` (MCP + a real `ChatModel`),
+  `DefaultAiToolRolePolicyTest` + `ToolRoleParityWithRestTest` + `McpRoleEnforcementIT` (roles),
+  sharing `AbstractMcpIT`'s JSON-RPC client.
+  `McpProtocolIT.everyAdvertisedToolIsCallable` deliberately drives *every* tool and asserts
+  `isError == false` — it doubles as the trace driver for deriving native-image metadata.
+- **The `spring.ai.model.*` selectors are registered per-suite, not in `AbstractMcpIT`.** A
+  superclass `@DynamicPropertySource` registration **wins** over a subclass one, so a suite that
+  "overrides" `spring.ai.model.chat` silently keeps the parent's value and tests nothing. Each
+  suite calls `registerModelSelectors(registry, chat)` explicitly; `McpWithChatModelIT` asserts a
+  `ChatModel` bean is really present so it can never go vacuous again.
+- **Run them:** `-Dtest=none` also needs `-Dsurefire.failIfNoSpecifiedTests=false` on surefire
+  3.5.3, or the build fails before failsafe starts.
+
 ### Release / publish CI
 The TypeScript SDK (`@openfilz-sdk/typescript`) publishes to npm via **OIDC Trusted Publishing** (no `NPM_TOKEN`): the publish job needs `permissions: id-token: write` (plus `contents: write` / `packages: write`, since declaring permissions zeroes the rest), Node 24 (whose **bundled** npm 11.16+ already satisfies OIDC auto-detection's npm ≥ 11.5.1 requirement), and no `_authToken` line in `.npmrc`.
 - **Do NOT `npm install -g npm@latest` in the release workflow.** The self-upgrade currently ships a broken tree whose bundled `sigstore` is missing, so `npm publish` (which auto-enables provenance under OIDC) dies with `npm error Cannot find module 'sigstore'` … `libnpmpublish/lib/provenance.js` (npm/cli#9722). Rely on the pristine Node-bundled npm — it has `sigstore` intact and is already ≥ 11.5.1. Removed the upgrade step from `release-backend.yml` 2026-07-09. The npmjs Trusted Publisher config must match the repo + workflow **filename** exactly — renaming the release workflow file requires updating it on npmjs too. The Python (twine) and C# (NuGet) SDKs still publish via API tokens.
