@@ -23,6 +23,7 @@ This guide is intended for developers who want to **integrate with OpenFilz** �
   - [Audit Trail](#audit-trail)
   - [Dashboard](#dashboard)
   - [AI Chat](#ai-chat)
+  - [MCP Server](#mcp-server)
   - [e-Sign (Electronic Signature)](#e-sign-electronic-signature)
 - [GraphQL API](#graphql-api)
   - [Endpoint and Explorer](#endpoint-and-explorer)
@@ -253,6 +254,7 @@ The Swagger UI provides interactive documentation where you can try out every en
 | `GET` | `/ai/conversations` | List all AI chat conversations |
 | `GET` | `/ai/conversations/{id}` | Get conversation message history |
 | `DELETE` | `/ai/conversations/{id}` | Delete a conversation and all its messages |
+| `POST` | `/mcp` | MCP endpoint for external AI agents (JSON-RPC, **not** under `/api/v1`) |
 | `GET` | `/settings` | User settings and quotas |
 | `POST` | `/suggestions/search` | Document name suggestions |
 | `GET` | `/thumbnails/img/{documentId}` | Get document thumbnail |
@@ -559,6 +561,60 @@ The AI assistant can invoke the following document management tools during a con
 | `getDocumentPath` | Get the full path of a document from root |
 
 These tools are invoked automatically by the LLM when the user's request requires an action. The results are incorporated into the AI response.
+
+### MCP Server
+
+> **Requires `openfilz.mcp.active=true`**. Unlike the other endpoints on this page, `/mcp` is served
+> at the **root** — `http://localhost:8081/mcp`, not under `/api/v1`.
+
+`POST /mcp` speaks the [Model Context Protocol](https://modelcontextprotocol.io) over streamable
+HTTP, letting AI agents outside OpenFilz drive the same document tools the built-in assistant uses.
+Most integrators should point an **MCP client** at it rather than write JSON-RPC by hand — see
+[MCP Server](mcp.md) for Claude Code, `mcp.json`, n8n and Spring AI snippets.
+
+The transport is **stateless**: every request carries its own bearer token, and identity is taken
+from that token rather than from tool arguments. Requests without one get `401`.
+
+#### Discovering the tools
+
+```bash
+curl -X POST "http://localhost:8081/mcp" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+```
+
+Returns 4 tools in `READ_ONLY` mode (the default) and 8 in `READ_WRITE`, each with a description
+and a JSON input schema.
+
+#### Calling a tool
+
+```bash
+curl -X POST "http://localhost:8081/mcp" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call",
+       "params":{"name":"queryDocuments",
+                 "arguments":{"nameLike":"invoice","type":"FILE","pageSize":10}}}'
+```
+
+The result is a standard MCP `CallToolResult` — content blocks plus an `isError` flag:
+
+```json
+{"jsonrpc":"2.0","id":2,
+ "result":{"content":[{"type":"text","text":"..."}],"isError":false}}
+```
+
+The `Accept` header **must** allow both `application/json` and `text/event-stream`; streamable HTTP
+lets the server answer in either shape.
+
+> **Everything is scoped to the calling user.** A document `queryDocuments` does not return is not
+> visible to that user — in the Enterprise edition the ownership and sharing rules apply
+> automatically.
+
+---
 
 ### e-Sign (Electronic Signature)
 

@@ -23,6 +23,7 @@ import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.ServerAuthenticationEntryPoint;
 import org.springframework.security.web.server.authorization.AuthorizationContext;
 import org.springframework.security.web.server.authorization.ServerAccessDeniedHandler;
+import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import static org.openfilz.dms.config.RestApiVersion.*;
@@ -46,6 +47,7 @@ public class DefaultAuthSecurityConfig {
     private boolean graphiqlEnabled;
 
     protected final SecurityService securityService;
+    protected final CommonProperties commonProperties;
 
     @Bean
     public ReactiveJwtDecoder jwtDecoder() {
@@ -63,6 +65,10 @@ public class DefaultAuthSecurityConfig {
             // GraphiQL
             "/graphiql",
             "/graphiql/**",
+            // OAuth 2.1 discovery for /mcp (RFC 9728) — must be readable without a token, or the
+            // discovery flow is circular. Served by McpDiscoveryController, 404 when MCP is off.
+            "/.well-known/oauth-protected-resource",
+            "/.well-known/oauth-authorization-server",
             // OnlyOffice DocumentServer endpoints (handled by OnlyOfficeSecurityConfig)
             // These are called by OnlyOffice server, not by authenticated users
             API_PREFIX + ENDPOINT_DOCUMENTS + "/*/onlyoffice-download",
@@ -148,12 +154,32 @@ public class DefaultAuthSecurityConfig {
             ServerHttpResponse response = exchange.getResponse();
             response.setStatusCode(HttpStatus.UNAUTHORIZED);
             try {
-                response.getHeaders().set(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
+                response.getHeaders().set(HttpHeaders.WWW_AUTHENTICATE, wwwAuthenticateFor(exchange));
             } catch (UnsupportedOperationException ignored) {
                 // Headers read-only (response already committed) — 401 status is set
             }
             return response.setComplete();
         });
+    }
+
+    /**
+     * The {@code WWW-Authenticate} challenge for a 401. For {@code /mcp} it carries the
+     * {@code resource_metadata} pointer (RFC 9728 §5.1) so a remote MCP host discovers the
+     * protected-resource metadata document and, from it, the authorization server — turning an
+     * unauthenticated call into an OAuth login instead of a dead end. Every other path keeps the
+     * bare {@code Bearer} challenge.
+     */
+    private String wwwAuthenticateFor(ServerWebExchange exchange) {
+        if (exchange.getRequest().getPath().value().startsWith("/mcp")) {
+            String metadataUrl = trimTrailingSlash(commonProperties.getApiPublicBaseUrl())
+                    + "/.well-known/oauth-protected-resource";
+            return "Bearer resource_metadata=\"" + metadataUrl + "\"";
+        }
+        return "Bearer";
+    }
+
+    private static String trimTrailingSlash(String url) {
+        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
     }
 
 }

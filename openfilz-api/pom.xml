@@ -331,6 +331,15 @@
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-tika-document-reader</artifactId>
         </dependency>
+        <!-- MCP server: exposes the same @Tool methods the AI assistant uses to external agents
+             (Claude, n8n, custom agents) over POST /mcp. Stateless streamable-HTTP transport, so
+             every request carries its own bearer token and no session outlives the JWT.
+             spring-ai-mcp registers the McpSchema reflection hints via META-INF/spring/aot.factories,
+             so the EE native image needs no hand-written hints for the protocol DTOs. -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-mcp-server-webflux</artifactId>
+        </dependency>
         <!-- Cache for per-user BYOK ChatClients (UserChatClientResolver); version managed by Boot -->
         <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>

@@ -10,6 +10,14 @@ Everything below lives in `openfilz-api` and is inert unless `openfilz.ai.active
 bean is conditional on that flag, and the AI Flyway migrations (`db/ai-migration/`) only run when
 it is set.
 
+> **One exception, since the MCP server shipped.** `DocumentAiTools` and its access policy are no
+> longer reached only by the chat pipeline: they are also the tool surface served to external
+> agents over `POST /mcp`, which is gated on its own switch, `openfilz.mcp.active`. So the *tool
+> layer* can be live while AI chat is off — a deployment may run the MCP server with no chat model,
+> no embeddings and no pgvector, because the calling agent brings its own model. Everything else on
+> this page (ingestion, indexing, RAG, BYOK) really is inert without `openfilz.ai.active`.
+> See [MCP Server](mcp.md).
+
 ---
 
 ## 1. Component overview
@@ -33,6 +41,11 @@ flowchart LR
         PostProc["DefaultMetadataPostProcessor"]
         Cipher["AiSettingsCipher<br/>(AES-256-GCM)"]
         Guard["EmbeddingRegistryGuard<br/>(startup)"]
+        McpEp["MCP server<br/>POST /mcp"]
+    end
+
+    subgraph Ext["External agents"]
+        Agents["Claude Code / Desktop,<br/>n8n, custom agents"]
     end
 
     subgraph Stores["Storage"]
@@ -49,6 +62,7 @@ flowchart LR
     end
 
     ChatUI --> ChatCtrl --> ChatSvc
+    Agents --> McpEp --> ToolsFactory
     SettingsUI --> SettingsCtrl --> Cipher
     SettingsCtrl --> PG
     ChatSvc --> Resolver --> Assembler
@@ -72,6 +86,8 @@ Key design points:
 | **Chat model is per-user, embedding model is per-deployment** | Vectors from different embedding models live in incomparable spaces — swapping the embedding model silently breaks similarity search. `EmbeddingRegistryGuard` enforces this at startup; the chat model can be swapped freely |
 | **Provider clients built programmatically for BYOK** | No Spring auto-configuration involved → the `spring.ai.model.*` selectors and GraalVM build-time conditions are untouched (native-image-safe); BYOK flags are read at runtime |
 | **404 (not 403) on foreign conversations** | Doesn't leak the existence of other users' conversations |
+| **`DocumentAiTools` has two front-ends, one implementation** | The MCP server ([mcp.md](mcp.md)) only *adapts* the same `ToolCallback`s the chat pipeline uses. A capability added to `DocumentAiTools` is gained by the assistant and every external agent at once — never add an MCP-only tool class |
+| **`chatModel` is nullable** | An MCP deployment need not run an LLM of its own. Only `describeImage` consumes one, and it degrades with a message instead of throwing |
 
 ---
 
@@ -478,6 +494,7 @@ re-learns.
 | BYOK settings API + crypto | `controller/rest/AiSettingsController`, `service/impl/AiSettingsCipher` |
 | Migrations | `resources/db/ai-migration/V1_4..V1_6` |
 | Native hints (Anthropic SDK) | `config/AnthropicSdkRuntimeHints` |
+| MCP front-end onto the same tools | `config/McpProperties`, `config/McpConfig`, `service/mcp/**` — see [mcp.md](mcp.md) |
 
 ## 7. Deploying the local Ollama (Docker / Dokploy / Kubernetes)
 
