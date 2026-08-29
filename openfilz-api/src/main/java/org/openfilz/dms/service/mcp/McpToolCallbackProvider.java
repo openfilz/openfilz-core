@@ -117,6 +117,27 @@ public class McpToolCallbackProvider implements ToolCallbackProvider, UserInfoSe
     }
 
     /**
+     * A mutating tool must run as a real, identifiable user, or its effects can be neither scoped
+     * nor attributed: a token with no {@code email} claim — a bare service account — would
+     * otherwise write as {@code ANONYMOUS_USER} in the tamper-evident audit chain and against a
+     * null document scope. Refuse such writes so an agent must authenticate as a dedicated user
+     * (its token carrying that user's email) or act on behalf of one via token exchange.
+     * <p>
+     * Reads are intentionally not blocked here — the access policy returns nothing for a null user
+     * in the enterprise edition, and a read leaves the audit chain untouched.
+     *
+     * @return a refusal message, or {@code null} when the operation may proceed
+     */
+    static String mutationRequiresIdentity(ToolCapability capability, String userEmail) {
+        if (capability.isMutating() && (userEmail == null || userEmail.isBlank())) {
+            return "Not permitted: this operation changes data and requires an identified OpenFilz "
+                    + "user. Your token has no user identity (email) — authenticate as a dedicated "
+                    + "user, or act on behalf of one.";
+        }
+        return null;
+    }
+
+    /**
      * Tool definitions (name, description, JSON input schema) harvested from a contributor's
      * unbound template. Definitions are static — only execution needs a user — so this uses
      * {@code bind(null, null)}. See {@link McpToolContributor#bind} for why the template must not
@@ -204,6 +225,18 @@ public class McpToolCallbackProvider implements ToolCallbackProvider, UserInfoSe
             // Fresh, user-bound tools per call: any per-turn state inside the tool object is the
             // caller's alone, and the access policy has to see this caller and no other.
             String userEmail = getUserAttribute(authentication, EMAIL);
+            // A mutating tool must run as a real, identifiable user, or its effects cannot be
+            // scoped or attributed. A token with no email claim — a bare service account — would
+            // otherwise write as ANONYMOUS_USER in the audit chain and against a null document
+            // scope. Refuse: the agent must authenticate as a dedicated user (its token carrying
+            // that user's email) or act on behalf of one (token exchange). Reads are left to the
+            // access policy, which returns nothing for a null user in the enterprise edition.
+            String identityRefusal = mutationRequiresIdentity(capability, userEmail);
+            if (identityRefusal != null) {
+                log.warn("MCP mutating tool '{}' refused: caller '{}' has no user identity (email claim).",
+                        toolDefinition.name(), authentication.getName());
+                return identityRefusal;
+            }
             ToolCallback bound = Arrays.stream(MethodToolCallbackProvider.builder()
                             .toolObjects(contributor.bind(userEmail, authentication))
                             .build()
