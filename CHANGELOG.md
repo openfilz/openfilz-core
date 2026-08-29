@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[17cd1d0d5fa4a8e](https://github.com/openfilz/openfilz-core/commit/17cd1d0d5fa4a8e) maven-release-bot[bot] *2026-08-27 23:12:50*
+[81c8a2cf73f8330](https://github.com/openfilz/openfilz-core/commit/81c8a2cf73f8330) maven-release-bot[bot] *2026-08-29 13:18:40*
 
 
-## v1.2.36
+## v1.2.37
 ### No issue
 
-**[maven-release-plugin] prepare release v1.2.36**
+**[maven-release-plugin] prepare release v1.2.37**
 
 
-[11dced8d31258d5](https://github.com/openfilz/openfilz-core/commit/11dced8d31258d5) maven-release-bot[bot] *2026-08-27 23:12:47*
+[ddf44aaffc20bb6](https://github.com/openfilz/openfilz-core/commit/ddf44aaffc20bb6) maven-release-bot[bot] *2026-08-29 13:18:38*
 
-**Merge pull request #211 from openfilz/develop**
+**Merge pull request #213 from openfilz/develop**
 
- * Develop → main: SIGN_REQUESTER role gating e-Sign initiation
+ * release: merge develop → main (MCP server + accumulated develop changes)
 
-[5552d1ef29b55fb](https://github.com/openfilz/openfilz-core/commit/5552d1ef29b55fb) Yann Demel *2026-08-27 23:09:22*
+[e70fa5956bbe220](https://github.com/openfilz/openfilz-core/commit/e70fa5956bbe220) Yann Demel *2026-08-29 13:15:42*
 
 
