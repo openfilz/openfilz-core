@@ -21,6 +21,24 @@ Two consequences worth internalising before reading on:
   no pgvector at all — the calling agent brings its own model. (Only `describeImage` uses a local
   model, and it says so plainly when there isn't one.)
 
+### Community vs Enterprise
+
+MCP itself is **open source** and works in Community Edition out of the box — no licence, no extra
+service. What differs is how it is *scoped and managed*, and that difference is the reason to run it
+on Enterprise for anything multi-user:
+
+| | Community (CE) | Enterprise (EE) |
+|---|---|---|
+| `/mcp` endpoint, the document tools | ✅ | ✅ |
+| Per-user document scoping | **permit-all** — an agent sees *every* document | ownership + sharing enforced; an agent sees only its user's documents |
+| Share / comment tools | — | ✅ |
+| Scoped, revocable agent tokens | — | ✅ (`/api/v1/admin/mcp/tokens`) |
+| Roles / seats | READER/CONTRIBUTOR gate | full role model; write agents are licensed seats |
+
+> **Run CE MCP only single-user or in evaluation.** Because CE has no per-document permissions, an
+> agent there can read across all documents. For any multi-user or production deployment, Enterprise
+> is what makes an agent see exactly what its user may — see the security model below.
+
 > **Related:** [AI Architecture](ai.md) for how the shared tool layer works internally ·
 > [Admin guide → MCP Server](admin-guide.md#mcp-server-external-ai-agents) for the property tables ·
 > [Developer guide → MCP Server](developer-guide.md#mcp-server) for the raw JSON-RPC calls.
@@ -186,6 +204,29 @@ The full walkthrough — creating the client, assigning roles, verifying the map
 Tokens are short-lived (5 min by default); a long-running agent refreshes, which its MCP client
 library handles, or re-mints.
 
+### Scoped agent tokens (Enterprise)
+
+For long-running agents, the Enterprise edition can mint a **scoped, revocable OpenFilz token**
+instead of using a raw Keycloak credential. It is bound to a dedicated OpenFilz user (so audit and
+document scope resolve to that user, exactly as for a human), carries a **capability cap**
+(`READ_ONLY` or `READ_WRITE`), is long-lived, and can be **revoked** without touching Keycloak.
+
+```bash
+# an admin mints one; the token is returned once
+curl -X POST https://api.openfilz.com/api/v1/admin/mcp/tokens \
+  -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
+  -d '{"subjectEmail":"research-agent@acme.com","mode":"READ_ONLY","label":"research bot"}'
+# → { "token": "…", "jti": "…", "expiresAt": "…" }
+```
+
+Give the returned `token` to the agent as its bearer credential on `/mcp`. Enable the feature with
+`openfilz.mcp.tokens.enabled=true` and a `signing-secret`; list/revoke at
+`GET`/`DELETE /api/v1/admin/mcp/tokens[/{jti}]` (admin only).
+
+> **Licence note:** a scoped token binds to a real user, so the seat model applies unchanged — a
+> `READ_WRITE` agent's user must be `LICENSED` (one seat); a `READ_ONLY` agent can be a `FREE` user
+> (no seat). The token adds revocability and a capability cap; it is not a way around seats.
+
 ### Claude Code
 
 ```bash
@@ -268,6 +309,10 @@ with an `Authorization: Bearer …` header credential.
 spring.ai.mcp.client.streamable-http.connections.openfilz.url: https://api.openfilz.com/mcp
 ```
 
+### Runnable examples
+
+Working, copy-pasteable clients for each of these live in [`examples/mcp/`](../examples/mcp) — a plain Python client, a Claude-driven Python agent, a Spring AI client, an n8n workflow, and a registry `server.json`.
+
 ### Verifying by hand
 
 The official [MCP Inspector](https://github.com/modelcontextprotocol/inspector) is the quickest
@@ -278,7 +323,7 @@ npx -y @modelcontextprotocol/inspector --cli http://localhost:8081/mcp \
   --transport http --header "Authorization: Bearer $TOKEN" --method tools/list
 ```
 
-It should list 8 tools in `READ_WRITE` mode, 4 in `READ_ONLY`. Dropping the `--header` must fail
+It should list 16 tools in `READ_WRITE` mode, 8 in `READ_ONLY` (Community counts; Enterprise adds the share/comment tools). Dropping the `--header` must fail
 with `401` — if it does not, `/mcp` is not protected and something is very wrong.
 
 ---
@@ -289,7 +334,7 @@ with `401` — if it does not, `/mcp` is not protected and something is very wro
 |---|---|
 | `401` on every call | No/invalid bearer token, or the token is not for this realm. `/mcp` is never anonymous. |
 | `tools/list` returns nothing | `openfilz.mcp.active` is `false`. |
-| Only 4 tools listed | `READ_ONLY` mode (the default). Set `OPENFILZ_MCP_MODE=READ_WRITE`. |
+| Only the read tools listed | `READ_ONLY` mode (the default). Set `OPENFILZ_MCP_MODE=READ_WRITE`. |
 | *"This OpenFilz MCP server is read-only"* | A mutating tool was called in `READ_ONLY` mode. |
 | *"Not permitted: your OpenFilz role does not allow this operation"* | The user lacks the role — e.g. a READER calling `createFolder`. Grant CONTRIBUTOR, or use a `READ_ONLY` deployment. |
 | *"Not authenticated: this MCP server requires a bearer token…"* | The token did not reach the tool. Check that a proxy in front of OpenFilz forwards the `Authorization` header. |

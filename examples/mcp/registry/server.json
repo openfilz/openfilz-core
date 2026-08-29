@@ -1,0 +1,17 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "name": "com.openfilz/openfilz",
+  "description": "Drive an OpenFilz document management system from an AI agent: search, read, organise, share and comment on documents, all scoped to the calling user's permissions.",
+  "repository": {
+    "url": "https://github.com/openfilz/openfilz-core",
+    "source": "github"
+  },
+  "version": "1.0.0",
+  "websiteUrl": "https://openfilz.com",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://api.openfilz.com/mcp"
+    }
+  ]
+}

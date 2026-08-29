@@ -1,0 +1,16 @@
+spring:
+  main:
+    web-application-type: none   # a console app, not a server
+  ai:
+    mcp:
+      client:
+        streamable-http:
+          connections:
+            openfilz:
+              # Your OpenFilz MCP endpoint. Override with OPENFILZ_MCP_URL.
+              url: ${OPENFILZ_MCP_URL:https://api.openfilz.com/mcp}
+
+# The bearer token is added by OpenFilzAuthCustomizer (see the Java source).
+openfilz:
+  mcp:
+    token: ${OPENFILZ_TOKEN:}
