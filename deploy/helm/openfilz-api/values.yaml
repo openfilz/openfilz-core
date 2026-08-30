@@ -132,6 +132,9 @@ mcp:
   active: false
   mode: READ_ONLY              # READ_ONLY | READ_WRITE
   authorizationServerUrl: ""   # empty → global.auth.publicAuthority
+  # Comma-separated scopes_supported advertised in the protected-resource metadata;
+  # empty → application default (openid,profile,email,offline_access).
+  scopesSupported: ""
 
 # -- AI Document Chat configuration.
 # Set ai.active to true and configure an LLM provider to enable AI features.

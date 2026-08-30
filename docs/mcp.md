@@ -382,7 +382,7 @@ How it works — nothing for you to build:
 1. The host calls `/mcp` with no token and gets `401` carrying
    `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"`.
 2. It reads that metadata (served unauthenticated) and learns the authorization server — your
-   Keycloak realm.
+   Keycloak realm — and which scopes to request (`scopes_supported`).
 3. It runs an authorization-code + PKCE login against Keycloak using the pre-registered public
    client **`openfilz-mcp`**, and calls `/mcp` with the resulting token.
 
@@ -425,16 +425,20 @@ find the exact callback URL in that provider's connector documentation.
 > `openfilz.mcp.active` is off), and the Keycloak `…/auth?client_id=openfilz-mcp&…` page must
 > show a login form, not *Client not found*.
 
-> **Scopes: the client must accept everything your realm advertises.** Claude requests the
-> union of the realm's `scopes_supported` (from the OIDC discovery document), and Keycloak
+> **Scopes: the resource metadata names them, so well-behaved hosts stay green.** The
+> protected-resource metadata advertises `scopes_supported` (default `openid profile email
+> offline_access`, override with `OPENFILZ_MCP_SCOPES_SUPPORTED`), and per the MCP authorization
+> spec a host SHOULD request exactly those — so custom client scopes your realm defines are
+> simply never requested. A host that ignores it falls back to the *realm's* `scopes_supported`
+> (from the OIDC discovery document) and requests the union of everything there; Keycloak then
 > refuses the whole login when *any* requested scope is not assigned to the client — the
 > symptom is a successful sign-in page followed by *"Authorization with … failed"*
-> (`error=invalid_scope`, Keycloak log: `Invalid scopes: …`). Two rules keep it green:
+> (`error=invalid_scope`, Keycloak log: `Invalid scopes: …`). Two rules keep such hosts green:
 > `offline_access` must be assigned to `openfilz-mcp` as an **optional client scope** (Claude
 > uses it to hold a refresh token for the persistent connection — the shipped export now
 > includes it), and any **custom client scope** your realm defines must either also be assigned
 > to `openfilz-mcp` (optional is fine) or be deleted if unused — a leftover scope nothing
-> references still appears in `scopes_supported` and breaks the login.
+> references still appears in the realm's `scopes_supported` and breaks the login.
 
 ### n8n
 
@@ -503,7 +507,8 @@ with `401` — if it does not, `/mcp` is not protected and something is very wro
 
 | Concern | Class |
 |---|---|
-| Feature toggle + mode | `config/McpProperties.java` |
+| Feature toggle + mode + advertised OAuth scopes | `config/McpProperties.java` |
+| OAuth 2.1 discovery (RFC 9728 protected-resource metadata) | `controller/rest/McpDiscoveryController.java` |
 | Transport wiring, carries the caller's identity | `config/McpConfig.java` |
 | Lifts `Authentication` into the exchange | `service/mcp/McpAuthenticationWebFilter.java` |
 | Per-call user binding, read-only enforcement | `service/mcp/McpToolCallbackProvider.java` |

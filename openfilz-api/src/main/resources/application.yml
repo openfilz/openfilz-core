@@ -349,6 +349,11 @@ openfilz:
     # claude.ai, IDE connectors) can discover where to log in. Same realm the resource server
     # validates tokens against — defaults to KEYCLOAK_REALM_URL, so nothing extra to set.
     authorization-server-url: ${KEYCLOAK_REALM_URL:http://localhost:8180/realms/openfilz}
+    # Scopes advertised as scopes_supported in the same metadata. A host that honours it (the
+    # MCP authorization spec says clients SHOULD) requests exactly these instead of the union of
+    # the realm's scopes_supported — so a custom realm scope not assigned to openfilz-mcp no
+    # longer kills the login with invalid_scope. Comma-separated override.
+    scopes-supported: ${OPENFILZ_MCP_SCOPES_SUPPORTED:openid,profile,email,offline_access}
 
 # OnlyOffice DocumentServer Integration
 onlyoffice:

@@ -170,6 +170,10 @@ spec:
             - name: OPENFILZ_MCP_AUTHORIZATION_SERVER_URL
               value: {{ . | quote }}
             {{- end }}
+            {{- with .Values.mcp.scopesSupported }}
+            - name: OPENFILZ_MCP_SCOPES_SUPPORTED
+              value: {{ . | quote }}
+            {{- end }}
             {{- end }}
             {{- if .Values.ai.active }}
             # --- AI Document Chat ---

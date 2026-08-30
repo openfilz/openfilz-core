@@ -62,7 +62,13 @@ public class McpOAuthDiscoveryIT extends AbstractMcpIT {
                 .jsonPath("$.resource").value(r -> org.assertj.core.api.Assertions
                         .assertThat((String) r).endsWith("/mcp"))
                 .jsonPath("$.authorization_servers[0]").isEqualTo(authServer)
-                .jsonPath("$.bearer_methods_supported[0]").isEqualTo("header");
+                .jsonPath("$.bearer_methods_supported[0]").isEqualTo("header")
+                // scopes_supported tells a well-behaved host exactly which scopes to request, so
+                // it stops requesting the union of the realm's scopes_supported — which Keycloak
+                // rejects with invalid_scope when the realm carries a scope (offline_access, a
+                // leftover custom client scope) not assigned to the openfilz-mcp client.
+                .jsonPath("$.scopes_supported").isEqualTo(
+                        java.util.List.of("openid", "profile", "email", "offline_access"));
     }
 
     @Test
