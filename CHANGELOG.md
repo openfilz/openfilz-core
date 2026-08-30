@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[81c8a2cf73f8330](https://github.com/openfilz/openfilz-core/commit/81c8a2cf73f8330) maven-release-bot[bot] *2026-08-29 13:18:40*
+[9d45ae7909d8f87](https://github.com/openfilz/openfilz-core/commit/9d45ae7909d8f87) maven-release-bot[bot] *2026-08-30 16:55:16*
 
 
-## v1.2.37
+## v1.2.38
 ### No issue
 
-**[maven-release-plugin] prepare release v1.2.37**
+**[maven-release-plugin] prepare release v1.2.38**
 
 
-[ddf44aaffc20bb6](https://github.com/openfilz/openfilz-core/commit/ddf44aaffc20bb6) maven-release-bot[bot] *2026-08-29 13:18:38*
+[946de10bffa163d](https://github.com/openfilz/openfilz-core/commit/946de10bffa163d) maven-release-bot[bot] *2026-08-30 16:55:13*
 
-**Merge pull request #213 from openfilz/develop**
+**Merge pull request #215 from openfilz/develop**
 
- * release: merge develop → main (MCP server + accumulated develop changes)
+ * fix(security): let users manage their own AI settings (BYOK)
 
-[e70fa5956bbe220](https://github.com/openfilz/openfilz-core/commit/e70fa5956bbe220) Yann Demel *2026-08-29 13:15:42*
+[17f72d941053c3b](https://github.com/openfilz/openfilz-core/commit/17f72d941053c3b) Yann Demel *2026-08-30 16:52:01*
 
 
