@@ -59,6 +59,15 @@ public abstract class AbstractSecurityService implements SecurityService {
         if (idx >= 0 && getContextPath(fullPath, idx).startsWith(RestApiVersion.ENDPOINT_AI)) {
             return isAuthorized((JwtAuthenticationToken) auth, of(Role.READER.toString(), Role.CONTRIBUTOR.toString(), Role.CLEANER.toString()));
         }
+        // Per-user AI settings (BYOK) - /settings/ai**. Self-scoped: the controller keys the row on
+        // the email in the JWT and never accepts a userId from the request, so every user who may
+        // use the assistant may read and write their own row - hence the same role set as the
+        // /ai branch above. Needs its own branch (and must sit above the DELETE check): only GET
+        // falls into isQueryOrSearch, while PUT (save), POST (/test, /models) and DELETE (reset)
+        // match no generic rule and would otherwise be denied.
+        if (idx >= 0 && pathStartsWith(getContextPath(fullPath, idx), RestApiVersion.ENDPOINT_SETTINGS + RestApiVersion.ENDPOINT_AI)) {
+            return isAuthorized((JwtAuthenticationToken) auth, of(Role.READER.toString(), Role.CONTRIBUTOR.toString(), Role.CLEANER.toString()));
+        }
         // e-Sign: initiators (CONTRIBUTOR) create/send/cancel/resend envelopes and own templates (incl. DELETE of
         // their own templates); READER may list what waits for their signature. The signer-facing
         // /public/signatures/** path never reaches here (dedicated permit-all chain).
