@@ -122,6 +122,17 @@ quotas:
   fileUploadMb: 1024
   userMb: 2048
 
+# MCP server — external AI agents over POST /mcp (Claude, Cursor, n8n…; see
+# docs/mcp.md). OAuth discovery advertises the PUBLIC realm URL to MCP hosts
+# (they sit outside the cluster — never auth.realmInternalUrl); empty falls
+# back to global.auth.publicAuthority (the browser-facing issuer). The realm
+# must contain the `openfilz-mcp` public PKCE client — realms created before
+# the MCP release need it imported once (docs/mcp.md → upgraded deployments).
+mcp:
+  active: false
+  mode: READ_ONLY              # READ_ONLY | READ_WRITE
+  authorizationServerUrl: ""   # empty → global.auth.publicAuthority
+
 # -- AI Document Chat configuration.
 # Set ai.active to true and configure an LLM provider to enable AI features.
 # Requires PostgreSQL with pgvector extension.

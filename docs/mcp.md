@@ -227,10 +227,12 @@ claude mcp add --transport http openfilz \
 
 1. **Settings → Connectors → Add custom connector**
 2. Name: `OpenFilz` — URL: `https://openfilz-api.yourdomain.com/mcp`
-3. **Connect** → sign in with your OpenFilz account — done
-4. If it says *"Couldn't register with …'s sign-in service"*: set **OAuth Client ID** to
-   `openfilz-mcp` in the connector settings (no secret) and retry — see
-   [the DCR note](#remote-connectors-that-log-in-for-themselves-oauth-21).
+3. Under **OAuth client**, pick **Use your own OAuth client** → Client ID `openfilz-mcp`,
+   secret blank. Leave **Authentication** on *Always required*. (The other two options —
+   Anthropic's hosted client metadata, and automatic registration — both fail against
+   Keycloak with *"Couldn't register with …'s sign-in service"*; see
+   [the DCR note](#remote-connectors-that-log-in-for-themselves-oauth-21).)
+4. **Add** → **Connect** → sign in with your OpenFilz account — done
 
 </details>
 
@@ -395,15 +397,22 @@ is not on that list (for example ChatGPT or Gemini connectors) needs its callbac
 Keycloak → Clients → `openfilz-mcp` → *Valid redirect URIs*. No OpenFilz change and no restart —
 find the exact callback URL in that provider's connector documentation.
 
-> **Dynamic Client Registration (DCR) is intentionally off.** OpenFilz uses one shared public
-> client rather than letting every host register its own, which keeps the realm clean (DCR
-> accumulates a client per connecting app). The visible consequence: a host that tries DCR
-> first — **Claude Desktop and claude.ai do** — fails its first attempt with *"Couldn't register
-> with …'s sign-in service. You can try again, or add an OAuth Client ID in the connector
-> settings."* That dialog names the fix: set **OAuth Client ID** to `openfilz-mcp` (leave the
-> secret empty) and retry — the login then proceeds normally. Cursor, VS Code, n8n and any
-> client that accepts a `client_id` work the same way. DCR can be enabled in Keycloak later with
-> no code change; claude.ai's hosted connector *directory* listing still expects DCR.
+> **Dynamic Client Registration (DCR) is intentionally off — pick "Use your own OAuth client".**
+> Claude's *Add custom connector* dialog offers three **OAuth client** options; only the last
+> one works against a stock OpenFilz Keycloak:
+>
+> | Dialog option | Works? | Why |
+> |---|---|---|
+> | *Use Anthropic's hosted client metadata* (CIMD — the default) | ❌ | Keycloak does not support URL-based client IDs |
+> | *No client ID — register one automatically* (DCR) | ❌ | DCR is deliberately off: one shared client keeps the realm clean instead of accumulating a client per connecting app |
+> | ***Use your own OAuth client*** | ✅ | Client ID `openfilz-mcp`, secret blank |
+>
+> Leave **Authentication** on *Always required* (auto-detected). Picking either failing option
+> shows *"Couldn't register with …'s sign-in service. You can try again, or add an OAuth Client
+> ID in the connector settings."* — that dialog lets you switch to `openfilz-mcp` without
+> recreating the connector. Cursor, VS Code, n8n and any client that accepts a `client_id` use
+> the same value. DCR can be enabled in Keycloak later with no code change; claude.ai's hosted
+> connector *directory* listing still expects DCR.
 
 > **Upgraded deployments: the `openfilz-mcp` client must exist in your live realm.** The realm
 > export ships it, but Keycloak **imports a realm only when it is first created** — a realm that
