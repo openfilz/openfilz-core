@@ -68,6 +68,12 @@ openfilz-api:
     softDelete: true
     checksum: true
     fulltext: false            # needs OpenSearch in openfilz-shared
+  # MCP server for external AI agents (Claude, Cursor, n8n… — see docs/mcp.md).
+  # OAuth discovery advertises global.auth.publicAuthority; the realm needs the
+  # openfilz-mcp public client (import once on realms predating the MCP release).
+  # mcp:
+  #   active: true
+  #   mode: READ_ONLY          # READ_ONLY | READ_WRITE
   gotenberg:
     url: http://shared-gotenberg.openfilz-shared.svc.cluster.local:3000
   opensearch:

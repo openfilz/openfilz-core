@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -43,7 +44,11 @@ public class McpDiscoveryController {
      * RFC 9728 protected-resource metadata. Kept deliberately minimal — {@code resource} and
      * {@code authorization_servers} are the only fields an MCP host requires; {@code
      * bearer_methods_supported} states that the token goes in the {@code Authorization} header,
-     * which is how the stateless transport reads it.
+     * which is how the stateless transport reads it; {@code scopes_supported} names the scopes
+     * to request, so a host that honours it (the MCP authorization spec says clients SHOULD)
+     * never requests the union of the realm's own {@code scopes_supported} — which Keycloak
+     * rejects wholesale with {@code invalid_scope} when the realm carries a custom client scope
+     * not assigned to {@code openfilz-mcp}.
      */
     @GetMapping("/.well-known/oauth-protected-resource")
     public ResponseEntity<Map<String, Object>> protectedResourceMetadata() {
@@ -51,10 +56,15 @@ public class McpDiscoveryController {
             return ResponseEntity.notFound().build();
         }
         String resource = trimTrailingSlash(commonProperties.getApiPublicBaseUrl()) + "/mcp";
-        return ResponseEntity.ok(Map.of(
-                "resource", resource,
-                "authorization_servers", List.of(mcpProperties.getAuthorizationServerUrl()),
-                "bearer_methods_supported", List.of("header")));
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("resource", resource);
+        metadata.put("authorization_servers", List.of(mcpProperties.getAuthorizationServerUrl()));
+        metadata.put("bearer_methods_supported", List.of("header"));
+        // An explicitly emptied list means "advertise nothing", not "request no scopes".
+        if (mcpProperties.getScopesSupported() != null && !mcpProperties.getScopesSupported().isEmpty()) {
+            metadata.put("scopes_supported", mcpProperties.getScopesSupported());
+        }
+        return ResponseEntity.ok(metadata);
     }
 
     /**

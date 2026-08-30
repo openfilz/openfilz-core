@@ -69,7 +69,7 @@ therefore withheld unless you opt in:
 
 | Mode | Tools exposed |
 |---|---|
-| `READ_ONLY` (default) | `queryDocuments`, `readDocumentContent`, `getDocumentPath`, `describeImage` |
+| `READ_ONLY` (default) | `whoami`, `queryDocuments`, `readDocumentContent`, `getDocumentPath`, `describeImage`, the metadata/version reads |
 | `READ_WRITE` | the four above **plus** `writeFile`, `createFolder`, `moveDocuments`, `renameDocument` |
 
 In `READ_ONLY` the mutating tools are absent from `tools/list` — an agent cannot choose a tool it
@@ -99,6 +99,7 @@ opened it, and horizontal scaling needs no sticky sessions.
   | `AUDITOR` | read the audit trail *(no tool yet)* |
   | `SIGN_REQUESTER` | initiate e-Sign requests, together with `CONTRIBUTOR` *(no tool yet)* |
   | `VIEW_SHARE` / `EDIT_SHARE` *(Enterprise)* | read / manage shares *(no tool yet)* |
+  | `COMMENTER` *(Enterprise)* | read and add comments (`listComments`, `addComment`) |
 
   Because `tools/list` is built once per deployment rather than per caller, a READER still *sees*
   the write tools advertised and is refused when calling one — the same behaviour as `READ_ONLY`
@@ -123,11 +124,12 @@ opened it, and horizontal scaling needs no sticky sessions.
 
 ## 3. The tool surface
 
-Sixteen document tools, curated rather than generated. (A 60-operation auto-generated tool list from the
+Seventeen document tools, curated rather than generated. (A 60-operation auto-generated tool list from the
 OpenAPI spec would make agents *worse*, not better — the small, well-described surface is the point.)
 
 | Tool | Mode | What it does |
 |---|---|---|
+| `whoami` | read | The identity the session acts as (email, name) and the operations the caller's roles allow — derived from the caller's own token by the same policy that judges every call. Needs **no role** (any authenticated caller); an agent should call it before mutating operations to confirm its own blast radius. |
 | `queryDocuments` | read | List folder contents, search by name, find recent files, count documents. **The main entry point** — most other tools take a *name*, and this is what resolves an ambiguous name to the right item. |
 | `readDocumentContent` | read | Extract the text of a document. |
 | `getDocumentPath` | read | Full path (ancestors) of a document, from root to its parent folder. |
@@ -159,11 +161,14 @@ alongside the document tools (no configuration — they appear when the enterpri
 | `shareDocument` | write | Share a document with a user by email as READER / COMMENTER / EDITOR | CONTRIBUTOR + EDIT_SHARE |
 | `unshareDocument` | write | Revoke a user's access to a document | CONTRIBUTOR + EDIT_SHARE |
 | `addComment` | write | Add a comment to a document | CONTRIBUTOR or COMMENTER |
-| `listComments` | read | List a document's comments | READER or CONTRIBUTOR |
+| `listComments` | read | List a document's comments | READER or CONTRIBUTOR or COMMENTER |
+| `getDocumentPermissions` | read | A document's permissions: owner, who it is shared with, and each grantee's access level (READER / COMMENTER / EDITOR) | the document's **owner** (no share role needed), or VIEW_SHARE / EDIT_SHARE for a document shared with the caller |
 
 A client discovers these at runtime through `tools/list` — an agent talking to a Community
 deployment simply sees fewer tools. They carry the same per-user scoping as the document tools: an
-agent can only share or comment on documents its user may act on.
+agent can only share or comment on documents its user may act on, and permissions are only
+inspectable by the owner or a share-role holder the document is shared with (the same owner
+bypass the GraphQL `listDocShares` query applies).
 
 ---
 
@@ -180,7 +185,119 @@ this section:
   [Remote connectors that log in for themselves](#remote-connectors-that-log-in-for-themselves-oauth-21).
 
 The snippets below assume the API at `http://localhost:8081`; in production use your real hostname
-over HTTPS (e.g. `https://api.openfilz.com/mcp`).
+over HTTPS (e.g. `https://openfilz-api.yourdomain.com/mcp` or `https://yourdomain-api.openfilz.com/mcp`).
+
+> **`api.openfilz.com` is the OpenFilz demo environment, not your endpoint.** On-prem
+> deployments choose their own hostname on their own DNS (e.g. `openfilz-api.yourdomain.com`);
+> Cloud-Prem deployments get an assigned `yourdomain-api.openfilz.com` hostname. Either way,
+> your agents connect to *your deployment's* API hostname — the snippets below use
+> `openfilz-api.yourdomain.com` as a stand-in; substitute your own.
+
+### Quick start — pick your tool
+
+Grab a bearer token (first block below — Claude Desktop and claude.ai don't even need one), paste
+the snippet for your tool, then ask it something like *"list my folders and count the PDFs"*:
+
+<details>
+<summary><b>Get a token</b> — the <code>$TOKEN</code> in the snippets below</summary>
+
+```bash
+export TOKEN=$(curl -s -X POST \
+  "https://openfilz-auth.yourdomain.com/realms/openfilz/protocol/openid-connect/token" \
+  -d grant_type=client_credentials -d client_id=my-agent -d client_secret=<your-client-secret> \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+```
+
+Any Keycloak access token for a real user works too. The full setup — creating the
+service-account client, assigning roles, and the long-lived, revocable Enterprise
+[scoped agent tokens](#scoped-agent-tokens-enterprise) — is in
+[Getting a bearer token](#getting-a-bearer-token) just below.
+
+</details>
+
+<details open>
+<summary><b>Claude Code</b></summary>
+
+```bash
+claude mcp add --transport http openfilz \
+  https://openfilz-api.yourdomain.com/mcp \
+  --header "Authorization: Bearer $TOKEN"
+```
+
+</details>
+
+<details>
+<summary><b>Claude Desktop / claude.ai</b> — no token, OAuth login</summary>
+
+1. **Settings → Connectors → Add custom connector**
+2. Name: `OpenFilz` — URL: `https://openfilz-api.yourdomain.com/mcp`
+3. Under **OAuth client**, pick **Use your own OAuth client** → Client ID `openfilz-mcp`,
+   secret blank. Leave **Authentication** on *Always required*. (The other two options —
+   Anthropic's hosted client metadata, and automatic registration — both fail against
+   Keycloak with *"Couldn't register with …'s sign-in service"*; see
+   [the DCR note](#remote-connectors-that-log-in-for-themselves-oauth-21).)
+4. **Add** → **Connect** → sign in with your OpenFilz account — done
+
+</details>
+
+<details>
+<summary><b>Cursor</b></summary>
+
+```json
+// .cursor/mcp.json
+{
+  "mcpServers": {
+    "openfilz": {
+      "url": "https://openfilz-api.yourdomain.com/mcp",
+      "headers": { "Authorization": "Bearer <your-token>" }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>VS Code / GitHub Copilot</b></summary>
+
+```json
+// .vscode/mcp.json
+{
+  "servers": {
+    "openfilz": {
+      "type": "http",
+      "url": "https://openfilz-api.yourdomain.com/mcp",
+      "headers": { "Authorization": "Bearer <your-token>" }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>Gemini CLI</b></summary>
+
+```bash
+gemini mcp add --transport http openfilz \
+  https://openfilz-api.yourdomain.com/mcp \
+  --header "Authorization: Bearer $TOKEN"
+```
+
+</details>
+
+<details>
+<summary><b>n8n</b></summary>
+
+**MCP Client Tool** node, connected to an **AI Agent** node:
+transport `HTTP Streamable`, URL `https://openfilz-api.yourdomain.com/mcp`,
+a *Header Auth* credential `Authorization: Bearer <your-token>` —
+[importable workflow](../examples/mcp/n8n/).
+
+</details>
+
+The rest of this section covers the two auth paths in detail, plus more clients
+(Spring AI, Python, MCP Inspector).
 
 ### Getting a bearer token
 
@@ -189,7 +306,7 @@ For the bearer-token path, mint a token from your Keycloak realm with a **servic
 
 ```bash
 export TOKEN=$(curl -s -X POST \
-  "https://auth.openfilz.com/realms/openfilz/protocol/openid-connect/token" \
+  "https://openfilz-auth.yourdomain.com/realms/openfilz/protocol/openid-connect/token" \
   -d grant_type=client_credentials \
   -d client_id=my-agent \
   -d client_secret=<your-client-secret> \
@@ -213,7 +330,7 @@ document scope resolve to that user, exactly as for a human), carries a **capabi
 
 ```bash
 # an admin mints one; the token is returned once
-curl -X POST https://api.openfilz.com/api/v1/admin/mcp/tokens \
+curl -X POST https://openfilz-api.yourdomain.com/api/v1/admin/mcp/tokens \
   -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
   -d '{"subjectEmail":"research-agent@acme.com","mode":"READ_ONLY","label":"research bot"}'
 # → { "token": "…", "jti": "…", "expiresAt": "…" }
@@ -230,7 +347,7 @@ Give the returned `token` to the agent as its bearer credential on `/mcp`. Enabl
 ### Claude Code
 
 ```bash
-claude mcp add --transport http openfilz https://api.openfilz.com/mcp \
+claude mcp add --transport http openfilz https://openfilz-api.yourdomain.com/mcp \
   --header "Authorization: Bearer $TOKEN"
 ```
 
@@ -243,7 +360,7 @@ For any host configured from an `mcp.json`-style file that lets you set a static
   "mcpServers": {
     "openfilz": {
       "type": "http",
-      "url": "https://api.openfilz.com/mcp",
+      "url": "https://openfilz-api.yourdomain.com/mcp",
       "headers": { "Authorization": "Bearer ${OPENFILZ_TOKEN}" }
     }
   }
@@ -269,7 +386,7 @@ How it works — nothing for you to build:
 1. The host calls `/mcp` with no token and gets `401` carrying
    `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"`.
 2. It reads that metadata (served unauthenticated) and learns the authorization server — your
-   Keycloak realm.
+   Keycloak realm — and which scopes to request (`scopes_supported`).
 3. It runs an authorization-code + PKCE login against Keycloak using the pre-registered public
    client **`openfilz-mcp`**, and calls `/mcp` with the resulting token.
 
@@ -284,16 +401,52 @@ is not on that list (for example ChatGPT or Gemini connectors) needs its callbac
 Keycloak → Clients → `openfilz-mcp` → *Valid redirect URIs*. No OpenFilz change and no restart —
 find the exact callback URL in that provider's connector documentation.
 
-> **Dynamic Client Registration (DCR) is intentionally off.** OpenFilz uses one shared public
-> client rather than letting every host register its own, which keeps the realm clean (DCR
-> accumulates a client per connecting app). The trade-off: **claude.ai's *hosted* connector
-> directory currently expects DCR**, so the automatic web-directory listing may not apply — but
-> Claude Desktop, Claude Code, Cursor, VS Code, n8n and any client that accepts a `client_id`
-> (use `openfilz-mcp`) all work. DCR can be enabled in Keycloak later with no code change.
+> **Dynamic Client Registration (DCR) is intentionally off — pick "Use your own OAuth client".**
+> Claude's *Add custom connector* dialog offers three **OAuth client** options; only the last
+> one works against a stock OpenFilz Keycloak:
+>
+> | Dialog option | Works? | Why |
+> |---|---|---|
+> | *Use Anthropic's hosted client metadata* (CIMD — the default) | ❌ | Keycloak does not support URL-based client IDs |
+> | *No client ID — register one automatically* (DCR) | ❌ | DCR is deliberately off: one shared client keeps the realm clean instead of accumulating a client per connecting app |
+> | ***Use your own OAuth client*** | ✅ | Client ID `openfilz-mcp`, secret blank |
+>
+> Leave **Authentication** on *Always required* (auto-detected). Picking either failing option
+> shows *"Couldn't register with …'s sign-in service. You can try again, or add an OAuth Client
+> ID in the connector settings."* — that dialog lets you switch to `openfilz-mcp` without
+> recreating the connector. Cursor, VS Code, n8n and any client that accepts a `client_id` use
+> the same value. DCR can be enabled in Keycloak later with no code change; claude.ai's hosted
+> connector *directory* listing still expects DCR.
+
+> **Upgraded deployments: the `openfilz-mcp` client must exist in your live realm.** The realm
+> export ships it, but Keycloak **imports a realm only when it is first created** — a realm that
+> predates OpenFilz's MCP feature does not gain the client on upgrade, and every OAuth login
+> fails with *Client not found*. Add it once by hand: Keycloak admin → your realm → Clients →
+> **Import client**, pasting the `openfilz-mcp` block from `realm-export.json` (public client,
+> PKCE `S256`, standard flow only, the redirect URIs listed above, and `offline_access` as an
+> **optional client scope**). Two quick checks that both halves are live:
+> `GET /.well-known/oauth-protected-resource` on the API must answer `200` (a `404` means
+> `openfilz.mcp.active` is off), and the Keycloak `…/auth?client_id=openfilz-mcp&…` page must
+> show a login form, not *Client not found*.
+
+> **Scopes: the resource metadata names them, so well-behaved hosts stay green.** The
+> protected-resource metadata advertises `scopes_supported` (default `openid profile email
+> offline_access`, override with `OPENFILZ_MCP_SCOPES_SUPPORTED`), and per the MCP authorization
+> spec a host SHOULD request exactly those — so custom client scopes your realm defines are
+> simply never requested. A host that ignores it falls back to the *realm's* `scopes_supported`
+> (from the OIDC discovery document) and requests the union of everything there; Keycloak then
+> refuses the whole login when *any* requested scope is not assigned to the client — the
+> symptom is a successful sign-in page followed by *"Authorization with … failed"*
+> (`error=invalid_scope`, Keycloak log: `Invalid scopes: …`). Two rules keep such hosts green:
+> `offline_access` must be assigned to `openfilz-mcp` as an **optional client scope** (Claude
+> uses it to hold a refresh token for the persistent connection — the shipped export now
+> includes it), and any **custom client scope** your realm defines must either also be assigned
+> to `openfilz-mcp` (optional is fine) or be deleted if unused — a leftover scope nothing
+> references still appears in the realm's `scopes_supported` and breaks the login.
 
 ### n8n
 
-Use the **MCP Client** node: transport `HTTP Streamable`, URL `https://api.openfilz.com/mcp`,
+Use the **MCP Client** node: transport `HTTP Streamable`, URL `https://openfilz-api.yourdomain.com/mcp`,
 with an `Authorization: Bearer …` header credential.
 
 ### Spring AI
@@ -306,7 +459,7 @@ with an `Authorization: Bearer …` header credential.
 ```
 
 ```yaml
-spring.ai.mcp.client.streamable-http.connections.openfilz.url: https://api.openfilz.com/mcp
+spring.ai.mcp.client.streamable-http.connections.openfilz.url: https://openfilz-api.yourdomain.com/mcp
 ```
 
 ### Runnable examples
@@ -323,7 +476,7 @@ npx -y @modelcontextprotocol/inspector --cli http://localhost:8081/mcp \
   --transport http --header "Authorization: Bearer $TOKEN" --method tools/list
 ```
 
-It should list 16 tools in `READ_WRITE` mode, 8 in `READ_ONLY` (Community counts; Enterprise adds the share/comment tools). Dropping the `--header` must fail
+It should list 17 tools in `READ_WRITE` mode, 9 in `READ_ONLY` (Community counts; Enterprise adds the share/comment/permissions tools). Dropping the `--header` must fail
 with `401` — if it does not, `/mcp` is not protected and something is very wrong.
 
 ---
@@ -358,7 +511,8 @@ with `401` — if it does not, `/mcp` is not protected and something is very wro
 
 | Concern | Class |
 |---|---|
-| Feature toggle + mode | `config/McpProperties.java` |
+| Feature toggle + mode + advertised OAuth scopes | `config/McpProperties.java` |
+| OAuth 2.1 discovery (RFC 9728 protected-resource metadata) | `controller/rest/McpDiscoveryController.java` |
 | Transport wiring, carries the caller's identity | `config/McpConfig.java` |
 | Lifts `Authentication` into the exchange | `service/mcp/McpAuthenticationWebFilter.java` |
 | Per-call user binding, read-only enforcement | `service/mcp/McpToolCallbackProvider.java` |

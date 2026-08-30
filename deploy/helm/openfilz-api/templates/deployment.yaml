@@ -158,6 +158,23 @@ spec:
               value: {{ .Values.quotas.fileUploadMb | quote }}
             - name: OPENFILZ_QUOTA_USER
               value: {{ .Values.quotas.userMb | quote }}
+            # --- MCP server (external AI agents over POST /mcp) ---
+            - name: OPENFILZ_MCP_ACTIVE
+              value: {{ .Values.mcp.active | quote }}
+            {{- if .Values.mcp.active }}
+            - name: OPENFILZ_MCP_MODE
+              value: {{ .Values.mcp.mode | quote }}
+            {{- with (include "openfilz-api.mcpAuthorizationServerUrl" .) }}
+            # Discovery must advertise the PUBLIC realm URL — the property defaults
+            # to KEYCLOAK_REALM_URL (in-cluster), unreachable by MCP hosts.
+            - name: OPENFILZ_MCP_AUTHORIZATION_SERVER_URL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.mcp.scopesSupported }}
+            - name: OPENFILZ_MCP_SCOPES_SUPPORTED
+              value: {{ . | quote }}
+            {{- end }}
+            {{- end }}
             {{- if .Values.ai.active }}
             # --- AI Document Chat ---
             - name: OPENFILZ_AI_ACTIVE

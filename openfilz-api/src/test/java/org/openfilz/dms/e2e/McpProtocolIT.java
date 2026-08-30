@@ -218,6 +218,7 @@ public class McpProtocolIT extends AbstractMcpIT {
 
     private static String argumentsFor(String tool, String probe) {
         return switch (tool) {
+            case "whoami" -> "{}";
             case "queryDocuments" -> """
                     {"sortBy":"updatedAt","sortOrder":"DESC","pageSize":5,"countOnly":false}""";
             case "readDocumentContent" -> """

@@ -77,6 +77,12 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- coalesce .Values.auth.realmInternalUrl (dig "auth" "realmInternalUrl" "" (.Values.global | default dict)) | default "" -}}
 {{- end }}
 
+{{/* Public realm URL advertised in MCP OAuth discovery: chart-local value, then
+the umbrella's browser-facing issuer (global.auth.publicAuthority). */}}
+{{- define "openfilz-api.mcpAuthorizationServerUrl" -}}
+{{- coalesce .Values.mcp.authorizationServerUrl (dig "auth" "publicAuthority" "" (.Values.global | default dict)) | default "" -}}
+{{- end }}
+
 {{- define "openfilz-api.corsAllowedOrigins" -}}
 {{- if .Values.auth.corsAllowedOrigins -}}
 {{- .Values.auth.corsAllowedOrigins -}}

@@ -5,7 +5,7 @@ token (a Keycloak access token, or an Enterprise [scoped agent token](../../../d
 
 ```bash
 pip install -r requirements.txt
-export OPENFILZ_MCP_URL="https://api.openfilz.com/mcp"
+export OPENFILZ_MCP_URL="https://openfilz-api.yourdomain.com/mcp"
 export OPENFILZ_TOKEN="<bearer token>"
 ```
 

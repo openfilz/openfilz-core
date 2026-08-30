@@ -21,7 +21,7 @@
     },
     {
       "parameters": {
-        "endpointUrl": "https://api.openfilz.com/mcp",
+        "endpointUrl": "https://openfilz-api.yourdomain.com/mcp",
         "serverTransport": "httpStreamable",
         "authentication": "headerAuth",
         "note": "Set a Header Auth credential: Name = Authorization, Value = Bearer <token>"

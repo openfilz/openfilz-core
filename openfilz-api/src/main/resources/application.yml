@@ -68,11 +68,12 @@ spring:
         # Advertised in the initialize response — the "system prompt" of the tool surface,
         # telling the calling agent how to use OpenFilz well.
         instructions: >-
-          OpenFilz document management. Use queryDocuments to find files and folders before
-          acting on them: most tools accept a document or folder NAME, and queryDocuments is what
-          resolves an ambiguous name to the right item. readDocumentContent extracts the text of a
-          file. All operations are scoped to the calling user's own permissions — a document that
-          queryDocuments does not return is not visible to this user.
+          OpenFilz document management. Call whoami first to learn which OpenFilz user this
+          session acts as and what its roles allow. Use queryDocuments to find files and folders
+          before acting on them: most tools accept a document or folder NAME, and queryDocuments
+          is what resolves an ambiguous name to the right item. readDocumentContent extracts the
+          text of a file. All operations are scoped to the calling user's own permissions — a
+          document that queryDocuments does not return is not visible to this user.
         # STATELESS: every request carries its own bearer token, so no MCP session outlives
         # the JWT that opened it and scaling needs no sticky sessions. SSE is deprecated.
         protocol: STATELESS
@@ -349,6 +350,11 @@ openfilz:
     # claude.ai, IDE connectors) can discover where to log in. Same realm the resource server
     # validates tokens against — defaults to KEYCLOAK_REALM_URL, so nothing extra to set.
     authorization-server-url: ${KEYCLOAK_REALM_URL:http://localhost:8180/realms/openfilz}
+    # Scopes advertised as scopes_supported in the same metadata. A host that honours it (the
+    # MCP authorization spec says clients SHOULD) requests exactly these instead of the union of
+    # the realm's scopes_supported — so a custom realm scope not assigned to openfilz-mcp no
+    # longer kills the login with invalid_scope. Comma-separated override.
+    scopes-supported: ${OPENFILZ_MCP_SCOPES_SUPPORTED:openid,profile,email,offline_access}
 
 # OnlyOffice DocumentServer Integration
 onlyoffice:

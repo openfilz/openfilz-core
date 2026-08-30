@@ -4,6 +4,8 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.List;
+
 /**
  * Configuration properties for the MCP (Model Context Protocol) server endpoint.
  * Maps to {@code openfilz.mcp.*} in application.yml.
@@ -52,6 +54,18 @@ public class McpProperties {
      * server already validates tokens against, so a standard deployment sets nothing extra.
      */
     private String authorizationServerUrl = "http://localhost:8180/realms/openfilz";
+
+    /**
+     * The OAuth scopes advertised as {@code scopes_supported} in the RFC 9728 protected-resource
+     * metadata. Without this field a well-behaved MCP host (Claude Desktop, claude.ai) falls back
+     * to the authorization server's OIDC {@code scopes_supported} and requests the union of
+     * <em>everything the realm advertises</em> — and Keycloak refuses the whole login with
+     * {@code error=invalid_scope} as soon as any realm scope (a leftover custom client scope, an
+     * unassigned {@code offline_access}) is not assigned to the {@code openfilz-mcp} client.
+     * Naming the scopes here keeps the authorization request down to what the client actually
+     * needs, independent of whatever else the realm defines.
+     */
+    private List<String> scopesSupported = List.of("openid", "profile", "email", "offline_access");
 
     public boolean isReadOnly() {
         return mode == Mode.READ_ONLY;

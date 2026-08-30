@@ -71,6 +71,11 @@ public class DefaultAiToolRolePolicy implements AiToolRolePolicy {
             log.debug("Tool capability {} is not available in this edition — refused", capability);
             return false;
         }
+        if (required.anyAuthenticated()) {
+            // Reaching this line means the caller carries a validated JWT — that is the whole
+            // requirement (e.g. IDENTITY_READ: your own identity needs no role).
+            return true;
+        }
         SecurityService service = securityService.get();
         return required.all()
                 ? required.roles().stream().allMatch(role -> service.isAuthorized(jwt, role))
@@ -86,6 +91,8 @@ public class DefaultAiToolRolePolicy implements AiToolRolePolicy {
      */
     protected RoleRequirement rolesFor(ToolCapability capability) {
         return switch (capability) {
+            // Your own identity needs no role — any authenticated caller may ask who it is.
+            case IDENTITY_READ -> RoleRequirement.authenticated();
             case DOCUMENT_READ -> RoleRequirement.any(Role.READER.toString(), Role.CONTRIBUTOR.toString());
             case DOCUMENT_WRITE -> RoleRequirement.any(Role.CONTRIBUTOR.toString());
             case DOCUMENT_DELETE -> RoleRequirement.any(Role.CLEANER.toString());
@@ -104,24 +111,31 @@ public class DefaultAiToolRolePolicy implements AiToolRolePolicy {
 
     /**
      * A set of roles plus how to combine them. {@code never()} means the capability does not exist
-     * in this edition, which is not the same as "nobody happens to hold the role".
+     * in this edition, which is not the same as "nobody happens to hold the role" — and
+     * {@code authenticated()} means a validated caller suffices, which is not the same as "no
+     * requirement at all" (an unauthenticated call is still refused before this is consulted).
      */
-    public record RoleRequirement(List<String> roles, boolean all) {
+    public record RoleRequirement(List<String> roles, boolean all, boolean anyAuthenticated) {
 
         public static RoleRequirement any(String... roles) {
-            return new RoleRequirement(List.of(roles), false);
+            return new RoleRequirement(List.of(roles), false, false);
         }
 
         public static RoleRequirement all(String... roles) {
-            return new RoleRequirement(List.of(roles), true);
+            return new RoleRequirement(List.of(roles), true, false);
         }
 
         public static RoleRequirement never() {
-            return new RoleRequirement(List.of(), false);
+            return new RoleRequirement(List.of(), false, false);
+        }
+
+        /** Any authenticated caller, regardless of roles (e.g. {@code IDENTITY_READ}). */
+        public static RoleRequirement authenticated() {
+            return new RoleRequirement(List.of(), false, true);
         }
 
         public boolean isNever() {
-            return roles.isEmpty();
+            return roles.isEmpty() && !anyAuthenticated;
         }
     }
 }
