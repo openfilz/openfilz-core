@@ -228,6 +228,9 @@ claude mcp add --transport http openfilz \
 1. **Settings → Connectors → Add custom connector**
 2. Name: `OpenFilz` — URL: `https://openfilz-api.yourdomain.com/mcp`
 3. **Connect** → sign in with your OpenFilz account — done
+4. If it says *"Couldn't register with …'s sign-in service"*: set **OAuth Client ID** to
+   `openfilz-mcp` in the connector settings (no secret) and retry — see
+   [the DCR note](#remote-connectors-that-log-in-for-themselves-oauth-21).
 
 </details>
 
@@ -394,10 +397,23 @@ find the exact callback URL in that provider's connector documentation.
 
 > **Dynamic Client Registration (DCR) is intentionally off.** OpenFilz uses one shared public
 > client rather than letting every host register its own, which keeps the realm clean (DCR
-> accumulates a client per connecting app). The trade-off: **claude.ai's *hosted* connector
-> directory currently expects DCR**, so the automatic web-directory listing may not apply — but
-> Claude Desktop, Claude Code, Cursor, VS Code, n8n and any client that accepts a `client_id`
-> (use `openfilz-mcp`) all work. DCR can be enabled in Keycloak later with no code change.
+> accumulates a client per connecting app). The visible consequence: a host that tries DCR
+> first — **Claude Desktop and claude.ai do** — fails its first attempt with *"Couldn't register
+> with …'s sign-in service. You can try again, or add an OAuth Client ID in the connector
+> settings."* That dialog names the fix: set **OAuth Client ID** to `openfilz-mcp` (leave the
+> secret empty) and retry — the login then proceeds normally. Cursor, VS Code, n8n and any
+> client that accepts a `client_id` work the same way. DCR can be enabled in Keycloak later with
+> no code change; claude.ai's hosted connector *directory* listing still expects DCR.
+
+> **Upgraded deployments: the `openfilz-mcp` client must exist in your live realm.** The realm
+> export ships it, but Keycloak **imports a realm only when it is first created** — a realm that
+> predates OpenFilz's MCP feature does not gain the client on upgrade, and every OAuth login
+> fails with *Client not found*. Add it once by hand: Keycloak admin → your realm → Clients →
+> **Import client**, pasting the `openfilz-mcp` block from `realm-export.json` (public client,
+> PKCE `S256`, standard flow only, the redirect URIs listed above). Two quick checks that both
+> halves are live: `GET /.well-known/oauth-protected-resource` on the API must answer `200`
+> (a `404` means `openfilz.mcp.active` is off), and the Keycloak `…/auth?client_id=openfilz-mcp&…`
+> page must show a login form, not *Client not found*.
 
 ### n8n
 
