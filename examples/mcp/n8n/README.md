@@ -8,7 +8,7 @@ Drive OpenFilz from an n8n workflow using the **MCP Client Tool** node connected
 2. Add an **MCP Client Tool** node and connect it to the agent's *Tool* input.
 3. In the MCP Client node:
    - **Endpoint / Transport:** `HTTP Streamable`
-   - **URL:** `https://api.openfilz.com/mcp`
+   - **URL:** `https://openfilz-api.yourdomain.com/mcp` (your deployment's API hostname)
    - **Authentication:** a *Header Auth* credential — name `Authorization`, value `Bearer <token>`
      (a Keycloak access token, or an OpenFilz [scoped agent token](../../../docs/mcp.md#scoped-agent-tokens-enterprise)).
 4. Prompt the agent, e.g. *"List my folders and count the PDFs."* — it will call the OpenFilz tools.

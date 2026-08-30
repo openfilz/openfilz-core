@@ -7,8 +7,9 @@ spring:
         streamable-http:
           connections:
             openfilz:
-              # Your OpenFilz MCP endpoint. Override with OPENFILZ_MCP_URL.
-              url: ${OPENFILZ_MCP_URL:https://api.openfilz.com/mcp}
+              # Your OpenFilz MCP endpoint (your deployment's API hostname).
+              # Override with OPENFILZ_MCP_URL.
+              url: ${OPENFILZ_MCP_URL:https://openfilz-api.yourdomain.com/mcp}
 
 # The bearer token is added by OpenFilzAuthCustomizer (see the Java source).
 openfilz:

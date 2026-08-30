@@ -4,7 +4,7 @@ Minimal OpenFilz MCP client: connect, list the tools, call one.
 Proves connectivity and the auth header end to end — no LLM involved. Run this first to confirm
 your OpenFilz `/mcp` endpoint and bearer token work before wiring an agent.
 
-    export OPENFILZ_MCP_URL="https://api.openfilz.com/mcp"
+    export OPENFILZ_MCP_URL="https://openfilz-api.yourdomain.com/mcp"
     export OPENFILZ_TOKEN="<a Keycloak access token, or an OpenFilz scoped agent token>"
     python list_and_call.py
 """

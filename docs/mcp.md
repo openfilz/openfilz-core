@@ -99,6 +99,7 @@ opened it, and horizontal scaling needs no sticky sessions.
   | `AUDITOR` | read the audit trail *(no tool yet)* |
   | `SIGN_REQUESTER` | initiate e-Sign requests, together with `CONTRIBUTOR` *(no tool yet)* |
   | `VIEW_SHARE` / `EDIT_SHARE` *(Enterprise)* | read / manage shares *(no tool yet)* |
+  | `COMMENTER` *(Enterprise)* | read and add comments (`listComments`, `addComment`) |
 
   Because `tools/list` is built once per deployment rather than per caller, a READER still *sees*
   the write tools advertised and is refused when calling one — the same behaviour as `READ_ONLY`
@@ -159,7 +160,7 @@ alongside the document tools (no configuration — they appear when the enterpri
 | `shareDocument` | write | Share a document with a user by email as READER / COMMENTER / EDITOR | CONTRIBUTOR + EDIT_SHARE |
 | `unshareDocument` | write | Revoke a user's access to a document | CONTRIBUTOR + EDIT_SHARE |
 | `addComment` | write | Add a comment to a document | CONTRIBUTOR or COMMENTER |
-| `listComments` | read | List a document's comments | READER or CONTRIBUTOR |
+| `listComments` | read | List a document's comments | READER or CONTRIBUTOR or COMMENTER |
 
 A client discovers these at runtime through `tools/list` — an agent talking to a Community
 deployment simply sees fewer tools. They carry the same per-user scoping as the document tools: an
@@ -180,7 +181,11 @@ this section:
   [Remote connectors that log in for themselves](#remote-connectors-that-log-in-for-themselves-oauth-21).
 
 The snippets below assume the API at `http://localhost:8081`; in production use your real hostname
-over HTTPS (e.g. `https://api.openfilz.com/mcp`).
+over HTTPS (e.g. `https://openfilz-api.yourdomain.com/mcp` or `https://yourdomain-api.openfilz.com/mcp`).
+
+> **`api.openfilz.com` is the OpenFilz demo environment, not your endpoint.** Whether you run
+> on-prem or cloud-prem, your agents connect to *your deployment's* API hostname — the snippets
+> below use `openfilz-api.yourdomain.com` as a stand-in; substitute your own.
 
 ### Getting a bearer token
 
@@ -189,7 +194,7 @@ For the bearer-token path, mint a token from your Keycloak realm with a **servic
 
 ```bash
 export TOKEN=$(curl -s -X POST \
-  "https://auth.openfilz.com/realms/openfilz/protocol/openid-connect/token" \
+  "https://openfilz-auth.yourdomain.com/realms/openfilz/protocol/openid-connect/token" \
   -d grant_type=client_credentials \
   -d client_id=my-agent \
   -d client_secret=<your-client-secret> \
@@ -213,7 +218,7 @@ document scope resolve to that user, exactly as for a human), carries a **capabi
 
 ```bash
 # an admin mints one; the token is returned once
-curl -X POST https://api.openfilz.com/api/v1/admin/mcp/tokens \
+curl -X POST https://openfilz-api.yourdomain.com/api/v1/admin/mcp/tokens \
   -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
   -d '{"subjectEmail":"research-agent@acme.com","mode":"READ_ONLY","label":"research bot"}'
 # → { "token": "…", "jti": "…", "expiresAt": "…" }
@@ -230,7 +235,7 @@ Give the returned `token` to the agent as its bearer credential on `/mcp`. Enabl
 ### Claude Code
 
 ```bash
-claude mcp add --transport http openfilz https://api.openfilz.com/mcp \
+claude mcp add --transport http openfilz https://openfilz-api.yourdomain.com/mcp \
   --header "Authorization: Bearer $TOKEN"
 ```
 
@@ -243,7 +248,7 @@ For any host configured from an `mcp.json`-style file that lets you set a static
   "mcpServers": {
     "openfilz": {
       "type": "http",
-      "url": "https://api.openfilz.com/mcp",
+      "url": "https://openfilz-api.yourdomain.com/mcp",
       "headers": { "Authorization": "Bearer ${OPENFILZ_TOKEN}" }
     }
   }
@@ -293,7 +298,7 @@ find the exact callback URL in that provider's connector documentation.
 
 ### n8n
 
-Use the **MCP Client** node: transport `HTTP Streamable`, URL `https://api.openfilz.com/mcp`,
+Use the **MCP Client** node: transport `HTTP Streamable`, URL `https://openfilz-api.yourdomain.com/mcp`,
 with an `Authorization: Bearer …` header credential.
 
 ### Spring AI
@@ -306,7 +311,7 @@ with an `Authorization: Bearer …` header credential.
 ```
 
 ```yaml
-spring.ai.mcp.client.streamable-http.connections.openfilz.url: https://api.openfilz.com/mcp
+spring.ai.mcp.client.streamable-http.connections.openfilz.url: https://openfilz-api.yourdomain.com/mcp
 ```
 
 ### Runnable examples

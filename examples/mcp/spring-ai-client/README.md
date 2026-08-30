@@ -9,7 +9,7 @@ the advertised tools. In a real app you hand `ToolCallbackProvider.getToolCallba
 > call.
 
 ```bash
-export OPENFILZ_MCP_URL="https://api.openfilz.com/mcp"
+export OPENFILZ_MCP_URL="https://openfilz-api.yourdomain.com/mcp"
 export OPENFILZ_TOKEN="<bearer token>"
 mvn spring-boot:run
 ```

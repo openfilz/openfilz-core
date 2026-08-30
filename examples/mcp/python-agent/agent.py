@@ -4,7 +4,7 @@ LLM-driven OpenFilz agent: Claude picks which OpenFilz tools to call to answer a
 This is the real MCP use case — a non-deterministic consumer where the model chooses the calls.
 It runs a small tool-use loop: hand Claude the OpenFilz tools, let it call them, feed results back.
 
-    export OPENFILZ_MCP_URL="https://api.openfilz.com/mcp"
+    export OPENFILZ_MCP_URL="https://openfilz-api.yourdomain.com/mcp"
     export OPENFILZ_TOKEN="<bearer token>"
     export ANTHROPIC_API_KEY="<your Anthropic key>"
     python agent.py "Find my documents about invoices and tell me how many there are."

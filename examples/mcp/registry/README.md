@@ -5,7 +5,7 @@
 **Two honest caveats before submitting:**
 
 1. **OpenFilz is self-hosted.** There is no single public `/mcp` URL — every customer runs their own.
-   The `remotes[].url` in `server.json` is a placeholder (`api.openfilz.com`); the registry entry's
+   The `remotes[].url` in `server.json` is a placeholder (`openfilz-api.yourdomain.com`); the registry entry's
    real job is discoverability of the *software* and how to connect, not a live shared endpoint.
    Consider this listing marketing/discovery, and point users at [the docs](../../../docs/mcp.md)
    for connecting their own instance.

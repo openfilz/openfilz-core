@@ -23,8 +23,9 @@ Enterprise) share and comment — scoped to the calling user's permissions.
 2. **Get a bearer token** — a Keycloak access token for a real user, or, in Enterprise, an admin-minted
    [scoped agent token](../../docs/mcp.md#scoped-agent-tokens-enterprise). Every example authenticates
    with `Authorization: Bearer <token>`; what the agent can see and do is exactly that user's scope.
-3. Point the example at your endpoint (`https://api.openfilz.com/mcp`, or `http://localhost:8080/mcp`
-   for local dev).
+3. Point the example at your endpoint — your deployment's API hostname, e.g.
+   `https://openfilz-api.yourdomain.com/mcp` (or `http://localhost:8080/mcp` for local dev).
+   `api.openfilz.com` is the OpenFilz demo environment, not your endpoint.
 
 Full reference — security model, the tool tables, OAuth discovery, Community vs Enterprise — is in
 [`docs/mcp.md`](../../docs/mcp.md).

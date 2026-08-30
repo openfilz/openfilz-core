@@ -11,7 +11,7 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://api.openfilz.com/mcp"
+      "url": "https://openfilz-api.yourdomain.com/mcp"
     }
   ]
 }
