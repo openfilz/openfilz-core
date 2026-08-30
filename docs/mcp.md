@@ -191,8 +191,25 @@ over HTTPS (e.g. `https://openfilz-api.yourdomain.com/mcp` or `https://yourdomai
 
 ### Quick start — pick your tool
 
-Grab a bearer token (next section — Claude Desktop and claude.ai don't even need one), paste the
-snippet for your tool, then ask it something like *"list my folders and count the PDFs"*:
+Grab a bearer token (first block below — Claude Desktop and claude.ai don't even need one), paste
+the snippet for your tool, then ask it something like *"list my folders and count the PDFs"*:
+
+<details>
+<summary><b>Get a token</b> — the <code>$TOKEN</code> in the snippets below</summary>
+
+```bash
+export TOKEN=$(curl -s -X POST \
+  "https://openfilz-auth.yourdomain.com/realms/openfilz/protocol/openid-connect/token" \
+  -d grant_type=client_credentials -d client_id=my-agent -d client_secret=<your-client-secret> \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+```
+
+Any Keycloak access token for a real user works too. The full setup — creating the
+service-account client, assigning roles, and the long-lived, revocable Enterprise
+[scoped agent tokens](#scoped-agent-tokens-enterprise) — is in
+[Getting a bearer token](#getting-a-bearer-token) just below.
+
+</details>
 
 <details open>
 <summary><b>Claude Code</b></summary>
