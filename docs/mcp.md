@@ -187,6 +187,90 @@ over HTTPS (e.g. `https://openfilz-api.yourdomain.com/mcp` or `https://yourdomai
 > on-prem or cloud-prem, your agents connect to *your deployment's* API hostname — the snippets
 > below use `openfilz-api.yourdomain.com` as a stand-in; substitute your own.
 
+### Quick start — pick your tool
+
+Grab a bearer token (next section — Claude Desktop and claude.ai don't even need one), paste the
+snippet for your tool, then ask it something like *"list my folders and count the PDFs"*:
+
+<details open>
+<summary><b>Claude Code</b></summary>
+
+```bash
+claude mcp add --transport http openfilz \
+  https://openfilz-api.yourdomain.com/mcp \
+  --header "Authorization: Bearer $TOKEN"
+```
+
+</details>
+
+<details>
+<summary><b>Claude Desktop / claude.ai</b> — no token, OAuth login</summary>
+
+1. **Settings → Connectors → Add custom connector**
+2. Name: `OpenFilz` — URL: `https://openfilz-api.yourdomain.com/mcp`
+3. **Connect** → sign in with your OpenFilz account — done
+
+</details>
+
+<details>
+<summary><b>Cursor</b></summary>
+
+```json
+// .cursor/mcp.json
+{
+  "mcpServers": {
+    "openfilz": {
+      "url": "https://openfilz-api.yourdomain.com/mcp",
+      "headers": { "Authorization": "Bearer <your-token>" }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>VS Code / GitHub Copilot</b></summary>
+
+```json
+// .vscode/mcp.json
+{
+  "servers": {
+    "openfilz": {
+      "type": "http",
+      "url": "https://openfilz-api.yourdomain.com/mcp",
+      "headers": { "Authorization": "Bearer <your-token>" }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>Gemini CLI</b></summary>
+
+```bash
+gemini mcp add --transport http openfilz \
+  https://openfilz-api.yourdomain.com/mcp \
+  --header "Authorization: Bearer $TOKEN"
+```
+
+</details>
+
+<details>
+<summary><b>n8n</b></summary>
+
+**MCP Client Tool** node, connected to an **AI Agent** node:
+transport `HTTP Streamable`, URL `https://openfilz-api.yourdomain.com/mcp`,
+a *Header Auth* credential `Authorization: Bearer <your-token>` —
+[importable workflow](../examples/mcp/n8n/).
+
+</details>
+
+The rest of this section covers the two auth paths in detail, plus more clients
+(Spring AI, Python, MCP Inspector).
+
 ### Getting a bearer token
 
 For the bearer-token path, mint a token from your Keycloak realm with a **service-account client**
