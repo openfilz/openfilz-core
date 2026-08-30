@@ -229,6 +229,21 @@ public class DocumentAiTools {
         return modifiedFolders;
     }
 
+    /**
+     * Human-readable log of the mutating actions performed during this turn (create / write / move /
+     * rename). Consumed by {@code AiChatServiceImpl} to report partial success when the model fails
+     * to produce a summary after those side effects have already committed.
+     */
+    private final List<String> performedActions = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    private void recordAction(String description) {
+        performedActions.add(description);
+    }
+
+    public List<String> getPerformedActions() {
+        return performedActions;
+    }
+
     private void register(UUID id, UUID parentId, String type, String name) {
         documentRegistry.put(name, new DocRef(id, parentId, type, name));
     }
@@ -270,6 +285,7 @@ public class DocumentAiTools {
     public void clearRegistry() {
         documentRegistry.clear();
         modifiedFolders.clear();
+        performedActions.clear();
     }
 
     /** Get all registered documents (for post-processing). */
@@ -504,6 +520,7 @@ public class DocumentAiTools {
                 if (response != null && response.id() != null) {
                     register(response.id(), parentId, DocumentType.FILE.name(), fileName);
                     recordFolderModified(parentId);
+                    recordAction("Created file '%s'".formatted(fileName));
                     log.info("[AI-TOOL] writeFile: created '{}' ({} bytes) in folder {}", fileName, fileSize, parentId);
                     return toolResult("writeFile", "File '%s' created successfully.".formatted(fileName));
                 }
@@ -545,6 +562,7 @@ public class DocumentAiTools {
             var result = blockWithAuth(documentService.createFolder(request));
             register(result.id(), parentId, DocumentType.FOLDER.name(), name);
             recordFolderModified(parentId);
+            recordAction("Created folder '%s'".formatted(name));
             return "Folder '%s' created successfully with ID: %s".formatted(name, result.id());
         } catch (Exception e) {
             log.error("Error creating folder", e);
@@ -643,6 +661,8 @@ public class DocumentAiTools {
             // Both sides of the move changed content: the target and each source folder
             recordFolderModified(targetId);
             sourceParents.forEach(this::recordFolderModified);
+            recordAction("Moved %d item(s) to %s".formatted(moved,
+                    isRootFolderName(targetFolder) ? "the root folder" : "'%s'".formatted(targetFolder)));
             return "Successfully moved %d item(s).".formatted(moved);
         } catch (Exception e) {
             log.error("Error moving documents", e);
@@ -746,6 +766,7 @@ public class DocumentAiTools {
             }
 
             recordFolderModified(doc.getParentId());
+            recordAction("Renamed '%s' to '%s'".formatted(doc.getName(), newName));
             return "Successfully renamed to '%s'.".formatted(newName);
         } catch (Exception e) {
             log.error("Error renaming document", e);
