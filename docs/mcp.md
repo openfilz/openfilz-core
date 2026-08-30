@@ -183,9 +183,11 @@ this section:
 The snippets below assume the API at `http://localhost:8081`; in production use your real hostname
 over HTTPS (e.g. `https://openfilz-api.yourdomain.com/mcp` or `https://yourdomain-api.openfilz.com/mcp`).
 
-> **`api.openfilz.com` is the OpenFilz demo environment, not your endpoint.** Whether you run
-> on-prem or cloud-prem, your agents connect to *your deployment's* API hostname — the snippets
-> below use `openfilz-api.yourdomain.com` as a stand-in; substitute your own.
+> **`api.openfilz.com` is the OpenFilz demo environment, not your endpoint.** On-prem
+> deployments choose their own hostname on their own DNS (e.g. `openfilz-api.yourdomain.com`);
+> Cloud-Prem deployments get an assigned `yourdomain-api.openfilz.com` hostname. Either way,
+> your agents connect to *your deployment's* API hostname — the snippets below use
+> `openfilz-api.yourdomain.com` as a stand-in; substitute your own.
 
 ### Quick start — pick your tool
 
