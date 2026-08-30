@@ -419,10 +419,22 @@ find the exact callback URL in that provider's connector documentation.
 > predates OpenFilz's MCP feature does not gain the client on upgrade, and every OAuth login
 > fails with *Client not found*. Add it once by hand: Keycloak admin → your realm → Clients →
 > **Import client**, pasting the `openfilz-mcp` block from `realm-export.json` (public client,
-> PKCE `S256`, standard flow only, the redirect URIs listed above). Two quick checks that both
-> halves are live: `GET /.well-known/oauth-protected-resource` on the API must answer `200`
-> (a `404` means `openfilz.mcp.active` is off), and the Keycloak `…/auth?client_id=openfilz-mcp&…`
-> page must show a login form, not *Client not found*.
+> PKCE `S256`, standard flow only, the redirect URIs listed above, and `offline_access` as an
+> **optional client scope**). Two quick checks that both halves are live:
+> `GET /.well-known/oauth-protected-resource` on the API must answer `200` (a `404` means
+> `openfilz.mcp.active` is off), and the Keycloak `…/auth?client_id=openfilz-mcp&…` page must
+> show a login form, not *Client not found*.
+
+> **Scopes: the client must accept everything your realm advertises.** Claude requests the
+> union of the realm's `scopes_supported` (from the OIDC discovery document), and Keycloak
+> refuses the whole login when *any* requested scope is not assigned to the client — the
+> symptom is a successful sign-in page followed by *"Authorization with … failed"*
+> (`error=invalid_scope`, Keycloak log: `Invalid scopes: …`). Two rules keep it green:
+> `offline_access` must be assigned to `openfilz-mcp` as an **optional client scope** (Claude
+> uses it to hold a refresh token for the persistent connection — the shipped export now
+> includes it), and any **custom client scope** your realm defines must either also be assigned
+> to `openfilz-mcp` (optional is fine) or be deleted if unused — a leftover scope nothing
+> references still appears in `scopes_supported` and breaks the login.
 
 ### n8n
 

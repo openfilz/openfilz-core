@@ -35,6 +35,9 @@
         "profile",
         "basic",
         "email"
+      ],
+      "optionalClientScopes": [
+        "offline_access"
       ]
     },
     {
