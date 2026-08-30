@@ -69,7 +69,7 @@ therefore withheld unless you opt in:
 
 | Mode | Tools exposed |
 |---|---|
-| `READ_ONLY` (default) | `queryDocuments`, `readDocumentContent`, `getDocumentPath`, `describeImage` |
+| `READ_ONLY` (default) | `whoami`, `queryDocuments`, `readDocumentContent`, `getDocumentPath`, `describeImage`, the metadata/version reads |
 | `READ_WRITE` | the four above **plus** `writeFile`, `createFolder`, `moveDocuments`, `renameDocument` |
 
 In `READ_ONLY` the mutating tools are absent from `tools/list` — an agent cannot choose a tool it
@@ -124,11 +124,12 @@ opened it, and horizontal scaling needs no sticky sessions.
 
 ## 3. The tool surface
 
-Sixteen document tools, curated rather than generated. (A 60-operation auto-generated tool list from the
+Seventeen document tools, curated rather than generated. (A 60-operation auto-generated tool list from the
 OpenAPI spec would make agents *worse*, not better — the small, well-described surface is the point.)
 
 | Tool | Mode | What it does |
 |---|---|---|
+| `whoami` | read | The identity the session acts as (email, name) and the operations the caller's roles allow — derived from the caller's own token by the same policy that judges every call. Needs **no role** (any authenticated caller); an agent should call it before mutating operations to confirm its own blast radius. |
 | `queryDocuments` | read | List folder contents, search by name, find recent files, count documents. **The main entry point** — most other tools take a *name*, and this is what resolves an ambiguous name to the right item. |
 | `readDocumentContent` | read | Extract the text of a document. |
 | `getDocumentPath` | read | Full path (ancestors) of a document, from root to its parent folder. |
@@ -161,10 +162,13 @@ alongside the document tools (no configuration — they appear when the enterpri
 | `unshareDocument` | write | Revoke a user's access to a document | CONTRIBUTOR + EDIT_SHARE |
 | `addComment` | write | Add a comment to a document | CONTRIBUTOR or COMMENTER |
 | `listComments` | read | List a document's comments | READER or CONTRIBUTOR or COMMENTER |
+| `getDocumentPermissions` | read | A document's permissions: owner, who it is shared with, and each grantee's access level (READER / COMMENTER / EDITOR) | the document's **owner** (no share role needed), or VIEW_SHARE / EDIT_SHARE for a document shared with the caller |
 
 A client discovers these at runtime through `tools/list` — an agent talking to a Community
 deployment simply sees fewer tools. They carry the same per-user scoping as the document tools: an
-agent can only share or comment on documents its user may act on.
+agent can only share or comment on documents its user may act on, and permissions are only
+inspectable by the owner or a share-role holder the document is shared with (the same owner
+bypass the GraphQL `listDocShares` query applies).
 
 ---
 
@@ -472,7 +476,7 @@ npx -y @modelcontextprotocol/inspector --cli http://localhost:8081/mcp \
   --transport http --header "Authorization: Bearer $TOKEN" --method tools/list
 ```
 
-It should list 16 tools in `READ_WRITE` mode, 8 in `READ_ONLY` (Community counts; Enterprise adds the share/comment tools). Dropping the `--header` must fail
+It should list 17 tools in `READ_WRITE` mode, 9 in `READ_ONLY` (Community counts; Enterprise adds the share/comment/permissions tools). Dropping the `--header` must fail
 with `401` — if it does not, `/mcp` is not protected and something is very wrong.
 
 ---

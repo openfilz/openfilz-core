@@ -26,6 +26,15 @@ package org.openfilz.dms.service.ai;
  */
 public enum ToolCapability {
 
+    /**
+     * Read the caller's own identity and effective permissions ({@code whoami}). Granted to any
+     * authenticated caller regardless of roles — an agent must be able to confirm which principal
+     * it is acting as before it can reason about anything else, and the answer is derived solely
+     * from the caller's own token. There is no REST equivalent to mirror: identity <em>is</em> the
+     * token.
+     */
+    IDENTITY_READ(false),
+
     /** Read or search documents. Mirrors the REST read/search endpoints: READER or CONTRIBUTOR. */
     DOCUMENT_READ(false),
 

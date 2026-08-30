@@ -1014,6 +1014,46 @@ public class DocumentAiTools {
         }
     }
 
+    @Tool(description = "Get the identity of the OpenFilz user this session acts as, and the "
+            + "operations that user's roles allow (read/write/delete documents, shares, comments, "
+            + "e-Sign, audit). Read-only and free of side effects — call it before mutating "
+            + "operations to confirm which principal you are acting as.")
+    public String whoami() {
+        // No capability gate beyond IDENTITY_READ (any authenticated caller): the answer is
+        // derived from the caller's own token and the same policies that will judge their calls —
+        // nothing about any other user or document is revealed.
+        Map<String, Object> identity = new java.util.LinkedHashMap<>();
+        identity.put("email", userEmail);
+        if (authentication instanceof org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken jwt) {
+            Object name = jwt.getToken().getClaims().getOrDefault("name",
+                    jwt.getToken().getClaims().get("preferred_username"));
+            if (name != null) {
+                identity.put("name", name.toString());
+            }
+        }
+        identity.put("documentScope", accessPolicy.permitAll()
+                ? "all documents — this deployment has no per-document permissions"
+                : "per-user — only documents this user owns or that are shared with them");
+        Map<String, Boolean> operations = new java.util.LinkedHashMap<>();
+        operations.put("readDocuments", allowedForCaller(ToolCapability.DOCUMENT_READ));
+        operations.put("writeDocuments", allowedForCaller(ToolCapability.DOCUMENT_WRITE));
+        operations.put("deleteDocuments", allowedForCaller(ToolCapability.DOCUMENT_DELETE));
+        operations.put("readAuditTrail", allowedForCaller(ToolCapability.AUDIT_READ));
+        operations.put("readSignatureStatus", allowedForCaller(ToolCapability.SIGNATURE_READ));
+        operations.put("initiateSignatureRequests", allowedForCaller(ToolCapability.SIGNATURE_WRITE));
+        operations.put("readShares", allowedForCaller(ToolCapability.SHARE_READ));
+        operations.put("manageShares", allowedForCaller(ToolCapability.SHARE_WRITE));
+        operations.put("readComments", allowedForCaller(ToolCapability.COMMENT_READ));
+        operations.put("writeComments", allowedForCaller(ToolCapability.COMMENT_WRITE));
+        identity.put("allowedOperations", operations);
+        return toolResult("whoami", JSON.writeValueAsString(identity));
+    }
+
+    /** The caller's effective verdict for a capability — the same gate that will judge the call. */
+    private boolean allowedForCaller(ToolCapability capability) {
+        return rolePolicy == null || rolePolicy.isAllowed(authentication, capability);
+    }
+
     @Tool(description = "Read all metadata (custom properties) of a document or folder as key/value pairs.")
     public String getMetadata(
             @ToolParam(description = "The name or reference of the document or folder") String documentName) {

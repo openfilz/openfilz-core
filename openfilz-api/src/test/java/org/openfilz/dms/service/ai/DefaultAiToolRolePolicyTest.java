@@ -135,6 +135,16 @@ class DefaultAiToolRolePolicyTest {
     }
 
     @Test
+    @DisplayName("IDENTITY_READ (whoami) is granted to any authenticated caller, roles or not")
+    void identityReadNeedsNoRole() {
+        assertThat(policyFor(false)
+                .isAllowed(jwt(), ToolCapability.IDENTITY_READ))
+                .as("a caller with no OpenFilz role must still be able to ask who it is").isTrue();
+        assertThat(policyFor(false, Role.READER.toString())
+                .isAllowed(jwt(), ToolCapability.IDENTITY_READ)).isTrue();
+    }
+
+    @Test
     @DisplayName("share capabilities are refused in Community — there is no sharing model")
     void shareCapabilitiesAreEnterpriseOnly() {
         AiToolRolePolicy policy = policyFor(false,

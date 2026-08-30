@@ -33,6 +33,7 @@ public class DocumentAiToolsContributor implements McpToolContributor {
      * classifies, rather than in the provider — the provider merges the maps of all contributors.
      */
     public static final Map<String, ToolCapability> CAPABILITIES = Map.ofEntries(
+            entry("whoami", ToolCapability.IDENTITY_READ),
             entry("queryDocuments", ToolCapability.DOCUMENT_READ),
             entry("readDocumentContent", ToolCapability.DOCUMENT_READ),
             entry("getDocumentPath", ToolCapability.DOCUMENT_READ),
