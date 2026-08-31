@@ -1,6 +1,8 @@
 package org.openfilz.dms.service.impl;
 
 import lombok.RequiredArgsConstructor;
+import org.openfilz.dms.config.CommonProperties;
+import org.openfilz.dms.config.McpProperties;
 import org.openfilz.dms.config.QuotaProperties;
 import org.openfilz.dms.config.RecycleBinProperties;
 import org.openfilz.dms.dto.response.Settings;
@@ -20,6 +22,9 @@ import java.util.List;
 @RequiredArgsConstructor
 @ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
 public class SettingsServiceImpl implements SettingsService {
+
+    /** Mirrors spring.ai.mcp.server.streamable-http.mcp-endpoint, which the transport fixes at /mcp. */
+    private static final String MCP_ENDPOINT_PATH = "/mcp";
 
     @Value("${openfilz.soft-delete.active:false}")
     private Boolean softDelete;
@@ -60,6 +65,16 @@ public class SettingsServiceImpl implements SettingsService {
     private final RecycleBinProperties recycleBinProperties;
 
     private final QuotaProperties quotaProperties;
+
+    /** MCP server config — surfaced so a user can connect their own agent without asking an admin. */
+    private final McpProperties mcpProperties;
+
+    /**
+     * Holds the public API base URL. The MCP endpoint is built from it exactly as
+     * McpDiscoveryController builds the RFC 9728 {@code resource}, so what the settings page
+     * shows and what a host discovers can never drift apart.
+     */
+    private final CommonProperties commonProperties;
 
     /** Senders registered for the e-Sign OTP channels — drives what the UI may offer. */
     private final List<SignatureOtpSender> otpSenders;
@@ -135,7 +150,25 @@ public class SettingsServiceImpl implements SettingsService {
                .signatureCloudActive(Boolean.TRUE.equals(signatureActive) && isCloudSealConfigured())
                .demoMode(Boolean.TRUE.equals(demoMode))
                .sealProvider(Boolean.TRUE.equals(signatureActive) ? effectiveSealProvider() : null)
+               .mcpActive(mcpProperties.isActive())
+               .mcpUrl(mcpProperties.isActive() ? mcpEndpointUrl() : null)
+               .mcpMode(mcpProperties.isActive() ? mcpProperties.getMode().name() : null)
+               .mcpAuthorizationServerUrl(mcpProperties.isActive() ? mcpProperties.getAuthorizationServerUrl() : null)
+               .mcpClientId(mcpProperties.isActive() ? mcpProperties.getClientId() : null)
                .build());
+
+    }
+
+    /**
+     * The URL an MCP host connects to. Same construction as the protected-resource metadata:
+     * the public API base URL plus the transport's endpoint path.
+     */
+    private String mcpEndpointUrl() {
+        String base = commonProperties.getApiPublicBaseUrl();
+        if (base == null || base.isBlank()) {
+            return null;
+        }
+        return (base.endsWith("/") ? base.substring(0, base.length() - 1) : base) + MCP_ENDPOINT_PATH;
 
     }
 
