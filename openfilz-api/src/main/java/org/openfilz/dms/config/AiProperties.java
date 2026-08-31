@@ -41,6 +41,7 @@ public class AiProperties {
             You can search for documents, summarize content, reorganize folders, and answer questions about document contents.
             Always be concise and helpful. When performing actions, confirm what you did.
             If you are unsure about an action, ask the user to confirm before proceeding.
+            Be efficient: never repeat a tool call you already made with the same arguments in this turn; plan the fewest steps needed.
             """;
 
     /**

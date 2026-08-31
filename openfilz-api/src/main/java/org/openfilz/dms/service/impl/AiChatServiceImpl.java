@@ -169,6 +169,33 @@ public class AiChatServiceImpl implements AiChatService {
                                     ))
                                     .doOnComplete(() -> log.debug("[AI] === Chat request complete ==="))
                                     .onErrorResume(e -> {
+                                        // A mutating tool already committed its side effects this turn
+                                        // (modifiedFolders is non-empty), so streamWithFailover refused to
+                                        // retry on a fallback model — a retry would run the mutation twice.
+                                        // Report the completed changes rather than a bare error for work
+                                        // that actually succeeded; only the closing summary is missing.
+                                        if (!tools.getModifiedFolders().isEmpty()) {
+                                            String message = buildPartialSuccessMessage(
+                                                    tools.getPerformedActions(), AiFailoverPolicy.classify(e));
+                                            log.warn("[AI] Model failed after a mutation — reporting {} completed "
+                                                            + "action(s) instead of an error: {}",
+                                                    tools.getPerformedActions().size(), e.toString());
+                                            List<String> modifiedFolderIds = List.copyOf(tools.getModifiedFolders());
+                                            return saveMessage(conversationId, "ASSISTANT", message)
+                                                    .then(updateConversationTimestamp(conversationId))
+                                                    .thenReturn(message)
+                                                    .flatMapMany(saved -> Flux.just(
+                                                            AiChatResponse.builder()
+                                                                    .conversationId(conversationId)
+                                                                    .content(saved)
+                                                                    .type(AiChatResponse.EventType.MESSAGE)
+                                                                    .build(),
+                                                            AiChatResponse.builder()
+                                                                    .conversationId(conversationId)
+                                                                    .type(AiChatResponse.EventType.DONE)
+                                                                    .modifiedFolderIds(modifiedFolderIds)
+                                                                    .build()));
+                                        }
                                         log.error("[AI] Error during AI chat streaming", e);
                                         return Flux.just(AiChatResponse.builder()
                                                 .conversationId(conversationId)
@@ -278,6 +305,35 @@ public class AiChatServiceImpl implements AiChatService {
             }
         }
         return -1;
+    }
+
+    /**
+     * Message shown when the model fails <em>after</em> a mutating tool has already committed this
+     * turn (a move / rename / create / write). The change is real and persisted; only the model's
+     * closing summary is missing — so we confirm exactly what was done and name why no summary
+     * followed, rather than surfacing a bare error for work that succeeded.
+     * <p>
+     * Package-private and static so it is unit-testable without the reactive pipeline.
+     */
+    static String buildPartialSuccessMessage(List<String> performedActions, AiFailoverPolicy.Failure failure) {
+        String reason = switch (failure) {
+            case QUOTA_EXHAUSTED -> "the AI model's rate limit was reached";
+            case MODEL_UNAVAILABLE -> "the AI model is currently unavailable";
+            case PROVIDER_OVERLOADED -> "the AI provider is overloaded";
+            default -> "the AI model could not finish its response";
+        };
+        StringBuilder sb = new StringBuilder();
+        if (performedActions == null || performedActions.isEmpty()) {
+            sb.append("I applied the requested change(s) to your documents.");
+        } else {
+            sb.append("I completed the following change").append(performedActions.size() > 1 ? "s:" : ":");
+            for (String action : performedActions) {
+                sb.append("\n- ").append(action);
+            }
+        }
+        sb.append("\n\nI couldn't add a summary because ").append(reason)
+          .append(". Your changes are saved — ask me again in a moment for a recap.");
+        return sb.toString();
     }
 
     @Override
