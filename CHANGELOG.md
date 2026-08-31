@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[394de8f52093bc5](https://github.com/openfilz/openfilz-core/commit/394de8f52093bc5) maven-release-bot[bot] *2026-08-30 23:33:47*
+[33b657f23e14cb6](https://github.com/openfilz/openfilz-core/commit/33b657f23e14cb6) maven-release-bot[bot] *2026-08-31 19:01:39*
 
 
-## v1.2.39
+## v1.2.40
 ### No issue
 
-**[maven-release-plugin] prepare release v1.2.39**
+**[maven-release-plugin] prepare release v1.2.40**
 
 
-[8132da4f750f852](https://github.com/openfilz/openfilz-core/commit/8132da4f750f852) maven-release-bot[bot] *2026-08-30 23:33:44*
+[0a64b7f11c9d445](https://github.com/openfilz/openfilz-core/commit/0a64b7f11c9d445) maven-release-bot[bot] *2026-08-31 19:01:36*
 
-**Merge pull request #216 from openfilz/develop**
+**Merge pull request #218 from openfilz/develop**
 
- * Release: MCP whoami tool, scopes_supported metadata, Helm MCP toggles + MCP docs
+ * Improve AI error handling and report partial success on failure
 
-[0969ed8d05d2c20](https://github.com/openfilz/openfilz-core/commit/0969ed8d05d2c20) Yann Demel *2026-08-30 23:30:36*
+[26268337d35c7f1](https://github.com/openfilz/openfilz-core/commit/26268337d35c7f1) Yann Demel *2026-08-31 18:58:32*
 
 
