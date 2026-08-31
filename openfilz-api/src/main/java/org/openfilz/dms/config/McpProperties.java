@@ -67,6 +67,16 @@ public class McpProperties {
      */
     private List<String> scopesSupported = List.of("openid", "profile", "email", "offline_access");
 
+    /**
+     * The Keycloak client id an MCP host should authenticate with. Purely informational for the
+     * server — it is the realm that owns the client — but the hosts that cannot register
+     * themselves need it typed in by hand: Keycloak has dynamic client registration disabled by
+     * default, so Claude Desktop / claude.ai must be pointed at an existing client ("Use your own
+     * OAuth client") instead of auto-registering. Surfaced in the settings API so a user can read
+     * it off their own deployment rather than guess it.
+     */
+    private String clientId = "openfilz-mcp";
+
     public boolean isReadOnly() {
         return mode == Mode.READ_ONLY;
     }
