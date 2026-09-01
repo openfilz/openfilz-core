@@ -201,6 +201,11 @@ the snippet for your tool, then ask it something like *"list my folders and coun
 <details>
 <summary><b>Get a token</b> — the <code>$TOKEN</code> in the snippets below</summary>
 
+Only the tools that paste a token need this (Claude Code, Cursor, Gemini CLI, n8n) — VS Code /
+Copilot, Claude Desktop and claude.ai sign in with OAuth instead, no token to mint. `my-agent`
+is a **placeholder for a service-account client you create in Keycloak first** (no such client
+ships with OpenFilz):
+
 ```bash
 export TOKEN=$(curl -s -X POST \
   "https://openfilz-auth.yourdomain.com/realms/openfilz/protocol/openid-connect/token" \
@@ -258,20 +263,16 @@ claude mcp add --transport http openfilz \
 </details>
 
 <details>
-<summary><b>VS Code / GitHub Copilot</b></summary>
+<summary><b>VS Code / GitHub Copilot</b> — no token, OAuth login</summary>
 
-```json
-// .vscode/mcp.json
-{
-  "servers": {
-    "openfilz": {
-      "type": "http",
-      "url": "https://openfilz-api.yourdomain.com/mcp",
-      "headers": { "Authorization": "Bearer <your-token>" }
-    }
-  }
-}
-```
+1. Command Palette → **MCP: Add Server…** → **HTTP**
+2. URL: `https://openfilz-api.yourdomain.com/mcp` — name it `openfilz`
+3. VS Code starts the sign-in. Self-registration (DCR) is off, so it asks for an OAuth
+   client: Client ID **`openfilz-mcp`**, client secret **empty**
+4. Your browser opens the OpenFilz sign-in — sign in, done
+
+Prefer a pasted token (e.g. a service-account identity instead of yours)? A static header in
+`.vscode/mcp.json` works too — see [`mcp.json` (config-file hosts)](#mcpjson-config-file-hosts).
 
 </details>
 
@@ -415,8 +416,10 @@ find the exact callback URL in that provider's connector documentation.
 > shows *"Couldn't register with …'s sign-in service. You can try again, or add an OAuth Client
 > ID in the connector settings."* — that dialog lets you switch to `openfilz-mcp` without
 > recreating the connector. Cursor, VS Code, n8n and any client that accepts a `client_id` use
-> the same value. DCR can be enabled in Keycloak later with no code change; claude.ai's hosted
-> connector *directory* listing still expects DCR.
+> the same value — VS Code handles the failed registration itself, prompting for a Client ID
+> (`openfilz-mcp`) and secret (leave empty) when adding the server. DCR can be enabled in
+> Keycloak later with no code change; claude.ai's hosted connector *directory* listing still
+> expects DCR.
 
 > **Upgraded deployments: the `openfilz-mcp` client must exist in your live realm.** The realm
 > export ships it, but Keycloak **imports a realm only when it is first created** — a realm that
