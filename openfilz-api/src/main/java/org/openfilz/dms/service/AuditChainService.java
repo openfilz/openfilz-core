@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
 import java.util.UUID;
 
@@ -33,6 +34,26 @@ public class AuditChainService {
         this.sortedKeyMapper = JsonMapper.builder()
                 .enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS)
                 .build();
+    }
+
+    /**
+     * The timestamp to stamp on an audit entry that takes part in the hash chain.
+     *
+     * <p>Truncated to microseconds on purpose. {@code audit_logs.timestamp} is a
+     * TIMESTAMPTZ, which Postgres stores with microsecond resolution, and the r2dbc
+     * driver sends the value as text with up to 9 fractional digits — so Postgres
+     * <em>rounds</em> (half-up) rather than truncates. {@code OffsetDateTime.now()}
+     * has nanosecond resolution on JDK 9+, so about one entry in 2000 falls in the
+     * last 500 ns of a millisecond and is rounded up across a millisecond boundary.
+     * Since {@link #canonicalize} hashes {@code toInstant().toEpochMilli()}, such an
+     * entry is hashed with one millisecond and read back with the next one, and
+     * {@code verifyChain()} then reports the chain BROKEN — a false tamper alarm.
+     *
+     * <p>Truncating here keeps the invariant the chain depends on: the value we hash
+     * is exactly the value Postgres stores.
+     */
+    public OffsetDateTime auditTimestamp() {
+        return OffsetDateTime.now().truncatedTo(ChronoUnit.MICROS);
     }
 
     public String computeGenesisHash() {

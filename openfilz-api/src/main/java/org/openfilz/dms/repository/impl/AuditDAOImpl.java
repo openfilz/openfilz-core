@@ -169,7 +169,7 @@ public class AuditDAOImpl implements AuditDAO, UserInfoService {
         return getConnectedUserEmail()
                 .flatMap(username -> {
                     String userPrincipal = username != null ? username : "SYSTEM";
-                    OffsetDateTime timestamp = OffsetDateTime.now();
+                    OffsetDateTime timestamp = auditChainService.auditTimestamp();
 
                     // Acquire advisory lock, read last hash, compute new hash, insert — all in one transaction
                     Mono<Void> chainedInsert = databaseClient.sql("SELECT pg_advisory_xact_lock(1)")

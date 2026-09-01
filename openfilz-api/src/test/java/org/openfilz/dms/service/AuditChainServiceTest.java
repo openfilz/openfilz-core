@@ -205,4 +205,57 @@ class AuditChainServiceTest {
         assertNotNull(hash);
         assertEquals(64, hash.length());
     }
+
+    // ==================== Postgres microsecond rounding ====================
+    //
+    // audit_logs.timestamp is a TIMESTAMPTZ, which Postgres stores with only
+    // microsecond resolution — and the r2dbc driver sends the value as text
+    // with up to 9 fractional digits, so Postgres ROUNDS (half-up), it does not
+    // truncate. `OffsetDateTime.now()` on JDK 9+ has nanosecond resolution, so
+    // roughly 1 entry in 2000 lands in the last 500 ns of a millisecond and gets
+    // rounded up ACROSS a millisecond boundary. canonicalize() hashes
+    // toInstant().toEpochMilli(), so the entry is written with one millisecond
+    // and read back with the next one — verifyChain() then recomputes a
+    // different hash and reports the chain BROKEN (a false tamper alarm).
+
+    /** Replicates what Postgres does to a TIMESTAMPTZ on write: round half-up to microseconds. */
+    private static OffsetDateTime asStoredByPostgres(OffsetDateTime value) {
+        return value.plusNanos(500).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+    }
+
+    @Test
+    void nanosecondTimestamp_isRoundedAcrossAMillisecond_andBreaksTheHash() {
+        // Characterization of the hazard: .123999999 is stored as .124000, so the
+        // epoch-millisecond the hash is built from changes from 123 to 124.
+        OffsetDateTime written = OffsetDateTime.of(2025, 6, 15, 10, 30, 0, 123_999_999, ZoneOffset.UTC);
+        OffsetDateTime stored = asStoredByPostgres(written);
+
+        assertNotEquals(written.toInstant().toEpochMilli(), stored.toInstant().toEpochMilli(),
+                "Postgres rounding must cross the millisecond boundary for this fixture");
+        assertNotEquals(
+                auditChainService.computeHash(written, "user@test.com", AuditAction.UPLOAD_DOCUMENT,
+                        DocumentType.FILE, null, null, "prevhash"),
+                auditChainService.computeHash(stored, "user@test.com", AuditAction.UPLOAD_DOCUMENT,
+                        DocumentType.FILE, null, null, "prevhash"),
+                "a nanosecond-precision timestamp hashes differently once Postgres has rounded it");
+    }
+
+    @Test
+    void auditTimestamp_survivesPostgresRounding_soTheChainStaysValid() {
+        // The timestamp the write path stamps on a chained entry must be storable
+        // losslessly, so that what we hashed is exactly what verifyChain() reads back.
+        for (int i = 0; i < 2000; i++) {
+            OffsetDateTime written = auditChainService.auditTimestamp();
+            OffsetDateTime stored = asStoredByPostgres(written);
+
+            assertEquals(written, stored,
+                    "audit timestamps must be microsecond-aligned so Postgres stores them unchanged");
+            assertEquals(
+                    auditChainService.computeHash(written, "user@test.com", AuditAction.UPLOAD_DOCUMENT,
+                            DocumentType.FILE, null, null, "prevhash"),
+                    auditChainService.computeHash(stored, "user@test.com", AuditAction.UPLOAD_DOCUMENT,
+                            DocumentType.FILE, null, null, "prevhash"),
+                    "the hash must be identical before and after the value round-trips through Postgres");
+        }
+    }
 }

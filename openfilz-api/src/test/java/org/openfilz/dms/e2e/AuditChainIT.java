@@ -302,7 +302,9 @@ public class AuditChainIT extends TestContainersBaseConfig {
 
         // Re-insert genesis so subsequent tests work
         String genesisHash = auditChainService.computeGenesisHash();
-        OffsetDateTime genesisTimestamp = OffsetDateTime.now();
+        // Microsecond-aligned: Postgres rounds a TIMESTAMPTZ to microseconds, which would
+        // otherwise shift the hashed epoch-millisecond. See AuditChainService#auditTimestamp.
+        OffsetDateTime genesisTimestamp = auditChainService.auditTimestamp();
         String genesisEntryHash = auditChainService.computeHash(
                 genesisTimestamp, "SYSTEM", CHAIN_GENESIS, null, null, null, genesisHash);
         databaseClient.sql("DROP TRIGGER IF EXISTS audit_log_immutable ON audit_logs").then().block();
