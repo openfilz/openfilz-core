@@ -72,8 +72,11 @@ spring:
           session acts as and what its roles allow. Use queryDocuments to find files and folders
           before acting on them: most tools accept a document or folder NAME, and queryDocuments
           is what resolves an ambiguous name to the right item. readDocumentContent extracts the
-          text of a file. All operations are scoped to the calling user's own permissions — a
-          document that queryDocuments does not return is not visible to this user.
+          text of a file. downloadDocument returns the extracted text plus a resource link
+          (openfilz://documents/{id}); fetch that link with resources/read on this same
+          connection to obtain the original file bytes. All operations are scoped to the calling
+          user's own permissions — a document that queryDocuments does not return is not visible
+          to this user.
         # STATELESS: every request carries its own bearer token, so no MCP session outlives
         # the JWT that opened it and scaling needs no sticky sessions. SSE is deprecated.
         protocol: STATELESS

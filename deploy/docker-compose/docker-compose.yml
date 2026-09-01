@@ -84,6 +84,11 @@ services:
 
       OPENFILZ_CALCULATECHECKSUM: ${OPENFILZ_CALCULATECHECKSUM:-false}
 
+      # MCP server — external AI agents over POST /mcp (see docs/mcp.md).
+      # authorization-server-url falls back to KEYCLOAK_REALM_URL in application.yml.
+      OPENFILZ_MCP_ACTIVE: ${OPENFILZ_MCP_ACTIVE:-false}
+      OPENFILZ_MCP_MODE: ${OPENFILZ_MCP_MODE:-READ_ONLY}
+
       # Server configuration
       SERVER_PORT: 8081
 

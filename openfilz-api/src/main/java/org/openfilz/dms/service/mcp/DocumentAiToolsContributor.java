@@ -89,4 +89,15 @@ public class DocumentAiToolsContributor implements McpToolContributor {
     public Map<String, ToolCapability> capabilities() {
         return CAPABILITIES;
     }
+
+    /**
+     * {@code downloadDocument} stays in {@link #CAPABILITIES} (it is part of the advertised
+     * surface, and the read-only/role classification is still the source of truth) but is served
+     * over MCP by {@link McpDocumentResources}: its result carries a {@code resource_link}
+     * content block next to the text fallback, which the adapted String route cannot express.
+     */
+    @Override
+    public Set<String> nativeTools() {
+        return Set.of(McpDocumentResources.DOWNLOAD_TOOL);
+    }
 }

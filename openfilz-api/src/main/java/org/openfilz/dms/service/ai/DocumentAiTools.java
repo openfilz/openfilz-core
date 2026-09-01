@@ -1231,35 +1231,120 @@ public class DocumentAiTools {
                 .formatted(documentName, response.restoredFromVersionId(), response.newVersionId()));
     }
 
-    @Tool(description = "Get a document's content: the extracted text for text/PDF/Office files, or "
-            + "a download link for binary files (images, archives, …). The link is fetched with the "
-            + "same OpenFilz bearer token.")
+    @Tool(description = "Get a document's content: the extracted text for text/PDF/Office files, "
+            + "plus a link to download the original file in a browser (as a signed-in user).")
     public String downloadDocument(
             @ToolParam(description = "The name or reference of the document") String documentName) {
+        DocumentDownload download = fetchDownload(documentName);
+        if (download.error() != null) {
+            return toolResult("downloadDocument", download.error());
+        }
+        Document doc = download.document();
+        if (download.extractedText() != null) {
+            return toolResult("downloadDocument", ("Content of '%s' (%s, %d bytes):\n\n%s\n\n"
+                    + "Download the original file (browser, signed-in user): %s").formatted(
+                    doc.getName(), contentTypeOf(doc), sizeOf(doc), download.extractedText(), download.downloadUrl()));
+        }
+        return toolResult("downloadDocument", ("'%s' is a %s file (%d bytes); its content is not text. "
+                + "Download the original file (browser, signed-in user): %s").formatted(
+                doc.getName(), contentTypeOf(doc), sizeOf(doc), download.downloadUrl()));
+    }
+
+    /**
+     * The structured form of {@link #downloadDocument}, shared by both front-ends: the chat
+     * assistant formats it as text above; the MCP front-end ({@code McpDocumentResources})
+     * renders it as a {@code resource_link} + text content blocks, so an MCP client can fetch
+     * the original bytes over its own authenticated connection ({@code resources/read}).
+     * Same gates as the tool: role policy, then per-document access policy.
+     *
+     * @return the document, its extracted text (null when not extractable) and browser download
+     *         URL — or an {@code error} message, in which case every other field is null
+     */
+    public DocumentDownload fetchDownload(String documentName) {
         String roleDenial = denyIfNotAllowed("downloadDocument", ToolCapability.DOCUMENT_READ);
-        if (roleDenial != null) return roleDenial;
+        if (roleDenial != null) {
+            return DocumentDownload.failure(roleDenial);
+        }
         UUID id = resolveDocumentToId(documentName);
         if (id == null || !canRead(id)) {
-            return toolResult("downloadDocument", "No document named '%s' is visible to you.".formatted(documentName));
+            return DocumentDownload.failure("No document named '%s' is visible to you.".formatted(documentName));
         }
         Document doc = blockWithAuth(documentRepository.findById(id));
         if (doc == null) {
-            return toolResult("downloadDocument", "Document '%s' not found.".formatted(documentName));
+            return DocumentDownload.failure("Document '%s' not found.".formatted(documentName));
         }
         if (doc.getType() == DocumentType.FOLDER) {
-            return toolResult("downloadDocument", "'%s' is a folder, not a downloadable file.".formatted(documentName));
+            return DocumentDownload.failure("'%s' is a folder, not a downloadable file.".formatted(documentName));
         }
-        String url = downloadUrl(id);
         Resource resource = blockWithAuth(storageService.loadFile(doc.getStoragePath()));
-        String text = extractText(resource);
-        if (text != null) {
-            return toolResult("downloadDocument", ("Content of '%s' (%s, %d bytes):\n\n%s\n\n"
-                    + "Download the original file: %s").formatted(
-                    doc.getName(), contentTypeOf(doc), sizeOf(doc), text, url));
+        return new DocumentDownload(doc, extractText(resource), downloadUrl(id), null);
+    }
+
+    /**
+     * The raw bytes of a single document, for the MCP resource front-end
+     * ({@code openfilz://documents/{id}} → {@code resources/read}). Enforces the same two gates
+     * as every tool — the role policy for the kind of operation, the access policy for the
+     * document — and answers for an inaccessible id exactly as for an id that does not exist,
+     * so the resource URI space is not an existence oracle.
+     *
+     * @param maxBytes refuse (never truncate) content larger than this — the whole blob is
+     *                 base64-inlined into a single JSON-RPC response
+     */
+    public DocumentContent fetchContent(UUID documentId, long maxBytes) {
+        String roleDenial = denyIfNotAllowed("resources/read", ToolCapability.DOCUMENT_READ);
+        if (roleDenial != null) {
+            return DocumentContent.failure(roleDenial, false);
         }
-        return toolResult("downloadDocument", ("'%s' is a %s file (%d bytes); its content is not text. "
-                + "Download it with your OpenFilz bearer token: %s").formatted(
-                doc.getName(), contentTypeOf(doc), sizeOf(doc), url));
+        if (documentId == null || !canRead(documentId)) {
+            return DocumentContent.notFound(documentId);
+        }
+        Document doc = blockWithAuth(documentRepository.findById(documentId));
+        if (doc == null || doc.getType() == DocumentType.FOLDER
+                || (doc.getActive() != null && !doc.getActive())) {
+            return DocumentContent.notFound(documentId);
+        }
+        if (sizeOf(doc) > maxBytes) {
+            return DocumentContent.failure(resourceTooLarge(doc, sizeOf(doc), maxBytes), false);
+        }
+        try {
+            Resource resource = blockWithAuth(storageService.loadFile(doc.getStoragePath()));
+            if (resource == null) {
+                return DocumentContent.failure("Could not load '%s' from storage.".formatted(doc.getName()), false);
+            }
+            byte[] bytes = resource.getContentAsByteArray();
+            if (bytes.length > maxBytes) {
+                // The stored size can lie (null, stale after a replace) — re-check what was read
+                return DocumentContent.failure(resourceTooLarge(doc, bytes.length, maxBytes), false);
+            }
+            return new DocumentContent(doc, bytes, null, false);
+        } catch (Exception e) {
+            log.error("[AI-TOOL] error reading document {} for resources/read", documentId, e);
+            return DocumentContent.failure("Error reading document: " + e.getMessage(), false);
+        }
+    }
+
+    private String resourceTooLarge(Document doc, long size, long maxBytes) {
+        return ("'%s' is %d bytes, above this server's %d-byte MCP resource limit. "
+                + "Download it in a browser instead: %s").formatted(
+                doc.getName(), size, maxBytes, downloadUrl(doc.getId()));
+    }
+
+    /** Everything a front-end needs to hand a document over, or an error message (exactly one is set). */
+    public record DocumentDownload(Document document, String extractedText, String downloadUrl, String error) {
+        static DocumentDownload failure(String error) {
+            return new DocumentDownload(null, null, null, error);
+        }
+    }
+
+    /** A document's raw bytes for the MCP resource front-end, or a refusal ({@code notFound} steers the error code). */
+    public record DocumentContent(Document document, byte[] bytes, String error, boolean notFound) {
+        static DocumentContent failure(String error, boolean notFound) {
+            return new DocumentContent(null, null, error, notFound);
+        }
+
+        static DocumentContent notFound(UUID id) {
+            return failure("No document with id '%s' is visible to you.".formatted(id), true);
+        }
     }
 
     /** Extract text from a file with Tika, truncated for context, or null if none is extractable. */

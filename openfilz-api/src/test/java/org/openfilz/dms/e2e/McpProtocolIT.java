@@ -3,7 +3,9 @@ package org.openfilz.dms.e2e;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.openfilz.dms.config.McpProperties;
 import org.openfilz.dms.service.mcp.DocumentAiToolsContributor;
+import org.openfilz.dms.service.mcp.McpDocumentResources;
 import org.openfilz.dms.service.mcp.McpToolCallbackProvider;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
@@ -15,7 +17,11 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import tools.jackson.databind.JsonNode;
 
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -46,8 +52,13 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 @TestConstructor(autowireMode = ALL)
 public class McpProtocolIT extends AbstractMcpIT {
 
-    public McpProtocolIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
+    /** For the size-cap test — the flag is runtime-read, so mutating the bean is effective per call. */
+    private final McpProperties mcpProperties;
+
+    public McpProtocolIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder,
+                         McpProperties mcpProperties) {
         super(webTestClient, customJacksonJsonEncoder);
+        this.mcpProperties = mcpProperties;
     }
 
     @DynamicPropertySource
@@ -183,6 +194,139 @@ public class McpProtocolIT extends AbstractMcpIT {
         assertThat(rpcError || toolError)
                 .as("calling a tool that does not exist must fail; response was: %s", response)
                 .isTrue();
+    }
+
+    // ---------------------------------------------------------------- resources
+    // downloadDocument is served natively (McpDocumentResources): its result carries a
+    // resource_link content block next to the text fallback, and resources/read serves the
+    // original bytes over the same authenticated connection. These tests also drive the
+    // resource read path for layer 2's native-image trace.
+
+    @Test
+    @DisplayName("initialize advertises the resources capability alongside tools")
+    void initializeAdvertisesResources() {
+        JsonNode result = expectResult(rpc(70, "initialize", """
+                {"protocolVersion":"2025-06-18",
+                 "capabilities":{},
+                 "clientInfo":{"name":"openfilz-protocol-it","version":"1.0.0"}}"""));
+
+        assertThat(result.path("capabilities").has("resources"))
+                .as("a server exposing openfilz://documents/{id} must advertise resources")
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("resources/templates/list advertises the document template and nothing enumerable")
+    void resourceTemplateIsAdvertised() {
+        JsonNode templatesResult = expectResult(rpc(71, "resources/templates/list", "{}"));
+        List<String> templates = new ArrayList<>();
+        templatesResult.path("resourceTemplates")
+                .forEach(template -> templates.add(template.path("uriTemplate").asString()));
+        assertThat(templates).contains(McpDocumentResources.DOCUMENT_URI_TEMPLATE);
+
+        // resources/list stays empty by design: the list is per-deployment, not per-caller,
+        // so enumerating documents there would be a leak. Per-call authorization happens in
+        // the read handler instead.
+        JsonNode listResult = expectResult(rpc(72, "resources/list", "{}"));
+        assertThat(listResult.path("resources").isEmpty())
+                .as("no document may ever be enumerated in the static resources/list")
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("downloadDocument returns a resource_link whose resources/read serves the original bytes")
+    void downloadDocumentServesResourceLinkAndTextFallback() {
+        String probe = "mcp-res-" + UUID.randomUUID().toString().substring(0, 8);
+        String fileContent = "resource content " + probe;
+        callToolText("writeFile", """
+                {"fileName":"%s.txt","content":"%s"}""".formatted(probe, fileContent));
+
+        JsonNode result = expectResult(rpc(73, "tools/call", """
+                {"name":"downloadDocument","arguments":{"documentName":"%s.txt"}}""".formatted(probe)));
+        assertThat(result.path("isError").asBoolean(false)).isFalse();
+
+        String linkUri = null;
+        StringBuilder text = new StringBuilder();
+        for (JsonNode block : result.path("content")) {
+            switch (block.path("type").asString()) {
+                case "resource_link" -> linkUri = block.path("uri").asString();
+                case "text" -> text.append(block.path("text").asString());
+            }
+        }
+        assertThat(linkUri)
+                .as("a resource_link block, for clients that can follow it")
+                .startsWith(McpDocumentResources.DOCUMENT_URI_PREFIX);
+        assertThat(text.toString())
+                .as("the text fallback still carries the extracted content for tools-only clients")
+                .contains(fileContent);
+
+        JsonNode read = expectResult(readResource(linkUri));
+        JsonNode contents = read.path("contents").path(0);
+        assertThat(contents.path("uri").asString()).isEqualTo(linkUri);
+        byte[] blob = Base64.getDecoder().decode(contents.path("blob").asString());
+        assertThat(new String(blob, StandardCharsets.UTF_8))
+                .as("resources/read must serve the original bytes, not extracted text")
+                .isEqualTo(fileContent);
+    }
+
+    @Test
+    @DisplayName("resources/read refuses an unknown id and a malformed uri without an existence oracle")
+    void unknownResourceIsNotFound() {
+        JsonNode unknownId = readResource(McpDocumentResources.DOCUMENT_URI_PREFIX + UUID.randomUUID());
+        assertThat(unknownId.has("error"))
+                .as("an id nobody can see must be an error, not empty contents: %s", unknownId)
+                .isTrue();
+        // "not visible to you" wording only — never a permission-vs-existence distinction
+        assertThat(unknownId.path("error").path("message").asString().toLowerCase())
+                .doesNotContain("permission", "forbidden");
+
+        JsonNode malformed = readResource("openfilz://documents/not-a-uuid");
+        assertThat(malformed.has("error"))
+                .as("a uri outside the strict template must be refused: %s", malformed)
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("a document above the configured resource size cap is refused with guidance")
+    void oversizedResourceIsRefused() {
+        String probe = "mcp-cap-" + UUID.randomUUID().toString().substring(0, 8);
+        callToolText("writeFile", """
+                {"fileName":"%s.txt","content":"more than one byte"}""".formatted(probe));
+        JsonNode result = expectResult(rpc(74, "tools/call", """
+                {"name":"downloadDocument","arguments":{"documentName":"%s.txt"}}""".formatted(probe)));
+        String linkUri = null;
+        for (JsonNode block : result.path("content")) {
+            if ("resource_link".equals(block.path("type").asString())) {
+                linkUri = block.path("uri").asString();
+            }
+        }
+        assertThat(linkUri).isNotNull();
+
+        long originalCap = mcpProperties.getMaxResourceSizeBytes();
+        try {
+            mcpProperties.setMaxResourceSizeBytes(1);
+            JsonNode refused = readResource(linkUri);
+            assertThat(refused.has("error"))
+                    .as("an oversized blob must be refused, not truncated: %s", refused)
+                    .isTrue();
+            assertThat(refused.path("error").path("message").asString())
+                    .as("the refusal points the caller at the browser download instead")
+                    .contains("limit");
+        } finally {
+            mcpProperties.setMaxResourceSizeBytes(originalCap);
+        }
+    }
+
+    @Test
+    @DisplayName("an unauthenticated resources/read is rejected before reaching any handler")
+    void unauthenticatedResourceReadIsRejected() {
+        webTestClient.post().uri(MCP_ENDPOINT)
+                .accept(MediaType.APPLICATION_JSON, MediaType.TEXT_EVENT_STREAM)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(rpcBody(97, "resources/read", """
+                        {"uri":"%s%s"}""".formatted(McpDocumentResources.DOCUMENT_URI_PREFIX, UUID.randomUUID())))
+                .exchange()
+                .expectStatus().isUnauthorized();
     }
 
     /**

@@ -46,6 +46,15 @@ public class McpProperties {
     }
 
     /**
+     * Upper bound for a document served through {@code resources/read}
+     * ({@code openfilz://documents/{id}} — see {@code McpDocumentResources}). The whole file is
+     * base64-inlined into a single JSON-RPC response (+33% over the raw size), so this caps the
+     * per-read memory and payload; larger documents are refused with a pointer to the browser
+     * download endpoint. Runtime-read like every flag here, never a bean condition.
+     */
+    private long maxResourceSizeBytes = 10L * 1024 * 1024;
+
+    /**
      * The OAuth 2.0 authorization server that protects this MCP endpoint — the Keycloak realm URL
      * (e.g. {@code https://auth.openfilz.com/realms/openfilz}). Advertised in the RFC 9728
      * protected-resource metadata so a remote MCP host can discover where to authenticate.
