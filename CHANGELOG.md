@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[f7be09bc91c5ddb](https://github.com/openfilz/openfilz-core/commit/f7be09bc91c5ddb) maven-release-bot[bot] *2026-08-31 20:55:21*
+[63fc2267226b31e](https://github.com/openfilz/openfilz-core/commit/63fc2267226b31e) maven-release-bot[bot] *2026-09-01 18:53:34*
 
 
-## v1.2.41
+## v1.3.0
 ### No issue
 
-**[maven-release-plugin] prepare release v1.2.41**
+**[maven-release-plugin] prepare release v1.3.0**
 
 
-[0864f10d71b761c](https://github.com/openfilz/openfilz-core/commit/0864f10d71b761c) maven-release-bot[bot] *2026-08-31 20:55:18*
+[2696fe51887086a](https://github.com/openfilz/openfilz-core/commit/2696fe51887086a) maven-release-bot[bot] *2026-09-01 18:53:31*
 
-**Merge pull request #219 from openfilz/develop**
+**Merge pull request #220 from openfilz/develop**
 
- * feat(settings): expose the MCP connection details to the frontend
+ * Serve documents as MCP resources and fix environment variable forwarding
 
-[d4dea02e36c76e8](https://github.com/openfilz/openfilz-core/commit/d4dea02e36c76e8) Yann Demel *2026-08-31 20:52:18*
+[dab0e8fa23b327f](https://github.com/openfilz/openfilz-core/commit/dab0e8fa23b327f) Yann Demel *2026-09-01 18:48:39*
 
 
