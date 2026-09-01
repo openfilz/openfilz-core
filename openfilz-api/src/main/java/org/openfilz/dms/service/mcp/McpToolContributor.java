@@ -4,6 +4,7 @@ import org.openfilz.dms.service.ai.ToolCapability;
 import org.springframework.security.core.Authentication;
 
 import java.util.Map;
+import java.util.Set;
 
 /**
  * A source of MCP tools. Every {@code @Tool}-annotated object exposed over {@code /mcp} comes from
@@ -52,4 +53,16 @@ public interface McpToolContributor {
      * rather than run (fail closed), so a tool added without a capability cannot ship.
      */
     Map<String, ToolCapability> capabilities();
+
+    /**
+     * Tool names this contributor's {@code @Tool} objects define but which are served over MCP by
+     * a hand-built native specification instead of the adapted callback route — because their
+     * result needs MCP content the {@code String} pipeline cannot express (e.g.
+     * {@code downloadDocument}'s {@code resource_link} block, see {@code McpDocumentResources}).
+     * The provider skips them: they stay available to the chat assistant unchanged, and MCP
+     * advertises only the native registration, so the name is never exposed twice.
+     */
+    default Set<String> nativeTools() {
+        return Set.of();
+    }
 }

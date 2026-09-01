@@ -105,6 +105,12 @@ public abstract class AbstractMcpIT extends TestContainersKeyCloakConfig {
         return text.toString();
     }
 
+    /** resources/read for a URI, returning the raw JSON-RPC response (result or error). */
+    protected JsonNode readResource(String uri) {
+        return rpc(7, "resources/read", """
+                {"uri":"%s"}""".formatted(uri));
+    }
+
     protected JsonNode expectResult(JsonNode response) {
         assertThat(response.has("error"))
                 .as("JSON-RPC call failed: %s", response)

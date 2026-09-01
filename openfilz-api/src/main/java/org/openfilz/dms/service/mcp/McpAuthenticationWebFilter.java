@@ -1,5 +1,6 @@
 package org.openfilz.dms.service.mcp;
 
+import io.modelcontextprotocol.common.McpTransportContext;
 import org.springframework.core.Ordered;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
@@ -38,6 +39,17 @@ public class McpAuthenticationWebFilter implements WebFilter, Ordered {
 
     /** Path prefix this filter reacts to — matches the MCP endpoint. */
     static final String MCP_PATH_PREFIX = "/mcp";
+
+    /**
+     * The caller's {@link Authentication} as forwarded into the MCP transport context by
+     * {@code McpConfig}'s contextExtractor, or {@code null} when the request carried none.
+     * Shared by the tool and resource front-ends so both fail closed identically.
+     */
+    public static Authentication authenticationFrom(McpTransportContext context) {
+        return context != null
+                && context.get(AUTHENTICATION_ATTRIBUTE) instanceof Authentication authentication
+                ? authentication : null;
+    }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {

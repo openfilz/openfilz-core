@@ -664,12 +664,32 @@ external agents (Claude Code/Desktop, n8n, custom agents, Spring AI clients) ove
   per-capability permissions, capability `IDENTITY_READ` = any authenticated caller via
   `RoleRequirement.authenticated()`), query/read/path/vision, write/
   create/move/rename, metadata get/search/update/delete, delete (CLEANER), version list/restore,
-  downloadDocument (text inline or a REST download link for binary; shares `extractText` with
-  readDocumentContent).
+  downloadDocument (extracted text + a `resource_link` block, see below; shares `extractText`
+  with readDocumentContent via `fetchDownload`).
   Each is classified in `DocumentAiToolsContributor.CAPABILITIES` (a `Map.ofEntries`, since >10)
   and driven by `McpProtocolIT.everyAdvertisedToolIsCallable`, which now authenticates as
   `admin-user` (holds CONTRIBUTOR+CLEANER+AUDITOR+SIGN_REQUESTER) so every tool — including the
   CLEANER-gated `deleteDocument` — actually dispatches for the layer-2 trace.
+- **Documents are MCP resources (`openfilz://documents/{id}`), and `downloadDocument` is the one
+  natively-registered tool.** The adapted `String` route can only emit a single `TextContent`, so
+  `McpDocumentResources` (a `@Configuration` in `service/mcp`) hand-builds two stateless
+  specifications, merged by Spring AI's autoconfig (`List<SyncToolSpecification>` /
+  `List<SyncResourceTemplateSpecification>` beans, flat-mapped with the converted callbacks):
+  the `downloadDocument` tool, whose result carries a `resource_link` content block **plus** a
+  text fallback (extracted text — so tools-only clients like n8n keep the old behaviour, since a
+  server cannot detect resource-link support), and the resource template, whose `resources/read`
+  handler serves the raw bytes as a base64 blob over the *same authenticated `POST /mcp`*
+  (no out-of-band URL, no second credential). `resources/list` stays empty by design — the list
+  is per-deployment, so enumerating documents there would leak. All logic (name resolution, role
+  gate, access policy, Tika extraction, byte loading) stays in `DocumentAiTools`
+  (`fetchDownload`/`fetchContent`), bound per call — the MCP class is wire shape only, so "the
+  MCP layer never defines a tool" holds in substance. Inaccessible ids answer exactly like
+  nonexistent ids (`RESOURCE_NOT_FOUND`, no existence oracle); blobs above
+  `openfilz.mcp.max-resource-size-bytes` (default 10 MB — base64 inflates responses by a third)
+  are refused with a pointer to the browser download. The contributor declares the tool in
+  `nativeTools()` so `McpToolCallbackProvider` skips it (it stays in `CAPABILITIES` — still the
+  source of truth for role/read-only classification, and the chat assistant keeps its `@Tool`
+  method unchanged).
 - **Tests:** `McpRuntimeHintsTest` (hints), `McpProtocolIT` (read-write, full protocol),
   `McpReadOnlyModeIT` (default posture), `McpWithChatModelIT` (MCP + a real `ChatModel`),
   `DefaultAiToolRolePolicyTest` + `ToolRoleParityWithRestTest` + `McpRoleEnforcementIT` (roles),

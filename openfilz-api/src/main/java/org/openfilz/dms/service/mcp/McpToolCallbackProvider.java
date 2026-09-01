@@ -77,6 +77,12 @@ public class McpToolCallbackProvider implements ToolCallbackProvider, UserInfoSe
         for (McpToolContributor contributor : contributors) {
             for (ToolCallback template : templateCallbacks(contributor)) {
                 String name = template.getToolDefinition().name();
+                if (contributor.nativeTools().contains(name)) {
+                    // Served by a hand-built MCP specification (multi-block content the String
+                    // pipeline cannot express — see McpDocumentResources). Skipping keeps it out
+                    // of the adapted route so the name is not advertised twice.
+                    continue;
+                }
                 ToolCapability capability = capabilities.get(name);
                 if (capability == null) {
                     // Fail closed: a tool whose contributor did not classify it is not advertised
@@ -161,12 +167,9 @@ public class McpToolCallbackProvider implements ToolCallbackProvider, UserInfoSe
             return null;
         }
         Object exchange = toolContext.getContext().get(McpToolUtils.TOOL_CONTEXT_MCP_EXCHANGE_KEY);
-        if (exchange instanceof McpTransportContext transportContext
-                && transportContext.get(McpAuthenticationWebFilter.AUTHENTICATION_ATTRIBUTE)
-                    instanceof Authentication authentication) {
-            return authentication;
-        }
-        return null;
+        return exchange instanceof McpTransportContext transportContext
+                ? McpAuthenticationWebFilter.authenticationFrom(transportContext)
+                : null;
     }
 
     /**
