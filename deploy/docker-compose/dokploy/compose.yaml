@@ -285,6 +285,14 @@ services:
       AI_USER_SETTINGS_ENABLED: ${AI_USER_SETTINGS_ENABLED:-false}
       AI_SETTINGS_ENCRYPTION_KEY: ${AI_SETTINGS_ENCRYPTION_KEY:-}
 
+      # MCP server — external AI agents over POST /mcp (see docs/mcp.md).
+      OPENFILZ_MCP_ACTIVE: ${OPENFILZ_MCP_ACTIVE:-false}
+      OPENFILZ_MCP_MODE: ${OPENFILZ_MCP_MODE:-READ_ONLY}
+      # Advertised in the RFC 9728 protected-resource metadata and the settings page.
+      # KEYCLOAK_REALM_URL above is the internal hostname, unreachable by MCP hosts —
+      # this must be the public realm URL.
+      OPENFILZ_MCP_AUTHORIZATION_SERVER_URL: https://${KEYCLOAK_HOSTNAME:-auth.openfilz.com}/realms/openfilz
+
     volumes:
       - openfilz-storage:/var/data/openfilz
     networks:
