@@ -13,6 +13,7 @@ import org.openfilz.dms.dto.response.RestoreVersionResponse;
 import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.config.CommonProperties;
 import org.openfilz.dms.config.RestApiVersion;
+import org.openfilz.dms.security.DownloadTokenService;
 import org.openfilz.dms.service.DocumentVersionService;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -95,6 +96,13 @@ public class DocumentAiTools {
     /** Public API base URL, for building the download link downloadDocument hands back. */
     private final CommonProperties commonProperties;
 
+    /**
+     * Signed download links ({@code ?token=…}): when the feature is on, the download URL is
+     * minted for the requesting user and clickable without a bearer header — the only form of
+     * the link a chat transcript can actually use. Null-tolerated for direct unit construction.
+     */
+    private final DownloadTokenService downloadTokenService;
+
     /** For parsing the metadata-map tool arguments, which arrive as a JSON object string. */
     private static final JsonMapper JSON = JsonMapper.builder().build();
     /**
@@ -115,7 +123,8 @@ public class DocumentAiTools {
                            AiAccessPolicy accessPolicy,
                            AiToolRolePolicy rolePolicy,
                            DocumentVersionService versionService,
-                           CommonProperties commonProperties) {
+                           CommonProperties commonProperties,
+                           DownloadTokenService downloadTokenService) {
         this.documentService = documentService;
         this.documentRepository = documentRepository;
         this.storageService = storageService;
@@ -125,6 +134,7 @@ public class DocumentAiTools {
         this.rolePolicy = rolePolicy;
         this.versionService = versionService;
         this.commonProperties = commonProperties;
+        this.downloadTokenService = downloadTokenService;
     }
 
     /**
@@ -1232,7 +1242,8 @@ public class DocumentAiTools {
     }
 
     @Tool(description = "Get a document's content: the extracted text for text/PDF/Office files, "
-            + "plus a link to download the original file in a browser (as a signed-in user).")
+            + "plus a browser link to download the original file (the result says how long the "
+            + "link stays valid and whether sign-in is needed).")
     public String downloadDocument(
             @ToolParam(description = "The name or reference of the document") String documentName) {
         DocumentDownload download = fetchDownload(documentName);
@@ -1242,12 +1253,13 @@ public class DocumentAiTools {
         Document doc = download.document();
         if (download.extractedText() != null) {
             return toolResult("downloadDocument", ("Content of '%s' (%s, %d bytes):\n\n%s\n\n"
-                    + "Download the original file (browser, signed-in user): %s").formatted(
-                    doc.getName(), contentTypeOf(doc), sizeOf(doc), download.extractedText(), download.downloadUrl()));
+                    + "Download the original file (%s): %s").formatted(
+                    doc.getName(), contentTypeOf(doc), sizeOf(doc), download.extractedText(),
+                    download.downloadHint(), download.downloadUrl()));
         }
         return toolResult("downloadDocument", ("'%s' is a %s file (%d bytes); its content is not text. "
-                + "Download the original file (browser, signed-in user): %s").formatted(
-                doc.getName(), contentTypeOf(doc), sizeOf(doc), download.downloadUrl()));
+                + "Download the original file (%s): %s").formatted(
+                doc.getName(), contentTypeOf(doc), sizeOf(doc), download.downloadHint(), download.downloadUrl()));
     }
 
     /**
@@ -1277,7 +1289,14 @@ public class DocumentAiTools {
             return DocumentDownload.failure("'%s' is a folder, not a downloadable file.".formatted(documentName));
         }
         Resource resource = blockWithAuth(storageService.loadFile(doc.getStoragePath()));
-        return new DocumentDownload(doc, extractText(resource), downloadUrl(id), null);
+        // Signed link: minted for this user, for this one document, only after the checks above
+        // passed — so the URL is clickable straight from the conversation, expiring quickly.
+        String token = downloadTokenService == null ? null : downloadTokenService.mint(id, userEmail);
+        String hint = token != null
+                ? "link valid about %d minutes, no sign-in needed"
+                        .formatted(Math.max(1, downloadTokenService.ttlSeconds() / 60))
+                : "browser, signed-in user";
+        return new DocumentDownload(doc, extractText(resource), tokenizedDownloadUrl(id, token), hint, null);
     }
 
     /**
@@ -1324,15 +1343,28 @@ public class DocumentAiTools {
     }
 
     private String resourceTooLarge(Document doc, long size, long maxBytes) {
+        UUID id = doc.getId();
+        String token = downloadTokenService == null ? null : downloadTokenService.mint(id, userEmail);
         return ("'%s' is %d bytes, above this server's %d-byte MCP resource limit. "
                 + "Download it in a browser instead: %s").formatted(
-                doc.getName(), size, maxBytes, downloadUrl(doc.getId()));
+                doc.getName(), size, maxBytes, tokenizedDownloadUrl(id, token));
     }
 
-    /** Everything a front-end needs to hand a document over, or an error message (exactly one is set). */
-    public record DocumentDownload(Document document, String extractedText, String downloadUrl, String error) {
+    /** The download URL, with the signed token appended when one was minted. */
+    private String tokenizedDownloadUrl(UUID documentId, String token) {
+        String url = downloadUrl(documentId);
+        return token == null ? url : url + "?" + DownloadTokenService.TOKEN_PARAM + "=" + token;
+    }
+
+    /**
+     * Everything a front-end needs to hand a document over, or an error message (exactly one of
+     * {@code document}/{@code error} is set). {@code downloadHint} is a ready phrase describing
+     * how the URL is usable ("browser, signed-in user" vs. an expiring signed link).
+     */
+    public record DocumentDownload(Document document, String extractedText, String downloadUrl,
+                                   String downloadHint, String error) {
         static DocumentDownload failure(String error) {
-            return new DocumentDownload(null, null, null, error);
+            return new DocumentDownload(null, null, null, null, error);
         }
     }
 

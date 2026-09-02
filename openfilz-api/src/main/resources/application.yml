@@ -360,6 +360,16 @@ openfilz:
     # longer kills the login with invalid_scope. Comma-separated override.
     scopes-supported: ${OPENFILZ_MCP_SCOPES_SUPPORTED:openid,profile,email,offline_access}
 
+  # Signed download links for downloadDocument (chat assistant + MCP): a short-lived HS256
+  # token in the URL lets the human behind the conversation download the ONE document it was
+  # minted for, with no bearer header. Off by default; refuses to run without a >= 32-byte
+  # secret (openssl rand -base64 32). Runtime toggle, never a bean condition.
+  download-tokens:
+    enabled: ${OPENFILZ_DOWNLOAD_TOKENS_ENABLED:false}
+    signing-secret: ${OPENFILZ_DOWNLOAD_TOKENS_SECRET:}
+    default-ttl-seconds: ${OPENFILZ_DOWNLOAD_TOKENS_TTL_SECONDS:300}
+    max-ttl-seconds: 900
+
 # OnlyOffice DocumentServer Integration
 onlyoffice:
   enabled: ${ONLYOFFICE_ENABLED:false}

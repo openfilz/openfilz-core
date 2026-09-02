@@ -690,6 +690,22 @@ external agents (Claude Code/Desktop, n8n, custom agents, Spring AI clients) ove
   `nativeTools()` so `McpToolCallbackProvider` skips it (it stays in `CAPABILITIES` — still the
   source of truth for role/read-only classification, and the chat assistant keeps its `@Tool`
   method unchanged).
+- **Signed download links (`openfilz.download-tokens.*`)** — the claude.ai connector consumes
+  neither resource links nor `resources/read`, and the bare download URL needs a bearer *header*
+  a browser address bar can't supply. When enabled, `downloadDocument`'s URL carries a
+  short-lived HS256 token (`?token=…`) so the human behind the conversation can just click it.
+  `DownloadTokenService` mints it only after the role + access gates passed, bound to
+  `{documentId, download audience, minter sub, exp}` (default TTL 300 s, hard-capped; off by
+  default; refuses to run without a ≥32-byte secret — no padded fallback). Redemption:
+  `DownloadTokenSecurityConfig` (chain order **-4**; matcher = feature on + the one download
+  path + `token` param, all checked per request, so the toggle is runtime/native-safe with no
+  sentinel) authenticates the request **as the minter** (`DownloadTokenAuthenticationToken`,
+  `getName()` = email → audit attribution + extension layers re-check document access at click
+  time = instant revocation). Every token failure is a uniform empty 404 — no oracle. Accepted
+  residual risk (documented decision): whoever holds the URL within TTL gets that one document —
+  the URL transits chat logs and browser history. Tests: `DownloadTokenServiceTest` (fail-closed
+  matrix) + `McpProtocolIT.signedDownloadLinkServesTheDocument` (unauthenticated redemption,
+  tamper → 404, token-on-wrong-document → 404, token-less path still 401).
 - **Tests:** `McpRuntimeHintsTest` (hints), `McpProtocolIT` (read-write, full protocol),
   `McpReadOnlyModeIT` (default posture), `McpWithChatModelIT` (MCP + a real `ChatModel`),
   `DefaultAiToolRolePolicyTest` + `ToolRoleParityWithRestTest` + `McpRoleEnforcementIT` (roles),
