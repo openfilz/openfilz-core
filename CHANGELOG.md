@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[d5feb8dd55d08bb](https://github.com/openfilz/openfilz-core/commit/d5feb8dd55d08bb) maven-release-bot[bot] *2026-09-03 15:14:57*
+[b8854f5212e9fe1](https://github.com/openfilz/openfilz-core/commit/b8854f5212e9fe1) maven-release-bot[bot] *2026-09-03 17:35:07*
 
 
-## v1.3.2
+## v1.3.3
 ### No issue
 
-**[maven-release-plugin] prepare release v1.3.2**
+**[maven-release-plugin] prepare release v1.3.3**
 
 
-[02c459b8f670948](https://github.com/openfilz/openfilz-core/commit/02c459b8f670948) maven-release-bot[bot] *2026-09-03 15:14:54*
+[7205b8c4d0622b3](https://github.com/openfilz/openfilz-core/commit/7205b8c4d0622b3) maven-release-bot[bot] *2026-09-03 17:35:03*
 
-**Merge pull request #224 from openfilz/develop**
+**Merge pull request #225 from openfilz/develop**
 
- * Expose activeSignatureEnvelope in PDF info endpoint and add tests
+ * Merge develop into main
 
-[948084dc5dd4db3](https://github.com/openfilz/openfilz-core/commit/948084dc5dd4db3) Yann Demel *2026-09-03 15:12:23*
+[15342e097293023](https://github.com/openfilz/openfilz-core/commit/15342e097293023) Yann Demel *2026-09-03 17:32:19*
 
 
