@@ -174,12 +174,40 @@ class PdfToolsServiceImplTest {
         Document locked = doc("locked.pdf", "application/pdf", 10);
         stubDownload(locked, threePages);
         when(engine.inspect(any())).thenReturn(inspection(0, true, false));
+        when(envelopeRepository.findBySourceDocId(locked.getId())).thenReturn(Flux.empty());
         StepVerifier.create(service.info(locked.getId()))
                 .assertNext(info -> {
                     assertThat(info.encrypted()).isTrue();
                     assertThat(info.pageCount()).isZero();
                     assertThat(info.name()).isEqualTo("locked.pdf");
+                    assertThat(info.activeSignatureEnvelope()).isFalse();
                 })
+                .verifyComplete();
+    }
+
+    @Test
+    void infoFlagsARunningSignatureEnvelope() throws IOException {
+        Document d = doc("contract.pdf", "application/pdf", 10);
+        stubDownload(d, threePages);
+        when(engine.inspect(any())).thenReturn(inspection(3, false, false));
+        SignatureEnvelope done = SignatureEnvelope.builder().status(SignatureEnvelopeStatus.COMPLETED).build();
+        SignatureEnvelope active = SignatureEnvelope.builder().status(SignatureEnvelopeStatus.SENT).build();
+        when(envelopeRepository.findBySourceDocId(d.getId())).thenReturn(Flux.just(done, active));
+        // Callers use the flag to disable "save as new version" before the API has to refuse it.
+        StepVerifier.create(service.info(d.getId()))
+                .assertNext(info -> assertThat(info.activeSignatureEnvelope()).isTrue())
+                .verifyComplete();
+    }
+
+    @Test
+    void infoDoesNotFlagTerminalEnvelopesOnly() throws IOException {
+        Document d = doc("contract.pdf", "application/pdf", 10);
+        stubDownload(d, threePages);
+        when(engine.inspect(any())).thenReturn(inspection(3, false, false));
+        SignatureEnvelope done = SignatureEnvelope.builder().status(SignatureEnvelopeStatus.COMPLETED).build();
+        when(envelopeRepository.findBySourceDocId(d.getId())).thenReturn(Flux.just(done));
+        StepVerifier.create(service.info(d.getId()))
+                .assertNext(info -> assertThat(info.activeSignatureEnvelope()).isFalse())
                 .verifyComplete();
     }
 

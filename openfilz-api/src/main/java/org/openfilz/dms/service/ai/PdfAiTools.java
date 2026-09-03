@@ -94,6 +94,7 @@ public class PdfAiTools {
                     .append(", ").append(info.size()).append(" bytes");
             if (info.encrypted()) sb.append(", PASSWORD-PROTECTED (cannot be transformed)");
             if (info.signed()) sb.append(", DIGITALLY SIGNED (page changes invalidate the signature; save results as a new document)");
+            if (info.activeSignatureEnvelope()) sb.append(", BEING SIGNED (active e-Sign envelope; results can only be saved as a new document)");
             if (!info.pages().isEmpty()) {
                 var first = info.pages().getFirst();
                 sb.append(". First page ").append(first.width()).append("x").append(first.height()).append(" pt");
