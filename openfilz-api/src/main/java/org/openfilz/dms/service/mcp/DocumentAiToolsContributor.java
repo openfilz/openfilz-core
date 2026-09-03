@@ -39,6 +39,7 @@ public class DocumentAiToolsContributor implements McpToolContributor {
             entry("getDocumentPath", ToolCapability.DOCUMENT_READ),
             entry("describeImage", ToolCapability.DOCUMENT_READ),
             entry("writeFile", ToolCapability.DOCUMENT_WRITE),
+            entry("createBlankDocument", ToolCapability.DOCUMENT_WRITE),
             entry("createFolder", ToolCapability.DOCUMENT_WRITE),
             entry("moveDocuments", ToolCapability.DOCUMENT_WRITE),
             entry("renameDocument", ToolCapability.DOCUMENT_WRITE),

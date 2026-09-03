@@ -13,9 +13,11 @@ import org.openfilz.dms.service.AiChatService;
 import org.openfilz.dms.service.ai.AiAccessPolicy;
 import org.openfilz.dms.service.ai.AiFailoverPolicy;
 import org.openfilz.dms.service.ai.AiFallbackChain;
+import org.openfilz.dms.service.ai.AiToolTurnEffects;
 import org.openfilz.dms.service.ai.ChatClientAssembler;
 import org.openfilz.dms.service.ai.DocumentAiTools;
 import org.openfilz.dms.service.ai.DocumentAiToolsFactory;
+import org.openfilz.dms.service.ai.ReorganizationPlanMarkers;
 import org.openfilz.dms.service.ai.UserChatClientResolver;
 import org.openfilz.dms.service.ai.UserChatClientResolver.ResolvedChat;
 import org.openfilz.dms.service.mcp.McpToolContributor;
@@ -39,7 +41,9 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -110,6 +114,11 @@ public class AiChatServiceImpl implements AiChatService {
                 ResolvedChat first = candidates.getFirst();
                 DocumentAiTools tools = toolsFactory.create(first.chatModel(), userEmail, authentication);
                 List<Object> extraTools = chatTools(userEmail, authentication);
+                extraTools.forEach(extra -> {
+                    if (extra instanceof AiToolTurnEffects effects) {
+                        effects.bindConversation(conversationId);
+                    }
+                });
                 Set<String> ragDocumentNames = new HashSet<>();
                 log.debug("[AI] Chat model: {} ({}){}", first.provider(), first.model(),
                         candidates.size() > 1 ? " (+" + (candidates.size() - 1) + " fallback)" : "");
@@ -154,6 +163,10 @@ public class AiChatServiceImpl implements AiChatService {
                                         // This guarantees document links appear even when the LLM forgets to mention filenames
                                         enriched = appendSourceLinks(enriched, tools, ragDocumentNames);
 
+                                        // A reorganisation plan proposed this turn becomes a proposal card:
+                                        // the marker is persisted with the message so the card survives reloads
+                                        enriched = ReorganizationPlanMarkers.append(enriched, proposedPlanIds(extraTools));
+
                                         log.debug("[AI] Enriched response: {} chars (was {} chars)", enriched.length(), fullResponse.length());
                                         log.debug("[AI] Final response preview: {}", enriched.length() > 300
                                                 ? enriched.substring(0, 300) + "..." : enriched);
@@ -174,8 +187,8 @@ public class AiChatServiceImpl implements AiChatService {
                                                     .type(AiChatResponse.EventType.DONE)
                                                     // Folders whose content changed via tool calls — the frontend
                                                     // refreshes the file explorer only when it displays one of them
-                                                    .modifiedFolderIds(tools.getModifiedFolders().isEmpty()
-                                                            ? null : List.copyOf(tools.getModifiedFolders()))
+                                                    .modifiedFolderIds(modifiedFolders(tools, extraTools).isEmpty()
+                                                            ? null : List.copyOf(modifiedFolders(tools, extraTools)))
                                                     .build()
                                     ))
                                     .doOnComplete(() -> log.debug("[AI] === Chat request complete ==="))
@@ -185,13 +198,18 @@ public class AiChatServiceImpl implements AiChatService {
                                         // retry on a fallback model — a retry would run the mutation twice.
                                         // Report the completed changes rather than a bare error for work
                                         // that actually succeeded; only the closing summary is missing.
-                                        if (!tools.getModifiedFolders().isEmpty()) {
-                                            String message = buildPartialSuccessMessage(
-                                                    tools.getPerformedActions(), AiFailoverPolicy.classify(e));
+                                        Set<String> mutated = modifiedFolders(tools, extraTools);
+                                        List<UUID> proposedPlans = proposedPlanIds(extraTools);
+                                        if (!mutated.isEmpty() || !proposedPlans.isEmpty()) {
+                                            List<String> actions = performedActions(tools, extraTools);
+                                            String message = mutated.isEmpty()
+                                                    ? buildPartialProposalMessage(AiFailoverPolicy.classify(e))
+                                                    : buildPartialSuccessMessage(actions, AiFailoverPolicy.classify(e));
+                                            message = ReorganizationPlanMarkers.append(message, proposedPlans);
                                             log.warn("[AI] Model failed after a mutation — reporting {} completed "
                                                             + "action(s) instead of an error: {}",
-                                                    tools.getPerformedActions().size(), e.toString());
-                                            List<String> modifiedFolderIds = List.copyOf(tools.getModifiedFolders());
+                                                    actions.size(), e.toString());
+                                            List<String> modifiedFolderIds = mutated.isEmpty() ? null : List.copyOf(mutated);
                                             return saveMessage(conversationId, "ASSISTANT", message)
                                                     .then(updateConversationTimestamp(conversationId))
                                                     .thenReturn(message)
@@ -285,7 +303,8 @@ public class AiChatServiceImpl implements AiChatService {
                     int nextIndex = nextUsable(candidates, index);
                     boolean hasNextCandidate = nextIndex >= 0;
                     boolean nothingStreamed = fullResponse.isEmpty();
-                    boolean nothingMutated = tools.getModifiedFolders().isEmpty();
+                    boolean nothingMutated = modifiedFolders(tools, extraTools).isEmpty()
+                            && proposedPlanIds(extraTools).isEmpty();
 
                     if (!mayRetry || !hasNextCandidate || !nothingStreamed || !nothingMutated) {
                         if (mayRetry && !hasNextCandidate) {
@@ -317,6 +336,55 @@ public class AiChatServiceImpl implements AiChatService {
                 .filter(McpToolContributor::exposeInChat)
                 .map(contributor -> contributor.bind(userEmail, authentication))
                 .toList();
+    }
+
+    /**
+     * Folders whose content changed this turn — through {@link DocumentAiTools} or any contributed
+     * tool object reporting via {@link AiToolTurnEffects}.
+     */
+    private static Set<String> modifiedFolders(DocumentAiTools tools, List<Object> extraTools) {
+        Set<String> all = new LinkedHashSet<>(tools.getModifiedFolders());
+        for (Object extra : extraTools) {
+            if (extra instanceof AiToolTurnEffects effects) {
+                all.addAll(effects.modifiedFolders());
+            }
+        }
+        return all;
+    }
+
+    private static List<String> performedActions(DocumentAiTools tools, List<Object> extraTools) {
+        List<String> all = new ArrayList<>(tools.getPerformedActions());
+        for (Object extra : extraTools) {
+            if (extra instanceof AiToolTurnEffects effects) {
+                all.addAll(effects.performedActions());
+            }
+        }
+        return all;
+    }
+
+    private static List<UUID> proposedPlanIds(List<Object> extraTools) {
+        List<UUID> all = new ArrayList<>();
+        for (Object extra : extraTools) {
+            if (extra instanceof AiToolTurnEffects effects) {
+                all.addAll(effects.proposedPlanIds());
+            }
+        }
+        return all;
+    }
+
+    /**
+     * Message when the model fails after proposing a reorganisation plan but before moving
+     * anything: the proposal is real and shown as a card, only the model's explanation is missing.
+     */
+    static String buildPartialProposalMessage(AiFailoverPolicy.Failure failure) {
+        String reason = switch (failure) {
+            case QUOTA_EXHAUSTED -> "the AI model's rate limit was reached";
+            case MODEL_UNAVAILABLE -> "the AI model is currently unavailable";
+            case PROVIDER_OVERLOADED -> "the AI provider is overloaded";
+            default -> "the AI model could not finish its response";
+        };
+        return "I prepared a reorganisation proposal for your documents (nothing has been moved yet — review "
+                + "it below and apply it if it suits you). I couldn't add an explanation because " + reason + ".";
     }
 
     /** Index of the next candidate still worth an attempt, or -1 when the chain is spent. */
@@ -434,7 +502,8 @@ public class AiChatServiceImpl implements AiChatService {
         return messageRepository.findByConversationIdOrderByCreatedAtAsc(conversationId)
                 .map(msg -> (Message) switch (msg.getRole()) {
                     case "USER" -> new UserMessage(msg.getContent());
-                    case "ASSISTANT" -> new AssistantMessage(DocumentAiTools.stripDocMarkers(msg.getContent()));
+                    case "ASSISTANT" -> new AssistantMessage(ReorganizationPlanMarkers.strip(
+                            DocumentAiTools.stripDocMarkers(msg.getContent())));
                     case "SYSTEM" -> new SystemMessage(msg.getContent());
                     default -> new UserMessage(msg.getContent());
                 })
@@ -605,7 +674,7 @@ public class AiChatServiceImpl implements AiChatService {
                 Note: I also found some potentially related content from the document library below. \
                 Only use this if it is directly relevant to the user's question. \
                 If the user is asking to find, list, or read a specific file or folder, \
-                use the tools (searchByName, listFolder, readDocumentContent) instead of this context. \
+                use the tools (queryDocuments, readDocumentContent) instead of this context. \
                 Always mention the document name when referencing information from it.
 
                 ---

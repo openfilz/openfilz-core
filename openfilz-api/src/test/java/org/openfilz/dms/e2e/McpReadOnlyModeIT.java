@@ -51,9 +51,13 @@ public class McpReadOnlyModeIT extends AbstractMcpIT {
     void mutatingToolsAreNotAdvertised() {
         java.util.Set<String> readOnly = new java.util.HashSet<>(DocumentAiToolsContributor.READ_ONLY_TOOLS);
         readOnly.addAll(org.openfilz.dms.service.mcp.PdfAiToolsContributor.READ_ONLY_TOOLS);
+        readOnly.addAll(org.openfilz.dms.service.mcp.OrganizeAiToolsContributor.READ_ONLY_TOOLS);
+        readOnly.addAll(org.openfilz.dms.service.mcp.SignatureAiToolsContributor.READ_ONLY_TOOLS);
         assertThat(advertisedToolNames())
                 .doesNotContainAnyElementsOf(DocumentAiToolsContributor.MUTATING_TOOLS)
                 .doesNotContainAnyElementsOf(org.openfilz.dms.service.mcp.PdfAiToolsContributor.MUTATING_TOOLS)
+                .doesNotContainAnyElementsOf(org.openfilz.dms.service.mcp.OrganizeAiToolsContributor.MUTATING_TOOLS)
+                .doesNotContainAnyElementsOf(org.openfilz.dms.service.mcp.SignatureAiToolsContributor.MUTATING_TOOLS)
                 .containsExactlyInAnyOrderElementsOf(readOnly);
     }
 

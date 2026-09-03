@@ -391,19 +391,28 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
 
     @Override
     public Mono<Void> moveFolders(MoveRequest request) {
+        if (request.targetFolderId() == null) {
+            // Root level: no target folder to validate and no cycle possible (same as moveFiles)
+            return doMoveFolders(request);
+        }
         Mono<Document> targetFolderMono = documentDAO.findById(request.targetFolderId(), AccessType.RW)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, request.targetFolderId())))
                 .filter(doc -> doc.getType() == DocumentType.FOLDER)
                 .switchIfEmpty(Mono.error(new OperationForbiddenException("Target is not a folder: " + request.targetFolderId())));
 
-        return targetFolderMono.flatMap(targetFolder ->
-                Flux.fromIterable(request.documentIds())
+        return targetFolderMono.flatMap(_ -> doMoveFolders(request));
+    }
+
+    private Mono<Void> doMoveFolders(MoveRequest request) {
+        return Flux.fromIterable(request.documentIds())
                         .flatMap(folderIdToMove -> {
                             if (folderIdToMove.equals(request.targetFolderId())) {
                                 return Mono.error(new OperationForbiddenException("Cannot move a folder into itself."));
                             }
                             // Check for moving a parent into its child (cycle) - more complex check needed for full hierarchy
-                            Mono<Boolean> isMovingToDescendant = isDescendant(request.targetFolderId(), folderIdToMove);
+                            Mono<Boolean> isMovingToDescendant = request.targetFolderId() == null
+                                    ? Mono.just(false)
+                                    : isDescendant(request.targetFolderId(), folderIdToMove);
 
                             return isMovingToDescendant.flatMap(isDescendant -> {
                                 if (isDescendant) {
@@ -425,8 +434,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                                         });
                             });
                         })
-                        .then()
-        );
+                        .then();
     }
 
     private Mono<Document> moveDocument(MoveRequest request, Document documentToMove) {

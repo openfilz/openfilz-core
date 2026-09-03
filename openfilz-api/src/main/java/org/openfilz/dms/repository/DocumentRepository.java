@@ -29,4 +29,10 @@ public interface DocumentRepository extends ReactiveCrudRepository<Document, UUI
     Mono<Boolean> existsByNameAndParentIdAndActiveIsTrue(String name, UUID parentId);
 
     Flux<Document> findByNameContainingIgnoreCaseAndActiveTrue(String name);
+
+    /** Active root-level documents (the reorganisation inventory walks the tree from here). */
+    Flux<Document> findByParentIdIsNullAndActiveIsTrue();
+
+    /** Active direct children of a folder. */
+    Flux<Document> findByParentIdAndActiveIsTrue(UUID parentId);
 }
