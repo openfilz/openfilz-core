@@ -15,6 +15,7 @@ This guide explains how to use OpenFilz through the web interface (OpenFilz Web)
 - [Creating Folders and Documents](#creating-folders-and-documents)
 - [File and Folder Operations](#file-and-folder-operations)
 - [File Preview and Editing](#file-preview-and-editing)
+- [PDF Tools](#pdf-tools)
 - [Search](#search)
 - [Favorites](#favorites)
 - [Recycle Bin](#recycle-bin)
@@ -223,6 +224,38 @@ Select one or more items, then use the toolbar or context menu:
 | **View Properties** | Open the metadata and audit panel |
 
 All operations are tracked in the audit trail.
+
+---
+
+## PDF Tools
+
+OpenFilz can merge, split, rotate and reorganise the pages of the PDFs it stores — no upload to a
+third-party site, and every result is a regular document with its own audit trail, version history and
+permissions. Select one or more PDFs and use the **PDF tools** actions in the toolbar or the context
+menu (they are hidden when your administrator has disabled the feature):
+
+| Action | What it does |
+|--------|--------------|
+| **Merge** | Combine the selected PDFs, in the order you choose, into a new document — optionally with a bookmark per file and a page selection per file |
+| **Split** | Cut a PDF into several documents: every N pages, at the pages you pick, by custom ranges, one document per page, or at its bookmarks |
+| **Organize pages** | A visual page grid to reorder (drag), rotate, delete, duplicate or extract pages, and insert pages from another PDF |
+| **Rotate** | Rotate all or selected pages (for example the odd pages of a double-sided scan) of one or several PDFs |
+
+Where the result goes:
+
+- **Save as new version** (default for *Organize* and *Rotate*) updates the PDF in place. When versioning is
+  enabled the previous content stays available in the version history, so the change can be undone.
+- **Save as new document** (default for *Merge* and always for *Split*) leaves the originals untouched and
+  creates the result next to them.
+
+Page selections accept single pages, ranges and keywords: `1-3, 7, 10-`, `odd`, `even`, `all`.
+
+> **Signed PDFs.** Changing the pages of a digitally signed PDF (for example a completed e-Sign envelope)
+> invalidates its signature. OpenFilz warns you and saves the result as a new document unless you
+> explicitly accept the loss. Password-protected PDFs cannot be transformed until the password is removed.
+
+The same operations are available to the [AI assistant](#ai-document-chat) ("merge the three invoices of
+Acme into one file", "rotate the odd pages of scan.pdf") and to external agents through the MCP server.
 
 ---
 

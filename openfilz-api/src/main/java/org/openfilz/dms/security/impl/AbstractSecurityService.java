@@ -228,7 +228,7 @@ public abstract class AbstractSecurityService implements SecurityService {
                 && pathStartsWith(path, RestApiVersion.ENDPOINT_FILES, RestApiVersion.ENDPOINT_FOLDERS, RestApiVersion.ENDPOINT_DOCUMENTS)) ||
                 ((!method.equals(HttpMethod.TRACE) && !method.equals(HttpMethod.PUT)) && pathStartsWith(path, "/tus")) ||
                 (method.equals(HttpMethod.POST) && (
-                        pathStartsWith(path, RestApiVersion.ENDPOINT_FILES, "/documents/upload", "/documents/upload-multiple", RestApiVersion.ENDPOINT_RECYCLE_BIN) ||
+                        pathStartsWith(path, RestApiVersion.ENDPOINT_FILES, "/documents/upload", "/documents/upload-multiple", RestApiVersion.ENDPOINT_RECYCLE_BIN, RestApiVersion.ENDPOINT_PDF) ||
                                 path.equals(RestApiVersion.ENDPOINT_FOLDERS) ||
                                 path.equals("/folders/move") ||
                                 path.equals("/folders/copy") ||
@@ -283,7 +283,8 @@ public abstract class AbstractSecurityService implements SecurityService {
                     RestApiVersion.ENDPOINT_RECYCLE_BIN,
                     RestApiVersion.ENDPOINT_DASHBOARD,
                     RestApiVersion.ENDPOINT_FAVORITES,
-                    RestApiVersion.ENDPOINT_SETTINGS
+                    RestApiVersion.ENDPOINT_SETTINGS,
+                    RestApiVersion.ENDPOINT_PDF
                 ))
                 ||
                 (method.equals(HttpMethod.POST) && (

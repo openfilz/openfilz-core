@@ -65,4 +65,16 @@ public interface McpToolContributor {
     default Set<String> nativeTools() {
         return Set.of();
     }
+
+    /**
+     * Whether the in-app chat assistant binds this contributor's tools too (the MCP server always
+     * does). The chat has no provider-level role gate — {@code McpToolCallbackProvider}'s
+     * capability check does not run there — so only a contributor whose tools enforce
+     * {@link org.openfilz.dms.service.ai.AiToolRolePolicy} themselves (as {@code DocumentAiTools}
+     * and {@code PdfAiTools} do) may opt in. Defaults to {@code false}; {@code DocumentAiTools} is
+     * wired into the chat directly and must not opt in.
+     */
+    default boolean exposeInChat() {
+        return false;
+    }
 }
