@@ -124,12 +124,24 @@ public class PdfToolsServiceImpl implements PdfToolsService {
     @Override
     public Mono<PdfInfo> info(UUID documentId) {
         return withWorkspace(dir -> loadSources(List.of(documentId), dir)
-                .map(sources -> {
+                .flatMap(sources -> {
                     Source s = sources.getFirst();
                     Inspection i = s.inspection();
-                    return new PdfInfo(s.id(), s.document().getName(), sizeOf(s.document()), i.pageCount(),
-                            i.pages(), i.encrypted(), i.signed(), i.outline());
+                    return hasActiveEnvelope(s.id())
+                            .map(activeEnvelope -> new PdfInfo(s.id(), s.document().getName(), sizeOf(s.document()),
+                                    i.pageCount(), i.pages(), i.encrypted(), i.signed(), activeEnvelope, i.outline()));
                 }));
+    }
+
+    /**
+     * True while at least one non-terminal e-Sign envelope references this document: replacing its
+     * content would pull the ground from under an in-flight signing round, so in-place saves are
+     * refused and callers are told up front to target a new document.
+     */
+    private Mono<Boolean> hasActiveEnvelope(UUID documentId) {
+        return envelopeRepository.findBySourceDocId(documentId)
+                .filter(envelope -> envelope.getStatus() != null && !envelope.getStatus().isTerminal())
+                .hasElements();
     }
 
     // ── merge ───────────────────────────────────────────────────────────────
@@ -541,9 +553,7 @@ public class PdfToolsServiceImpl implements PdfToolsService {
                     "'" + document.getName() + "' is digitally signed; changing its pages invalidates the signature. "
                             + "Save as a new document, or set acknowledgeSignatureLoss=true"));
         }
-        return envelopeRepository.findBySourceDocId(document.getId())
-                .filter(envelope -> envelope.getStatus() != null && !envelope.getStatus().isTerminal())
-                .hasElements()
+        return hasActiveEnvelope(document.getId())
                 .flatMap(active -> active
                         ? Mono.error(PdfToolsException.conflict(PdfToolsException.ACTIVE_SIGNATURE_ENVELOPE,
                         "'" + document.getName() + "' is being signed (active e-Sign envelope); save the result as a new document"))

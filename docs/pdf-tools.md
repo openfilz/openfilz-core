@@ -72,7 +72,7 @@ point for a lazy thumbnail grid.
 |---|---|
 | Memory / CPU on the API process (native image, shared with uploads) | PDFBox in-process, temp-file backed (`RandomAccessReadBufferedFile` + `IOUtils.createTempFileOnlyStreamCache()`), on `boundedElastic`, bounded by `openfilz.pdf-tools.max-*` limits and a small concurrency semaphore. No external service: works with `thumbnail.active=false`, no Gotenberg. |
 | New POST paths are 403 by default | `AbstractSecurityService.isInsertOrUpdateAccess` must allow-list `/api/v1/pdf/**` (CONTRIBUTOR). `WormSecurityServiceImpl` mirrors the existing rule: new documents allowed, in-place replace refused. |
-| Digitally signed PDFs (e-Sign output, AATL seal) become invalid after any change | `/info` reports `signed`; the UI warns and defaults to *new document*; the backend refuses `NEW_VERSION` on a signed PDF unless `acknowledgeSignatureLoss=true` (409). Documents attached to an **active e-Sign envelope** are refused for in-place edits. |
+| Digitally signed PDFs (e-Sign output, AATL seal) become invalid after any change | `/info` reports `signed`; the UI warns and defaults to *new document*; the backend refuses `NEW_VERSION` on a signed PDF unless `acknowledgeSignatureLoss=true` (409). Documents attached to an **active e-Sign envelope** are refused for in-place edits — `/info` reports `activeSignatureEnvelope` so the UI disables *new version* up front instead of surfacing the 409. |
 | Encrypted PDFs | v1 refuses with a 422 `PDF_ENCRYPTED`; v2 adds unlock/protect. |
 | Generated SDKs break on anonymous schemas / enum quirks | Every DTO is a named top-level record; enum fields verified against the springdoc `swagger-annotations` clash (see core `CLAUDE.md` §17); SDK generation is a phase-1 exit criterion. |
 | GraalVM native (built by EE, CE is JVM) | Page-tree operations are COS-level and PDFBox ships its own native metadata; add `PdfBoxRuntimeHints` only if the EE native build proves it necessary. Verify the native build in phase 4, not at the end. |
@@ -109,7 +109,7 @@ per source, `out.importPage(page)` per `PageRef` (keeps resources/annotations; r
 
 | Method & path | Body | Result |
 |---|---|---|
-| `GET /pdf/{documentId}/info` | — | `PdfInfo { pageCount, pages[{number,width,height,rotation}], encrypted, signed, outline[{title,page,level}] }` |
+| `GET /pdf/{documentId}/info` | — | `PdfInfo { pageCount, pages[{number,width,height,rotation}], encrypted, signed, activeSignatureEnvelope, outline[{title,page,level}] }` |
 | `POST /pdf/merge` | `MergeRequest { sources[{documentId, pages?}], addOutline, output }` | `PdfOperationResponse` |
 | `POST /pdf/split` | `SplitRequest { documentId, mode: EVERY_N_PAGES \| AT_PAGES \| PAGE_RANGES \| EVERY_PAGE \| BY_OUTLINE_LEVEL, n?, pages?, ranges?, outlineLevel?, output: { folderId?, namePattern, createSubfolder } }` | `PdfOperationResponse` (N outputs) |
 | `POST /pdf/organize` | `OrganizeRequest { documentId, pages[{documentId?, page, rotation}], output }` — the generic composition; covers reorder / delete / duplicate / rotate per page / extract / insert from another PDF | `PdfOperationResponse` |
@@ -250,9 +250,11 @@ dialogs/pdf-rotate-dialog/               tiny: CW / CCW / 180°, all pages, new 
 
 - **Organizer**: toolbar (undo/redo, rotate selected, delete selected, duplicate, extract selected
   → new document, insert pages from another PDF *(v1.1)*), the grid, and a pinned footer with a
-  split Save button: **Save as new document** (default when signed) / **Save as new version**
-  (default otherwise; the version history makes it reversible). A warning banner when
-  `info.signed`. Result: toast with "Open".
+  split Save button: **Save as new document** (default when signed or while an e-Sign envelope is
+  running) / **Save as new version** (default otherwise; the version history makes it reversible;
+  disabled when `info.activeSignatureEnvelope`). A warning banner when `info.signed` or
+  `info.activeSignatureEnvelope`, and API refusals are shown in the footer — a snackbar is
+  hidden behind the full-height dialog. Result: toast with "Open".
 - **Merge**: ordered list of the selected PDFs (CDK vertical drag, first-page thumbnail, page
   count from `/info`, optional per-file page range), "Add bookmarks per file" toggle, output name
   (default `<first name> (merged).pdf`), destination = current folder. Result: list refresh +

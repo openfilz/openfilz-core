@@ -339,6 +339,26 @@ class PdfToolsIT extends TestContainersKeyCloakConfig {
         assertThat(auditTrail(out.documentId())).contains(main.toString()).contains(other.toString());
     }
 
+    /**
+     * What the organizer dialog sends when every page comes from the edited PDF and one of them
+     * was rotated in the grid: the new document must carry that rotation, the source stays intact.
+     */
+    @Test
+    void organizeKeepsPerPageRotationWhenSavingTheMainDocumentAsANewDocument() {
+        UUID id = upload(contributor, "cv.pdf", PdfTestFiles.pdf("P1", "P2", "P3"));
+        PdfOperationResponse r = ok(post(contributor, "/organize", new OrganizeRequest(id, List.of(
+                new PageInstruction(null, 1, 0), new PageInstruction(null, 2, 180), new PageInstruction(null, 3, 0)),
+                newDocument("cv (edited)"))));
+        UUID created = r.outputs().getFirst().documentId();
+        assertThat(created).isNotEqualTo(id);
+        byte[] bytes = download(contributor, created);
+        assertThat(PdfTestFiles.pageTexts(bytes)).containsExactly("P1", "P2", "P3");
+        assertThat(PdfTestFiles.rotation(bytes, 1)).isZero();
+        assertThat(PdfTestFiles.rotation(bytes, 2)).isEqualTo(180);
+        assertThat(PdfTestFiles.rotation(bytes, 3)).isZero();
+        assertThat(PdfTestFiles.rotation(download(contributor, id), 2)).isZero();
+    }
+
     // ── rotate ──────────────────────────────────────────────────────────────
 
     @Test
