@@ -332,8 +332,14 @@ public class AiChatServiceImpl implements AiChatService {
         if (toolContributors == null || toolContributors.isEmpty()) {
             return List.of();
         }
+        // openfilz.ai.chat.excluded-contributors lets a deployment on a small model trim the
+        // tool surface: the schema of every bound tool travels with each request, and tiny models
+        // stop calling tools at all once it grows too large.
+        List<String> excluded = aiProperties.getChat().getExcludedContributors();
         return toolContributors.stream()
                 .filter(McpToolContributor::exposeInChat)
+                .filter(contributor -> excluded == null || !excluded.contains(
+                        org.springframework.util.ClassUtils.getUserClass(contributor).getSimpleName()))
                 .map(contributor -> contributor.bind(userEmail, authentication))
                 .toList();
     }

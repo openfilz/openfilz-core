@@ -72,9 +72,14 @@ public class SignatureAiToolsContributor implements McpToolContributor {
         return CAPABILITIES;
     }
 
-    /** The tools enforce the role gate themselves, so the chat may call them directly. */
+    /**
+     * The tools enforce the role gate themselves, so the chat may call them directly — but only
+     * while e-Sign is on: four tools that can only answer "disabled" would just dilute the model's
+     * tool choice (and their schema costs tokens on every request). Read at request time, so the
+     * runtime toggle keeps working in native images; the MCP list stays per-deployment as usual.
+     */
     @Override
     public boolean exposeInChat() {
-        return true;
+        return signatureProperties.isActive();
     }
 }

@@ -55,6 +55,23 @@ public class AiProperties {
     private Fallback fallback = new Fallback();
 
     /**
+     * In-app chat assistant tuning (the MCP server is unaffected).
+     */
+    private Chat chat = new Chat();
+
+    @Data
+    public static class Chat {
+        /**
+         * Simple class names of {@code McpToolContributor}s whose tools the chat assistant must
+         * NOT bind even though they opt in (e.g. {@code OrganizeAiToolsContributor},
+         * {@code SignatureAiToolsContributor}, {@code PdfAiToolsContributor}). Small local models
+         * degrade as the tool schema grows — they start refusing or emit tool calls as text — so a
+         * deployment on such a model can trim the surface to what it uses. Read per request.
+         */
+        private List<String> excludedContributors = new ArrayList<>();
+    }
+
+    /**
      * Ollama provider switches.
      */
     private Provider ollama = new Provider();

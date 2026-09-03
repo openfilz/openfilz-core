@@ -104,6 +104,13 @@ public class AiRealLlmE2EIT extends TestContainersBaseConfig {
         registry.add("spring.ai.ollama.chat.temperature", () -> "0.0");
         // The container already holds both models (SharedOllamaContainer pulls them once).
         registry.add("spring.ai.ollama.init.pull-model-strategy", () -> "never");
+        // A 1.5B model stops calling tools once the bound schema grows past the document + PDF
+        // tools (it answers "I can't assist with that" or emits the call as text, ~2 min per
+        // request on CI CPUs). This suite pins the pipeline, not the reorganisation / e-Sign
+        // tools — those have their own ITs — so trim the chat surface the way a deployment on a
+        // small model would (openfilz.ai.chat.excluded-contributors).
+        registry.add("openfilz.ai.chat.excluded-contributors",
+                () -> "OrganizeAiToolsContributor,SignatureAiToolsContributor");
     }
 
     // ========================= Embeddings (deterministic) =========================

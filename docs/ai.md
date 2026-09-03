@@ -268,6 +268,12 @@ sequenceDiagram
   tool objects report their side effects (modified folders, actions, proposed plans) through
   `AiToolTurnEffects`, which is also how the file explorer learns to refresh and how the
   failover logic knows a mutation already committed.
+- **Trimming the tool surface for small models**: the schema of every bound tool travels with
+  each request, and small local models (1–3B) stop calling tools once it grows too large — they
+  refuse, or emit the call as text. The e-Sign tools are bound only while
+  `openfilz.signature.active` is on, and `openfilz.ai.chat.excluded-contributors` (simple class
+  names, e.g. `OrganizeAiToolsContributor,SignatureAiToolsContributor,PdfAiToolsContributor`)
+  drops whole contributors from the chat without touching the MCP server. Read per request.
 - **Doc-link enrichment**: every tool call and RAG hit registers `{id, parentId, type, name}` in
   the request's `DocumentAiTools` registry; after streaming, document names in the answer are
   replaced with `[[doc:…]]` markers the frontend renders as clickable links.
