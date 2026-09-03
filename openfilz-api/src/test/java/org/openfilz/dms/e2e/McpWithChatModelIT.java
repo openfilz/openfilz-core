@@ -91,6 +91,8 @@ public class McpWithChatModelIT extends AbstractMcpIT {
         // The context starting at all is most of the assertion: the cycle aborts the refresh.
         Set<String> expected = new HashSet<>(DocumentAiToolsContributor.READ_ONLY_TOOLS);
         expected.addAll(DocumentAiToolsContributor.MUTATING_TOOLS);
+        expected.addAll(org.openfilz.dms.service.mcp.PdfAiToolsContributor.READ_ONLY_TOOLS);
+        expected.addAll(org.openfilz.dms.service.mcp.PdfAiToolsContributor.MUTATING_TOOLS);
 
         assertThat(advertisedToolNames()).containsExactlyInAnyOrderElementsOf(expected);
     }

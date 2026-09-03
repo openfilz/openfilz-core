@@ -31,10 +31,23 @@ public class ChatClientAssembler {
     private final ToolCallingManager toolCallingManager;
 
     public ChatClient assemble(ChatModel chatModel, DocumentAiTools documentAiTools) {
+        return assemble(chatModel, documentAiTools, java.util.List.of());
+    }
+
+    /**
+     * @param extraTools further per-request tool objects (from the {@code McpToolContributor}s that
+     *                   opt into the chat, e.g. the PDF tools), bound to the same user
+     */
+    public ChatClient assemble(ChatModel chatModel, DocumentAiTools documentAiTools, java.util.List<Object> extraTools) {
+        Object[] toolObjects = new Object[1 + extraTools.size()];
+        toolObjects[0] = documentAiTools;
+        for (int i = 0; i < extraTools.size(); i++) {
+            toolObjects[i + 1] = extraTools.get(i);
+        }
         return ChatClient.builder(chatModel)
                 .defaultSystem(aiProperties.getSystemPrompt())
                 .defaultToolCallbacks(MethodToolCallbackProvider.builder()
-                        .toolObjects(documentAiTools)
+                        .toolObjects(toolObjects)
                         .build())
                 .defaultAdvisors(ToolCallingAdvisor.builder()
                         .toolCallingManager(toolCallingManager)

@@ -46,6 +46,10 @@ public class SettingsServiceImpl implements SettingsService {
     @Value("${openfilz.signature.active:false}")
     private Boolean signatureActive;
 
+    // PDF tools master switch — the frontend shows the merge / split / rotate / organize actions from this.
+    @Value("${openfilz.pdf-tools.active:true}")
+    private Boolean pdfToolsActive;
+
     // When on, initiating signature requests also needs the SIGN_REQUESTER role — surfaced so the
     // frontend can hide the request/template actions from users without it (backend still enforces).
     @Value("${openfilz.signature.require-requester-role:false}")
@@ -144,6 +148,7 @@ public class SettingsServiceImpl implements SettingsService {
                .aiActive(aiActive)
                .aiUserSettingsEnabled(aiActive && aiUserSettingsEnabled)
                .signatureActive(Boolean.TRUE.equals(signatureActive))
+               .pdfToolsActive(Boolean.TRUE.equals(pdfToolsActive))
                .signatureRequesterRoleRequired(Boolean.TRUE.equals(signatureActive) && Boolean.TRUE.equals(signatureRequireRequesterRole))
                .signatureAuthMethods(deliverableAuthMethods())
                .signatureRemindersActive(Boolean.TRUE.equals(signatureActive) && !reminderSenders.isEmpty())

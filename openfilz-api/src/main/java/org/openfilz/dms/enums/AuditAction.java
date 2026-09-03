@@ -36,6 +36,8 @@ public enum AuditAction {
     SIGNATURE_REMINDER_SENT,
     SIGNATURE_TEMPLATE_CREATED,
     SIGNATURE_TEMPLATE_DELETED,
+    // PDF tools: a document produced or replaced by merge / split / organize / rotate (details carry the provenance)
+    PDF_TRANSFORM,
     // Audit chain actions
     CHAIN_GENESIS // Marks the start of the hash chain
 }

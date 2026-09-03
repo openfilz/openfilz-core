@@ -179,6 +179,14 @@ openfilz:
       product-name: ${OPENFILZ_SIGNATURE_PRODUCT_NAME:OpenFilz}
       logo-url: ${OPENFILZ_SIGNATURE_LOGO_URL:}
 
+  # PDF tools (merge / split / rotate / organize pages) — see docs/pdf-tools.md
+  pdf-tools:
+    active: ${OPENFILZ_PDF_TOOLS_ACTIVE:true}   # runtime toggle: endpoints 404 when off, UI hides the actions
+    max-input-bytes: ${OPENFILZ_PDF_TOOLS_MAX_INPUT_BYTES:209715200}   # all sources of one operation (200 MB)
+    max-pages: ${OPENFILZ_PDF_TOOLS_MAX_PAGES:2000}                     # all pages of one operation
+    max-outputs: ${OPENFILZ_PDF_TOOLS_MAX_OUTPUTS:200}                  # documents one split may produce
+    max-concurrent-operations: ${OPENFILZ_PDF_TOOLS_MAX_CONCURRENT:2}   # simultaneous PDFBox compositions per instance
+
   # Quota Configuration
   quota:
     # Maximum file size for each uploaded file in megabytes (MB)

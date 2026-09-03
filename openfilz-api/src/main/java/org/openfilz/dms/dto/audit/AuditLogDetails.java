@@ -19,7 +19,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
         @JsonSubTypes.Type(value = ReplaceAudit.class, name = AuditLogDetails.REPLACE),
         @JsonSubTypes.Type(value = RestoreVersionAudit.class, name = AuditLogDetails.RESTORE_VERSION),
         @JsonSubTypes.Type(value = UpdateMetadataAudit.class, name = AuditLogDetails.UPDATE_METADATA),
-        @JsonSubTypes.Type(value = UploadAudit.class, name = AuditLogDetails.UPLOAD)
+        @JsonSubTypes.Type(value = UploadAudit.class, name = AuditLogDetails.UPLOAD),
+        @JsonSubTypes.Type(value = PdfTransformAudit.class, name = AuditLogDetails.PDF_TRANSFORM)
 
 })
 @Schema(
@@ -34,7 +35,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
                 @DiscriminatorMapping(value = AuditLogDetails.REPLACE, schema = ReplaceAudit.class),
                 @DiscriminatorMapping(value = AuditLogDetails.RESTORE_VERSION, schema = RestoreVersionAudit.class),
                 @DiscriminatorMapping(value = AuditLogDetails.UPDATE_METADATA, schema = UpdateMetadataAudit.class),
-                @DiscriminatorMapping(value = AuditLogDetails.UPLOAD, schema = UploadAudit.class)
+                @DiscriminatorMapping(value = AuditLogDetails.UPLOAD, schema = UploadAudit.class),
+                @DiscriminatorMapping(value = AuditLogDetails.PDF_TRANSFORM, schema = PdfTransformAudit.class)
         }
 )
 public abstract class AuditLogDetails implements IAuditLogDetails {
@@ -51,4 +53,5 @@ public abstract class AuditLogDetails implements IAuditLogDetails {
     public static final String RESTORE_VERSION = "restoreVersion";
     public static final String UPDATE_METADATA = "updateMetadata";
     public static final String UPLOAD = "upload";
+    public static final String PDF_TRANSFORM = "pdfTransform";
 }

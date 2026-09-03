@@ -6,6 +6,8 @@ import lombok.Builder;
 public record Settings(Integer emptyBinInterval, Integer fileQuotaMB, Integer userQuotaMB,
                        String language, String theme, boolean thumbnailsActive, boolean aiActive,
                        boolean aiUserSettingsEnabled, boolean signatureActive,
+                       /** True when the PDF tools (merge / split / rotate / organize pages) are enabled — the frontend shows the PDF actions. */
+                       boolean pdfToolsActive,
                        /** True when initiating signature requests additionally requires the SIGN_REQUESTER role — the frontend hides the request/template actions from users without it. */
                        boolean signatureRequesterRoleRequired,
                        /** Recipient authentication methods this deployment can actually deliver. */

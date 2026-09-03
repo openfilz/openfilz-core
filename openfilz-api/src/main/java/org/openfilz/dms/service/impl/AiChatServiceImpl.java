@@ -18,6 +18,8 @@ import org.openfilz.dms.service.ai.DocumentAiTools;
 import org.openfilz.dms.service.ai.DocumentAiToolsFactory;
 import org.openfilz.dms.service.ai.UserChatClientResolver;
 import org.openfilz.dms.service.ai.UserChatClientResolver.ResolvedChat;
+import org.openfilz.dms.service.mcp.McpToolContributor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
@@ -69,6 +71,14 @@ public class AiChatServiceImpl implements AiChatService {
     private final AiChatMessageRepository messageRepository;
     private final AiAccessPolicy accessPolicy;
 
+    /**
+     * Tool contributors that opt into the chat ({@link McpToolContributor#exposeInChat()}), e.g. the
+     * PDF tools. Bound per request next to {@link DocumentAiTools}. Field-injected and optional so
+     * unit tests can still build the service with its explicit constructor.
+     */
+    @Autowired(required = false)
+    private List<McpToolContributor> toolContributors = List.of();
+
     @Override
     public Flux<AiChatResponse> chat(AiChatRequest request, String userEmail) {
         log.debug("[AI] === New chat request (user={}) ===", userEmail);
@@ -99,6 +109,7 @@ public class AiChatServiceImpl implements AiChatService {
                 List<ResolvedChat> candidates = fallbackChain.candidates(resolved);
                 ResolvedChat first = candidates.getFirst();
                 DocumentAiTools tools = toolsFactory.create(first.chatModel(), userEmail, authentication);
+                List<Object> extraTools = chatTools(userEmail, authentication);
                 Set<String> ragDocumentNames = new HashSet<>();
                 log.debug("[AI] Chat model: {} ({}){}", first.provider(), first.model(),
                         candidates.size() > 1 ? " (+" + (candidates.size() - 1) + " fallback)" : "");
@@ -132,7 +143,7 @@ public class AiChatServiceImpl implements AiChatService {
                             StringBuilder fullResponse = new StringBuilder();
 
                             log.debug("[AI] Sending prompt to LLM (streaming)...");
-                            return streamWithFailover(candidates, 0, resolved, tools, history, augmentedMessage, fullResponse)
+                            return streamWithFailover(candidates, 0, resolved, tools, extraTools, history, augmentedMessage, fullResponse)
                                     .doOnComplete(() -> log.debug("[AI] LLM streaming complete, raw response: {} chars", fullResponse.length()))
                                     .then(Mono.defer(() -> {
                                         // Post-process: enrich response with document links
@@ -234,11 +245,11 @@ public class AiChatServiceImpl implements AiChatService {
      * fingerprint either way, so a bad pool key is loud rather than silent.
      */
     private Flux<String> streamWithFailover(List<ResolvedChat> candidates, int index, ResolvedChat primary,
-                                            DocumentAiTools tools, List<Message> history,
+                                            DocumentAiTools tools, List<Object> extraTools, List<Message> history,
                                             String augmentedMessage, StringBuilder fullResponse) {
         ResolvedChat candidate = candidates.get(index);
         tools.rebindChatModel(candidate.chatModel());
-        ChatClient chatClient = assembler.assemble(candidate.chatModel(), tools);
+        ChatClient chatClient = assembler.assemble(candidate.chatModel(), tools, extraTools);
 
         return chatClient.prompt()
                 .messages(history)
@@ -292,9 +303,20 @@ public class AiChatServiceImpl implements AiChatService {
                     log.warn("[AI] {} on {} ({}, key {}) — falling back to {} ({}, key {})", failure,
                             candidate.provider(), candidate.model(), candidate.keyRef(),
                             next.provider(), next.model(), next.keyRef());
-                    return streamWithFailover(candidates, nextIndex, primary, tools, history,
+                    return streamWithFailover(candidates, nextIndex, primary, tools, extraTools, history,
                             augmentedMessage, fullResponse);
                 });
+    }
+
+    /** The opted-in contributors' tool objects, bound to the requesting user (empty when none). */
+    private List<Object> chatTools(String userEmail, org.springframework.security.core.Authentication authentication) {
+        if (toolContributors == null || toolContributors.isEmpty()) {
+            return List.of();
+        }
+        return toolContributors.stream()
+                .filter(McpToolContributor::exposeInChat)
+                .map(contributor -> contributor.bind(userEmail, authentication))
+                .toList();
     }
 
     /** Index of the next candidate still worth an attempt, or -1 when the chain is spent. */

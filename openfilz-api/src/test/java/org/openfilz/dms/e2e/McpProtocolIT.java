@@ -5,6 +5,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.openfilz.dms.config.McpProperties;
 import org.openfilz.dms.service.mcp.DocumentAiToolsContributor;
+import org.openfilz.dms.service.mcp.PdfAiToolsContributor;
 import org.openfilz.dms.service.mcp.McpDocumentResources;
 import org.openfilz.dms.service.mcp.McpToolCallbackProvider;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -102,6 +103,8 @@ public class McpProtocolIT extends AbstractMcpIT {
     void toolsListAdvertisesEveryTool() {
         Set<String> expected = new HashSet<>(DocumentAiToolsContributor.READ_ONLY_TOOLS);
         expected.addAll(DocumentAiToolsContributor.MUTATING_TOOLS);
+        expected.addAll(PdfAiToolsContributor.READ_ONLY_TOOLS);
+        expected.addAll(PdfAiToolsContributor.MUTATING_TOOLS);
 
         assertThat(advertisedToolNames()).containsExactlyInAnyOrderElementsOf(expected);
     }
@@ -462,6 +465,21 @@ public class McpProtocolIT extends AbstractMcpIT {
                     {"documentName":"%s","versionId":"v1"}""".formatted(probe);
             case "downloadDocument" -> """
                     {"documentName":"%s"}""".formatted(probe);
+            // PDF tools (PdfAiTools): unknown names resolve to a text result, which is what the trace needs
+            case "getPdfInfo" -> """
+                    {"document":"%s.pdf"}""".formatted(probe);
+            case "mergePdfs" -> """
+                    {"documents":"%s-a.pdf,%s-b.pdf"}""".formatted(probe, probe);
+            case "splitPdf" -> """
+                    {"document":"%s.pdf","mode":"every-page"}""".formatted(probe);
+            case "rotatePdf" -> """
+                    {"document":"%s.pdf","angle":90}""".formatted(probe);
+            case "deletePdfPages" -> """
+                    {"document":"%s.pdf","pages":"1"}""".formatted(probe);
+            case "extractPdfPages" -> """
+                    {"document":"%s.pdf","pages":"1"}""".formatted(probe);
+            case "reorderPdfPages" -> """
+                    {"document":"%s.pdf","pageOrder":"2,1"}""".formatted(probe);
             default -> throw new AssertionError("""
                     Unknown MCP tool '%s'. A tool was added to DocumentAiTools without being \
                     classified here — add arguments for it (and list it in \

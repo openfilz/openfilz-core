@@ -873,6 +873,39 @@ spring:
 > **Full reference:** [e-Sign Guide](esign.md) documents every property, the three seal
 > providers, the security model, the REST API and the extension points.
 
+### PDF Tools
+
+Merge, split, rotate and reorganise the pages of PDFs already stored in OpenFilz, from the web app,
+the REST API (`/api/v1/pdf/**`), the AI assistant and the MCP server. Results are regular documents
+(a new document, or a new version of the source when versioning is on) with a `PDF_TRANSFORM` audit
+entry recording the operation and its source documents. **Enabled by default**; while it is off, every
+`/api/v1/pdf/**` endpoint answers `404` and `GET /api/v1/settings` reports `pdfToolsActive: false` so
+the web UI hides the actions. No external service is needed (PDFBox in-process).
+
+```yaml
+openfilz:
+  pdf-tools:
+    active: true                    # OPENFILZ_PDF_TOOLS_ACTIVE
+    max-input-bytes: 209715200      # OPENFILZ_PDF_TOOLS_MAX_INPUT_BYTES — all sources of one operation
+    max-pages: 2000                 # OPENFILZ_PDF_TOOLS_MAX_PAGES — all pages of one operation
+    max-outputs: 200                # OPENFILZ_PDF_TOOLS_MAX_OUTPUTS — documents one split may produce
+    max-concurrent-operations: 2    # OPENFILZ_PDF_TOOLS_MAX_CONCURRENT — simultaneous compositions per instance
+```
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `openfilz.pdf-tools.active` | `true` | Master switch (endpoints, settings flag, AI/MCP tools). Read at runtime. |
+| `openfilz.pdf-tools.max-input-bytes` | `209715200` | Total size of the source PDFs of one operation; `413` beyond it |
+| `openfilz.pdf-tools.max-pages` | `2000` | Total pages one operation may touch; `422` beyond it |
+| `openfilz.pdf-tools.max-outputs` | `200` | Documents one split may produce; `422` beyond it |
+| `openfilz.pdf-tools.max-concurrent-operations` | `2` | Compositions running at once; further requests wait up to `slot-wait-seconds` (60) then answer `503` |
+
+> Writes need the `CONTRIBUTOR` role, reads (`/info`) `READER` or `CONTRIBUTOR`. Under **WORM mode**
+> only *new documents* can be produced (in-place edits answer `409`). Password-protected PDFs are
+> refused (`422 PDF_ENCRYPTED`); digitally signed PDFs can only be edited in place with
+> `acknowledgeSignatureLoss=true` (`409 PDF_SIGNED` otherwise), and never while an e-Sign envelope
+> is active on them. See [PDF Tools](pdf-tools.md) for the API and design.
+
 ### CORS
 
 | Property / Env Variable | Default | Description |
@@ -919,6 +952,7 @@ Summary of all toggleable features:
 | MCP server | `openfilz.mcp.active` | `false` | Exposes the document tools to external AI agents at `/mcp`; needs no LLM of its own |
 | MCP write access | `openfilz.mcp.mode` | `READ_ONLY` | Set `READ_WRITE` to let agents create/modify documents |
 | e-Sign | `openfilz.signature.active` | `false` | Electronic signature envelopes; needs SMTP to email signing links |
+| PDF tools | `openfilz.pdf-tools.active` | `true` | Merge / split / rotate / organise pages of stored PDFs (REST, UI, AI assistant, MCP) |
 
 ---
 
