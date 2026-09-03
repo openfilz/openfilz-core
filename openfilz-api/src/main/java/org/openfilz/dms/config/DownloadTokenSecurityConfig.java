@@ -2,8 +2,10 @@ package org.openfilz.dms.config;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.openfilz.dms.security.DownloadTokenAuthenticationEnricher;
 import org.openfilz.dms.security.DownloadTokenAuthenticationToken;
 import org.openfilz.dms.security.DownloadTokenService;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -60,6 +62,13 @@ public class DownloadTokenSecurityConfig {
 
     private final DownloadTokenService downloadTokenService;
 
+    /**
+     * Turns the validated token into the request's Authentication — identity in core, the
+     * extension layer's own principal type (user id / org / teams) in the enterprise edition,
+     * whose secure DAOs cannot resolve an unknown authentication class.
+     */
+    private final DownloadTokenAuthenticationEnricher authenticationEnricher;
+
     @Bean
     @Order(-4)
     public SecurityWebFilterChain downloadTokenSecurityFilterChain(ServerHttpSecurity http) {
@@ -101,8 +110,13 @@ public class DownloadTokenSecurityConfig {
                 return Mono.error(new BadCredentialsException("invalid download token"));
             }
             log.debug("Download token redeemed for document {} by {}", token.getDocumentId(), minterEmail);
-            return Mono.just(new DownloadTokenAuthenticationToken(
-                    minterEmail, token.getDocumentId(), token.getRawToken()));
+            return authenticationEnricher
+                    .enrich(new DownloadTokenAuthenticationToken(
+                            minterEmail, token.getDocumentId(), token.getRawToken()))
+                    // Any enrichment refusal (minter unknown, deactivated) is an authentication
+                    // failure — the failure handler's uniform 404 — never a 500
+                    .onErrorMap(e -> e instanceof AuthenticationException ? e
+                            : new BadCredentialsException("download token refused", e));
         };
     }
 
