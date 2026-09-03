@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[63fc2267226b31e](https://github.com/openfilz/openfilz-core/commit/63fc2267226b31e) maven-release-bot[bot] *2026-09-01 18:53:34*
+[8b4bdf52dcf5da1](https://github.com/openfilz/openfilz-core/commit/8b4bdf52dcf5da1) maven-release-bot[bot] *2026-09-03 06:37:32*
 
 
-## v1.3.0
+## v1.3.1
 ### No issue
 
-**[maven-release-plugin] prepare release v1.3.0**
+**[maven-release-plugin] prepare release v1.3.1**
 
 
-[2696fe51887086a](https://github.com/openfilz/openfilz-core/commit/2696fe51887086a) maven-release-bot[bot] *2026-09-01 18:53:31*
+[1edc8ac924c1c6f](https://github.com/openfilz/openfilz-core/commit/1edc8ac924c1c6f) maven-release-bot[bot] *2026-09-03 06:37:29*
 
-**Merge pull request #220 from openfilz/develop**
+**Merge pull request #222 from openfilz/develop**
 
- * Serve documents as MCP resources and fix environment variable forwarding
+ * release: PDF tools (merge / split / rotate / organize pages) + signed download links
 
-[dab0e8fa23b327f](https://github.com/openfilz/openfilz-core/commit/dab0e8fa23b327f) Yann Demel *2026-09-01 18:48:39*
+[652978825e7b97c](https://github.com/openfilz/openfilz-core/commit/652978825e7b97c) Yann Demel *2026-09-03 06:34:26*
 
 
