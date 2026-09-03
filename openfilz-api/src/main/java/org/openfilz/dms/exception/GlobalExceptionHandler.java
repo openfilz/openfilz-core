@@ -84,6 +84,12 @@ public class GlobalExceptionHandler {
         return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse(HttpStatus.BAD_REQUEST.value(), "Exception while processing Audit trail for this request")));
     }
 
+    @ExceptionHandler(PdfToolsException.class)
+    public Mono<ResponseEntity<ErrorResponse>> handlePdfTools(PdfToolsException ex) {
+        log.warn("PDF tools refused ({}): {}", ex.getStatus(), ex.getMessage());
+        return Mono.just(ResponseEntity.status(ex.getStatus()).body(new ErrorResponse(ex.getStatus().value(), ex.getMessage())));
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public Mono<ResponseEntity<ErrorResponse>> handleIllegalArgumentException(IllegalArgumentException ex) {
         log.warn("Illegal argument : {}", ex.getMessage());

@@ -149,14 +149,15 @@ public class McpDocumentResources implements UserInfoService {
                 .build();
         String text = download.extractedText() != null
                 ? ("Content of '%s' (%s, %d bytes):\n\n%s\n\n"
-                        + "The resource link above returns the original file (resources/read); a signed-in "
-                        + "user can also download it in a browser: %s").formatted(
+                        + "The resource link above returns the original file (resources/read); it can also "
+                        + "be downloaded in a browser (%s): %s").formatted(
                         doc.getName(), contentTypeOf(doc), sizeOf(doc), download.extractedText(),
-                        download.downloadUrl())
+                        download.downloadHint(), download.downloadUrl())
                 : ("'%s' is a %s file (%d bytes); its content is not text. Fetch the original bytes via "
-                        + "the resource link above (resources/read), or in a browser as a signed-in "
-                        + "user: %s").formatted(
-                        doc.getName(), contentTypeOf(doc), sizeOf(doc), download.downloadUrl());
+                        + "the resource link above (resources/read), or download it in a browser "
+                        + "(%s): %s").formatted(
+                        doc.getName(), contentTypeOf(doc), sizeOf(doc),
+                        download.downloadHint(), download.downloadUrl());
         log.debug("[MCP] {} served '{}' as resource link + text", DOWNLOAD_TOOL, doc.getName());
         return McpSchema.CallToolResult.builder()
                 .content(List.of(link, McpSchema.TextContent.builder(text).build()))

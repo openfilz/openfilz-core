@@ -76,7 +76,10 @@ class AiRagAccessFilterTest {
                 // the capability gate is covered by DefaultAiToolRolePolicyTest and McpRoleEnforcementIT.
                 (authentication, capability) -> true,
                 mock(org.openfilz.dms.service.DocumentVersionService.class),
-                new org.openfilz.dms.config.CommonProperties());
+                new org.openfilz.dms.config.CommonProperties(),
+                // real service, feature off by default — mint() returns null, links stay plain
+                new org.openfilz.dms.security.DownloadTokenService(
+                        new org.openfilz.dms.config.DownloadTokenProperties()));
     }
 
     private static Document chunk(UUID documentId, String name, String text, double score) {

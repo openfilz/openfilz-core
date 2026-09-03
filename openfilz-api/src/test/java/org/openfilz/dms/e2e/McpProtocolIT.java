@@ -5,6 +5,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.openfilz.dms.config.McpProperties;
 import org.openfilz.dms.service.mcp.DocumentAiToolsContributor;
+import org.openfilz.dms.service.mcp.PdfAiToolsContributor;
 import org.openfilz.dms.service.mcp.McpDocumentResources;
 import org.openfilz.dms.service.mcp.McpToolCallbackProvider;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -67,7 +68,13 @@ public class McpProtocolIT extends AbstractMcpIT {
         // all. McpWithChatModelIT covers the opposite case.
         registerModelSelectors(registry, "none");
         registry.add("openfilz.mcp.mode", () -> "READ_WRITE");
+        // Signed download links, so downloadDocument hands out a clickable expiring URL and the
+        // redemption chain can be driven end-to-end (see the download-links test section).
+        registry.add("openfilz.download-tokens.enabled", () -> "true");
+        registry.add("openfilz.download-tokens.signing-secret", () -> DOWNLOAD_TOKEN_SECRET);
     }
+
+    private static final String DOWNLOAD_TOKEN_SECRET = "mcp-protocol-it-download-secret-0123456789";
 
     // ---------------------------------------------------------------- handshake
 
@@ -96,6 +103,8 @@ public class McpProtocolIT extends AbstractMcpIT {
     void toolsListAdvertisesEveryTool() {
         Set<String> expected = new HashSet<>(DocumentAiToolsContributor.READ_ONLY_TOOLS);
         expected.addAll(DocumentAiToolsContributor.MUTATING_TOOLS);
+        expected.addAll(PdfAiToolsContributor.READ_ONLY_TOOLS);
+        expected.addAll(PdfAiToolsContributor.MUTATING_TOOLS);
 
         assertThat(advertisedToolNames()).containsExactlyInAnyOrderElementsOf(expected);
     }
@@ -329,6 +338,67 @@ public class McpProtocolIT extends AbstractMcpIT {
                 .expectStatus().isUnauthorized();
     }
 
+    // ---------------------------------------------------------------- signed download links
+    // With openfilz.download-tokens enabled, downloadDocument's URL carries a short-lived
+    // HS256 token minted for the calling user and bound to that one document — clickable from
+    // the conversation with no bearer header. DownloadTokenSecurityConfig redeems it; any
+    // failure answers a uniform 404.
+
+    @Test
+    @DisplayName("the signed download link works unauthenticated, for exactly its document")
+    void signedDownloadLinkServesTheDocument() {
+        String probe = "mcp-dl-" + UUID.randomUUID().toString().substring(0, 8);
+        String fileContent = "signed link content " + probe;
+        callToolText("writeFile", """
+                {"fileName":"%s.txt","content":"%s"}""".formatted(probe, fileContent));
+
+        String answer = callToolText("downloadDocument", """
+                {"documentName":"%s.txt"}""".formatted(probe));
+        assertThat(answer)
+                .as("the tool must describe the link as expiring and header-free")
+                .contains("no sign-in needed");
+        String tokenizedPath = tokenizedDownloadPath(answer);
+
+        // The whole point: no Authorization header, still exactly this one document
+        webTestClient.get().uri(tokenizedPath)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class).isEqualTo(fileContent);
+
+        // Tampered token → uniform 404
+        webTestClient.get().uri(tokenizedPath + "x")
+                .exchange()
+                .expectStatus().isNotFound();
+
+        // The same valid token on a different document's path → uniform 404 (one token, one file)
+        String otherProbe = "mcp-dl2-" + UUID.randomUUID().toString().substring(0, 8);
+        callToolText("writeFile", """
+                {"fileName":"%s.txt","content":"other"}""".formatted(otherProbe));
+        String otherPath = tokenizedDownloadPath(callToolText("downloadDocument", """
+                {"documentName":"%s.txt"}""".formatted(otherProbe)));
+        String swapped = otherPath.substring(0, otherPath.indexOf("?token="))
+                + tokenizedPath.substring(tokenizedPath.indexOf("?token="));
+        webTestClient.get().uri(swapped)
+                .exchange()
+                .expectStatus().isNotFound();
+
+        // And the plain (token-less) endpoint still demands a bearer token — the chain narrowed nothing
+        webTestClient.get().uri(tokenizedPath.substring(0, tokenizedPath.indexOf("?token=")))
+                .exchange()
+                .expectStatus().isUnauthorized();
+    }
+
+    /** Extract the tokenized download URL from a tool answer, as a server-relative path+query. */
+    private static String tokenizedDownloadPath(String toolAnswer) {
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("https?://\\S+?(/api/v1/documents/[0-9a-f-]{36}/download\\?token=\\S+)")
+                .matcher(toolAnswer);
+        assertThat(matcher.find())
+                .as("downloadDocument must hand out a tokenized download URL; answer was: %s", toolAnswer)
+                .isTrue();
+        return matcher.group(1);
+    }
+
     /**
      * Calls every tool the server advertises. Assertions are deliberately weak — the arguments
      * are benign and several tools legitimately answer "not found". What matters is that each
@@ -395,6 +465,21 @@ public class McpProtocolIT extends AbstractMcpIT {
                     {"documentName":"%s","versionId":"v1"}""".formatted(probe);
             case "downloadDocument" -> """
                     {"documentName":"%s"}""".formatted(probe);
+            // PDF tools (PdfAiTools): unknown names resolve to a text result, which is what the trace needs
+            case "getPdfInfo" -> """
+                    {"document":"%s.pdf"}""".formatted(probe);
+            case "mergePdfs" -> """
+                    {"documents":"%s-a.pdf,%s-b.pdf"}""".formatted(probe, probe);
+            case "splitPdf" -> """
+                    {"document":"%s.pdf","mode":"every-page"}""".formatted(probe);
+            case "rotatePdf" -> """
+                    {"document":"%s.pdf","angle":90}""".formatted(probe);
+            case "deletePdfPages" -> """
+                    {"document":"%s.pdf","pages":"1"}""".formatted(probe);
+            case "extractPdfPages" -> """
+                    {"document":"%s.pdf","pages":"1"}""".formatted(probe);
+            case "reorderPdfPages" -> """
+                    {"document":"%s.pdf","pageOrder":"2,1"}""".formatted(probe);
             default -> throw new AssertionError("""
                     Unknown MCP tool '%s'. A tool was added to DocumentAiTools without being \
                     classified here — add arguments for it (and list it in \

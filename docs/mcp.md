@@ -124,7 +124,7 @@ opened it, and horizontal scaling needs no sticky sessions.
 
 ## 3. The tool surface
 
-Seventeen document tools, curated rather than generated. (A 60-operation auto-generated tool list from the
+Seventeen document tools plus seven PDF tools, curated rather than generated. (A 60-operation auto-generated tool list from the
 OpenAPI spec would make agents *worse*, not better — the small, well-described surface is the point.)
 
 | Tool | Mode | What it does |
@@ -146,6 +146,26 @@ OpenAPI spec would make agents *worse*, not better — the small, well-described
 | `listVersions` | read | List a document's stored versions (versioned storage). |
 | `restoreVersion` | write | Restore a previous version as the current content. |
 | `downloadDocument` | read | Get a document's content — extracted text for text/PDF/Office, or a download link for binary files. |
+
+### PDF tools
+
+Present whenever `openfilz.pdf-tools.active` is on (the default). They act on PDFs already stored
+in the DMS and write their result back as a regular document — a new document, or a new version of
+the source — with an audit entry carrying the provenance (`PDF_TRANSFORM`). Page selections use the
+same syntax everywhere: `1-3,7,10-`, `odd`, `even`, `all`.
+
+| Tool | Mode | What it does |
+|---|---|---|
+| `getPdfInfo` | read | Page count, page sizes, bookmarks, and whether the PDF is password-protected or digitally signed. |
+| `mergePdfs` | write | Merge several PDFs (in the given order) into a new document, optionally with one bookmark per source. |
+| `splitPdf` | write | Split a PDF into new documents: every page, every N pages, at given pages, by page ranges, or at bookmarks. |
+| `rotatePdf` | write | Rotate all or selected pages by 90/180/270° — in place (new version) or as a new document. |
+| `deletePdfPages` | write | Remove pages — in place or as a new document. |
+| `extractPdfPages` | write | Copy selected pages into a new document. |
+| `reorderPdfPages` | write | Reorder pages — in place or as a new document. |
+
+In-place edits are refused on digitally signed PDFs (the signature would break — the tool says so and
+suggests a new document), on documents with an active e-Sign envelope, and under WORM mode.
 
 The server also advertises usage guidance in its `initialize` response (the MCP `instructions`
 field), telling the calling agent to resolve names with `queryDocuments` first and that everything
@@ -479,7 +499,7 @@ npx -y @modelcontextprotocol/inspector --cli http://localhost:8081/mcp \
   --transport http --header "Authorization: Bearer $TOKEN" --method tools/list
 ```
 
-It should list 17 tools in `READ_WRITE` mode, 9 in `READ_ONLY` (Community counts; Enterprise adds the share/comment/permissions tools). Dropping the `--header` must fail
+It should list 24 tools in `READ_WRITE` mode, 10 in `READ_ONLY` (Community counts; Enterprise adds the share/comment/permissions tools). Dropping the `--header` must fail
 with `401` — if it does not, `/mcp` is not protected and something is very wrong.
 
 ---

@@ -53,7 +53,8 @@ public class WormSecurityServiceImpl extends AbstractSecurityService {
         return method.equals(HttpMethod.POST) && (
                         pathStartsWith(path, "/files/copy",
                                 "/documents/upload",
-                                "/documents/upload-multiple") ||
+                                "/documents/upload-multiple",
+                                "/pdf") || // PDF tools: new documents only (the service refuses NEW_VERSION under WORM)
                                 path.equals("/folders") ||
                                 path.equals("/folders/copy"));
     }
