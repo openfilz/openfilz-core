@@ -12,7 +12,7 @@ import org.openfilz.dms.dto.response.ReorganizationPlanView;
 import org.openfilz.dms.service.ai.ReorganizationPlanService;
 import org.openfilz.dms.service.ai.ReorganizationPlanService.Caller;
 import org.openfilz.dms.utils.UserInfoService;
-import org.springframework.context.annotation.Lazy;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -36,6 +36,14 @@ import java.util.concurrent.Callable;
  * Same runtime gate as {@link AiChatController}: 404 when {@code openfilz.ai.active} is off. The
  * role gate for applying (CONTRIBUTOR) is enforced in {@link ReorganizationPlanService}, since
  * {@code /api/v1/ai/**} admits every reader.
+ * <p>
+ * The service is {@code @Lazy} so that nothing AI-related is built when the feature is off, and
+ * it is reached through an {@link ObjectProvider} rather than a {@code @Lazy} injection point:
+ * that variant wraps a concrete class in a CGLIB lazy-resolution proxy, which the GraalVM native
+ * image cannot instantiate ({@code MissingReflectionRegistrationError} on
+ * {@code CGLIB$FACTORY_DATA}) — the app then fails to start regardless of {@code ai.active}.
+ * {@code ObjectProvider} defers the lookup with no proxy at all, the same way
+ * {@link org.openfilz.dms.service.mcp.DocumentAiToolsContributor} reaches its lazy collaborators.
  */
 @Slf4j
 @RestController
@@ -44,10 +52,11 @@ import java.util.concurrent.Callable;
 @Tag(name = "AI Chat", description = "AI-powered document chat with RAG and function calling")
 public class AiReorganizationController implements UserInfoService {
 
-    private final ReorganizationPlanService planService;
+    private final ObjectProvider<ReorganizationPlanService> planService;
     private final AiProperties aiProperties;
 
-    public AiReorganizationController(@Lazy ReorganizationPlanService planService, AiProperties aiProperties) {
+    public AiReorganizationController(ObjectProvider<ReorganizationPlanService> planService,
+                                      AiProperties aiProperties) {
         this.planService = planService;
         this.aiProperties = aiProperties;
     }
@@ -56,7 +65,7 @@ public class AiReorganizationController implements UserInfoService {
     @Operation(summary = "Get a reorganisation plan proposed by the AI assistant",
             description = "The plan's items (what moves where), which are applicable, and its status.")
     public Mono<ReorganizationPlanView> get(@PathVariable UUID planId) {
-        return withCaller(caller -> planService.get(planId, caller));
+        return withCaller((service, caller) -> service.get(planId, caller));
     }
 
     @PostMapping(value = "/{planId}/apply", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -64,17 +73,17 @@ public class AiReorganizationController implements UserInfoService {
             description = "Creates the missing folders and moves the selected items (all applicable items when none is given).")
     public Mono<ReorganizationApplyResult> apply(@PathVariable UUID planId,
                                                  @RequestBody(required = false) ReorganizationApplyRequest request) {
-        return withCaller(caller -> planService.apply(planId, request != null ? request.itemIds() : null, caller));
+        return withCaller((service, caller) -> service.apply(planId, request != null ? request.itemIds() : null, caller));
     }
 
     @PostMapping(value = "/{planId}/discard", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Discard a proposed reorganisation plan")
     public Mono<ReorganizationPlanView> discard(@PathVariable UUID planId) {
-        return withCaller(caller -> planService.discard(planId, caller));
+        return withCaller((service, caller) -> service.discard(planId, caller));
     }
 
     private interface CallerAction<T> {
-        T run(Caller caller);
+        T run(ReorganizationPlanService service, Caller caller);
     }
 
     /** Resolve the caller, then run the blocking service call off the event loop. */
@@ -82,11 +91,13 @@ public class AiReorganizationController implements UserInfoService {
         if (!aiProperties.isActive()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "AI feature is disabled");
         }
+        // Resolved only past the gate, so the lazy service is first built on the first real call.
+        ReorganizationPlanService service = planService.getObject();
         return getAuthenticationMono()
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not authenticated")))
                 .flatMap(authentication -> getConnectedUserEmail()
                         .map(email -> new Caller(email, authentication)))
-                .flatMap(caller -> Mono.fromCallable((Callable<T>) () -> action.run(caller))
+                .flatMap(caller -> Mono.fromCallable((Callable<T>) () -> action.run(service, caller))
                         .subscribeOn(Schedulers.boundedElastic()));
     }
 }
