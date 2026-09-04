@@ -70,6 +70,11 @@ public class LocalFullTextServiceImpl implements FullTextService {
     @org.springframework.beans.factory.annotation.Value("${openfilz.ai.active:false}")
     private boolean aiActive;
 
+    /** Tier-1 document insights (the file's own metadata), captured from the same Tika pass. */
+    @Autowired(required = false)
+    @Lazy
+    private org.openfilz.dms.service.insight.DocumentInsightStore insightStore;
+
     public LocalFullTextServiceImpl(IndexService indexService, TikaService tikaService, StorageService storageService) {
         this.indexService = indexService;
         this.tikaService = tikaService;
@@ -106,7 +111,8 @@ public class LocalFullTextServiceImpl implements FullTextService {
             final boolean shareWithAi = aiActive && documentEmbeddingService != null;
             final StringBuilder collectedText = shareWithAi ? new StringBuilder() : null;
 
-            Flux<String> tikaFlux = tikaService.processResource(tempFile, storageService.loadFile(document.getStoragePath()));
+            Flux<String> tikaFlux = tikaService.processResource(tempFile, storageService.loadFile(document.getStoragePath()),
+                    metadata -> saveFileMetadata(document, metadata));
 
             // If sharing with AI, tap into the stream to collect text (lightweight — just appending strings)
             if (shareWithAi) {
@@ -134,6 +140,20 @@ public class LocalFullTextServiceImpl implements FullTextService {
             );
         } catch (IOException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    /** Tier-1 insight from the parse that already ran: no second Tika pass, no extra I/O. */
+    private void saveFileMetadata(Document document, org.apache.tika.metadata.Metadata metadata) {
+        if (insightStore == null) {
+            return;
+        }
+        try {
+            insightStore.saveFileMetadata(document, org.openfilz.dms.service.insight.TikaFileMetadata.from(metadata))
+                    .subscribe(v -> { },
+                            e -> log.warn("[INSIGHTS] tier-1 save failed for {}: {}", document.getId(), e.getMessage()));
+        } catch (Exception e) {
+            log.warn("[INSIGHTS] tier-1 save failed for {}: {}", document.getId(), e.getMessage());
         }
     }
 

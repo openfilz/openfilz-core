@@ -18,6 +18,8 @@ import org.openfilz.dms.service.DocumentVersionService;
 import org.openfilz.dms.dto.audit.AuditLog;
 import org.openfilz.dms.service.AuditService;
 import org.openfilz.dms.service.IndexService;
+import org.openfilz.dms.service.insight.DocumentInsightStore;
+import org.openfilz.dms.dto.response.DocumentInsightView;
 import org.springframework.lang.Nullable;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -116,6 +118,9 @@ public class DocumentAiTools {
      */
     private final IndexService indexService;
 
+    /** Document insights (file metadata + AI-derived category / summary), shown by getMetadata. Null-tolerated. */
+    private final DocumentInsightStore insightStore;
+
     /** For parsing the metadata-map tool arguments, which arrive as a JSON object string. */
     private static final JsonMapper JSON = JsonMapper.builder().build();
     /**
@@ -139,7 +144,8 @@ public class DocumentAiTools {
                            CommonProperties commonProperties,
                            DownloadTokenService downloadTokenService,
                            @Nullable AuditService auditService,
-                           @Nullable IndexService indexService) {
+                           @Nullable IndexService indexService,
+                           @Nullable DocumentInsightStore insightStore) {
         this.documentService = documentService;
         this.documentRepository = documentRepository;
         this.storageService = storageService;
@@ -152,6 +158,7 @@ public class DocumentAiTools {
         this.downloadTokenService = downloadTokenService;
         this.auditService = auditService;
         this.indexService = indexService;
+        this.insightStore = insightStore;
     }
 
     /**
@@ -1236,10 +1243,35 @@ public class DocumentAiTools {
         }
         Map<String, Object> metadata = blockWithAuth(
                 documentService.getDocumentMetadata(id, new SearchMetadataRequest(null)));
-        if (metadata == null || metadata.isEmpty()) {
+        Map<String, Object> insights = insightsOf(id);
+        if ((metadata == null || metadata.isEmpty()) && insights.isEmpty()) {
             return toolResult("getMetadata", "'%s' has no metadata.".formatted(documentName));
         }
-        return toolResult("getMetadata", JSON.writeValueAsString(metadata));
+        StringBuilder sb = new StringBuilder();
+        if (metadata != null && !metadata.isEmpty()) {
+            sb.append(JSON.writeValueAsString(metadata));
+        } else {
+            sb.append("'").append(documentName).append("' has no user metadata.");
+        }
+        if (!insights.isEmpty()) {
+            sb.append("\nInsights (derived from the content at upload, read-only): ")
+                    .append(JSON.writeValueAsString(insights));
+        }
+        return toolResult("getMetadata", sb.toString());
+    }
+
+    /** The document's insights as a compact map (empty when none, or no store in this deployment). */
+    private Map<String, Object> insightsOf(UUID documentId) {
+        if (insightStore == null || documentId == null) {
+            return Map.of();
+        }
+        try {
+            DocumentInsightView view = blockWithAuth(insightStore.find(documentId).map(DocumentInsightStore::toView));
+            return view == null ? Map.of() : DocumentInsightStore.compact(view);
+        } catch (Exception e) {
+            log.debug("[AI-TOOL] insights lookup failed for {}: {}", documentId, e.getMessage());
+            return Map.of();
+        }
     }
 
     @Tool(description = "Add or update metadata (custom properties) on a document or folder. Keys "

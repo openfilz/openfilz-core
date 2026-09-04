@@ -196,13 +196,13 @@ class LocalFullTextServiceImplTest {
         doReturn(Mono.just(new ByteArrayResource("content".getBytes())))
                 .when(storageService).loadFile("storage/doc.pdf");
         when(indexService.indexDocMetadataMono(doc)).thenReturn(Mono.empty());
-        when(tikaService.processResource(any(), any())).thenReturn(Flux.empty());
+        when(tikaService.processResource(any(), any(), any())).thenReturn(Flux.empty());
         when(indexService.indexDocumentStream(any(), eq(doc.getId()))).thenReturn(Mono.empty());
 
         service.indexDocument(doc);
 
         verify(storageService, timeout(2000)).loadFile("storage/doc.pdf");
-        verify(tikaService, timeout(2000)).processResource(any(), any());
+        verify(tikaService, timeout(2000)).processResource(any(), any(), any());
     }
 
     @Test
@@ -276,12 +276,12 @@ class LocalFullTextServiceImplTest {
         doReturn(Mono.just(new ByteArrayResource("content".getBytes())))
                 .when(storageService).loadFile("storage/report.docx");
         when(indexService.indexDocMetadataMono(doc)).thenReturn(Mono.empty());
-        when(tikaService.processResource(any(), any())).thenReturn(Flux.empty());
+        when(tikaService.processResource(any(), any(), any())).thenReturn(Flux.empty());
         when(indexService.indexDocumentStream(any(), eq(doc.getId()))).thenReturn(Mono.empty());
 
         service.indexDocument(doc);
 
-        verify(tikaService, timeout(2000)).processResource(any(), any());
+        verify(tikaService, timeout(2000)).processResource(any(), any(), any());
     }
 
     @Test
@@ -298,12 +298,12 @@ class LocalFullTextServiceImplTest {
         doReturn(Mono.just(new ByteArrayResource("content".getBytes())))
                 .when(storageService).loadFile("storage/notes.txt");
         when(indexService.indexDocMetadataMono(doc)).thenReturn(Mono.empty());
-        when(tikaService.processResource(any(), any())).thenReturn(Flux.empty());
+        when(tikaService.processResource(any(), any(), any())).thenReturn(Flux.empty());
         when(indexService.indexDocumentStream(any(), eq(doc.getId()))).thenReturn(Mono.empty());
 
         service.indexDocument(doc);
 
-        verify(tikaService, timeout(2000)).processResource(any(), any());
+        verify(tikaService, timeout(2000)).processResource(any(), any(), any());
     }
 
     @Test

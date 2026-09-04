@@ -43,6 +43,11 @@ public class DocumentEmbeddingServiceImpl implements DocumentEmbeddingService {
     private final AiProperties aiProperties;
     private final TikaService tikaService;
 
+    /** Tier-1 document insights (the file's own metadata), captured from the same Tika pass. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @Lazy
+    private org.openfilz.dms.service.insight.DocumentInsightStore insightStore;
+
     @Override
     public Mono<Void> embedDocument(Document document) {
         if (document.getType() != DocumentType.FILE) {
@@ -58,7 +63,8 @@ public class DocumentEmbeddingServiceImpl implements DocumentEmbeddingService {
         try {
             Path tempFile = Files.createTempFile("ai-embed-", ".tmp");
 
-            return tikaService.processResource(tempFile, storageService.loadFile(document.getStoragePath()))
+            return tikaService.processResource(tempFile, storageService.loadFile(document.getStoragePath()),
+                            metadata -> saveFileMetadata(document, metadata))
                     .reduce(new StringBuilder(), StringBuilder::append)
                     .flatMap(collectedText -> {
                         // Clean up temp file
@@ -82,6 +88,20 @@ public class DocumentEmbeddingServiceImpl implements DocumentEmbeddingService {
         } catch (IOException e) {
             log.error("[AI-EMBED] Failed to create temp file for '{}': {}", document.getName(), e.getMessage());
             return Mono.empty();
+        }
+    }
+
+    /** Tier-1 insight from the parse that already ran (full-text off, AI on). */
+    private void saveFileMetadata(Document document, org.apache.tika.metadata.Metadata metadata) {
+        if (insightStore == null) {
+            return;
+        }
+        try {
+            insightStore.saveFileMetadata(document, org.openfilz.dms.service.insight.TikaFileMetadata.from(metadata))
+                    .subscribe(v -> { },
+                            e -> log.warn("[INSIGHTS] tier-1 save failed for {}: {}", document.getId(), e.getMessage()));
+        } catch (Exception e) {
+            log.warn("[INSIGHTS] tier-1 save failed for {}: {}", document.getId(), e.getMessage());
         }
     }
 
