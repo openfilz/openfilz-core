@@ -6,6 +6,8 @@ import org.springframework.context.annotation.Configuration;
 
 import org.openfilz.dms.enums.AiProvider;
 
+import org.springframework.util.unit.DataSize;
+
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -76,6 +78,29 @@ public class AiProperties {
      * See {@code ReorganizationInventoryCache}.
      */
     private Reorganization reorganization = new Reorganization();
+
+    /** Tier-2 document insights (AI-derived category / summary / entities at ingestion). */
+    private Insights insights = new Insights();
+
+    @Data
+    public static class Insights {
+        /** Runtime toggle of the enrichment; needs {@code openfilz.ai.active} too. */
+        private boolean active = false;
+        /** {@code provider:model} for the enrichment (e.g. {@code anthropic:claude-haiku-4-5}); empty = the chat model. */
+        private String model = "";
+        /** Characters of text sent per document. */
+        private int maxChars = 6000;
+        /** Files larger than this are not enriched (tier 1 is still written). */
+        private DataSize maxFileSize = DataSize.ofMegabytes(50);
+        /** Concurrent model calls. */
+        private int concurrency = 2;
+        /** Files enriched per day; beyond it rows are SKIPPED and a later backfill picks them up. Zero disables the cap. */
+        private int dailyLimit = 2000;
+        /** The closed category list the model must pick from ({@code other} is always accepted). */
+        private List<String> categories = new ArrayList<>(List.of(
+                "invoice", "quote", "contract", "report", "letter", "cv", "presentation", "spreadsheet",
+                "form", "id-document", "receipt", "minutes", "specification", "manual", "other"));
+    }
 
     @Data
     public static class Reorganization {

@@ -67,7 +67,7 @@ public class DocumentAiToolsIT extends TestContainersBaseConfig {
     void queryDocuments_rootFolder_returnsContents() {
         UploadResponse uploaded = uploadDocument(newFileBuilder());
 
-        String result = documentAiTools.queryDocuments(null, null, null, null, null, null, null);
+        String result = documentAiTools.queryDocuments(null, null, null, null, null, null, null, null);
         Assertions.assertNotNull(result);
         Assertions.assertTrue(result.contains("Found"), "Should find documents");
         Assertions.assertTrue(result.contains("FILE") || result.contains("FOLDER"),
@@ -78,14 +78,14 @@ public class DocumentAiToolsIT extends TestContainersBaseConfig {
     void queryDocuments_searchByName_returnsMatch() {
         UploadResponse uploaded = uploadDocument(newFileBuilder());
 
-        String result = documentAiTools.queryDocuments(null, "test_file_1", null, null, null, null, null);
+        String result = documentAiTools.queryDocuments(null, "test_file_1", null, null, null, null, null, null);
         Assertions.assertNotNull(result);
         Assertions.assertTrue(result.contains("test_file_1"), "Should find the uploaded file");
     }
 
     @Test
     void queryDocuments_searchByName_noMatch_returnsEmpty() {
-        String result = documentAiTools.queryDocuments(null, "nonexistent_xyz_12345", null, null, null, null, null);
+        String result = documentAiTools.queryDocuments(null, "nonexistent_xyz_12345", null, null, null, null, null, null);
         Assertions.assertTrue(result.contains("No documents found"), "Should indicate no matches");
     }
 
@@ -94,7 +94,7 @@ public class DocumentAiToolsIT extends TestContainersBaseConfig {
         uploadDocument(newFileBuilder());
         createFolder("type-filter-folder-" + UUID.randomUUID());
 
-        String result = documentAiTools.queryDocuments(null, null, "FILE", null, null, null, null);
+        String result = documentAiTools.queryDocuments(null, null, "FILE", null, null, null, null, null);
         Assertions.assertFalse(result.contains("[FOLDER]"), "Should not contain folders when filtering by FILE");
     }
 
@@ -102,7 +102,7 @@ public class DocumentAiToolsIT extends TestContainersBaseConfig {
     void queryDocuments_sortByCreatedAt_returnsNewest() {
         uploadDocument(newFileBuilder());
 
-        String result = documentAiTools.queryDocuments(null, null, "FILE", "createdAt", "DESC", 1, null);
+        String result = documentAiTools.queryDocuments(null, null, "FILE", "createdAt", "DESC", 1, null, null);
         Assertions.assertTrue(result.contains("Found 1 result"), "Should return exactly 1 result");
     }
 
@@ -113,7 +113,7 @@ public class DocumentAiToolsIT extends TestContainersBaseConfig {
         builder.part("parentFolderId", folder.id().toString());
         uploadDocument(builder);
 
-        String result = documentAiTools.queryDocuments(folder.id().toString(), null, null, null, null, null, null);
+        String result = documentAiTools.queryDocuments(folder.id().toString(), null, null, null, null, null, null, null);
         Assertions.assertTrue(result.contains("Found"), "Should find documents in folder");
         Assertions.assertTrue(result.contains("FILE"), "Should contain the uploaded file");
     }
@@ -122,7 +122,7 @@ public class DocumentAiToolsIT extends TestContainersBaseConfig {
     void queryDocuments_countOnly_returnsCount() {
         uploadDocument(newFileBuilder());
 
-        String result = documentAiTools.queryDocuments(null, null, null, null, null, null, true);
+        String result = documentAiTools.queryDocuments(null, null, null, null, null, null, true, null);
         Assertions.assertTrue(result.contains("Found") && result.contains("document(s)"),
                 "Should return count message, got: " + result);
     }

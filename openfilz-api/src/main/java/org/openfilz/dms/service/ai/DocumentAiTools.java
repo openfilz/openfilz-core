@@ -413,7 +413,9 @@ public class DocumentAiTools {
             @ToolParam(required = false, description = "Sort by field: name, createdAt, updatedAt, size. Default: updatedAt") String sortBy,
             @ToolParam(required = false, description = "Sort order: ASC or DESC. Default: DESC") String sortOrder,
             @ToolParam(required = false, description = "Max results to return (1-50). Default: 10") Integer pageSize,
-            @ToolParam(required = false, description = "Set to true to only return the count, not the documents") Boolean countOnly
+            @ToolParam(required = false, description = "Set to true to only return the count, not the documents") Boolean countOnly,
+            @ToolParam(required = false, description = "Only documents whose AI-derived category is this "
+                    + "(e.g. invoice, contract, cv, report); needs document insights") String category
     ) {
         String roleDenial = denyIfNotAllowed("queryDocuments", ToolCapability.DOCUMENT_READ);
         if (roleDenial != null) return roleDenial;
@@ -470,7 +472,7 @@ public class DocumentAiTools {
             // Count only
             if (countOnly != null && countOnly) {
                 if (accessPolicy.permitAll()) {
-                    long count = queryService.count(request, userEmail);
+                    long count = queryService.count(request, userEmail, category);
                     return toolResult("queryDocuments", "Found %d document(s).".formatted(count));
                 }
                 // Per-document policy in effect: count only what the user can actually see
@@ -479,14 +481,14 @@ public class DocumentAiTools {
                         searchAllFolders ? null : folderId, docType, null, null, nameLike,
                         null, null, null, null, null, null, null, null, null, true,
                         new PageCriteria(sort, order, 1, 200), searchAllFolders);
-                var rows = queryService.query(countRequest, userEmail);
+                var rows = queryService.query(countRequest, userEmail, category);
                 long count = rows == null ? 0 : rows.stream().filter(r -> canRead(r.id())).count();
                 return toolResult("queryDocuments", "Found %d document(s)%s.".formatted(
                         count, rows != null && rows.size() >= 200 ? " (only the first 200 were scanned)" : ""));
             }
 
             // Query — never surface documents the requesting user cannot read
-            var results = queryService.query(request, userEmail);
+            var results = queryService.query(request, userEmail, category);
             if (results == null || results.isEmpty()) {
                 return toolResult("queryDocuments", "No documents found.");
             }

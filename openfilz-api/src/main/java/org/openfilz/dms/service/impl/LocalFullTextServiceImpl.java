@@ -75,6 +75,11 @@ public class LocalFullTextServiceImpl implements FullTextService {
     @Lazy
     private org.openfilz.dms.service.insight.DocumentInsightStore insightStore;
 
+    /** Tier-2 document insights (model enrichment), queued with the text this pass extracted. */
+    @Autowired(required = false)
+    @Lazy
+    private org.openfilz.dms.service.insight.DocumentInsightService insightService;
+
     public LocalFullTextServiceImpl(IndexService indexService, TikaService tikaService, StorageService storageService) {
         this.indexService = indexService;
         this.tikaService = tikaService;
@@ -133,6 +138,7 @@ public class LocalFullTextServiceImpl implements FullTextService {
                             log.debug("[AI-EMBED] Sharing Tika-extracted text with AI embedding for '{}' ({} chars)",
                                     document.getName(), collectedText.length());
                             documentEmbeddingService.embedFromText(document, collectedText.toString()).subscribe();
+                            enqueueInsights(document, collectedText);
                         }
                     })),
                     document,
@@ -140,6 +146,17 @@ public class LocalFullTextServiceImpl implements FullTextService {
             );
         } catch (IOException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    /** Tier-2 insight: hand the text head to the enrichment queue (returns at once; off = no-op). */
+    private void enqueueInsights(Document document, CharSequence text) {
+        try {
+            if (insightService != null && insightService.isActive()) {
+                insightService.enqueue(document, text.subSequence(0, Math.min(text.length(), 12_000)).toString());
+            }
+        } catch (Exception e) {
+            log.warn("[INSIGHTS] could not queue enrichment of {}: {}", document.getId(), e.getMessage());
         }
     }
 

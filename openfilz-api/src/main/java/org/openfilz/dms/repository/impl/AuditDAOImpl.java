@@ -40,6 +40,26 @@ public class AuditDAOImpl implements AuditDAO, UserInfoService {
     private final TransactionalOperator tx;
 
     @Override
+    public Flux<org.openfilz.dms.dto.audit.DocumentActivity> activitySummary(java.util.Collection<UUID> documentIds) {
+        if (documentIds == null || documentIds.isEmpty()) {
+            return Flux.empty();
+        }
+        return databaseClient.sql("""
+                        SELECT resource_id, max(timestamp) AS last_at, count(*) AS actions,
+                               count(DISTINCT user_principal) AS actors
+                          FROM audit_logs
+                         WHERE resource_id = ANY(:ids)
+                         GROUP BY resource_id""")
+                .bind("ids", new java.util.LinkedHashSet<>(documentIds).toArray(new UUID[0]))
+                .map(row -> new org.openfilz.dms.dto.audit.DocumentActivity(
+                        row.get("resource_id", UUID.class),
+                        row.get("last_at", OffsetDateTime.class),
+                        row.get("actions", Long.class) == null ? 0 : row.get("actions", Long.class),
+                        row.get("actors", Long.class) == null ? 0 : row.get("actors", Long.class)))
+                .all();
+    }
+
+    @Override
     public Flux<AuditLog> getAuditTrail(UUID resourceId, SortOrder sort) {
         String sql = "SELECT timestamp, user_principal, action, resource_type, details, previous_hash, hash FROM audit_logs WHERE resource_id = :resourceId ORDER BY timestamp " + sort.toString();
         return databaseClient.sql(sql)

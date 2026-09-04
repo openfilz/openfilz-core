@@ -85,6 +85,15 @@ public class ReorganizationPlanService {
     private final AiToolRolePolicy rolePolicy;
     private final AiReorganizationPlanRepository planRepository;
     private final ReorganizationInventoryCache inventoryCache;
+    private final org.openfilz.dms.repository.AuditDAO auditDAO;
+    private final org.openfilz.dms.service.insight.DocumentInsightStore insightStore;
+
+    /** Inventory detail: {@code full} carries the summaries, {@code compact} drops them (large trees). */
+    public static final String DETAIL_FULL = "full";
+    public static final String DETAIL_COMPACT = "compact";
+    /** Below this many files the default detail is full; above, compact. */
+    static final int COMPACT_THRESHOLD = 300;
+    static final int INVENTORY_SUMMARY_CHARS = 120;
 
     /** The user a call acts for: email for the access policy, Authentication for the service layer. */
     public record Caller(String email, Authentication authentication) {
@@ -102,9 +111,18 @@ public class ReorganizationPlanService {
      * {@code maxItems} entries and {@code maxDepth} levels; only documents the caller can read.
      */
     public String inventory(UUID rootId, Integer maxDepth, Integer maxItems, Caller caller) {
+        return inventory(rootId, maxDepth, maxItems, null, caller);
+    }
+
+    /**
+     * @param detail {@code full} (summaries included), {@code compact} (no summaries), or null to
+     *               decide from the size: full under {@value #COMPACT_THRESHOLD} files
+     */
+    public String inventory(UUID rootId, Integer maxDepth, Integer maxItems, String detail, Caller caller) {
         int depthLimit = clamp(maxDepth, DEFAULT_MAX_DEPTH, MAX_DEPTH);
         int itemLimit = clamp(maxItems, DEFAULT_MAX_ITEMS, MAX_ITEMS);
-        String cacheKey = ReorganizationInventoryCache.key(caller.email(), rootId, depthLimit, itemLimit, null);
+        String detailKey = detail == null || detail.isBlank() ? "auto" : detail.trim().toLowerCase(Locale.ROOT);
+        String cacheKey = ReorganizationInventoryCache.key(caller.email(), rootId, depthLimit, itemLimit, detailKey);
         String cached = inventoryCache.get(cacheKey);
         if (cached != null) {
             log.debug("[REORG] inventory served from cache for {} (root {})", caller.email(), rootId);
@@ -115,17 +133,21 @@ public class ReorganizationPlanService {
                     + " inventories per " + inventoryCache.rateWindow().toMinutes() + " minutes): reuse the "
                     + "inventory you already have, or narrow the folder and try again later.");
         }
-        String inventory = buildInventory(rootId, depthLimit, itemLimit, caller);
+        String inventory = buildInventory(rootId, depthLimit, itemLimit, detailKey, caller);
         inventoryCache.put(cacheKey, inventory);
         return inventory;
     }
 
-    private String buildInventory(UUID rootId, int depthLimit, int itemLimit, Caller caller) {
+    /** A file of the inventory with its absolute path, before enrichment. */
+    private record InventoryFile(Document document, String path) {
+    }
+
+    private String buildInventory(UUID rootId, int depthLimit, int itemLimit, String detail, Caller caller) {
         Map<String, List<Document>> childrenCache = new HashMap<>();
         String rootPath = absolutePath(rootId, new HashMap<>(), caller);
 
         List<String> folders = new ArrayList<>();
-        List<String> files = new ArrayList<>();
+        List<InventoryFile> files = new ArrayList<>();
         int listed = 0;
         boolean truncated = false;
 
@@ -151,20 +173,25 @@ public class ReorganizationPlanService {
                         folders.set(folders.size() - 1, folders.getLast() + "  [not expanded: depth limit]");
                     }
                 } else {
-                    files.add(child.getId() + " | " + childPath + " | " + extension(child.getName())
-                            + " | " + humanSize(child.getSize())
-                            + " | " + (child.getUpdatedAt() != null ? child.getUpdatedAt().toLocalDate() : "?")
-                            + metadataSummary(child));
+                    files.add(new InventoryFile(child, childPath));
                 }
             }
             if (truncated) break;
         }
+
+        // Two grouped queries for the whole inventory: the insights and the audit activity
+        List<UUID> fileIds = files.stream().map(f -> f.document().getId()).filter(Objects::nonNull).toList();
+        Map<UUID, org.openfilz.dms.dto.response.DocumentInsightView> insights = insightsOf(fileIds, caller);
+        Map<UUID, org.openfilz.dms.dto.audit.DocumentActivity> activity = activityOf(fileIds, caller);
+        boolean withSummaries = DETAIL_FULL.equals(detail)
+                || (!DETAIL_COMPACT.equals(detail) && files.size() < COMPACT_THRESHOLD);
 
         StringBuilder sb = new StringBuilder();
         sb.append("Inventory of ").append(rootPath).append(rootId != null ? " (id " + rootId + ")" : " (root level)")
                 .append(": ").append(folders.size()).append(" folder(s), ").append(files.size()).append(" file(s)");
         if (truncated) sb.append(" — TRUNCATED at ").append(itemLimit).append(" entries; narrow the folder or raise maxItems");
         sb.append(".\n");
+        appendAggregates(sb, files, insights, activity);
         if (!folders.isEmpty()) {
             sb.append("\nExisting folders:\n");
             folders.forEach(f -> sb.append("  ").append(f).append('\n'));
@@ -172,10 +199,123 @@ public class ReorganizationPlanService {
         if (files.isEmpty()) {
             sb.append("\nNo files.\n");
         } else {
-            sb.append("\nFiles (id | path | ext | size | modified | metadata):\n");
-            files.forEach(f -> sb.append("  ").append(f).append('\n'));
+            sb.append("\nFiles (id | path | ext | size | modified by | insights: cat / language / pages")
+                    .append(withSummaries ? " / \"summary\"" : "")
+                    .append(" | metadata | activity: last action, actions, users):\n");
+            for (InventoryFile file : files) {
+                sb.append("  ").append(fileRow(file, insights.get(file.document().getId()),
+                        activity.get(file.document().getId()), withSummaries)).append('\n');
+            }
         }
         return sb.toString();
+    }
+
+    private static String fileRow(InventoryFile file, org.openfilz.dms.dto.response.DocumentInsightView insight,
+                                  org.openfilz.dms.dto.audit.DocumentActivity activity, boolean withSummary) {
+        Document doc = file.document();
+        StringBuilder row = new StringBuilder();
+        row.append(doc.getId()).append(" | ").append(file.path()).append(" | ").append(extension(doc.getName()))
+                .append(" | ").append(humanSize(doc.getSize()))
+                .append(" | mod ").append(doc.getUpdatedAt() != null ? doc.getUpdatedAt().toLocalDate() : "?");
+        if (doc.getCreatedBy() != null && !doc.getCreatedBy().isBlank()) {
+            row.append(" by ").append(doc.getCreatedBy());
+        }
+        if (insight != null) {
+            List<String> segments = new ArrayList<>();
+            if (insight.category() != null) segments.add("cat " + insight.category());
+            if (insight.language() != null) segments.add(insight.language());
+            if (insight.pageCount() != null) segments.add(insight.pageCount() + " p");
+            if (withSummary && insight.summary() != null) {
+                String summary = insight.summary().replace('\n', ' ').replace('"', '\'');
+                segments.add("\"" + (summary.length() > INVENTORY_SUMMARY_CHARS
+                        ? summary.substring(0, INVENTORY_SUMMARY_CHARS - 1) + "…" : summary) + "\"");
+            } else if (insight.keywords() != null && !insight.keywords().isEmpty()) {
+                segments.add("kw " + String.join("/", insight.keywords().stream().limit(5).toList()));
+            }
+            if (!segments.isEmpty()) {
+                row.append(" | ").append(String.join(" | ", segments));
+            }
+        }
+        row.append(metadataSummary(doc));
+        if (activity != null) {
+            row.append(" | last ").append(activity.lastAt() != null ? activity.lastAt().toLocalDate() : "?")
+                    .append(", ").append(activity.actions()).append(activity.actions() == 1 ? " action" : " actions")
+                    .append(", ").append(activity.actors()).append(activity.actors() == 1 ? " user" : " users");
+        }
+        return row.toString();
+    }
+
+    /** Two lines that let the model choose "by category" or "active / archive" before reading rows. */
+    private static void appendAggregates(StringBuilder sb, List<InventoryFile> files,
+                                         Map<UUID, org.openfilz.dms.dto.response.DocumentInsightView> insights,
+                                         Map<UUID, org.openfilz.dms.dto.audit.DocumentActivity> activity) {
+        if (files.isEmpty()) {
+            return;
+        }
+        Map<String, Integer> categories = new java.util.TreeMap<>();
+        int withInsights = 0;
+        for (InventoryFile file : files) {
+            org.openfilz.dms.dto.response.DocumentInsightView insight = insights.get(file.document().getId());
+            if (insight != null && insight.category() != null) {
+                withInsights++;
+                categories.merge(insight.category(), 1, Integer::sum);
+            }
+        }
+        if (withInsights > 0) {
+            sb.append("Categories present (").append(withInsights).append(" of ").append(files.size())
+                    .append(" files have insights): ")
+                    .append(categories.entrySet().stream()
+                            .sorted((a, b) -> b.getValue().compareTo(a.getValue()))
+                            .map(e -> e.getKey() + " " + e.getValue())
+                            .collect(Collectors.joining(", ")))
+                    .append(".\n");
+        } else {
+            sb.append("No AI insights on these files yet: judge them by name, path, dates and activity, "
+                    + "and read a file only when its nature is unclear.\n");
+        }
+        OffsetDateTime yearAgo = OffsetDateTime.now().minusMonths(12);
+        long untouched = files.stream().filter(file -> {
+            org.openfilz.dms.dto.audit.DocumentActivity a = activity.get(file.document().getId());
+            OffsetDateTime last = a != null && a.lastAt() != null ? a.lastAt() : file.document().getUpdatedAt();
+            return last != null && last.isBefore(yearAgo);
+        }).count();
+        if (untouched > 0) {
+            sb.append("Activity: ").append(untouched).append(" file(s) untouched for more than 12 months.\n");
+        }
+    }
+
+    private Map<UUID, org.openfilz.dms.dto.response.DocumentInsightView> insightsOf(List<UUID> ids, Caller caller) {
+        if (ids.isEmpty() || insightStore == null) {
+            return Map.of();
+        }
+        try {
+            List<org.openfilz.dms.entity.AiDocumentInsight> rows = blockWithAuth(insightStore.findAll(ids).collectList(), caller);
+            Map<UUID, org.openfilz.dms.dto.response.DocumentInsightView> out = new HashMap<>();
+            if (rows != null) {
+                rows.forEach(row -> out.put(row.getDocumentId(), org.openfilz.dms.service.insight.DocumentInsightStore.toView(row)));
+            }
+            return out;
+        } catch (Exception e) {
+            log.debug("[REORG] insights lookup failed: {}", e.getMessage());
+            return Map.of();
+        }
+    }
+
+    private Map<UUID, org.openfilz.dms.dto.audit.DocumentActivity> activityOf(List<UUID> ids, Caller caller) {
+        if (ids.isEmpty() || auditDAO == null) {
+            return Map.of();
+        }
+        try {
+            List<org.openfilz.dms.dto.audit.DocumentActivity> rows = blockWithAuth(auditDAO.activitySummary(ids).collectList(), caller);
+            Map<UUID, org.openfilz.dms.dto.audit.DocumentActivity> out = new HashMap<>();
+            if (rows != null) {
+                rows.forEach(row -> out.put(row.documentId(), row));
+            }
+            return out;
+        } catch (Exception e) {
+            log.debug("[REORG] activity lookup failed: {}", e.getMessage());
+            return Map.of();
+        }
     }
 
     // ── validation ──────────────────────────────────────────────────────────

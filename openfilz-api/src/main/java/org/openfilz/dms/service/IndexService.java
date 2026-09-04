@@ -34,6 +34,16 @@ public interface IndexService {
         return Mono.empty();
     }
 
+    /** Set several top-level fields of a document's index entry (document-insight mirror). */
+    default Mono<Void> updateIndexFields(UUID documentId, Map<String, Object> fields) {
+        if (fields == null || fields.isEmpty()) {
+            return Mono.empty();
+        }
+        return Flux.fromIterable(fields.entrySet())
+                .concatMap(entry -> updateIndexField(documentId, entry.getKey(), entry.getValue()))
+                .then();
+    }
+
     default Mono<Void> indexDocMetadataMono(Document document) {
         return newOpenSearchDocumentMetadata(document)
                 .flatMap(openDoc -> indexMetadata(document.getId(), openDoc));

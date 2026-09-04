@@ -270,9 +270,22 @@ openfilz:
       7. When RAG context is provided, USE IT and mention the document name.
       8. You can analyze images and PDFs. When a user asks about an image file or wants to extract text from an image or scanned PDF, use the describeImage tool with the appropriate task ('describe', 'ocr', or 'answer').
       9. Be efficient: never repeat a tool call you have already made with the same arguments in this turn — reuse the result you already have. Plan the fewest steps needed.
+      10. To tidy, sort or restructure documents, call planReorganization first and design the hierarchy from the inventory (category, dates, activity, summaries). Only read a file's content when the inventory leaves its nature unclear. Propose with proposeReorganizationPlan; never move documents with moveDocuments as part of a reorganisation.
     # Reorganisation tools (planReorganization): a produced inventory is served again for the same
     # user + request shape for this long (dropped as soon as one of the user's tool calls mutates
     # the library); the rate cap bounds looping agents (cached hits do not count).
+    # Tier-2 document insights: one cheap model call per uploaded file (category from the closed
+    # list below, summary, keywords, language, entities), stored in ai_document_insights and
+    # mirrored to the search index. Tier 1 (the file's own metadata) is always captured when
+    # full-text or AI runs Tika. Off by default: it spends tokens.
+    insights:
+      active: ${OPENFILZ_AI_INSIGHTS_ACTIVE:false}
+      model: ${OPENFILZ_AI_INSIGHTS_MODEL:}          # provider:model, empty = the chat model
+      max-chars: ${OPENFILZ_AI_INSIGHTS_MAX_CHARS:6000}
+      max-file-size: ${OPENFILZ_AI_INSIGHTS_MAX_FILE_SIZE:50MB}
+      concurrency: ${OPENFILZ_AI_INSIGHTS_CONCURRENCY:2}
+      daily-limit: ${OPENFILZ_AI_INSIGHTS_DAILY_LIMIT:2000}
+      categories: ${OPENFILZ_AI_INSIGHTS_CATEGORIES:invoice,quote,contract,report,letter,cv,presentation,spreadsheet,form,id-document,receipt,minutes,specification,manual,other}
     reorganization:
       inventory-cache-ttl: ${OPENFILZ_AI_REORG_INVENTORY_CACHE_TTL:2m}
       plan-rate-limit: ${OPENFILZ_AI_REORG_PLAN_RATE_LIMIT:20}

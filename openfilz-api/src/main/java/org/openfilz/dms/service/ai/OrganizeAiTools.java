@@ -98,7 +98,9 @@ public class OrganizeAiTools implements AiToolTurnEffects {
     public String planReorganization(
             @ToolParam(required = false, description = "Name (or id) of the folder to reorganise; null or 'root' for the root level") String folder,
             @ToolParam(required = false, description = "How many levels deep to inventory (default 4, max 10)") Integer maxDepth,
-            @ToolParam(required = false, description = "Maximum entries to list (default 300, max 1000)") Integer maxItems) {
+            @ToolParam(required = false, description = "Maximum entries to list (default 300, max 1000)") Integer maxItems,
+            @ToolParam(required = false, description = "'full' includes each file's AI summary, 'compact' leaves it out; "
+                    + "default: full under 300 files, compact above") String detail) {
         String denial = deny("planReorganization", ToolCapability.DOCUMENT_READ);
         if (denial != null) return denial;
         return run(() -> {
@@ -111,13 +113,15 @@ public class OrganizeAiTools implements AiToolTurnEffects {
                 }
                 rootId = root.getId();
             }
-            String inventory = service.inventory(rootId, maxDepth, maxItems, caller());
+            String inventory = service.inventory(rootId, maxDepth, maxItems, detail, caller());
             return inventory + "\n" + PLAN_CONTRACT.replace("{root}", rootId != null ? "\"" + rootId + "\"" : "null");
         });
     }
 
     private static final String PLAN_CONTRACT = """
             HOW TO PROPOSE A REORGANISATION
+            Use the inventory's insights (category, language, summary), dates and activity to decide the logic — \
+            by category, client, project, year, or active vs archive — before reading any file. \
             Design a clear, shallow hierarchy (2-3 levels; group by topic, project, client, year, document type…), \
             then call proposeReorganizationPlan with this JSON:
             {"rootFolder": {root}, "rationale": "<one sentence on the logic of the hierarchy>", \
