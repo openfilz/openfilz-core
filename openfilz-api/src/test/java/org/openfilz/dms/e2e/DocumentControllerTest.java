@@ -53,7 +53,7 @@ class DocumentControllerTest {
         when(documentService.uploadDocument(any(), any(), any(), any(), any()))
                 .thenReturn(Mono.just(new UploadResponse(documentId, filename, null, null)));
 
-        StepVerifier.create(documentController.uploadDocument(filePart, parentId.toString(), null, 100L, false))
+        StepVerifier.create(documentController.uploadDocument(filePart, parentId.toString(), null, 100L, false, null))
                 .expectNextMatches(response ->
                     response.getStatusCode().is2xxSuccessful() &&
                     response.getBody().id().equals(documentId) &&

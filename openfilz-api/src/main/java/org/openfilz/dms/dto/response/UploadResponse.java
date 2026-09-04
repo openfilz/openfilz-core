@@ -4,13 +4,24 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import java.util.UUID;
 
-public record UploadResponse(UUID id, String name, String contentType, Long size, String errorType, String errorMessage) {
+public record UploadResponse(UUID id, String name, String contentType, Long size, String errorType, String errorMessage,
+                             /** Present when smart filing was scheduled for this upload: the job to poll. */
+                             AutoFileTicket autoFile) {
 
     /**
      * Creates a successful upload response.
      */
     public UploadResponse(UUID id, String name, String contentType, Long size) {
-        this(id, name, contentType, size, null, null);
+        this(id, name, contentType, size, null, null, null);
+    }
+
+    public UploadResponse(UUID id, String name, String contentType, Long size, String errorType, String errorMessage) {
+        this(id, name, contentType, size, errorType, errorMessage, null);
+    }
+
+    /** The same response with the smart-filing ticket attached. */
+    public UploadResponse withAutoFile(AutoFileTicket ticket) {
+        return new UploadResponse(id, name, contentType, size, errorType, errorMessage, ticket);
     }
 
     /**

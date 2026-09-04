@@ -203,6 +203,67 @@ sequenceDiagram
 
 ---
 
+## 3b. Document insights & smart filing
+
+Design: `openfilz-enterprise/docs/smart-reorganization.md` (§4 insights, §5 inventory, §13 smart filing).
+
+**Document insights** (`ai_document_insights`, Flyway `V1_9`) are what OpenFilz derives from a
+file's content, kept apart from the user-owned metadata JSON (recomputable, never PATCH-merged,
+no metadata audit):
+
+- **Tier 1 — the file's own metadata**, captured from the Tika pass that indexing / embedding
+  already run (`TikaService.processResource(path, resource, onMetadata)` hands back Tika's
+  `Metadata`; `TikaFileMetadata` maps title, author, created/modified dates, page count, language;
+  `DocumentInsightStore.saveFileMetadata` upserts). Free, deterministic, on whenever Tika runs.
+- **Tier 2 — AI enrichment** (`openfilz.ai.insights.active`): `AiDocumentInsightService` sends the
+  head of the text (`max-chars`) to a model on a bounded queue (`concurrency`, never on the upload
+  path) and stores a category from the closed list (`categories`, unknown → `other`), a summary,
+  keywords, the language and a few entities; FAILED on a non-contract answer, SKIPPED above
+  `max-file-size` / without text / past `daily-limit`. The model is the chat model or
+  `openfilz.ai.insights.model` (`provider:model`, server key). Results are mirrored to OpenSearch
+  (`category`, `summary`, `language` — fixed fields, added to existing indexes at startup).
+  `NoOpDocumentInsightService` + `DocumentInsightConfig` select the implementation at runtime
+  (native-safe). Backfill: `POST /api/v1/ai/insights/backfill {folderId, force}` (CONTRIBUTOR),
+  `GET …/backfill/{jobId}`.
+- Read: `GET /api/v1/documents/{id}/insights`; the `getMetadata` tool appends an *Insights* block;
+  `queryDocuments(category=…)` filters through the insights; `Settings.aiInsightsActive`.
+- Every stored tier-2 row publishes a Spring `DocumentInsightsReadyEvent` (the enterprise webhook
+  producer relays it as `document.insights.ready`).
+
+**The reorganisation inventory** (`planReorganization`) carries, per file, the insights (category,
+language, pages, summary in `detail=full`, keywords in `compact`) and the audit activity (last
+action, actions, users — `AuditDAO.activitySummary`, one grouped query), plus header aggregates
+(categories present, files untouched > 12 months). Inventories are cached per user + request
+shape (`ReorganizationInventoryCache`, `openfilz.ai.reorganization.*`) and dropped after any
+mutating tool call of that user.
+
+**Smart filing** (`openfilz.ai.auto-file.active`): on the user's explicit request — the remembered
+switch (`GET/PUT /api/v1/settings/ai/preferences`) or `autoFile=true` on `POST /upload`,
+`/upload-multiple`, the TUS finalize body, or `writeFile` — `DefaultAutoFileService` files the
+uploaded document seconds after the upload response (which carries `autoFile.jobId`):
+
+1. *eligibility*: an active FILE the caller may move, with a live session;
+2. *stage 1, the neighbour vote*: the vector store's nearest documents, resolved to their **live**
+   folders (never the chunk metadata's `parent_id`), inside the scope (the folder it was dropped in;
+   root = whole library) and writable — the leading folder wins at `neighbour-min-share` /
+   `neighbour-min-similarity`; one vector query, no model call;
+3. *stage 2, the model*: only when the vote is inconclusive — the scope's folder inventory
+   (`ReorganizationPlanService.folderInventory`) plus the insight row; a new folder only above
+   `new-folder-min-confidence`, at most `new-folder-max-depth` levels, and when the user allows it;
+4. *stage 3*: a one-item reorganisation plan (`origin = AUTO_FILE`, `document_id`, `details`,
+   Flyway `V1_10`) validated and applied through `ReorganizationPlanService.fileDocument`: same
+   permission / name-clash / no-op checks as a chat proposal, same audited move. Below the
+   thresholds the document stays (SKIPPED with the reason).
+
+`GET /api/v1/ai/auto-file/{jobId}` follows a batch, `POST …/{jobId}/undo` moves it back,
+`GET …/document/{id}` is the "Filed by OpenFilz" record, `POST …/filing/{planId}/undo` reverts one,
+`POST /api/v1/ai/auto-file {documentIds}` files existing documents; the `fileDocuments` tool does
+the same inline for agents. `AutoFileConfig` selects the real / no-op service at runtime;
+`Settings.aiAutoFileActive` drives the upload-area switch. Every filed document publishes a Spring
+`DocumentFiledEvent` (relayed as `document.filed` by the enterprise webhook producer).
+
+---
+
 ## 4. Chat workflow
 
 `POST /api/v1/ai/chat` streams Server-Sent Events. Per request, the pipeline resolves *which
@@ -254,7 +315,9 @@ sequenceDiagram
     S-->>User: SSE: MESSAGE (enriched text) + DONE   (ERROR on failure)
 ```
 
-- **Tools**: the 18 document tools of `DocumentAiTools` (`queryDocuments`, `readDocumentContent`,
+- **Tools**: the 19 document tools of `DocumentAiTools` (`queryDocuments`, `readDocumentContent` —
+  served from the OpenSearch `content` field when full-text is active, Tika on the file otherwise —,
+  `getDocumentActivity` — the audit trail, AUDITOR role —,
   `describeImage` — vision, runs on the *resolved* model, so BYOK users get their own model —,
   `writeFile`, `createBlankDocument`, `createFolder`, `moveDocuments`, `renameDocument`,
   `getDocumentPath`, metadata get/search/update/delete, delete, versions, `downloadDocument`,

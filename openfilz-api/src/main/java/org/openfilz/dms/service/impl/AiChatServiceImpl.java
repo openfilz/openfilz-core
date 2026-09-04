@@ -17,6 +17,7 @@ import org.openfilz.dms.service.ai.AiToolTurnEffects;
 import org.openfilz.dms.service.ai.ChatClientAssembler;
 import org.openfilz.dms.service.ai.DocumentAiTools;
 import org.openfilz.dms.service.ai.DocumentAiToolsFactory;
+import org.openfilz.dms.service.ai.ReorganizationInventoryCache;
 import org.openfilz.dms.service.ai.ReorganizationPlanMarkers;
 import org.openfilz.dms.service.ai.UserChatClientResolver;
 import org.openfilz.dms.service.ai.UserChatClientResolver.ResolvedChat;
@@ -74,6 +75,8 @@ public class AiChatServiceImpl implements AiChatService {
     private final AiChatConversationRepository conversationRepository;
     private final AiChatMessageRepository messageRepository;
     private final AiAccessPolicy accessPolicy;
+    /** Dropped for the user after a turn that mutated the library, so their next inventory sees it. */
+    private final ReorganizationInventoryCache inventoryCache;
 
     /**
      * Tool contributors that opt into the chat ({@link McpToolContributor#exposeInChat()}), e.g. the
@@ -191,7 +194,12 @@ public class AiChatServiceImpl implements AiChatService {
                                                             ? null : List.copyOf(modifiedFolders(tools, extraTools)))
                                                     .build()
                                     ))
-                                    .doOnComplete(() -> log.debug("[AI] === Chat request complete ==="))
+                                    .doOnComplete(() -> {
+                                        if (!modifiedFolders(tools, extraTools).isEmpty()) {
+                                            inventoryCache.invalidate(userEmail);
+                                        }
+                                        log.debug("[AI] === Chat request complete ===");
+                                    })
                                     .onErrorResume(e -> {
                                         // A mutating tool already committed its side effects this turn
                                         // (modifiedFolders is non-empty), so streamWithFailover refused to
@@ -210,6 +218,9 @@ public class AiChatServiceImpl implements AiChatService {
                                                             + "action(s) instead of an error: {}",
                                                     actions.size(), e.toString());
                                             List<String> modifiedFolderIds = mutated.isEmpty() ? null : List.copyOf(mutated);
+                                            if (!mutated.isEmpty()) {
+                                                inventoryCache.invalidate(userEmail);
+                                            }
                                             return saveMessage(conversationId, "ASSISTANT", message)
                                                     .then(updateConversationTimestamp(conversationId))
                                                     .thenReturn(message)

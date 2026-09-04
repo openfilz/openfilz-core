@@ -10,6 +10,7 @@ import org.openfilz.dms.service.IndexNameProvider;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.opensearch.indices.CreateIndexRequest;
 import org.opensearch.client.opensearch.indices.ExistsRequest;
+import org.opensearch.client.opensearch.indices.PutMappingRequest;
 import org.opensearch.client.transport.endpoints.BooleanResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperties;
@@ -44,12 +45,36 @@ public class DefaultIndexNameProvider implements IndexNameProvider {
     @PostConstruct
     public void init() {
         createIndex(defaultIndexName)
+                .then(ensureInsightFields(defaultIndexName))
                 .retryWhen(Retry.backoff(5, Duration.ofSeconds(3))
                         .maxBackoff(Duration.ofSeconds(30))
                         .doBeforeRetry(signal -> log.warn("Retrying OpenSearch index creation (attempt {}): {}",
                                 signal.totalRetries() + 1, signal.failure().getMessage())))
                 .doOnError(e -> log.error("Failed to create OpenSearch index '{}' after retries: {}", defaultIndexName, e.getMessage()))
                 .subscribe();
+    }
+
+    /**
+     * Add the document-insight fields to an index created before they existed. A put-mapping
+     * naming fields that already exist with the same type is a no-op, so this runs at every start.
+     */
+    protected Mono<Void> ensureInsightFields(String indexName) {
+        PutMappingRequest request = PutMappingRequest.of(b -> b
+                .index(indexName)
+                .properties(indexMappingsProvider.insightProperties()));
+        return Mono.fromFuture(() -> {
+                    try {
+                        return openSearchAsyncClient.indices().putMapping(request);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                })
+                .doOnSuccess(response -> log.debug("Insight fields ensured on index '{}': {}", indexName, response.acknowledged()))
+                .onErrorResume(e -> {
+                    log.warn("Could not add the insight fields to index '{}': {}", indexName, e.getMessage());
+                    return Mono.empty();
+                })
+                .then();
     }
 
     @Override

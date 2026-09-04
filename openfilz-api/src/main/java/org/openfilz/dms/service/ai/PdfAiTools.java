@@ -383,7 +383,7 @@ public class PdfAiTools {
             Document byId = blockWithAuth(documentRepository.findById(id));
             candidates = byId != null ? List.of(byId) : List.of();
         } else {
-            List<Document> found = blockWithAuth(documentRepository.findByNameContainingIgnoreCaseAndActiveTrue(nameOrId.trim()).collectList());
+            List<Document> found = blockWithAuth(documentRepository.findTop50ByNameContainingIgnoreCaseAndActiveTrueOrderByNameAsc(nameOrId.trim()).collectList());
             candidates = found != null ? found : List.of();
         }
         List<Document> pdfs = candidates.stream()
@@ -415,7 +415,7 @@ public class PdfAiTools {
             Document byId = blockWithAuth(documentRepository.findById(id));
             candidates = byId != null ? List.of(byId) : List.of();
         } else {
-            List<Document> found = blockWithAuth(documentRepository.findByNameContainingIgnoreCaseAndActiveTrue(nameOrId.trim()).collectList());
+            List<Document> found = blockWithAuth(documentRepository.findTop50ByNameContainingIgnoreCaseAndActiveTrueOrderByNameAsc(nameOrId.trim()).collectList());
             candidates = found != null ? found : List.of();
         }
         List<Document> folders = candidates.stream()

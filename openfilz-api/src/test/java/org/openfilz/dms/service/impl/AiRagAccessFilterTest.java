@@ -65,7 +65,8 @@ class AiRagAccessFilterTest {
                 new AiProperties(),
                 mock(AiChatConversationRepository.class),
                 mock(AiChatMessageRepository.class),
-                policy);
+                policy,
+                new org.openfilz.dms.service.ai.ReorganizationInventoryCache(new AiProperties()));
     }
 
     private DocumentAiTools tools() {
@@ -79,7 +80,9 @@ class AiRagAccessFilterTest {
                 new org.openfilz.dms.config.CommonProperties(),
                 // real service, feature off by default — mint() returns null, links stay plain
                 new org.openfilz.dms.security.DownloadTokenService(
-                        new org.openfilz.dms.config.DownloadTokenProperties()));
+                        new org.openfilz.dms.config.DownloadTokenProperties()),
+                // no audit trail, full-text index nor insight store in this unit test
+                null, null, null, null);
     }
 
     private static Document chunk(UUID documentId, String name, String text, double score) {

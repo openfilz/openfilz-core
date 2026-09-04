@@ -64,6 +64,14 @@ public class AiDocumentQueryService {
      * restrict results to the user's own and shared documents.
      */
     public List<FullDocumentInfo> query(ListFolderRequest request, String userEmail) {
+        return query(request, userEmail, null);
+    }
+
+    /**
+     * Same as {@link #query(ListFolderRequest, String)}, restricted to documents whose tier-2
+     * insight carries {@code insightCategory} (null = no restriction).
+     */
+    public List<FullDocumentInfo> query(ListFolderRequest request, String userEmail, String insightCategory) {
         log.debug("[AI-QUERY] query: scope={}, nameLike={}, type={}, sort={}:{}, page={}/{}",
                 scope(request), request.nameLike(), request.type(),
                 request.pageInfo().sortBy(), request.pageInfo().sortOrder(),
@@ -71,6 +79,7 @@ public class AiDocumentQueryService {
 
         StringBuilder query = buildSelect(userEmail);
         applyFilter(query, request);
+        applyInsightCategory(query, insightCategory);
         applySort(query, request);
         appendOffsetLimit(query, request);
 
@@ -79,6 +88,7 @@ public class AiDocumentQueryService {
         DatabaseClient.GenericExecuteSpec sql = criteria.bindCriteria(
                 databaseClient.sql(query.toString()), request);
         sql = bindUserContext(sql, userEmail);
+        sql = bindInsightCategory(sql, insightCategory);
 
         var results = sql.map(mapAllFields()).all().collectList().block();
         log.debug("[AI-QUERY] Returned {} results", results != null ? results.size() : 0);
@@ -89,17 +99,23 @@ public class AiDocumentQueryService {
      * Count documents matching the filter (same filtering as query, no sort/pagination).
      */
     public long count(ListFolderRequest request, String userEmail) {
+        return count(request, userEmail, null);
+    }
+
+    public long count(ListFolderRequest request, String userEmail, String insightCategory) {
         log.debug("[AI-QUERY] count: scope={}, nameLike={}, type={}", scope(request), request.nameLike(), request.type());
 
         StringBuilder query = new StringBuilder("select count(*)");
         appendFromClause(query, userEmail);
         applyFilter(query, request);
+        applyInsightCategory(query, insightCategory);
 
         log.debug("[AI-QUERY] SQL: {}", query);
 
         DatabaseClient.GenericExecuteSpec sql = criteria.bindCriteria(
                 databaseClient.sql(query.toString()), request);
         sql = bindUserContext(sql, userEmail);
+        sql = bindInsightCategory(sql, insightCategory);
 
         Long result = sql.map(row -> row.get(0, Long.class)).one().block();
         log.debug("[AI-QUERY] Count: {}", result);
@@ -115,6 +131,22 @@ public class AiDocumentQueryService {
      * skipping it to drop the parent scope would drop the access restriction with it, and hand
      * the model every user's documents. The criteria owns that decision; this service only asks.
      */
+    /** Restrict to documents whose tier-2 insight carries the category (joins ai_document_insights). */
+    private static void applyInsightCategory(StringBuilder query, String insightCategory) {
+        if (insightCategory == null || insightCategory.isBlank()) {
+            return;
+        }
+        boolean hasWhere = query.toString().toLowerCase(java.util.Locale.ROOT).contains(" where ");
+        query.append(hasWhere ? " and " : " where ")
+                .append("exists (select 1 from ai_document_insights ins where ins.document_id = ")
+                .append(PREFIX).append("id and ins.category = :insightCategory)");
+    }
+
+    private static DatabaseClient.GenericExecuteSpec bindInsightCategory(DatabaseClient.GenericExecuteSpec spec, String insightCategory) {
+        return insightCategory == null || insightCategory.isBlank() ? spec
+                : spec.bind("insightCategory", insightCategory.trim().toLowerCase(java.util.Locale.ROOT));
+    }
+
     private void applyFilter(StringBuilder query, ListFolderRequest request) {
         criteria.checkFilter(request);
         criteria.applyFilter(PREFIX, query, request);

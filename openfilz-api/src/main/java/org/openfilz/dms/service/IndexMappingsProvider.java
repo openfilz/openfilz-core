@@ -57,7 +57,23 @@ public interface IndexMappingsProvider {
                 .properties(OpenSearchDocumentKey.updatedBy.toString(), p -> p.keyword(k -> k))
                 .properties(OpenSearchDocumentKey.content.toString(), p -> p.text(txt -> txt.analyzer(CONTENT_ANALYZER)))
                 .properties(OpenSearchDocumentKey.metadata.toString(), p -> p.object(tx -> tx.dynamic(DynamicMapping.True)))
-                .properties(OpenSearchDocumentKey.active.toString(), p -> p.boolean_(b -> b));
+                .properties(OpenSearchDocumentKey.active.toString(), p -> p.boolean_(b -> b))
+                .properties(insightProperties());
+    }
+
+    /**
+     * The document-insight fields (fixed and typed on purpose: free-form keys from a model would
+     * explode the mapping). Also put on an existing index at startup, additively.
+     */
+    default java.util.Map<String, org.opensearch.client.opensearch._types.mapping.Property> insightProperties() {
+        java.util.Map<String, org.opensearch.client.opensearch._types.mapping.Property> properties = new java.util.LinkedHashMap<>();
+        properties.put(OpenSearchDocumentKey.category.toString(),
+                org.opensearch.client.opensearch._types.mapping.Property.of(p -> p.keyword(k -> k)));
+        properties.put(OpenSearchDocumentKey.summary.toString(),
+                org.opensearch.client.opensearch._types.mapping.Property.of(p -> p.text(t -> t)));
+        properties.put(OpenSearchDocumentKey.language.toString(),
+                org.opensearch.client.opensearch._types.mapping.Property.of(p -> p.keyword(k -> k)));
+        return properties;
     }
 
     /**

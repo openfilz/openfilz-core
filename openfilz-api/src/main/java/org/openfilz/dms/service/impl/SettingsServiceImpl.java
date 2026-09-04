@@ -39,6 +39,12 @@ public class SettingsServiceImpl implements SettingsService {
 
     // BYOK: lets users override the chat LLM with their own provider + API key. Read at
     // runtime (plain @Value, no conditional bean) so it stays a deployment toggle in native images.
+    @Value("${openfilz.ai.insights.active:false}")
+    private Boolean aiInsightsActive;
+
+    @Value("${openfilz.ai.auto-file.active:false}")
+    private Boolean aiAutoFileActive;
+
     @Value("${openfilz.ai.user-settings.enabled:false}")
     private Boolean aiUserSettingsEnabled;
 
@@ -147,6 +153,8 @@ public class SettingsServiceImpl implements SettingsService {
                .thumbnailsActive(thumbnailActive)
                .aiActive(aiActive)
                .aiUserSettingsEnabled(aiActive && aiUserSettingsEnabled)
+               .aiInsightsActive(Boolean.TRUE.equals(aiActive) && Boolean.TRUE.equals(aiInsightsActive))
+               .aiAutoFileActive(Boolean.TRUE.equals(aiActive) && Boolean.TRUE.equals(aiAutoFileActive))
                .signatureActive(Boolean.TRUE.equals(signatureActive))
                .pdfToolsActive(Boolean.TRUE.equals(pdfToolsActive))
                .signatureRequesterRoleRequired(Boolean.TRUE.equals(signatureActive) && Boolean.TRUE.equals(signatureRequireRequesterRole))

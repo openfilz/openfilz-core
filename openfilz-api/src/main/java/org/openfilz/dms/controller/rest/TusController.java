@@ -65,6 +65,11 @@ public class TusController {
     private final TusProperties tusProperties;
     private final CommonProperties commonProperties;
 
+    /** Smart filing on upload (design §13): schedules the filing job once the upload is finalized. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    private org.openfilz.dms.service.filing.AutoFileService autoFileService;
+
     private String baseUrl;
 
     @PostConstruct
@@ -383,6 +388,14 @@ public class TusController {
         log.info("TUS FINALIZE - Finalizing upload: {} with filename: {}", uploadId, request.filename());
 
         return tusUploadService.finalizeUpload(uploadId, request)
+                .flatMap(response -> autoFileService == null || Boolean.FALSE.equals(request.autoFile())
+                        ? Mono.just(response)
+                        : autoFileService.afterUpload(java.util.List.of(response), request.autoFile())
+                                .map(java.util.List::getFirst)
+                                .onErrorResume(e -> {
+                                    log.warn("Smart filing could not be scheduled: {}", e.getMessage());
+                                    return Mono.just(response);
+                                }))
                 .map(response -> ResponseEntity.status(HttpStatus.CREATED).body(response));
     }
 

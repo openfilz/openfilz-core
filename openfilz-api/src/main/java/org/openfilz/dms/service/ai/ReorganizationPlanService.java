@@ -38,6 +38,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -70,6 +71,13 @@ public class ReorganizationPlanService {
     public static final String STATUS_PARTIALLY_APPLIED = "PARTIALLY_APPLIED";
     public static final String STATUS_FAILED = "FAILED";
     public static final String STATUS_DISCARDED = "DISCARDED";
+    /** Smart filing found no confident destination: nothing moved, the record explains why. */
+    public static final String STATUS_SKIPPED = "SKIPPED";
+    /** A smart-filing move the user reverted. */
+    public static final String STATUS_UNDONE = "UNDONE";
+
+    public static final String ORIGIN_PROPOSAL = "PROPOSAL";
+    public static final String ORIGIN_AUTO_FILE = "AUTO_FILE";
 
     public static final int DEFAULT_MAX_DEPTH = 4;
     public static final int MAX_DEPTH = 10;
@@ -83,6 +91,16 @@ public class ReorganizationPlanService {
     private final AiAccessPolicy accessPolicy;
     private final AiToolRolePolicy rolePolicy;
     private final AiReorganizationPlanRepository planRepository;
+    private final ReorganizationInventoryCache inventoryCache;
+    private final org.openfilz.dms.repository.AuditDAO auditDAO;
+    private final org.openfilz.dms.service.insight.DocumentInsightStore insightStore;
+
+    /** Inventory detail: {@code full} carries the summaries, {@code compact} drops them (large trees). */
+    public static final String DETAIL_FULL = "full";
+    public static final String DETAIL_COMPACT = "compact";
+    /** Below this many files the default detail is full; above, compact. */
+    static final int COMPACT_THRESHOLD = 300;
+    static final int INVENTORY_SUMMARY_CHARS = 120;
 
     /** The user a call acts for: email for the access policy, Authentication for the service layer. */
     public record Caller(String email, Authentication authentication) {
@@ -90,6 +108,252 @@ public class ReorganizationPlanService {
 
     /** What gets persisted: the model's request (re-validated on apply) and the view shown to the user. */
     record StoredPlan(ReorganizationPlanRequest request, ReorganizationPlanView view) {
+    }
+
+    /** Outcome of a smart-filing move: FILED, SKIPPED (with the blocking issue) or FAILED. */
+    public record FilingApplyResult(UUID planId, String status, String reason, UUID targetId, String targetPath) {
+    }
+
+    // ── smart filing (one-item plans, origin AUTO_FILE) ─────────────────────
+
+    /**
+     * Validate a one-move plan for {@code documentId}, persist it with origin AUTO_FILE and the
+     * decision details, and apply it at once. A blocked item is recorded as SKIPPED (nothing
+     * moves); an apply failure as FAILED.
+     */
+    public FilingApplyResult fileDocument(ReorganizationPlanRequest request, UUID documentId, Caller caller,
+                                          Map<String, Object> details) {
+        ReorganizationPlanView view = validate(request, caller);
+        Item item = view.items().isEmpty() ? null : view.items().getFirst();
+        OffsetDateTime now = OffsetDateTime.now();
+        AiReorganizationPlan entity = AiReorganizationPlan.builder()
+                .createdBy(caller.email() == null ? "anonymousUser" : caller.email())
+                .rootFolderId(view.rootFolderId())
+                .origin(ORIGIN_AUTO_FILE)
+                .documentId(documentId)
+                .details(Json.of(JSON.writeValueAsString(details == null ? Map.of() : details)))
+                .createdAt(now)
+                .build();
+        if (item == null || !item.applicable()) {
+            String issue = item == null ? "The document could not be resolved." : item.issue();
+            entity.setStatus(STATUS_SKIPPED);
+            entity.setPlan(Json.of(JSON.writeValueAsString(new StoredPlan(request,
+                    view.withPersistence(null, STATUS_SKIPPED, entity.getCreatedBy(), now, null, null)))));
+            entity.setResult(Json.of(JSON.writeValueAsString(List.of(new ItemResult(documentId, "SKIPPED", issue)))));
+            AiReorganizationPlan saved = planRepository.save(entity).block();
+            return new FilingApplyResult(saved == null ? null : saved.getId(), org.openfilz.dms.dto.response.FilingOutcome.SKIPPED,
+                    issue, null, item == null ? null : item.targetPath());
+        }
+        entity.setStatus(STATUS_PROPOSED);
+        entity.setPlan(Json.of(JSON.writeValueAsString(new StoredPlan(request,
+                view.withPersistence(null, STATUS_PROPOSED, entity.getCreatedBy(), now, null, null)))));
+        AiReorganizationPlan saved = planRepository.save(entity).block();
+        if (saved == null) {
+            throw new IllegalStateException("The filing record could not be saved.");
+        }
+        ReorganizationApplyResult result = apply(saved.getId(), List.of(documentId), caller);
+        if (result.moved() > 0) {
+            Document moved = blockWithAuth(documentRepository.findById(documentId), caller);
+            UUID targetId = moved == null ? null : moved.getParentId();
+            return new FilingApplyResult(saved.getId(), org.openfilz.dms.dto.response.FilingOutcome.FILED, null, targetId,
+                    item.targetPath());
+        }
+        String failure = result.plan().results() == null ? "the move failed" : result.plan().results().stream()
+                .filter(r -> documentId.equals(r.documentId())).map(ItemResult::detail).filter(Objects::nonNull)
+                .findFirst().orElse("the move failed");
+        return new FilingApplyResult(saved.getId(), org.openfilz.dms.dto.response.FilingOutcome.FAILED, failure, null, item.targetPath());
+    }
+
+    /** The user reverted a smart-filing move (the document was moved back by the caller). */
+    public void markUndone(UUID planId, Caller caller) {
+        AiReorganizationPlan entity = loadOwned(planId, caller);
+        if (!ORIGIN_AUTO_FILE.equals(entity.getOrigin())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only a smart-filing record can be undone.");
+        }
+        entity.setStatus(STATUS_UNDONE);
+        planRepository.save(entity).block();
+    }
+
+    /** The latest smart-filing record of a document, whoever filed it (the caller's read access is checked by the service). */
+    public java.util.Optional<org.openfilz.dms.dto.response.FilingOutcome> latestFiling(UUID documentId) {
+        AiReorganizationPlan entity = planRepository.findFirstByDocumentIdAndOriginOrderByCreatedAtDesc(documentId, ORIGIN_AUTO_FILE).block();
+        return java.util.Optional.ofNullable(entity).map(this::filingOutcomeOf);
+    }
+
+    /** A smart-filing record of the caller's. */
+    public java.util.Optional<org.openfilz.dms.dto.response.FilingOutcome> filingOf(UUID planId, Caller caller) {
+        AiReorganizationPlan entity = loadOwned(planId, caller);
+        if (!ORIGIN_AUTO_FILE.equals(entity.getOrigin())) {
+            return java.util.Optional.empty();
+        }
+        return java.util.Optional.of(filingOutcomeOf(entity));
+    }
+
+    @SuppressWarnings("unchecked")
+    private org.openfilz.dms.dto.response.FilingOutcome filingOutcomeOf(AiReorganizationPlan entity) {
+        Map<String, Object> details = Map.of();
+        if (entity.getDetails() != null) {
+            try {
+                details = JSON.readValue(entity.getDetails().asString(), Map.class);
+            } catch (Exception ignored) {
+                details = Map.of();
+            }
+        }
+        StoredPlan stored = storedPlan(entity);
+        Item item = stored.view().items().isEmpty() ? null : stored.view().items().getFirst();
+        String status = switch (entity.getStatus()) {
+            case STATUS_APPLIED, STATUS_PARTIALLY_APPLIED -> org.openfilz.dms.dto.response.FilingOutcome.FILED;
+            case STATUS_UNDONE -> org.openfilz.dms.dto.response.FilingOutcome.UNDONE;
+            case STATUS_FAILED -> org.openfilz.dms.dto.response.FilingOutcome.FAILED;
+            default -> org.openfilz.dms.dto.response.FilingOutcome.SKIPPED;
+        };
+        Object from = details.get("from");
+        Object confidence = details.get("confidence");
+        UUID targetId = null;
+        if (org.openfilz.dms.dto.response.FilingOutcome.FILED.equals(status) && entity.getDocumentId() != null) {
+            Document current = documentRepository.findById(entity.getDocumentId()).block();
+            targetId = current == null ? null : current.getParentId();
+        }
+        String reason = details.get("reason") == null ? null : details.get("reason").toString();
+        if (entity.getResult() != null && !org.openfilz.dms.dto.response.FilingOutcome.FILED.equals(status)) {
+            try {
+                List<ItemResult> results = JSON.readValue(entity.getResult().asString(),
+                        JSON.getTypeFactory().constructCollectionType(List.class, ItemResult.class));
+                if (results != null && !results.isEmpty() && results.getFirst().detail() != null) {
+                    reason = results.getFirst().detail();
+                }
+            } catch (Exception ignored) {
+                // keep the decision reason
+            }
+        }
+        return new org.openfilz.dms.dto.response.FilingOutcome(
+                entity.getDocumentId(),
+                item == null ? null : item.name(),
+                status,
+                from == null ? null : parseUuid(from.toString()),
+                details.get("fromPath") == null ? null : details.get("fromPath").toString(),
+                targetId,
+                item == null ? null : item.targetPath(),
+                details.get("stage") == null ? null : details.get("stage").toString(),
+                confidence instanceof Number n ? n.doubleValue() : null,
+                reason,
+                entity.getId(),
+                entity.getAppliedAt() != null ? entity.getAppliedAt() : entity.getCreatedAt());
+    }
+
+    /** Absolute path of a folder (null = "/"), readable form for messages and records. */
+    public String pathOf(UUID folderId, Caller caller) {
+        return absolutePath(folderId, new HashMap<>(), caller);
+    }
+
+    /** Path of {@code folderId} relative to {@code scopeRootId} ("" when they are the same). */
+    public String relativePath(UUID folderId, UUID scopeRootId, Caller caller) {
+        Map<UUID, Document> cache = new HashMap<>();
+        String folder = absolutePath(folderId, cache, caller);
+        String scope = absolutePath(scopeRootId, cache, caller);
+        if (folder.equals(scope)) return "";
+        String prefix = "/".equals(scope) ? "/" : scope + "/";
+        return folder.startsWith(prefix) ? folder.substring(prefix.length()) : folder;
+    }
+
+    /** Whether {@code folderId} is {@code scopeRootId} or below it (null scope = everywhere). */
+    public boolean isWithin(UUID folderId, UUID scopeRootId, Map<UUID, Boolean> cache, Caller caller) {
+        if (scopeRootId == null) return true;
+        if (folderId == null) return false;
+        Boolean cached = cache.get(folderId);
+        if (cached != null) return cached;
+        UUID current = folderId;
+        int guard = 0;
+        boolean within = false;
+        while (current != null && guard++ < 64) {
+            if (current.equals(scopeRootId)) {
+                within = true;
+                break;
+            }
+            Document doc = blockWithAuth(documentRepository.findById(current), caller);
+            current = doc == null ? null : doc.getParentId();
+        }
+        cache.put(folderId, within);
+        return within;
+    }
+
+    /** Whether the relative path resolves to an existing folder under the scope root. */
+    public boolean folderExists(UUID scopeRootId, String relativePath, Caller caller) {
+        List<String> segments = normalizePath(relativePath);
+        if (segments == null) return false;
+        if (segments.isEmpty()) return true;
+        Map<UUID, Document> docCache = new HashMap<>();
+        TargetResolution target = resolveTarget(scopeRootId, absolutePath(scopeRootId, docCache, caller), segments,
+                new HashMap<>(), new HashMap<>(), docCache, caller);
+        return target.exists();
+    }
+
+    /** How many folders the relative path would create under the scope root. */
+    public int missingDepth(UUID scopeRootId, String relativePath, Caller caller) {
+        List<String> segments = normalizePath(relativePath);
+        if (segments == null || segments.isEmpty()) return 0;
+        Map<UUID, Document> docCache = new HashMap<>();
+        TargetResolution target = resolveTarget(scopeRootId, absolutePath(scopeRootId, docCache, caller), segments,
+                new HashMap<>(), new HashMap<>(), docCache, caller);
+        return target.missingPaths().size();
+    }
+
+    /**
+     * The folders of a scope for the filing model: each with its file count, category histogram
+     * (from the insights, one query) and three example names. Capped at 500 folders / 2 000 files.
+     */
+    public String folderInventory(UUID scopeRootId, Caller caller) {
+        Map<String, List<Document>> childrenCache = new HashMap<>();
+        String rootPath = absolutePath(scopeRootId, new HashMap<>(), caller);
+        record FolderRow(UUID id, String path, List<Document> files) {
+        }
+        List<FolderRow> rows = new ArrayList<>();
+        rows.add(new FolderRow(scopeRootId, rootPath, new ArrayList<>()));
+        Deque<Object[]> queue = new ArrayDeque<>();
+        queue.add(new Object[]{scopeRootId, rootPath, rows.getFirst()});
+        int folders = 0;
+        int files = 0;
+        while (!queue.isEmpty() && folders < 500 && files < 2000) {
+            Object[] entry = queue.poll();
+            UUID folderId = (UUID) entry[0];
+            String path = (String) entry[1];
+            FolderRow row = (FolderRow) entry[2];
+            for (Document child : children(folderId, childrenCache, caller)) {
+                if (child.getType() == DocumentType.FOLDER) {
+                    if (++folders >= 500) break;
+                    FolderRow sub = new FolderRow(child.getId(), join(path, child.getName()), new ArrayList<>());
+                    rows.add(sub);
+                    queue.add(new Object[]{child.getId(), sub.path(), sub});
+                } else {
+                    row.files().add(child);
+                    if (++files >= 2000) break;
+                }
+            }
+        }
+        List<UUID> fileIds = rows.stream().flatMap(r -> r.files().stream()).map(Document::getId).filter(Objects::nonNull).toList();
+        Map<UUID, org.openfilz.dms.dto.response.DocumentInsightView> insights = insightsOf(fileIds, caller);
+        StringBuilder sb = new StringBuilder("Folders of the scope (path (id): files, categories; examples):\n");
+        for (FolderRow row : rows) {
+            Map<String, Integer> categories = new java.util.TreeMap<>();
+            for (Document file : row.files()) {
+                org.openfilz.dms.dto.response.DocumentInsightView insight = insights.get(file.getId());
+                if (insight != null && insight.category() != null) {
+                    categories.merge(insight.category(), 1, Integer::sum);
+                }
+            }
+            sb.append("  ").append(row.path()).append(row.id() == null ? " (scope root)" : " (id " + row.id() + ")")
+                    .append(": ").append(row.files().size()).append(" file(s)");
+            if (!categories.isEmpty()) {
+                sb.append(", ").append(categories.entrySet().stream()
+                        .sorted((a, b) -> b.getValue().compareTo(a.getValue()))
+                        .map(e -> e.getKey() + " " + e.getValue()).collect(Collectors.joining(", ")));
+            }
+            if (!row.files().isEmpty()) {
+                sb.append("; e.g. ").append(row.files().stream().limit(3).map(Document::getName).collect(Collectors.joining(", ")));
+            }
+            sb.append('\n');
+        }
+        return sb.toString();
     }
 
     // ── inventory ───────────────────────────────────────────────────────────
@@ -100,13 +364,43 @@ public class ReorganizationPlanService {
      * {@code maxItems} entries and {@code maxDepth} levels; only documents the caller can read.
      */
     public String inventory(UUID rootId, Integer maxDepth, Integer maxItems, Caller caller) {
+        return inventory(rootId, maxDepth, maxItems, null, caller);
+    }
+
+    /**
+     * @param detail {@code full} (summaries included), {@code compact} (no summaries), or null to
+     *               decide from the size: full under {@value #COMPACT_THRESHOLD} files
+     */
+    public String inventory(UUID rootId, Integer maxDepth, Integer maxItems, String detail, Caller caller) {
         int depthLimit = clamp(maxDepth, DEFAULT_MAX_DEPTH, MAX_DEPTH);
         int itemLimit = clamp(maxItems, DEFAULT_MAX_ITEMS, MAX_ITEMS);
+        String detailKey = detail == null || detail.isBlank() ? "auto" : detail.trim().toLowerCase(Locale.ROOT);
+        String cacheKey = ReorganizationInventoryCache.key(caller.email(), rootId, depthLimit, itemLimit, detailKey);
+        String cached = inventoryCache.get(cacheKey);
+        if (cached != null) {
+            log.debug("[REORG] inventory served from cache for {} (root {})", caller.email(), rootId);
+            return cached;
+        }
+        if (!inventoryCache.tryAcquire(caller.email())) {
+            throw new IllegalStateException("Inventory rate limit reached (" + inventoryCache.rateLimit()
+                    + " inventories per " + inventoryCache.rateWindow().toMinutes() + " minutes): reuse the "
+                    + "inventory you already have, or narrow the folder and try again later.");
+        }
+        String inventory = buildInventory(rootId, depthLimit, itemLimit, detailKey, caller);
+        inventoryCache.put(cacheKey, inventory);
+        return inventory;
+    }
+
+    /** A file of the inventory with its absolute path, before enrichment. */
+    private record InventoryFile(Document document, String path) {
+    }
+
+    private String buildInventory(UUID rootId, int depthLimit, int itemLimit, String detail, Caller caller) {
         Map<String, List<Document>> childrenCache = new HashMap<>();
         String rootPath = absolutePath(rootId, new HashMap<>(), caller);
 
         List<String> folders = new ArrayList<>();
-        List<String> files = new ArrayList<>();
+        List<InventoryFile> files = new ArrayList<>();
         int listed = 0;
         boolean truncated = false;
 
@@ -132,20 +426,25 @@ public class ReorganizationPlanService {
                         folders.set(folders.size() - 1, folders.getLast() + "  [not expanded: depth limit]");
                     }
                 } else {
-                    files.add(child.getId() + " | " + childPath + " | " + extension(child.getName())
-                            + " | " + humanSize(child.getSize())
-                            + " | " + (child.getUpdatedAt() != null ? child.getUpdatedAt().toLocalDate() : "?")
-                            + metadataSummary(child));
+                    files.add(new InventoryFile(child, childPath));
                 }
             }
             if (truncated) break;
         }
+
+        // Two grouped queries for the whole inventory: the insights and the audit activity
+        List<UUID> fileIds = files.stream().map(f -> f.document().getId()).filter(Objects::nonNull).toList();
+        Map<UUID, org.openfilz.dms.dto.response.DocumentInsightView> insights = insightsOf(fileIds, caller);
+        Map<UUID, org.openfilz.dms.dto.audit.DocumentActivity> activity = activityOf(fileIds, caller);
+        boolean withSummaries = DETAIL_FULL.equals(detail)
+                || (!DETAIL_COMPACT.equals(detail) && files.size() < COMPACT_THRESHOLD);
 
         StringBuilder sb = new StringBuilder();
         sb.append("Inventory of ").append(rootPath).append(rootId != null ? " (id " + rootId + ")" : " (root level)")
                 .append(": ").append(folders.size()).append(" folder(s), ").append(files.size()).append(" file(s)");
         if (truncated) sb.append(" — TRUNCATED at ").append(itemLimit).append(" entries; narrow the folder or raise maxItems");
         sb.append(".\n");
+        appendAggregates(sb, files, insights, activity);
         if (!folders.isEmpty()) {
             sb.append("\nExisting folders:\n");
             folders.forEach(f -> sb.append("  ").append(f).append('\n'));
@@ -153,10 +452,123 @@ public class ReorganizationPlanService {
         if (files.isEmpty()) {
             sb.append("\nNo files.\n");
         } else {
-            sb.append("\nFiles (id | path | ext | size | modified | metadata):\n");
-            files.forEach(f -> sb.append("  ").append(f).append('\n'));
+            sb.append("\nFiles (id | path | ext | size | modified by | insights: cat / language / pages")
+                    .append(withSummaries ? " / \"summary\"" : "")
+                    .append(" | metadata | activity: last action, actions, users):\n");
+            for (InventoryFile file : files) {
+                sb.append("  ").append(fileRow(file, insights.get(file.document().getId()),
+                        activity.get(file.document().getId()), withSummaries)).append('\n');
+            }
         }
         return sb.toString();
+    }
+
+    private static String fileRow(InventoryFile file, org.openfilz.dms.dto.response.DocumentInsightView insight,
+                                  org.openfilz.dms.dto.audit.DocumentActivity activity, boolean withSummary) {
+        Document doc = file.document();
+        StringBuilder row = new StringBuilder();
+        row.append(doc.getId()).append(" | ").append(file.path()).append(" | ").append(extension(doc.getName()))
+                .append(" | ").append(humanSize(doc.getSize()))
+                .append(" | mod ").append(doc.getUpdatedAt() != null ? doc.getUpdatedAt().toLocalDate() : "?");
+        if (doc.getCreatedBy() != null && !doc.getCreatedBy().isBlank()) {
+            row.append(" by ").append(doc.getCreatedBy());
+        }
+        if (insight != null) {
+            List<String> segments = new ArrayList<>();
+            if (insight.category() != null) segments.add("cat " + insight.category());
+            if (insight.language() != null) segments.add(insight.language());
+            if (insight.pageCount() != null) segments.add(insight.pageCount() + " p");
+            if (withSummary && insight.summary() != null) {
+                String summary = insight.summary().replace('\n', ' ').replace('"', '\'');
+                segments.add("\"" + (summary.length() > INVENTORY_SUMMARY_CHARS
+                        ? summary.substring(0, INVENTORY_SUMMARY_CHARS - 1) + "…" : summary) + "\"");
+            } else if (insight.keywords() != null && !insight.keywords().isEmpty()) {
+                segments.add("kw " + String.join("/", insight.keywords().stream().limit(5).toList()));
+            }
+            if (!segments.isEmpty()) {
+                row.append(" | ").append(String.join(" | ", segments));
+            }
+        }
+        row.append(metadataSummary(doc));
+        if (activity != null) {
+            row.append(" | last ").append(activity.lastAt() != null ? activity.lastAt().toLocalDate() : "?")
+                    .append(", ").append(activity.actions()).append(activity.actions() == 1 ? " action" : " actions")
+                    .append(", ").append(activity.actors()).append(activity.actors() == 1 ? " user" : " users");
+        }
+        return row.toString();
+    }
+
+    /** Two lines that let the model choose "by category" or "active / archive" before reading rows. */
+    private static void appendAggregates(StringBuilder sb, List<InventoryFile> files,
+                                         Map<UUID, org.openfilz.dms.dto.response.DocumentInsightView> insights,
+                                         Map<UUID, org.openfilz.dms.dto.audit.DocumentActivity> activity) {
+        if (files.isEmpty()) {
+            return;
+        }
+        Map<String, Integer> categories = new java.util.TreeMap<>();
+        int withInsights = 0;
+        for (InventoryFile file : files) {
+            org.openfilz.dms.dto.response.DocumentInsightView insight = insights.get(file.document().getId());
+            if (insight != null && insight.category() != null) {
+                withInsights++;
+                categories.merge(insight.category(), 1, Integer::sum);
+            }
+        }
+        if (withInsights > 0) {
+            sb.append("Categories present (").append(withInsights).append(" of ").append(files.size())
+                    .append(" files have insights): ")
+                    .append(categories.entrySet().stream()
+                            .sorted((a, b) -> b.getValue().compareTo(a.getValue()))
+                            .map(e -> e.getKey() + " " + e.getValue())
+                            .collect(Collectors.joining(", ")))
+                    .append(".\n");
+        } else {
+            sb.append("No AI insights on these files yet: judge them by name, path, dates and activity, "
+                    + "and read a file only when its nature is unclear.\n");
+        }
+        OffsetDateTime yearAgo = OffsetDateTime.now().minusMonths(12);
+        long untouched = files.stream().filter(file -> {
+            org.openfilz.dms.dto.audit.DocumentActivity a = activity.get(file.document().getId());
+            OffsetDateTime last = a != null && a.lastAt() != null ? a.lastAt() : file.document().getUpdatedAt();
+            return last != null && last.isBefore(yearAgo);
+        }).count();
+        if (untouched > 0) {
+            sb.append("Activity: ").append(untouched).append(" file(s) untouched for more than 12 months.\n");
+        }
+    }
+
+    private Map<UUID, org.openfilz.dms.dto.response.DocumentInsightView> insightsOf(List<UUID> ids, Caller caller) {
+        if (ids.isEmpty() || insightStore == null) {
+            return Map.of();
+        }
+        try {
+            List<org.openfilz.dms.entity.AiDocumentInsight> rows = blockWithAuth(insightStore.findAll(ids).collectList(), caller);
+            Map<UUID, org.openfilz.dms.dto.response.DocumentInsightView> out = new HashMap<>();
+            if (rows != null) {
+                rows.forEach(row -> out.put(row.getDocumentId(), org.openfilz.dms.service.insight.DocumentInsightStore.toView(row)));
+            }
+            return out;
+        } catch (Exception e) {
+            log.debug("[REORG] insights lookup failed: {}", e.getMessage());
+            return Map.of();
+        }
+    }
+
+    private Map<UUID, org.openfilz.dms.dto.audit.DocumentActivity> activityOf(List<UUID> ids, Caller caller) {
+        if (ids.isEmpty() || auditDAO == null) {
+            return Map.of();
+        }
+        try {
+            List<org.openfilz.dms.dto.audit.DocumentActivity> rows = blockWithAuth(auditDAO.activitySummary(ids).collectList(), caller);
+            Map<UUID, org.openfilz.dms.dto.audit.DocumentActivity> out = new HashMap<>();
+            if (rows != null) {
+                rows.forEach(row -> out.put(row.documentId(), row));
+            }
+            return out;
+        } catch (Exception e) {
+            log.debug("[REORG] activity lookup failed: {}", e.getMessage());
+            return Map.of();
+        }
     }
 
     // ── validation ──────────────────────────────────────────────────────────
@@ -175,6 +587,8 @@ public class ReorganizationPlanService {
         Map<String, UUID> plannedNames = new HashMap<>();
         Set<String> foldersToCreate = new LinkedHashSet<>();
         List<Item> items = new ArrayList<>();
+        // Modify permission per document/folder, asked once for the whole plan (see prefetchModifiable)
+        Map<UUID, Boolean> modifiable = new HashMap<>();
 
         if (request.createFolders() != null) {
             for (String path : request.createFolders()) {
@@ -182,7 +596,7 @@ public class ReorganizationPlanService {
                 if (segments == null || segments.isEmpty()) continue;
                 TargetResolution target = resolveTarget(rootId, rootPath, segments, targets, childrenCache, docCache, caller);
                 if (!target.exists()) {
-                    if (canCreateIn(target.deepestExistingId(), caller)) {
+                    if (canCreateIn(target.deepestExistingId(), caller, modifiable)) {
                         foldersToCreate.addAll(target.missingPaths());
                     } else {
                         log.debug("[REORG] createFolders '{}' skipped: no permission under {}", path, target.deepestExistingPath());
@@ -191,8 +605,16 @@ public class ReorganizationPlanService {
             }
         }
 
+        // Resolve every document first, so the modify permission is asked once for the whole plan
+        List<Document> resolved = new ArrayList<>(request.moves().size());
         for (ReorganizationPlanRequest.Move move : request.moves()) {
-            Document doc = resolveDocument(move.document(), caller, docCache);
+            resolved.add(resolveDocument(move.document(), caller, docCache));
+        }
+        prefetchModifiable(resolved, caller, modifiable);
+
+        for (int index = 0; index < request.moves().size(); index++) {
+            ReorganizationPlanRequest.Move move = request.moves().get(index);
+            Document doc = resolved.get(index);
             if (doc == null) {
                 items.add(new Item(null, move.document(), null, null, null, false, false,
                         "No document '" + move.document() + "' is visible to you (use its id from the inventory)."));
@@ -214,7 +636,7 @@ public class ReorganizationPlanService {
             TargetResolution target = resolveTarget(rootId, rootPath, segments, targets, childrenCache, docCache, caller);
             String targetPath = target.path();
 
-            if (!canModify(doc.getId(), caller)) {
+            if (!canModify(doc.getId(), caller, modifiable)) {
                 items.add(new Item(doc.getId(), doc.getName(), type, currentPath, targetPath, target.exists(), false,
                         "You don't have permission to move this document."));
                 continue;
@@ -229,12 +651,12 @@ public class ReorganizationPlanService {
                         "Already in the target folder."));
                 continue;
             }
-            if (target.exists() && !canCreateIn(target.folderId(), caller)) {
+            if (target.exists() && !canCreateIn(target.folderId(), caller, modifiable)) {
                 items.add(new Item(doc.getId(), doc.getName(), type, currentPath, targetPath, true, false,
                         "You don't have permission to add documents to " + targetPath + "."));
                 continue;
             }
-            if (!target.exists() && !canCreateIn(target.deepestExistingId(), caller)) {
+            if (!target.exists() && !canCreateIn(target.deepestExistingId(), caller, modifiable)) {
                 items.add(new Item(doc.getId(), doc.getName(), type, currentPath, targetPath, false, false,
                         "You don't have permission to create folders in " + target.deepestExistingPath() + "."));
                 continue;
@@ -417,6 +839,8 @@ public class ReorganizationPlanService {
         entity.setPlan(Json.of(JSON.writeValueAsString(new StoredPlan(stored.request(), applied1))));
         entity.setResult(Json.of(JSON.writeValueAsString(results)));
         planRepository.save(entity).block();
+        // The library changed: the next inventory must be rebuilt, not served from the cache
+        inventoryCache.invalidate(caller.email());
         log.info("[REORG] Plan {} applied by {}: {} moved, {} failed, {} folder(s) created → {}",
                 planId, caller.email(), moved, failed, createdFolders.size(), status);
         int skipped = fresh.items().size() - moved - failed;
@@ -573,7 +997,7 @@ public class ReorganizationPlanService {
             docCache.put(id, doc);
             return doc;
         }
-        List<Document> found = blockWithAuth(documentRepository.findByNameContainingIgnoreCaseAndActiveTrue(trimmed).collectList(), caller);
+        List<Document> found = blockWithAuth(documentRepository.findByNameIgnoreCaseAndActiveTrue(trimmed).collectList(), caller);
         if (found == null) return null;
         List<Document> exact = found.stream()
                 .filter(d -> d.getName().equalsIgnoreCase(trimmed) && canRead(d.getId(), caller))
@@ -590,8 +1014,9 @@ public class ReorganizationPlanService {
                     ? documentRepository.findByParentIdIsNullAndActiveIsTrue()
                     : documentRepository.findByParentIdAndActiveIsTrue(folderId)).collectList(), caller);
             if (all == null) return List.of();
+            Set<UUID> readable = readableOf(all, caller);
             return all.stream()
-                    .filter(d -> canRead(d.getId(), caller))
+                    .filter(d -> readable.contains(d.getId()))
                     .sorted(Comparator.comparing((Document d) -> d.getType() != DocumentType.FOLDER)
                             .thenComparing(d -> d.getName().toLowerCase(Locale.ROOT)))
                     .toList();
@@ -623,7 +1048,8 @@ public class ReorganizationPlanService {
 
     private AiReorganizationPlan loadOwned(UUID planId, Caller caller) {
         AiReorganizationPlan entity = planId == null ? null : planRepository.findById(planId).block();
-        if (entity == null || caller.email() == null || !caller.email().equalsIgnoreCase(entity.getCreatedBy())) {
+        String owner = caller.email() == null ? "anonymousUser" : caller.email();
+        if (entity == null || !owner.equalsIgnoreCase(entity.getCreatedBy())) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Plan not found");
         }
         return entity;
@@ -649,10 +1075,46 @@ public class ReorganizationPlanService {
         return Boolean.TRUE.equals(accessPolicy.canModify(documentId, caller.email()).block());
     }
 
-    private boolean canCreateIn(UUID folderId, Caller caller) {
+    /** Ids of the documents the caller may read: one policy call for the whole list. */
+    private Set<UUID> readableOf(List<Document> documents, Caller caller) {
+        Set<UUID> ids = documents.stream().map(Document::getId).filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (accessPolicy.permitAll()) {
+            return ids;
+        }
+        Set<UUID> readable = blockWithAuth(accessPolicy.readable(ids, caller.email()), caller);
+        return readable == null ? Set.of() : readable;
+    }
+
+    /** Ask the modify permission once for every resolved document not decided yet. */
+    private void prefetchModifiable(List<Document> documents, Caller caller, Map<UUID, Boolean> modifiable) {
+        Set<UUID> ids = documents.stream().filter(Objects::nonNull).map(Document::getId)
+                .filter(id -> id != null && !modifiable.containsKey(id))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (ids.isEmpty()) {
+            return;
+        }
+        Set<UUID> allowed;
+        if (accessPolicy.permitAll()) {
+            allowed = ids;
+        } else {
+            Set<UUID> result = blockWithAuth(accessPolicy.modifiable(ids, caller.email()), caller);
+            allowed = result == null ? Set.of() : result;
+        }
+        for (UUID id : ids) {
+            modifiable.put(id, allowed.contains(id));
+        }
+    }
+
+    /** Memoised per validation: a target folder not covered by the prefetch is asked once. */
+    private boolean canModify(UUID documentId, Caller caller, Map<UUID, Boolean> modifiable) {
+        return modifiable.computeIfAbsent(documentId, id -> canModify(id, caller));
+    }
+
+    private boolean canCreateIn(UUID folderId, Caller caller, Map<UUID, Boolean> modifiable) {
         return folderId == null
                 ? Boolean.TRUE.equals(accessPolicy.canCreateAtRoot(caller.email()).block())
-                : canModify(folderId, caller);
+                : canModify(folderId, caller, modifiable);
     }
 
     private static <T> T blockWithAuth(Mono<T> mono, Caller caller) {

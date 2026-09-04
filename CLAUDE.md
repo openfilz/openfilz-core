@@ -297,6 +297,23 @@ resolution, the split-mode and page-selection vocabulary, in-place vs. new-docum
 `PdfToolsDisabledIT`; the MCP suites include the PDF tools in their advertised-set assertions
 (`McpProtocolIT.argumentsFor`).
 
+### Document insights & smart filing (AI)
+See `docs/ai.md` §3b and the design in `openfilz-enterprise/docs/smart-reorganization.md`. `ai_document_insights` (V1_9) holds
+what OpenFilz derives from a file: tier 1 = Tika file metadata captured from the parse indexing/embedding already run
+(`TikaService.processResource(path, resource, onMetadata)`, `TikaFileMetadata`, `DocumentInsightStore`); tier 2 = the model's
+category (closed list `openfilz.ai.insights.categories`) / summary / keywords / language / entities (`AiDocumentInsightService`,
+bounded queue, daily cap, backfill `POST /api/v1/ai/insights/backfill`; `NoOp…` + `DocumentInsightConfig` = native-safe runtime
+toggle `openfilz.ai.insights.active`; mirrored to OpenSearch `category`/`summary`/`language`). `GET /documents/{id}/insights`,
+`getMetadata` block, `queryDocuments(category)`. Smart filing (`openfilz.ai.auto-file.active`, `DefaultAutoFileService` +
+`NoOp…` + `AutoFileConfig`): `autoFile` on `/upload`, `/upload-multiple`, TUS finalize, `writeFile`, or the user's switch
+(`user_ai_preferences`, `GET/PUT /settings/ai/preferences`); the neighbour vote on the vector store (live `documents.parent_id`,
+never the chunk metadata) then the model, applied as a one-item `AiReorganizationPlan` (`origin = AUTO_FILE`, `document_id`,
+`details`, V1_10) via `ReorganizationPlanService.fileDocument`; `/api/v1/ai/auto-file/**` (job, undo, filing record),
+`fileDocuments` tool (`FilingAiToolsContributor`). Core publishes `DocumentFiledEvent` / `DocumentInsightsReadyEvent`
+(Spring events) for the EE webhook producer. Tests: `DocumentInsightsIT`, `DocumentInsightsTier2IT` (AiTestConfig answers the
+`INSIGHTS_V1` / `AUTOFILE_V1` prompts), `AutoFileIT`, `AutoFileDecisionTest`, `InsightResultTest`, `TikaFileMetadataTest`.
+Any contributor that opts into the chat must also be excluded in `AiRealLlmE2EIT` (small model).
+
 ### Settings API
 - **SettingsController** (`/api/v1/settings`) — exposes app config and user preferences to frontend
 
@@ -594,6 +611,7 @@ Four chat providers ship: **Ollama, Anthropic (Claude), Google Gemini (GenAI/Dev
 
 - **`openfilz.ai.active` is a RUNTIME toggle — never a bean condition.** No AI bean carries `@ConditionalOnProperty` anymore (bean conditions are evaluated at build time in GraalVM native images). Instead: `AiProperties.active` is bound at runtime; the two controllers are always mapped and return 404 per request when off; every other AI bean is `@Lazy` (so a disabled deployment never initializes the pipeline and a JVM deployment without provider models never resolves them); `EmbeddingRegistryGuard` (eager runner, `ObjectProvider` deps) and `aiFlywayCustomizer` self-guard on the flag at runtime. Native images must run `process-aot` with `-Dopenfilz.ai.active=true` so the Spring AI provider auto-configurations (still selector-gated) are compiled in — the EE collaboration pom does this in both native profiles.
 - **`AiAccessPolicy` — the AI feature's per-user document access seam.** The tools resolve documents by name via raw repository queries and read content straight from storage, so endpoint-level authorization alone cannot protect per-document permissions. Every read/modify decision (tool queries, name resolution, content reads, mutations, RAG chunks) goes through `AiAccessPolicy` with the requesting user's email. Core default `PermitAllAiAccessPolicy` (no per-document permissions in CE); the enterprise layer overrides with a `@Primary` policy backed by its ownership/share model. Policy implementations must not rely on the reactive security context (tool threads don't have it).
+  Batch variants `readable(ids, email)` / `modifiable(ids, email)` (defaults loop over the single verdicts; the EE policy answers with one query) are what `ReorganizationPlanService` uses — once per folder for the inventory, once per plan for validation — and it skips them entirely when `permitAll()`. `planReorganization` inventories are cached per user + request shape (`ReorganizationInventoryCache`, `openfilz.ai.reorganization.*`: 2 min TTL, dropped after any mutating tool call of that user, 20 productions / 10 min cap); `readDocumentContent` serves the OpenSearch `content` field when full-text is active instead of re-parsing the file; the AI tools' name fallback is a bounded `findTop50By…` scan.
 - **Tools are per-user AND carry the caller's `Authentication`.** `DocumentAiToolsFactory.create(chatModel, userEmail, authentication)`; inside the tools every blocking service call goes through `blockWithAuth(...)` which re-establishes the Authentication in the Reactor context — without it, secure DAO overrides in extension layers would see no user on tool threads. `writeFile` goes through `documentService.uploadDocument` (the full upload pipeline: ownership, audit, checksum, indexing), never a raw repository save.
 - **RAG retrieval fails closed.** `AiChatServiceImpl.retrieveContext` filters similarity-search chunks by `AiAccessPolicy.canRead(document_id, userEmail)` when the policy is not permit-all; chunks without `document_id` metadata are dropped. Pinned by `AiRagAccessFilterTest`.
 - **`AiDocumentQueryService` is user-aware**: `query(request, userEmail)` / `count(request, userEmail)` with protected `appendFromClause`/`bindUserContext` hooks (core: bare FROM, no binding). The enterprise layer overrides them to add the `doc_owner`/`doc_share` joins its `defaultListFolderCriteria` bean references via `:usrId`.
@@ -688,7 +706,7 @@ external agents (Claude Code/Desktop, n8n, custom agents, Spring AI clients) ove
   Core is JVM-only, but these classes are compiled into the enterprise native image. A GraalVM
   tracing-agent run (`openfilz-enterprise/docker/trace-mcp-native-hints.sh`) confirmed the residue
   is exactly those two ServiceLoader SPI files — **no further reflection hints are needed**.
-- **Tool surface (core):** 18 document tools in `DocumentAiTools` (incl. `createBlankDocument`), plus two more core contributors — `OrganizeAiToolsContributor` (4 reorganisation tools over `ReorganizationPlanService`: inventory → validated, persisted proposal → user-confirmed apply; the chat appends a `[[reorg-plan:id]]` marker rendered as a proposal card, `/api/v1/ai/reorganization/{id}`; contributed tool objects report side effects via `AiToolTurnEffects`) and `SignatureAiToolsContributor` (4 e-Sign tools: `sendForSignature` via template role binding or default last-page placement, list/status) — whoami (identity + effective
+- **Tool surface (core):** 19 document tools in `DocumentAiTools` (incl. `createBlankDocument` and `getDocumentActivity` — the audit trail, AUDITOR-gated), plus two more core contributors — `OrganizeAiToolsContributor` (4 reorganisation tools over `ReorganizationPlanService`: inventory → validated, persisted proposal → user-confirmed apply; the chat appends a `[[reorg-plan:id]]` marker rendered as a proposal card, `/api/v1/ai/reorganization/{id}`; contributed tool objects report side effects via `AiToolTurnEffects`) and `SignatureAiToolsContributor` (4 e-Sign tools: `sendForSignature` via template role binding or default last-page placement, list/status) — whoami (identity + effective
   per-capability permissions, capability `IDENTITY_READ` = any authenticated caller via
   `RoleRequirement.authenticated()`), query/read/path/vision, write/
   create/move/rename, metadata get/search/update/delete, delete (CLEANER), version list/restore,

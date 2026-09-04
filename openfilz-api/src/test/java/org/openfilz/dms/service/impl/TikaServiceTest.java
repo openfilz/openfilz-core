@@ -31,6 +31,21 @@ class TikaServiceTest {
     }
 
     @Test
+    void processResource_pdf_reportsTheFileMetadata() {
+        Resource resource = new org.springframework.core.io.ClassPathResource("pdf-example.pdf");
+        java.util.concurrent.atomic.AtomicReference<org.apache.tika.metadata.Metadata> seen = new java.util.concurrent.atomic.AtomicReference<>();
+
+        StepVerifier.create(service.processResource(tempFile, Mono.just(resource), seen::set).collectList())
+                .assertNext(chunks -> assertTrue(String.join("", chunks).length() > 0))
+                .verifyComplete();
+
+        assertTrue(seen.get() != null, "the metadata callback must run after the parse");
+        org.openfilz.dms.service.insight.TikaFileMetadata metadata = org.openfilz.dms.service.insight.TikaFileMetadata.from(seen.get());
+        assertTrue(metadata.pageCount() != null && metadata.pageCount() >= 1,
+                "a PDF always reports its page count, got: " + metadata);
+    }
+
+    @Test
     void processResource_plainText_emitsExtractedText() {
         Resource resource = new ByteArrayResource("Hello Tika extraction world".getBytes());
 

@@ -69,7 +69,7 @@ therefore withheld unless you opt in:
 
 | Mode | Tools exposed |
 |---|---|
-| `READ_ONLY` (default) | every *read* tool: `whoami`, `queryDocuments`, `readDocumentContent`, `getDocumentPath`, `describeImage`, `downloadDocument`, the metadata / version reads, `getPdfInfo`, `planReorganization`, `getReorganizationPlan`, the e-Sign reads |
+| `READ_ONLY` (default) | every *read* tool: `whoami`, `queryDocuments`, `readDocumentContent`, `getDocumentPath`, `describeImage`, `downloadDocument`, `getDocumentActivity`, the metadata / version reads, `getPdfInfo`, `planReorganization`, `getReorganizationPlan`, the e-Sign reads |
 | `READ_WRITE` | all of the above **plus** every *write* tool: `writeFile`, `createBlankDocument`, `createFolder`, `moveDocuments`, `renameDocument`, the metadata writes, `restoreVersion`, `deleteDocument`, the PDF transformations, `proposeReorganizationPlan` / `applyReorganizationPlan`, `sendForSignature` |
 
 In `READ_ONLY` the mutating tools are absent from `tools/list` — an agent cannot choose a tool it
@@ -124,7 +124,7 @@ opened it, and horizontal scaling needs no sticky sessions.
 
 ## 3. The tool surface
 
-Eighteen document tools, seven PDF tools, four reorganisation tools and four e-Sign tools, curated rather than generated. (A 60-operation auto-generated tool list from the
+Nineteen document tools, seven PDF tools, four reorganisation tools and four e-Sign tools, curated rather than generated. (A 60-operation auto-generated tool list from the
 OpenAPI spec would make agents *worse*, not better — the small, well-described surface is the point.)
 
 | Tool | Mode | What it does |
@@ -134,7 +134,7 @@ OpenAPI spec would make agents *worse*, not better — the small, well-described
 | `readDocumentContent` | read | Extract the text of a document. |
 | `getDocumentPath` | read | Full path (ancestors) of a document, from root to its parent folder. |
 | `describeImage` | read | Vision: describe/caption an image or PDF, OCR its text, or answer a question about it. Needs a local chat model — degrades with a clear message when there is none. |
-| `writeFile` | write | Write text content to a new file. |
+| `writeFile` | write | Write text content to a new file. `autoFile=true` additionally lets smart filing choose its folder right after saving (needs `openfilz.ai.auto-file.active`). |
 | `createBlankDocument` | write | Create an empty Word, Excel, PowerPoint or text document (the same templates as the app's "New document" menu), ready to edit. |
 | `createFolder` | write | Create a folder. |
 | `moveDocuments` | write | Move files or folders into another folder. |
@@ -146,6 +146,7 @@ OpenAPI spec would make agents *worse*, not better — the small, well-described
 | `deleteDocument` | delete | Delete a document or folder (to the recycle bin when soft-delete is on). Requires the CLEANER role. |
 | `listVersions` | read | List a document's stored versions (versioned storage). |
 | `restoreVersion` | write | Restore a previous version as the current content. |
+| `getDocumentActivity` | read | The audit trail of a document or folder (who did what, when), most recent first. Needs the **AUDITOR** role, like `/api/v1/audit`. |
 | `downloadDocument` | read | Get a document's content — extracted text for text/PDF/Office, or a download link for binary files. |
 
 ### PDF tools
@@ -210,6 +211,17 @@ app — an agent never sees a signing link.
 The server also advertises usage guidance in its `initialize` response (the MCP `instructions`
 field), telling the calling agent to resolve names with `queryDocuments` first and that everything
 is scoped to the caller's permissions.
+
+### Smart filing tool
+
+`FilingAiToolsContributor` (chat + MCP, `READ_WRITE` only), on when `openfilz.ai.auto-file.active`:
+
+| Tool | Kind | What it does |
+|---|---|---|
+| `fileDocuments` | write | Let OpenFilz choose the right folder for up to 10 existing documents (the neighbour vote, then the model; a document stays where it is when nothing is confident enough) and report what moved where and why. The on-demand twin of the upload-time filing. |
+
+`queryDocuments` also accepts `category` (one of `openfilz.ai.insights.categories`) to list only
+documents whose AI-derived insight carries that category.
 
 ### Enterprise tools
 
