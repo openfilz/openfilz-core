@@ -64,6 +64,11 @@ public class DocumentController {
     @Autowired(required = false)
     private DocumentVersionService documentVersionService;
 
+    /** Smart filing on upload (design §13): schedules the filing job after a successful upload. */
+    @Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    private org.openfilz.dms.service.filing.AutoFileService autoFileService;
+
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Upload a single document",
             description = "Uploads a single file, optionally with metadata and a parent folder ID.")
@@ -72,10 +77,12 @@ public class DocumentController {
             @Parameter(description = "Target parent folder ID to store the file; if not sent or null, the file is stored at the root level") @RequestPart(name = "parentFolderId", required = false) String parentFolderId,
             @RequestPart(name = "metadata", required = false) String metadataJson,
             @Parameter(hidden = true) @RequestHeader(name = "Content-Length", required = false) Long contentLength,
-            @Parameter(description = ALLOW_DUPLICATE_FILE_NAME_PARAM_DESCRIPTION) @RequestParam(required = false, defaultValue = "false") Boolean allowDuplicateFileNames
+            @Parameter(description = ALLOW_DUPLICATE_FILE_NAME_PARAM_DESCRIPTION) @RequestParam(required = false, defaultValue = "false") Boolean allowDuplicateFileNames,
+            @Parameter(description = AUTO_FILE_PARAM_DESCRIPTION) @RequestParam(required = false) Boolean autoFile
             ) {
 
         return documentService.uploadDocument(filePart, contentLength, parentFolderId != null ? UUID.fromString(parentFolderId) : null, parseMetadata(metadataJson), allowDuplicateFileNames)
+                .flatMap(uploadResponse -> afterUpload(List.of(uploadResponse), autoFile).map(List::getFirst))
                 .map(uploadResponse -> ResponseEntity.status(HttpStatus.CREATED).body(uploadResponse));
     }
 
@@ -101,7 +108,8 @@ public class DocumentController {
                     schema = @Schema(type = "string", example = "[{\"filename\":\"file1.txt\",\"fileAttributes\":{\"metadata\":{\"country\": \"UK\", \"info\": {\"key\": \"Value\"}}}}, {\"filename\":\"file2.md\",\"fileAttributes\":{\"metadata\":{\"key1\": \"value1\"}}}]")
             )
             List<MultipleUploadFileParameter> parametersByFilename,
-            @Parameter(description = ALLOW_DUPLICATE_FILE_NAME_PARAM_DESCRIPTION) @RequestParam(required = false, defaultValue = "false") Boolean allowDuplicateFileNames) {
+            @Parameter(description = ALLOW_DUPLICATE_FILE_NAME_PARAM_DESCRIPTION) @RequestParam(required = false, defaultValue = "false") Boolean allowDuplicateFileNames,
+            @Parameter(description = AUTO_FILE_PARAM_DESCRIPTION) @RequestParam(required = false) Boolean autoFile) {
         final Map<String, MultipleUploadFileParameterAttributes> parametersByFilenameMap = (parametersByFilename == null
                 || parametersByFilename.isEmpty() ? Collections.emptyMap()
                 : parametersByFilename.stream().collect(Collectors.toMap(MultipleUploadFileParameter::filename, MultipleUploadFileParameter::fileAttributes)));
@@ -134,8 +142,25 @@ public class DocumentController {
                     });
                 })
                 .collectList()
+                .flatMap(responses -> afterUpload(responses, autoFile))
                 .map(this::buildMultipleUploadResponse)
                 .doOnSuccess(response -> log.info("Finished processing all files for /upload-multiple with status: {}", response.getStatusCode()));
+    }
+
+    static final String AUTO_FILE_PARAM_DESCRIPTION = "Smart filing: true asks OpenFilz to choose the destination folder "
+            + "of the uploaded file(s) after the upload (a job id comes back in autoFile.jobId); false leaves them where "
+            + "they are; absent = the user's own switch. Needs openfilz.ai.auto-file.active.";
+
+    /** Hands the successful uploads to smart filing when asked (or when the user's switch is on). */
+    private Mono<List<UploadResponse>> afterUpload(List<UploadResponse> responses, Boolean autoFile) {
+        if (autoFileService == null || Boolean.FALSE.equals(autoFile)) {
+            return Mono.just(responses);
+        }
+        return autoFileService.afterUpload(responses, autoFile)
+                .onErrorResume(e -> {
+                    log.warn("Smart filing could not be scheduled: {}", e.getMessage());
+                    return Mono.just(responses);
+                });
     }
 
     /**

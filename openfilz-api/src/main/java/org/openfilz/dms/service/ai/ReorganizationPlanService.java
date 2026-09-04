@@ -71,6 +71,13 @@ public class ReorganizationPlanService {
     public static final String STATUS_PARTIALLY_APPLIED = "PARTIALLY_APPLIED";
     public static final String STATUS_FAILED = "FAILED";
     public static final String STATUS_DISCARDED = "DISCARDED";
+    /** Smart filing found no confident destination: nothing moved, the record explains why. */
+    public static final String STATUS_SKIPPED = "SKIPPED";
+    /** A smart-filing move the user reverted. */
+    public static final String STATUS_UNDONE = "UNDONE";
+
+    public static final String ORIGIN_PROPOSAL = "PROPOSAL";
+    public static final String ORIGIN_AUTO_FILE = "AUTO_FILE";
 
     public static final int DEFAULT_MAX_DEPTH = 4;
     public static final int MAX_DEPTH = 10;
@@ -101,6 +108,252 @@ public class ReorganizationPlanService {
 
     /** What gets persisted: the model's request (re-validated on apply) and the view shown to the user. */
     record StoredPlan(ReorganizationPlanRequest request, ReorganizationPlanView view) {
+    }
+
+    /** Outcome of a smart-filing move: FILED, SKIPPED (with the blocking issue) or FAILED. */
+    public record FilingApplyResult(UUID planId, String status, String reason, UUID targetId, String targetPath) {
+    }
+
+    // ── smart filing (one-item plans, origin AUTO_FILE) ─────────────────────
+
+    /**
+     * Validate a one-move plan for {@code documentId}, persist it with origin AUTO_FILE and the
+     * decision details, and apply it at once. A blocked item is recorded as SKIPPED (nothing
+     * moves); an apply failure as FAILED.
+     */
+    public FilingApplyResult fileDocument(ReorganizationPlanRequest request, UUID documentId, Caller caller,
+                                          Map<String, Object> details) {
+        ReorganizationPlanView view = validate(request, caller);
+        Item item = view.items().isEmpty() ? null : view.items().getFirst();
+        OffsetDateTime now = OffsetDateTime.now();
+        AiReorganizationPlan entity = AiReorganizationPlan.builder()
+                .createdBy(caller.email() == null ? "anonymousUser" : caller.email())
+                .rootFolderId(view.rootFolderId())
+                .origin(ORIGIN_AUTO_FILE)
+                .documentId(documentId)
+                .details(Json.of(JSON.writeValueAsString(details == null ? Map.of() : details)))
+                .createdAt(now)
+                .build();
+        if (item == null || !item.applicable()) {
+            String issue = item == null ? "The document could not be resolved." : item.issue();
+            entity.setStatus(STATUS_SKIPPED);
+            entity.setPlan(Json.of(JSON.writeValueAsString(new StoredPlan(request,
+                    view.withPersistence(null, STATUS_SKIPPED, entity.getCreatedBy(), now, null, null)))));
+            entity.setResult(Json.of(JSON.writeValueAsString(List.of(new ItemResult(documentId, "SKIPPED", issue)))));
+            AiReorganizationPlan saved = planRepository.save(entity).block();
+            return new FilingApplyResult(saved == null ? null : saved.getId(), org.openfilz.dms.dto.response.FilingOutcome.SKIPPED,
+                    issue, null, item == null ? null : item.targetPath());
+        }
+        entity.setStatus(STATUS_PROPOSED);
+        entity.setPlan(Json.of(JSON.writeValueAsString(new StoredPlan(request,
+                view.withPersistence(null, STATUS_PROPOSED, entity.getCreatedBy(), now, null, null)))));
+        AiReorganizationPlan saved = planRepository.save(entity).block();
+        if (saved == null) {
+            throw new IllegalStateException("The filing record could not be saved.");
+        }
+        ReorganizationApplyResult result = apply(saved.getId(), List.of(documentId), caller);
+        if (result.moved() > 0) {
+            Document moved = blockWithAuth(documentRepository.findById(documentId), caller);
+            UUID targetId = moved == null ? null : moved.getParentId();
+            return new FilingApplyResult(saved.getId(), org.openfilz.dms.dto.response.FilingOutcome.FILED, null, targetId,
+                    item.targetPath());
+        }
+        String failure = result.plan().results() == null ? "the move failed" : result.plan().results().stream()
+                .filter(r -> documentId.equals(r.documentId())).map(ItemResult::detail).filter(Objects::nonNull)
+                .findFirst().orElse("the move failed");
+        return new FilingApplyResult(saved.getId(), org.openfilz.dms.dto.response.FilingOutcome.FAILED, failure, null, item.targetPath());
+    }
+
+    /** The user reverted a smart-filing move (the document was moved back by the caller). */
+    public void markUndone(UUID planId, Caller caller) {
+        AiReorganizationPlan entity = loadOwned(planId, caller);
+        if (!ORIGIN_AUTO_FILE.equals(entity.getOrigin())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only a smart-filing record can be undone.");
+        }
+        entity.setStatus(STATUS_UNDONE);
+        planRepository.save(entity).block();
+    }
+
+    /** The latest smart-filing record of a document, whoever filed it (the caller's read access is checked by the service). */
+    public java.util.Optional<org.openfilz.dms.dto.response.FilingOutcome> latestFiling(UUID documentId) {
+        AiReorganizationPlan entity = planRepository.findFirstByDocumentIdAndOriginOrderByCreatedAtDesc(documentId, ORIGIN_AUTO_FILE).block();
+        return java.util.Optional.ofNullable(entity).map(this::filingOutcomeOf);
+    }
+
+    /** A smart-filing record of the caller's. */
+    public java.util.Optional<org.openfilz.dms.dto.response.FilingOutcome> filingOf(UUID planId, Caller caller) {
+        AiReorganizationPlan entity = loadOwned(planId, caller);
+        if (!ORIGIN_AUTO_FILE.equals(entity.getOrigin())) {
+            return java.util.Optional.empty();
+        }
+        return java.util.Optional.of(filingOutcomeOf(entity));
+    }
+
+    @SuppressWarnings("unchecked")
+    private org.openfilz.dms.dto.response.FilingOutcome filingOutcomeOf(AiReorganizationPlan entity) {
+        Map<String, Object> details = Map.of();
+        if (entity.getDetails() != null) {
+            try {
+                details = JSON.readValue(entity.getDetails().asString(), Map.class);
+            } catch (Exception ignored) {
+                details = Map.of();
+            }
+        }
+        StoredPlan stored = storedPlan(entity);
+        Item item = stored.view().items().isEmpty() ? null : stored.view().items().getFirst();
+        String status = switch (entity.getStatus()) {
+            case STATUS_APPLIED, STATUS_PARTIALLY_APPLIED -> org.openfilz.dms.dto.response.FilingOutcome.FILED;
+            case STATUS_UNDONE -> org.openfilz.dms.dto.response.FilingOutcome.UNDONE;
+            case STATUS_FAILED -> org.openfilz.dms.dto.response.FilingOutcome.FAILED;
+            default -> org.openfilz.dms.dto.response.FilingOutcome.SKIPPED;
+        };
+        Object from = details.get("from");
+        Object confidence = details.get("confidence");
+        UUID targetId = null;
+        if (org.openfilz.dms.dto.response.FilingOutcome.FILED.equals(status) && entity.getDocumentId() != null) {
+            Document current = documentRepository.findById(entity.getDocumentId()).block();
+            targetId = current == null ? null : current.getParentId();
+        }
+        String reason = details.get("reason") == null ? null : details.get("reason").toString();
+        if (entity.getResult() != null && !org.openfilz.dms.dto.response.FilingOutcome.FILED.equals(status)) {
+            try {
+                List<ItemResult> results = JSON.readValue(entity.getResult().asString(),
+                        JSON.getTypeFactory().constructCollectionType(List.class, ItemResult.class));
+                if (results != null && !results.isEmpty() && results.getFirst().detail() != null) {
+                    reason = results.getFirst().detail();
+                }
+            } catch (Exception ignored) {
+                // keep the decision reason
+            }
+        }
+        return new org.openfilz.dms.dto.response.FilingOutcome(
+                entity.getDocumentId(),
+                item == null ? null : item.name(),
+                status,
+                from == null ? null : parseUuid(from.toString()),
+                details.get("fromPath") == null ? null : details.get("fromPath").toString(),
+                targetId,
+                item == null ? null : item.targetPath(),
+                details.get("stage") == null ? null : details.get("stage").toString(),
+                confidence instanceof Number n ? n.doubleValue() : null,
+                reason,
+                entity.getId(),
+                entity.getAppliedAt() != null ? entity.getAppliedAt() : entity.getCreatedAt());
+    }
+
+    /** Absolute path of a folder (null = "/"), readable form for messages and records. */
+    public String pathOf(UUID folderId, Caller caller) {
+        return absolutePath(folderId, new HashMap<>(), caller);
+    }
+
+    /** Path of {@code folderId} relative to {@code scopeRootId} ("" when they are the same). */
+    public String relativePath(UUID folderId, UUID scopeRootId, Caller caller) {
+        Map<UUID, Document> cache = new HashMap<>();
+        String folder = absolutePath(folderId, cache, caller);
+        String scope = absolutePath(scopeRootId, cache, caller);
+        if (folder.equals(scope)) return "";
+        String prefix = "/".equals(scope) ? "/" : scope + "/";
+        return folder.startsWith(prefix) ? folder.substring(prefix.length()) : folder;
+    }
+
+    /** Whether {@code folderId} is {@code scopeRootId} or below it (null scope = everywhere). */
+    public boolean isWithin(UUID folderId, UUID scopeRootId, Map<UUID, Boolean> cache, Caller caller) {
+        if (scopeRootId == null) return true;
+        if (folderId == null) return false;
+        Boolean cached = cache.get(folderId);
+        if (cached != null) return cached;
+        UUID current = folderId;
+        int guard = 0;
+        boolean within = false;
+        while (current != null && guard++ < 64) {
+            if (current.equals(scopeRootId)) {
+                within = true;
+                break;
+            }
+            Document doc = blockWithAuth(documentRepository.findById(current), caller);
+            current = doc == null ? null : doc.getParentId();
+        }
+        cache.put(folderId, within);
+        return within;
+    }
+
+    /** Whether the relative path resolves to an existing folder under the scope root. */
+    public boolean folderExists(UUID scopeRootId, String relativePath, Caller caller) {
+        List<String> segments = normalizePath(relativePath);
+        if (segments == null) return false;
+        if (segments.isEmpty()) return true;
+        Map<UUID, Document> docCache = new HashMap<>();
+        TargetResolution target = resolveTarget(scopeRootId, absolutePath(scopeRootId, docCache, caller), segments,
+                new HashMap<>(), new HashMap<>(), docCache, caller);
+        return target.exists();
+    }
+
+    /** How many folders the relative path would create under the scope root. */
+    public int missingDepth(UUID scopeRootId, String relativePath, Caller caller) {
+        List<String> segments = normalizePath(relativePath);
+        if (segments == null || segments.isEmpty()) return 0;
+        Map<UUID, Document> docCache = new HashMap<>();
+        TargetResolution target = resolveTarget(scopeRootId, absolutePath(scopeRootId, docCache, caller), segments,
+                new HashMap<>(), new HashMap<>(), docCache, caller);
+        return target.missingPaths().size();
+    }
+
+    /**
+     * The folders of a scope for the filing model: each with its file count, category histogram
+     * (from the insights, one query) and three example names. Capped at 500 folders / 2 000 files.
+     */
+    public String folderInventory(UUID scopeRootId, Caller caller) {
+        Map<String, List<Document>> childrenCache = new HashMap<>();
+        String rootPath = absolutePath(scopeRootId, new HashMap<>(), caller);
+        record FolderRow(UUID id, String path, List<Document> files) {
+        }
+        List<FolderRow> rows = new ArrayList<>();
+        rows.add(new FolderRow(scopeRootId, rootPath, new ArrayList<>()));
+        Deque<Object[]> queue = new ArrayDeque<>();
+        queue.add(new Object[]{scopeRootId, rootPath, rows.getFirst()});
+        int folders = 0;
+        int files = 0;
+        while (!queue.isEmpty() && folders < 500 && files < 2000) {
+            Object[] entry = queue.poll();
+            UUID folderId = (UUID) entry[0];
+            String path = (String) entry[1];
+            FolderRow row = (FolderRow) entry[2];
+            for (Document child : children(folderId, childrenCache, caller)) {
+                if (child.getType() == DocumentType.FOLDER) {
+                    if (++folders >= 500) break;
+                    FolderRow sub = new FolderRow(child.getId(), join(path, child.getName()), new ArrayList<>());
+                    rows.add(sub);
+                    queue.add(new Object[]{child.getId(), sub.path(), sub});
+                } else {
+                    row.files().add(child);
+                    if (++files >= 2000) break;
+                }
+            }
+        }
+        List<UUID> fileIds = rows.stream().flatMap(r -> r.files().stream()).map(Document::getId).filter(Objects::nonNull).toList();
+        Map<UUID, org.openfilz.dms.dto.response.DocumentInsightView> insights = insightsOf(fileIds, caller);
+        StringBuilder sb = new StringBuilder("Folders of the scope (path (id): files, categories; examples):\n");
+        for (FolderRow row : rows) {
+            Map<String, Integer> categories = new java.util.TreeMap<>();
+            for (Document file : row.files()) {
+                org.openfilz.dms.dto.response.DocumentInsightView insight = insights.get(file.getId());
+                if (insight != null && insight.category() != null) {
+                    categories.merge(insight.category(), 1, Integer::sum);
+                }
+            }
+            sb.append("  ").append(row.path()).append(row.id() == null ? " (scope root)" : " (id " + row.id() + ")")
+                    .append(": ").append(row.files().size()).append(" file(s)");
+            if (!categories.isEmpty()) {
+                sb.append(", ").append(categories.entrySet().stream()
+                        .sorted((a, b) -> b.getValue().compareTo(a.getValue()))
+                        .map(e -> e.getKey() + " " + e.getValue()).collect(Collectors.joining(", ")));
+            }
+            if (!row.files().isEmpty()) {
+                sb.append("; e.g. ").append(row.files().stream().limit(3).map(Document::getName).collect(Collectors.joining(", ")));
+            }
+            sb.append('\n');
+        }
+        return sb.toString();
     }
 
     // ── inventory ───────────────────────────────────────────────────────────
@@ -795,7 +1048,8 @@ public class ReorganizationPlanService {
 
     private AiReorganizationPlan loadOwned(UUID planId, Caller caller) {
         AiReorganizationPlan entity = planId == null ? null : planRepository.findById(planId).block();
-        if (entity == null || caller.email() == null || !caller.email().equalsIgnoreCase(entity.getCreatedBy())) {
+        String owner = caller.email() == null ? "anonymousUser" : caller.email();
+        if (entity == null || !owner.equalsIgnoreCase(entity.getCreatedBy())) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Plan not found");
         }
         return entity;

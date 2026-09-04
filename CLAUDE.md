@@ -295,6 +295,23 @@ themselves may opt in. Tests: `PdfCompositionEngineTest`, `PageRangeParserTest`,
 `PdfTestFiles`), `PdfToolsDisabledIT`; the MCP suites include the PDF tools in their advertised-set assertions
 (`McpProtocolIT.argumentsFor`).
 
+### Document insights & smart filing (AI)
+See `docs/ai.md` §3b and the design in `openfilz-enterprise/docs/smart-reorganization.md`. `ai_document_insights` (V1_9) holds
+what OpenFilz derives from a file: tier 1 = Tika file metadata captured from the parse indexing/embedding already run
+(`TikaService.processResource(path, resource, onMetadata)`, `TikaFileMetadata`, `DocumentInsightStore`); tier 2 = the model's
+category (closed list `openfilz.ai.insights.categories`) / summary / keywords / language / entities (`AiDocumentInsightService`,
+bounded queue, daily cap, backfill `POST /api/v1/ai/insights/backfill`; `NoOp…` + `DocumentInsightConfig` = native-safe runtime
+toggle `openfilz.ai.insights.active`; mirrored to OpenSearch `category`/`summary`/`language`). `GET /documents/{id}/insights`,
+`getMetadata` block, `queryDocuments(category)`. Smart filing (`openfilz.ai.auto-file.active`, `DefaultAutoFileService` +
+`NoOp…` + `AutoFileConfig`): `autoFile` on `/upload`, `/upload-multiple`, TUS finalize, `writeFile`, or the user's switch
+(`user_ai_preferences`, `GET/PUT /settings/ai/preferences`); the neighbour vote on the vector store (live `documents.parent_id`,
+never the chunk metadata) then the model, applied as a one-item `AiReorganizationPlan` (`origin = AUTO_FILE`, `document_id`,
+`details`, V1_10) via `ReorganizationPlanService.fileDocument`; `/api/v1/ai/auto-file/**` (job, undo, filing record),
+`fileDocuments` tool (`FilingAiToolsContributor`). Core publishes `DocumentFiledEvent` / `DocumentInsightsReadyEvent`
+(Spring events) for the EE webhook producer. Tests: `DocumentInsightsIT`, `DocumentInsightsTier2IT` (AiTestConfig answers the
+`INSIGHTS_V1` / `AUTOFILE_V1` prompts), `AutoFileIT`, `AutoFileDecisionTest`, `InsightResultTest`, `TikaFileMetadataTest`.
+Any contributor that opts into the chat must also be excluded in `AiRealLlmE2EIT` (small model).
+
 ### Settings API
 - **SettingsController** (`/api/v1/settings`) — exposes app config and user preferences to frontend
 

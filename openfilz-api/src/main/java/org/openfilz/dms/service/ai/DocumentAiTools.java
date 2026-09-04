@@ -121,6 +121,9 @@ public class DocumentAiTools {
     /** Document insights (file metadata + AI-derived category / summary), shown by getMetadata. Null-tolerated. */
     private final DocumentInsightStore insightStore;
 
+    /** Smart filing (writeFile's autoFile). Null-tolerated; null or inactive = the option is refused. */
+    private final org.openfilz.dms.service.filing.AutoFileService autoFileService;
+
     /** For parsing the metadata-map tool arguments, which arrive as a JSON object string. */
     private static final JsonMapper JSON = JsonMapper.builder().build();
     /**
@@ -145,7 +148,8 @@ public class DocumentAiTools {
                            DownloadTokenService downloadTokenService,
                            @Nullable AuditService auditService,
                            @Nullable IndexService indexService,
-                           @Nullable DocumentInsightStore insightStore) {
+                           @Nullable DocumentInsightStore insightStore,
+                           @Nullable org.openfilz.dms.service.filing.AutoFileService autoFileService) {
         this.documentService = documentService;
         this.documentRepository = documentRepository;
         this.storageService = storageService;
@@ -159,6 +163,7 @@ public class DocumentAiTools {
         this.auditService = auditService;
         this.indexService = indexService;
         this.insightStore = insightStore;
+        this.autoFileService = autoFileService;
     }
 
     /**
@@ -520,7 +525,9 @@ public class DocumentAiTools {
     public String writeFile(
             @ToolParam(description = "The filename to create (e.g., 'summary.md', 'report.txt')") String fileName,
             @ToolParam(description = "The text content to write into the file") String content,
-            @ToolParam(required = false, description = "The folder name to save in, or null for root") String folderName
+            @ToolParam(required = false, description = "The folder name to save in, or null for root") String folderName,
+            @ToolParam(required = false, description = "true = let OpenFilz choose the destination folder after saving "
+                    + "(smart filing; the file lands in folderName first); default false") Boolean autoFile
     ) {
         String roleDenial = denyIfNotAllowed("writeFile", ToolCapability.DOCUMENT_WRITE);
         if (roleDenial != null) return roleDenial;
@@ -558,6 +565,9 @@ public class DocumentAiTools {
                     recordFolderModified(parentId);
                     recordAction("Created file '%s'".formatted(fileName));
                     log.info("[AI-TOOL] writeFile: created '{}' ({} bytes) in folder {}", fileName, fileSize, parentId);
+                    if (Boolean.TRUE.equals(autoFile)) {
+                        return toolResult("writeFile", "File '%s' created successfully. %s".formatted(fileName, fileNow(response.id())));
+                    }
                     return toolResult("writeFile", "File '%s' created successfully.".formatted(fileName));
                 }
                 return toolResult("writeFile", "Failed to save the file%s.".formatted(
@@ -958,6 +968,27 @@ public class DocumentAiTools {
         } catch (Exception e) {
             log.error("Error reading document content", e);
             return "Error reading document: " + e.getMessage();
+        }
+    }
+
+    /** Smart filing of a freshly written file, inline (the caller asked for it with autoFile=true). */
+    private String fileNow(UUID documentId) {
+        if (autoFileService == null || !autoFileService.isActive()) {
+            return "Smart filing is not active on this deployment, so it stayed where it was saved.";
+        }
+        try {
+            var outcome = autoFileService.fileNow(documentId,
+                    new org.openfilz.dms.service.ai.ReorganizationPlanService.Caller(userEmail, authentication), null);
+            if (org.openfilz.dms.dto.response.FilingOutcome.FILED.equals(outcome.status())) {
+                recordFolderModified(outcome.fromFolderId());
+                recordFolderModified(outcome.toFolderId());
+                recordAction("Filed '%s' into %s".formatted(outcome.name(), outcome.toPath()));
+                return "Smart filing moved it to %s (%s).".formatted(outcome.toPath(), outcome.reason());
+            }
+            return "Smart filing left it in place: %s.".formatted(outcome.reason());
+        } catch (Exception e) {
+            log.warn("[AI-TOOL] writeFile smart filing failed for {}: {}", documentId, e.toString());
+            return "Smart filing failed: " + e.getMessage();
         }
     }
 

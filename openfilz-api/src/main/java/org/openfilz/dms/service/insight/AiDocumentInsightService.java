@@ -76,6 +76,7 @@ public class AiDocumentInsightService implements DocumentInsightService {
     private final StorageService storageService;
     private final TikaService tikaService;
     private final ObjectProvider<IndexService> indexServiceProvider;
+    private final org.springframework.context.ApplicationEventPublisher events;
 
     private final Sinks.Many<Task> queue = Sinks.many().unicast().onBackpressureBuffer();
     private final Map<UUID, Job> jobs = new ConcurrentHashMap<>();
@@ -87,7 +88,8 @@ public class AiDocumentInsightService implements DocumentInsightService {
     public AiDocumentInsightService(AiProperties aiProperties, DocumentInsightStore store,
                                     UserChatClientResolver resolver, AiFallbackChain fallbackChain,
                                     DocumentRepository documentRepository, StorageService storageService,
-                                    TikaService tikaService, ObjectProvider<IndexService> indexServiceProvider) {
+                                    TikaService tikaService, ObjectProvider<IndexService> indexServiceProvider,
+                                    org.springframework.context.ApplicationEventPublisher events) {
         this.aiProperties = aiProperties;
         this.store = store;
         this.resolver = resolver;
@@ -96,6 +98,7 @@ public class AiDocumentInsightService implements DocumentInsightService {
         this.storageService = storageService;
         this.tikaService = tikaService;
         this.indexServiceProvider = indexServiceProvider;
+        this.events = events;
     }
 
     /** One queued enrichment: the document to enrich, the text head when already known, the job it belongs to. */
@@ -264,6 +267,7 @@ public class AiDocumentInsightService implements DocumentInsightService {
                     return store.saveEnrichment(document.getId(), entry.getValue(), modelName, PROMPT_VERSION)
                             .then(mirrorToIndex(document.getId(), entry.getValue()))
                             .then(finish(task, AiDocumentInsight.STATUS_DONE))
+                            .doOnSuccess(v -> publishReady(document, entry.getValue()))
                             .doOnSuccess(v -> log.info("[INSIGHTS] '{}' ({}) -> {} [{}]", document.getName(), document.getId(),
                                     entry.getValue().category(), modelName));
                 })
@@ -272,6 +276,15 @@ public class AiDocumentInsightService implements DocumentInsightService {
                     log.warn("[INSIGHTS] '{}' ({}) failed: {}", document.getName(), document.getId(), reason);
                     return outcome(task, AiDocumentInsight.STATUS_FAILED, reason);
                 });
+    }
+
+    private void publishReady(Document document, InsightResult result) {
+        try {
+            events.publishEvent(new org.openfilz.dms.event.DocumentInsightsReadyEvent(document.getId(), document.getName(),
+                    result.category(), result.summary(), result.language(), result.keywords(), result.entities()));
+        } catch (Exception e) {
+            log.debug("[INSIGHTS] event publication failed for {}: {}", document.getId(), e.getMessage());
+        }
     }
 
     private Mono<Void> outcome(Task task, String status, String reason) {

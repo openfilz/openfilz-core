@@ -197,7 +197,7 @@ public class DocumentAiToolsIT extends TestContainersBaseConfig {
         String result = documentAiTools.writeFile(
                 "ai-note-" + UUID.randomUUID() + ".txt",
                 "some content",
-                "no-such-folder-" + UUID.randomUUID());
+                "no-such-folder-" + UUID.randomUUID(), null);
 
         Assertions.assertTrue(result.contains("No folder named"),
                 "Should report the missing target folder, got: " + result);

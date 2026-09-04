@@ -82,6 +82,37 @@ public class AiProperties {
     /** Tier-2 document insights (AI-derived category / summary / entities at ingestion). */
     private Insights insights = new Insights();
 
+    /** Smart filing on upload: OpenFilz chooses the destination folder on the user's request. */
+    private AutoFile autoFile = new AutoFile();
+
+    @Data
+    public static class AutoFile {
+        /** Master switch; needs {@code openfilz.ai.active} and embeddings. */
+        private boolean active = false;
+        /** Initial value of the per-user switch. */
+        private boolean defaultForUsers = false;
+        /** Deployment ceiling for the per-user "may create folders" option. */
+        private boolean allowNewFolders = true;
+        /** Documents one upload batch may file; the rest stay put. */
+        private int maxPerBatch = 200;
+        /** Concurrent filings. */
+        private int concurrency = 2;
+        /** Nearest documents consulted by the neighbour vote. */
+        private int neighbourTopK = 20;
+        /** The leading folder must hold this share of the neighbours' similarity weight. */
+        private double neighbourMinShare = 0.6;
+        /** ...and its best neighbour must be at least this similar. */
+        private double neighbourMinSimilarity = 0.5;
+        /** Minimum model confidence to move into an existing folder. */
+        private double llmMinConfidence = 0.7;
+        /** Minimum model confidence to create a new folder. */
+        private double newFolderMinConfidence = 0.85;
+        /** New folders may be at most this many levels below an existing one. */
+        private int newFolderMaxDepth = 2;
+        /** How long a filing waits for the document's tier-2 insight before deciding without it. */
+        private Duration waitForInsights = Duration.ofSeconds(30);
+    }
+
     @Data
     public static class Insights {
         /** Runtime toggle of the enrichment; needs {@code openfilz.ai.active} too. */

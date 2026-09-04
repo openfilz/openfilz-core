@@ -82,7 +82,7 @@ class AiRagAccessFilterTest {
                 new org.openfilz.dms.security.DownloadTokenService(
                         new org.openfilz.dms.config.DownloadTokenProperties()),
                 // no audit trail, full-text index nor insight store in this unit test
-                null, null, null);
+                null, null, null, null);
     }
 
     private static Document chunk(UUID documentId, String name, String text, double score) {

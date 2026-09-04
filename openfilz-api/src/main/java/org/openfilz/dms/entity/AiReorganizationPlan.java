@@ -52,4 +52,16 @@ public class AiReorganizationPlan {
 
     @Column("applied_at")
     private OffsetDateTime appliedAt;
+
+    /** PROPOSAL (chat / MCP, the default) or AUTO_FILE (smart filing). */
+    @Column("origin")
+    private String origin;
+
+    /** The single document of an AUTO_FILE plan (its filing record). */
+    @Column("document_id")
+    private UUID documentId;
+
+    /** Decision details of a filing: stage, confidence, reason, from. */
+    @Column("details")
+    private Json details;
 }

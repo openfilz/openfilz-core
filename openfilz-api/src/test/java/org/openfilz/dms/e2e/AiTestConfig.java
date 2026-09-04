@@ -88,6 +88,13 @@ public class AiTestConfig {
                             ```""";
                     return new ChatResponse(List.of(new Generation(new AssistantMessage(answer))));
                 });
+        // Smart filing (stage 2): the filing prompt carries its own marker; the mock proposes a
+        // new folder with high confidence (AutoFileIT relies on it when no neighbours exist yet).
+        when(chatModel.call(org.mockito.ArgumentMatchers.argThat((org.springframework.ai.chat.prompt.Prompt p) ->
+                p != null && p.getContents() != null && p.getContents().contains("AUTOFILE_V1"))))
+                .thenAnswer(invocation -> new ChatResponse(List.of(new Generation(new AssistantMessage("""
+                        {"target": "Filed-by-model", "createFolders": ["Filed-by-model"], "confidence": 0.95,
+                         "reason": "The mocked model files everything into Filed-by-model"}""")))));
         return chatModel;
     }
 

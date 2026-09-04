@@ -109,6 +109,8 @@ public class McpProtocolIT extends AbstractMcpIT {
         expected.addAll(org.openfilz.dms.service.mcp.OrganizeAiToolsContributor.MUTATING_TOOLS);
         expected.addAll(org.openfilz.dms.service.mcp.SignatureAiToolsContributor.READ_ONLY_TOOLS);
         expected.addAll(org.openfilz.dms.service.mcp.SignatureAiToolsContributor.MUTATING_TOOLS);
+        expected.addAll(org.openfilz.dms.service.mcp.FilingAiToolsContributor.READ_ONLY_TOOLS);
+        expected.addAll(org.openfilz.dms.service.mcp.FilingAiToolsContributor.MUTATING_TOOLS);
 
         assertThat(advertisedToolNames()).containsExactlyInAnyOrderElementsOf(expected);
     }
@@ -443,6 +445,8 @@ public class McpProtocolIT extends AbstractMcpIT {
                     {"documentName":"%s"}""".formatted(probe);
             case "getDocumentActivity" -> """
                     {"document":"%s","limit":5}""".formatted(probe);
+            case "fileDocuments" -> """
+                    {"documentIds":"%s"}""".formatted(UUID.randomUUID());
             case "getDocumentPath" -> """
                     {"documentId":"%s"}""".formatted(UUID.randomUUID());
             case "describeImage" -> """

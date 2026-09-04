@@ -46,7 +46,7 @@ class DocumentAiToolsIndexedContentTest {
                 null, new PermitAllAiAccessPolicy(), (authentication, capability) -> true,
                 mock(DocumentVersionService.class), new CommonProperties(),
                 new DownloadTokenService(new DownloadTokenProperties()),
-                null, indexService, null);
+                null, indexService, null, null);
     }
 
     @Test

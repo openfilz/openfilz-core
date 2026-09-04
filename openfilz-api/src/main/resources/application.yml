@@ -286,6 +286,24 @@ openfilz:
       concurrency: ${OPENFILZ_AI_INSIGHTS_CONCURRENCY:2}
       daily-limit: ${OPENFILZ_AI_INSIGHTS_DAILY_LIMIT:2000}
       categories: ${OPENFILZ_AI_INSIGHTS_CATEGORIES:invoice,quote,contract,report,letter,cv,presentation,spreadsheet,form,id-document,receipt,minutes,specification,manual,other}
+    # Smart filing on upload (design §13): on the user's explicit request (a remembered switch or
+    # autoFile=true on the upload), OpenFilz chooses the destination folder — the nearest documents'
+    # folder (one vector query, no model call) or, when they disagree, the model's choice among the
+    # scope's folders. Asynchronous: the upload lands where it was dropped and moves seconds later;
+    # below the thresholds it stays; every move is a normal audited move with an undo.
+    auto-file:
+      active: ${OPENFILZ_AI_AUTO_FILE_ACTIVE:false}
+      default-for-users: ${OPENFILZ_AI_AUTO_FILE_DEFAULT:false}
+      allow-new-folders: ${OPENFILZ_AI_AUTO_FILE_NEW_FOLDERS:true}
+      max-per-batch: 200
+      concurrency: 2
+      neighbour-top-k: 20
+      neighbour-min-share: 0.6
+      neighbour-min-similarity: 0.5
+      llm-min-confidence: 0.7
+      new-folder-min-confidence: 0.85
+      new-folder-max-depth: 2
+      wait-for-insights: 30s
     reorganization:
       inventory-cache-ttl: ${OPENFILZ_AI_REORG_INVENTORY_CACHE_TTL:2m}
       plan-rate-limit: ${OPENFILZ_AI_REORG_PLAN_RATE_LIMIT:20}

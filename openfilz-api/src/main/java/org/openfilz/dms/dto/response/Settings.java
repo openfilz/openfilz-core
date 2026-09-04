@@ -8,6 +8,8 @@ public record Settings(Integer emptyBinInterval, Integer fileQuotaMB, Integer us
                        boolean aiUserSettingsEnabled,
                        /** True when tier-2 document insights (AI category / summary at upload) are on: the frontend shows the Insights section and category facets. */
                        boolean aiInsightsActive,
+                       /** True when smart filing on upload is on: the upload area shows the "Let OpenFilz choose the folder" switch. */
+                       boolean aiAutoFileActive,
                        boolean signatureActive,
                        /** True when the PDF tools (merge / split / rotate / organize pages) are enabled — the frontend shows the PDF actions. */
                        boolean pdfToolsActive,
