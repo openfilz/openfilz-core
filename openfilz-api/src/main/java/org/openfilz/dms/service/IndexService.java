@@ -25,6 +25,15 @@ public interface IndexService {
 
     Mono<Void> indexDocumentStream(Flux<String> textFragments, UUID documentId);
 
+    /**
+     * The indexed full text of a document, or empty when the index holds none for it (not
+     * extractable, not indexed yet, or an index service without content storage). Lets the AI
+     * tools reuse the text extracted at upload instead of downloading the file and parsing it again.
+     */
+    default Mono<String> getContent(UUID documentId) {
+        return Mono.empty();
+    }
+
     default Mono<Void> indexDocMetadataMono(Document document) {
         return newOpenSearchDocumentMetadata(document)
                 .flatMap(openDoc -> indexMetadata(document.getId(), openDoc));

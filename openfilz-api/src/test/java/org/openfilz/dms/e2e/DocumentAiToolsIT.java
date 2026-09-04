@@ -277,4 +277,23 @@ public class DocumentAiToolsIT extends TestContainersBaseConfig {
                 .expectBody(FolderResponse.class)
                 .returnResult().getResponseBody();
     }
+
+    // ========================= getDocumentActivity =========================
+
+    @Test
+    void getDocumentActivity_listsTheUploadMostRecentFirst() {
+        UploadResponse uploaded = uploadDocument(newFileBuilder());
+
+        String result = documentAiTools.getDocumentActivity(uploaded.id().toString(), 10);
+
+        Assertions.assertTrue(result.contains("Activity of '" + uploaded.name() + "'"), result);
+        Assertions.assertTrue(result.contains("UPLOAD"), "the upload must be listed: " + result);
+        Assertions.assertTrue(result.contains("timestamp | user | action | details"), result);
+    }
+
+    @Test
+    void getDocumentActivity_unknownDocument_notFound() {
+        String result = documentAiTools.getDocumentActivity(UUID.randomUUID().toString(), null);
+        Assertions.assertTrue(result.contains("not found"), result);
+    }
 }

@@ -28,7 +28,14 @@ public interface DocumentRepository extends ReactiveCrudRepository<Document, UUI
 
     Mono<Boolean> existsByNameAndParentIdAndActiveIsTrue(String name, UUID parentId);
 
-    Flux<Document> findByNameContainingIgnoreCaseAndActiveTrue(String name);
+    /**
+     * Name-fallback resolution for the AI tools: at most 50 active documents whose name contains
+     * the fragment, by name. An unindexed {@code ILIKE '%...%'} scan, bounded on purpose.
+     */
+    Flux<Document> findTop50ByNameContainingIgnoreCaseAndActiveTrueOrderByNameAsc(String name);
+
+    /** Active documents with exactly this name (case-insensitive): the reorganisation plan's name fallback. */
+    Flux<Document> findByNameIgnoreCaseAndActiveTrue(String name);
 
     /** Active root-level documents (the reorganisation inventory walks the tree from here). */
     Flux<Document> findByParentIdIsNullAndActiveIsTrue();

@@ -72,6 +72,25 @@ public class AiProperties {
     }
 
     /**
+     * Reorganisation tools ({@code planReorganization}): inventory cache and per-user rate cap.
+     * See {@code ReorganizationInventoryCache}.
+     */
+    private Reorganization reorganization = new Reorganization();
+
+    @Data
+    public static class Reorganization {
+        /**
+         * How long a produced inventory is served again for the same user and request shape. It
+         * is dropped earlier as soon as one of the user's tool calls mutates the library. Zero
+         * disables the cache.
+         */
+        private Duration inventoryCacheTtl = Duration.ofMinutes(2);
+        /** Inventories a user may produce per {@link #planRateWindow}; cached hits do not count. Zero disables the cap. */
+        private int planRateLimit = 20;
+        private Duration planRateWindow = Duration.ofMinutes(10);
+    }
+
+    /**
      * Ollama provider switches.
      */
     private Provider ollama = new Provider();

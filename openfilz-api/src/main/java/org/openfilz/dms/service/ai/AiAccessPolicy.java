@@ -1,8 +1,14 @@
 package org.openfilz.dms.service.ai;
 
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Per-user document access policy consulted by the AI feature (tools, RAG retrieval).
@@ -38,5 +44,30 @@ public interface AiAccessPolicy {
     /** Can the user create content at the root level? */
     default Mono<Boolean> canCreateAtRoot(String userEmail) {
         return Mono.just(true);
+    }
+
+    /**
+     * The subset of {@code documentIds} the user can read, decided in one call. The default loops
+     * over {@link #canRead}; an implementation with a per-document permission model (the
+     * enterprise edition) overrides it with a single query, so the reorganisation inventory and
+     * plan validation ask once per folder or plan instead of once per document.
+     */
+    default Mono<Set<UUID>> readable(Collection<UUID> documentIds, String userEmail) {
+        return filterBy(documentIds, id -> canRead(id, userEmail));
+    }
+
+    /** The subset of {@code documentIds} the user can modify, decided in one call (see {@link #readable}). */
+    default Mono<Set<UUID>> modifiable(Collection<UUID> documentIds, String userEmail) {
+        return filterBy(documentIds, id -> canModify(id, userEmail));
+    }
+
+    private static Mono<Set<UUID>> filterBy(Collection<UUID> documentIds, Function<UUID, Mono<Boolean>> check) {
+        if (documentIds == null || documentIds.isEmpty()) {
+            return Mono.just(Set.of());
+        }
+        return Flux.fromIterable(new LinkedHashSet<>(documentIds))
+                .filterWhen(id -> check.apply(id).defaultIfEmpty(false))
+                .collect(Collectors.toCollection(LinkedHashSet::new))
+                .map(set -> (Set<UUID>) set);
     }
 }

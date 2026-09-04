@@ -15,6 +15,10 @@ import org.openfilz.dms.config.CommonProperties;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.security.DownloadTokenService;
 import org.openfilz.dms.service.DocumentVersionService;
+import org.openfilz.dms.dto.audit.AuditLog;
+import org.openfilz.dms.service.AuditService;
+import org.openfilz.dms.service.IndexService;
+import org.springframework.lang.Nullable;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.Arrays;
@@ -103,6 +107,15 @@ public class DocumentAiTools {
      */
     private final DownloadTokenService downloadTokenService;
 
+    /** Audit trail, for {@code getDocumentActivity}. Null-tolerated for direct unit construction. */
+    private final AuditService auditService;
+
+    /**
+     * The full-text index when full-text search is active, null otherwise: {@code readDocumentContent}
+     * serves the text extracted at upload from it instead of downloading the file and running Tika again.
+     */
+    private final IndexService indexService;
+
     /** For parsing the metadata-map tool arguments, which arrive as a JSON object string. */
     private static final JsonMapper JSON = JsonMapper.builder().build();
     /**
@@ -124,7 +137,9 @@ public class DocumentAiTools {
                            AiToolRolePolicy rolePolicy,
                            DocumentVersionService versionService,
                            CommonProperties commonProperties,
-                           DownloadTokenService downloadTokenService) {
+                           DownloadTokenService downloadTokenService,
+                           @Nullable AuditService auditService,
+                           @Nullable IndexService indexService) {
         this.documentService = documentService;
         this.documentRepository = documentRepository;
         this.storageService = storageService;
@@ -135,6 +150,8 @@ public class DocumentAiTools {
         this.versionService = versionService;
         this.commonProperties = commonProperties;
         this.downloadTokenService = downloadTokenService;
+        this.auditService = auditService;
+        this.indexService = indexService;
     }
 
     /**
@@ -686,7 +703,7 @@ public class DocumentAiTools {
                         doc = canRead(id) ? blockWithAuth(documentRepository.findById(id)) : null;
                     } else {
                         // Search by name — skip candidates the user cannot see
-                        var found = documentRepository.findByNameContainingIgnoreCaseAndActiveTrue(trimmed)
+                        var found = documentRepository.findTop50ByNameContainingIgnoreCaseAndActiveTrueOrderByNameAsc(trimmed)
                                 .collectList().block();
                         if (found != null) {
                             var readable = found.stream().filter(d -> canRead(d.getId())).findFirst();
@@ -770,7 +787,7 @@ public class DocumentAiTools {
             return ref.id();
         }
         var found = blockWithAuth(
-                documentRepository.findByNameContainingIgnoreCaseAndActiveTrue(nameOrId).collectList());
+                documentRepository.findTop50ByNameContainingIgnoreCaseAndActiveTrueOrderByNameAsc(nameOrId).collectList());
         if (found == null) {
             return null;
         }
@@ -786,7 +803,7 @@ public class DocumentAiTools {
         var ref = documentRegistry.get(nameOrId);
         if (ref != null) return ref.id();
         // Search DB — skip candidates the user cannot see
-        var found = documentRepository.findByNameContainingIgnoreCaseAndActiveTrue(nameOrId)
+        var found = documentRepository.findTop50ByNameContainingIgnoreCaseAndActiveTrueOrderByNameAsc(nameOrId)
                 .filter(d -> d.getType() == org.openfilz.dms.enums.DocumentType.FOLDER)
                 .collectList().block();
         if (found != null) {
@@ -811,7 +828,7 @@ public class DocumentAiTools {
             UUID id = resolveDocumentToId(documentName);
             if (id == null) {
                 // Also try searching files — skip candidates the user cannot see
-                var found = documentRepository.findByNameContainingIgnoreCaseAndActiveTrue(documentName)
+                var found = documentRepository.findTop50ByNameContainingIgnoreCaseAndActiveTrueOrderByNameAsc(documentName)
                         .collectList().block();
                 if (found != null) {
                     id = found.stream().filter(d -> canRead(d.getId()))
@@ -860,7 +877,7 @@ public class DocumentAiTools {
                 UUID folderId = resolveToId(folderName);
                 if (folderId == null) {
                     // Try searching for the folder — skip candidates the user cannot see
-                    var folders = documentRepository.findByNameContainingIgnoreCaseAndActiveTrue(folderName)
+                    var folders = documentRepository.findTop50ByNameContainingIgnoreCaseAndActiveTrueOrderByNameAsc(folderName)
                             .filter(d -> d.getType() == org.openfilz.dms.enums.DocumentType.FOLDER)
                             .collectList().block();
                     if (folders != null) {
@@ -917,10 +934,14 @@ public class DocumentAiTools {
             register(doc);
 
             // Load the file from storage and extract text with Tika
-            Resource resource = blockWithAuth(storageService.loadFile(doc.getStoragePath()));
-            if (resource == null) return "Could not load the file from storage.";
-
-            String fullText = extractText(resource);
+            // Prefer the text the full-text indexing pass already extracted: no storage download,
+            // no second Tika parse. Falls back to the file when the index holds nothing for it.
+            String fullText = indexedText(doc);
+            if (fullText == null) {
+                Resource resource = blockWithAuth(storageService.loadFile(doc.getStoragePath()));
+                if (resource == null) return "Could not load the file from storage.";
+                fullText = extractText(resource);
+            }
             if (fullText == null) {
                 return "Could not extract text from this file. It may be a binary or image file.";
             }
@@ -938,7 +959,7 @@ public class DocumentAiTools {
         if (id != null) return canRead(id) ? id : null;
         var ref = documentRegistry.get(nameOrId);
         if (ref != null) return ref.id();
-        var found = documentRepository.findByNameContainingIgnoreCaseAndActiveTrue(nameOrId)
+        var found = documentRepository.findTop50ByNameContainingIgnoreCaseAndActiveTrueOrderByNameAsc(nameOrId)
                 .collectList().block();
         if (found != null) {
             var readable = found.stream().filter(d -> canRead(d.getId())).findFirst();
@@ -1010,7 +1031,7 @@ public class DocumentAiTools {
             if (folderName != null && !folderName.isBlank() && !"null".equalsIgnoreCase(folderName)) {
                 UUID folderId = resolveToId(folderName);
                 if (folderId == null) {
-                    var folders = documentRepository.findByNameContainingIgnoreCaseAndActiveTrue(folderName)
+                    var folders = documentRepository.findTop50ByNameContainingIgnoreCaseAndActiveTrueOrderByNameAsc(folderName)
                             .filter(d -> d.getType() == DocumentType.FOLDER)
                             .collectList().block();
                     if (folders != null) {
@@ -1143,6 +1164,65 @@ public class DocumentAiTools {
     /** The caller's effective verdict for a capability — the same gate that will judge the call. */
     private boolean allowedForCaller(ToolCapability capability) {
         return rolePolicy == null || rolePolicy.isAllowed(authentication, capability);
+    }
+
+    @Tool(description = "Activity (audit trail) of a document or folder: who did what and when (upload, "
+            + "download, move, rename, metadata changes, sharing), most recent first. Use it to judge whether "
+            + "a document is still in use or who last worked on it. Requires the AUDITOR role.")
+    public String getDocumentActivity(
+            @ToolParam(description = "Name or id of the document or folder") String document,
+            @ToolParam(required = false, description = "Maximum entries to return (default 20, max 100)") Integer limit) {
+        String roleDenial = denyIfNotAllowed("getDocumentActivity", ToolCapability.AUDIT_READ);
+        if (roleDenial != null) return roleDenial;
+        log.debug("[AI-TOOL] getDocumentActivity called with: document='{}', limit={}", document, limit);
+        try {
+            if (auditService == null) {
+                return toolResult("getDocumentActivity", "The audit trail is not available on this deployment.");
+            }
+            UUID id = resolveAnyToId(document);
+            if (id == null) {
+                return toolResult("getDocumentActivity", "Document '%s' not found.".formatted(document));
+            }
+            Document doc = blockWithAuth(documentRepository.findById(id));
+            if (doc == null || !canRead(doc.getId())) {
+                return toolResult("getDocumentActivity", "Document '%s' not found.".formatted(document));
+            }
+            register(doc);
+            int max = limit == null || limit <= 0 ? 20 : Math.min(limit, 100);
+            List<AuditLog> entries = blockWithAuth(auditService.getAuditTrail(id, SortOrder.DESC).take(max).collectList());
+            if (entries == null || entries.isEmpty()) {
+                return toolResult("getDocumentActivity", "No activity recorded for '%s'.".formatted(doc.getName()));
+            }
+            long actors = entries.stream().map(AuditLog::username).filter(u -> u != null).distinct().count();
+            StringBuilder sb = new StringBuilder();
+            sb.append("Activity of '").append(doc.getName()).append("': ").append(entries.size())
+                    .append(" most recent entr").append(entries.size() == 1 ? "y" : "ies")
+                    .append(entries.size() == max ? " (more may exist)" : "")
+                    .append(", ").append(actors).append(" user").append(actors == 1 ? "" : "s")
+                    .append(". Format: timestamp | user | action | details\n");
+            for (AuditLog entry : entries) {
+                sb.append("  ")
+                        .append(entry.timestamp() != null ? entry.timestamp().withNano(0).toLocalDateTime() : "?")
+                        .append(" | ").append(entry.username() != null ? entry.username() : "?")
+                        .append(" | ").append(entry.action())
+                        .append(" | ").append(summarizeDetails(entry.details()))
+                        .append('\n');
+            }
+            return toolResult("getDocumentActivity", sb.toString());
+        } catch (Exception e) {
+            log.error("Error reading document activity", e);
+            return "Error reading document activity: " + e.getMessage();
+        }
+    }
+
+    private static String summarizeDetails(Object details) {
+        if (details == null) return "-";
+        try {
+            String json = JSON.writeValueAsString(details);
+            return json.length() > 160 ? json.substring(0, 157) + "..." : json;
+        } catch (Exception e) {
+            return String.valueOf(details);
+        }
     }
 
     @Tool(description = "Read all metadata (custom properties) of a document or folder as key/value pairs.")
@@ -1439,6 +1519,36 @@ public class DocumentAiTools {
         }
     }
 
+    /** Maximum characters of a document's text handed to the model by readDocumentContent. */
+    static final int MAX_CONTENT_CHARS = 8000;
+
+    /**
+     * The document's text from the full-text index (extracted at upload), truncated like
+     * {@link #extractText}; null when full-text is off or the index holds nothing for it.
+     */
+    private String indexedText(Document doc) {
+        if (indexService == null || doc.getId() == null) {
+            return null;
+        }
+        try {
+            String text = blockWithAuth(indexService.getContent(doc.getId()));
+            if (text == null || text.isBlank()) {
+                return null;
+            }
+            log.debug("[AI-TOOL] readDocumentContent served '{}' from the search index ({} chars)", doc.getName(), text.length());
+            return truncateForModel(text);
+        } catch (Exception e) {
+            log.debug("[AI-TOOL] index lookup failed for {}, falling back to the file: {}", doc.getId(), e.getMessage());
+            return null;
+        }
+    }
+
+    private static String truncateForModel(String fullText) {
+        return fullText.length() > MAX_CONTENT_CHARS
+                ? fullText.substring(0, MAX_CONTENT_CHARS) + "\n\n[... content truncated, document is longer ...]"
+                : fullText;
+    }
+
     /** Extract text from a file with Tika, truncated for context, or null if none is extractable. */
     private String extractText(Resource resource) {
         if (resource == null) {
@@ -1453,9 +1563,7 @@ public class DocumentAiTools {
             if (fullText == null || fullText.isBlank()) {
                 return null;
             }
-            return fullText.length() > 8000
-                    ? fullText.substring(0, 8000) + "\n\n[... content truncated, document is longer ...]"
-                    : fullText;
+            return truncateForModel(fullText);
         } catch (Exception e) {
             log.debug("[AI-TOOL] no extractable text from {}: {}", resource, e.getMessage());
             return null;

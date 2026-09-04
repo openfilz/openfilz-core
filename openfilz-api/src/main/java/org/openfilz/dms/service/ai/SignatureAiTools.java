@@ -436,7 +436,7 @@ public class SignatureAiTools {
             Document byId = blockWithAuth(documentRepository.findByIdAndActive(id, true));
             candidates = byId != null ? List.of(byId) : List.of();
         } else {
-            List<Document> found = blockWithAuth(documentRepository.findByNameContainingIgnoreCaseAndActiveTrue(nameOrId.trim()).collectList());
+            List<Document> found = blockWithAuth(documentRepository.findTop50ByNameContainingIgnoreCaseAndActiveTrueOrderByNameAsc(nameOrId.trim()).collectList());
             candidates = found != null ? found : List.of();
         }
         List<Document> pdfs = candidates.stream()

@@ -38,6 +38,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -83,6 +84,7 @@ public class ReorganizationPlanService {
     private final AiAccessPolicy accessPolicy;
     private final AiToolRolePolicy rolePolicy;
     private final AiReorganizationPlanRepository planRepository;
+    private final ReorganizationInventoryCache inventoryCache;
 
     /** The user a call acts for: email for the access policy, Authentication for the service layer. */
     public record Caller(String email, Authentication authentication) {
@@ -102,6 +104,23 @@ public class ReorganizationPlanService {
     public String inventory(UUID rootId, Integer maxDepth, Integer maxItems, Caller caller) {
         int depthLimit = clamp(maxDepth, DEFAULT_MAX_DEPTH, MAX_DEPTH);
         int itemLimit = clamp(maxItems, DEFAULT_MAX_ITEMS, MAX_ITEMS);
+        String cacheKey = ReorganizationInventoryCache.key(caller.email(), rootId, depthLimit, itemLimit, null);
+        String cached = inventoryCache.get(cacheKey);
+        if (cached != null) {
+            log.debug("[REORG] inventory served from cache for {} (root {})", caller.email(), rootId);
+            return cached;
+        }
+        if (!inventoryCache.tryAcquire(caller.email())) {
+            throw new IllegalStateException("Inventory rate limit reached (" + inventoryCache.rateLimit()
+                    + " inventories per " + inventoryCache.rateWindow().toMinutes() + " minutes): reuse the "
+                    + "inventory you already have, or narrow the folder and try again later.");
+        }
+        String inventory = buildInventory(rootId, depthLimit, itemLimit, caller);
+        inventoryCache.put(cacheKey, inventory);
+        return inventory;
+    }
+
+    private String buildInventory(UUID rootId, int depthLimit, int itemLimit, Caller caller) {
         Map<String, List<Document>> childrenCache = new HashMap<>();
         String rootPath = absolutePath(rootId, new HashMap<>(), caller);
 
@@ -175,6 +194,8 @@ public class ReorganizationPlanService {
         Map<String, UUID> plannedNames = new HashMap<>();
         Set<String> foldersToCreate = new LinkedHashSet<>();
         List<Item> items = new ArrayList<>();
+        // Modify permission per document/folder, asked once for the whole plan (see prefetchModifiable)
+        Map<UUID, Boolean> modifiable = new HashMap<>();
 
         if (request.createFolders() != null) {
             for (String path : request.createFolders()) {
@@ -182,7 +203,7 @@ public class ReorganizationPlanService {
                 if (segments == null || segments.isEmpty()) continue;
                 TargetResolution target = resolveTarget(rootId, rootPath, segments, targets, childrenCache, docCache, caller);
                 if (!target.exists()) {
-                    if (canCreateIn(target.deepestExistingId(), caller)) {
+                    if (canCreateIn(target.deepestExistingId(), caller, modifiable)) {
                         foldersToCreate.addAll(target.missingPaths());
                     } else {
                         log.debug("[REORG] createFolders '{}' skipped: no permission under {}", path, target.deepestExistingPath());
@@ -191,8 +212,16 @@ public class ReorganizationPlanService {
             }
         }
 
+        // Resolve every document first, so the modify permission is asked once for the whole plan
+        List<Document> resolved = new ArrayList<>(request.moves().size());
         for (ReorganizationPlanRequest.Move move : request.moves()) {
-            Document doc = resolveDocument(move.document(), caller, docCache);
+            resolved.add(resolveDocument(move.document(), caller, docCache));
+        }
+        prefetchModifiable(resolved, caller, modifiable);
+
+        for (int index = 0; index < request.moves().size(); index++) {
+            ReorganizationPlanRequest.Move move = request.moves().get(index);
+            Document doc = resolved.get(index);
             if (doc == null) {
                 items.add(new Item(null, move.document(), null, null, null, false, false,
                         "No document '" + move.document() + "' is visible to you (use its id from the inventory)."));
@@ -214,7 +243,7 @@ public class ReorganizationPlanService {
             TargetResolution target = resolveTarget(rootId, rootPath, segments, targets, childrenCache, docCache, caller);
             String targetPath = target.path();
 
-            if (!canModify(doc.getId(), caller)) {
+            if (!canModify(doc.getId(), caller, modifiable)) {
                 items.add(new Item(doc.getId(), doc.getName(), type, currentPath, targetPath, target.exists(), false,
                         "You don't have permission to move this document."));
                 continue;
@@ -229,12 +258,12 @@ public class ReorganizationPlanService {
                         "Already in the target folder."));
                 continue;
             }
-            if (target.exists() && !canCreateIn(target.folderId(), caller)) {
+            if (target.exists() && !canCreateIn(target.folderId(), caller, modifiable)) {
                 items.add(new Item(doc.getId(), doc.getName(), type, currentPath, targetPath, true, false,
                         "You don't have permission to add documents to " + targetPath + "."));
                 continue;
             }
-            if (!target.exists() && !canCreateIn(target.deepestExistingId(), caller)) {
+            if (!target.exists() && !canCreateIn(target.deepestExistingId(), caller, modifiable)) {
                 items.add(new Item(doc.getId(), doc.getName(), type, currentPath, targetPath, false, false,
                         "You don't have permission to create folders in " + target.deepestExistingPath() + "."));
                 continue;
@@ -417,6 +446,8 @@ public class ReorganizationPlanService {
         entity.setPlan(Json.of(JSON.writeValueAsString(new StoredPlan(stored.request(), applied1))));
         entity.setResult(Json.of(JSON.writeValueAsString(results)));
         planRepository.save(entity).block();
+        // The library changed: the next inventory must be rebuilt, not served from the cache
+        inventoryCache.invalidate(caller.email());
         log.info("[REORG] Plan {} applied by {}: {} moved, {} failed, {} folder(s) created → {}",
                 planId, caller.email(), moved, failed, createdFolders.size(), status);
         int skipped = fresh.items().size() - moved - failed;
@@ -573,7 +604,7 @@ public class ReorganizationPlanService {
             docCache.put(id, doc);
             return doc;
         }
-        List<Document> found = blockWithAuth(documentRepository.findByNameContainingIgnoreCaseAndActiveTrue(trimmed).collectList(), caller);
+        List<Document> found = blockWithAuth(documentRepository.findByNameIgnoreCaseAndActiveTrue(trimmed).collectList(), caller);
         if (found == null) return null;
         List<Document> exact = found.stream()
                 .filter(d -> d.getName().equalsIgnoreCase(trimmed) && canRead(d.getId(), caller))
@@ -590,8 +621,9 @@ public class ReorganizationPlanService {
                     ? documentRepository.findByParentIdIsNullAndActiveIsTrue()
                     : documentRepository.findByParentIdAndActiveIsTrue(folderId)).collectList(), caller);
             if (all == null) return List.of();
+            Set<UUID> readable = readableOf(all, caller);
             return all.stream()
-                    .filter(d -> canRead(d.getId(), caller))
+                    .filter(d -> readable.contains(d.getId()))
                     .sorted(Comparator.comparing((Document d) -> d.getType() != DocumentType.FOLDER)
                             .thenComparing(d -> d.getName().toLowerCase(Locale.ROOT)))
                     .toList();
@@ -649,10 +681,46 @@ public class ReorganizationPlanService {
         return Boolean.TRUE.equals(accessPolicy.canModify(documentId, caller.email()).block());
     }
 
-    private boolean canCreateIn(UUID folderId, Caller caller) {
+    /** Ids of the documents the caller may read: one policy call for the whole list. */
+    private Set<UUID> readableOf(List<Document> documents, Caller caller) {
+        Set<UUID> ids = documents.stream().map(Document::getId).filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (accessPolicy.permitAll()) {
+            return ids;
+        }
+        Set<UUID> readable = blockWithAuth(accessPolicy.readable(ids, caller.email()), caller);
+        return readable == null ? Set.of() : readable;
+    }
+
+    /** Ask the modify permission once for every resolved document not decided yet. */
+    private void prefetchModifiable(List<Document> documents, Caller caller, Map<UUID, Boolean> modifiable) {
+        Set<UUID> ids = documents.stream().filter(Objects::nonNull).map(Document::getId)
+                .filter(id -> id != null && !modifiable.containsKey(id))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (ids.isEmpty()) {
+            return;
+        }
+        Set<UUID> allowed;
+        if (accessPolicy.permitAll()) {
+            allowed = ids;
+        } else {
+            Set<UUID> result = blockWithAuth(accessPolicy.modifiable(ids, caller.email()), caller);
+            allowed = result == null ? Set.of() : result;
+        }
+        for (UUID id : ids) {
+            modifiable.put(id, allowed.contains(id));
+        }
+    }
+
+    /** Memoised per validation: a target folder not covered by the prefetch is asked once. */
+    private boolean canModify(UUID documentId, Caller caller, Map<UUID, Boolean> modifiable) {
+        return modifiable.computeIfAbsent(documentId, id -> canModify(id, caller));
+    }
+
+    private boolean canCreateIn(UUID folderId, Caller caller, Map<UUID, Boolean> modifiable) {
         return folderId == null
                 ? Boolean.TRUE.equals(accessPolicy.canCreateAtRoot(caller.email()).block())
-                : canModify(folderId, caller);
+                : canModify(folderId, caller, modifiable);
     }
 
     private static <T> T blockWithAuth(Mono<T> mono, Caller caller) {

@@ -11,6 +11,7 @@ import org.openfilz.dms.service.OpenSearchMetadataService;
 import org.openfilz.dms.utils.JsonUtils;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.opensearch.core.DeleteRequest;
+import org.opensearch.client.opensearch.core.GetRequest;
 import org.opensearch.client.opensearch.core.IndexRequest;
 import org.opensearch.client.opensearch.core.IndexResponse;
 import org.opensearch.client.opensearch.core.UpdateRequest;
@@ -67,6 +68,33 @@ public class OpenSearchIndexService implements IndexService {
     public Mono<Void> updateIndexField(UUID documentId, String key, Object value) {
         Object valueToIndex = getValueToIndex(key, value);
         return doUpdateIndexField(documentId, key, valueToIndex);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public Mono<String> getContent(UUID documentId) {
+        GetRequest request = new GetRequest.Builder()
+                .index(indexNameProvider.getIndexName(documentId))
+                .id(documentId.toString())
+                .sourceIncludes(List.of(OpenSearchDocumentKey.content.toString()))
+                .build();
+        try {
+            return Mono.fromFuture(openSearchAsyncClient.get(request, Map.class))
+                    .flatMap(response -> {
+                        Map<String, Object> source = response.found() ? (Map<String, Object>) response.source() : null;
+                        Object content = source == null ? null : source.get(OpenSearchDocumentKey.content.toString());
+                        return content == null || content.toString().isBlank()
+                                ? Mono.<String>empty() : Mono.just(content.toString());
+                    })
+                    .onErrorResume(e -> {
+                        // A missing index or an unreachable node is not an error for the caller:
+                        // "no indexed content" and it falls back to the file.
+                        log.debug("[INDEX] no indexed content for {}: {}", documentId, e.getMessage());
+                        return Mono.empty();
+                    });
+        } catch (IOException e) {
+            return Mono.error(e);
+        }
     }
 
     @Override

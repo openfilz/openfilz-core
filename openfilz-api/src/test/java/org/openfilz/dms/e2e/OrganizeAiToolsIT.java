@@ -249,6 +249,33 @@ class OrganizeAiToolsIT extends AbstractMcpIT {
         }
     }
 
+    @Test
+    @DisplayName("an inventory is served from the cache until one of the user's tool calls mutates the library")
+    void inventoryIsCachedAndDroppedOnMutation() {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        FolderResponse root = createFolder("reorg-cache-" + suffix, null);
+        UploadResponse first = upload("test1.txt", root.id());
+
+        assertThat(callToolText("planReorganization", """
+                {"folder":"%s"}""".formatted(root.id()))).contains(first.id().toString());
+
+        // A REST upload is not one of the user's tool calls: the cached inventory does not see it
+        UploadResponse second = upload("test2.txt", root.id());
+        assertThat(callToolText("planReorganization", """
+                {"folder":"%s"}""".formatted(root.id())))
+                .contains(first.id().toString())
+                .doesNotContain(second.id().toString());
+
+        // A mutating tool call drops the user's cached inventories, so the next one is rebuilt
+        assertThat(callToolText("writeFile", """
+                {"fileName":"fresh-%s.txt","content":"hello","folderName":"reorg-cache-%s"}""".formatted(suffix, suffix)))
+                .doesNotContain("Not permitted").doesNotContain("Error");
+        assertThat(callToolText("planReorganization", """
+                {"folder":"%s"}""".formatted(root.id())))
+                .contains(first.id().toString(), second.id().toString())
+                .contains("fresh-" + suffix + ".txt");
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private static UUID planIdOf(String answer) {

@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.McpProperties;
 import org.openfilz.dms.service.ai.AiToolRolePolicy;
+import org.openfilz.dms.service.ai.ReorganizationInventoryCache;
 import org.openfilz.dms.service.ai.ToolCapability;
 import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.ai.chat.model.ToolContext;
@@ -64,6 +65,8 @@ public class McpToolCallbackProvider implements ToolCallbackProvider, UserInfoSe
     private final List<McpToolContributor> contributors;
     private final McpProperties mcpProperties;
     private final AiToolRolePolicy rolePolicy;
+    /** Dropped for the caller after every mutating call, so their next inventory sees the change. */
+    private final ReorganizationInventoryCache inventoryCache;
 
     @Override
     public ToolCallback[] getToolCallbacks() {
@@ -249,7 +252,13 @@ public class McpToolCallbackProvider implements ToolCallbackProvider, UserInfoSe
                     .orElseThrow(() -> new IllegalStateException(
                             "MCP tool '" + toolDefinition.name() + "' vanished from its contributor"));
             log.debug("[MCP] {} invoked by {}", toolDefinition.name(), authentication.getName());
-            return bound.call(toolInput);
+            try {
+                return bound.call(toolInput);
+            } finally {
+                if (capability.isMutating()) {
+                    inventoryCache.invalidate(userEmail);
+                }
+            }
         }
     }
 }

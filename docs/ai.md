@@ -254,7 +254,9 @@ sequenceDiagram
     S-->>User: SSE: MESSAGE (enriched text) + DONE   (ERROR on failure)
 ```
 
-- **Tools**: the 18 document tools of `DocumentAiTools` (`queryDocuments`, `readDocumentContent`,
+- **Tools**: the 19 document tools of `DocumentAiTools` (`queryDocuments`, `readDocumentContent` —
+  served from the OpenSearch `content` field when full-text is active, Tika on the file otherwise —,
+  `getDocumentActivity` — the audit trail, AUDITOR role —,
   `describeImage` — vision, runs on the *resolved* model, so BYOK users get their own model —,
   `writeFile`, `createBlankDocument`, `createFolder`, `moveDocuments`, `renameDocument`,
   `getDocumentPath`, metadata get/search/update/delete, delete, versions, `downloadDocument`,

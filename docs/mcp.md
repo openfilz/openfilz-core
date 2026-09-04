@@ -69,7 +69,7 @@ therefore withheld unless you opt in:
 
 | Mode | Tools exposed |
 |---|---|
-| `READ_ONLY` (default) | every *read* tool: `whoami`, `queryDocuments`, `readDocumentContent`, `getDocumentPath`, `describeImage`, `downloadDocument`, the metadata / version reads, `getPdfInfo`, `planReorganization`, `getReorganizationPlan`, the e-Sign reads |
+| `READ_ONLY` (default) | every *read* tool: `whoami`, `queryDocuments`, `readDocumentContent`, `getDocumentPath`, `describeImage`, `downloadDocument`, `getDocumentActivity`, the metadata / version reads, `getPdfInfo`, `planReorganization`, `getReorganizationPlan`, the e-Sign reads |
 | `READ_WRITE` | all of the above **plus** every *write* tool: `writeFile`, `createBlankDocument`, `createFolder`, `moveDocuments`, `renameDocument`, the metadata writes, `restoreVersion`, `deleteDocument`, the PDF transformations, `proposeReorganizationPlan` / `applyReorganizationPlan`, `sendForSignature` |
 
 In `READ_ONLY` the mutating tools are absent from `tools/list` — an agent cannot choose a tool it
@@ -124,7 +124,7 @@ opened it, and horizontal scaling needs no sticky sessions.
 
 ## 3. The tool surface
 
-Eighteen document tools, seven PDF tools, four reorganisation tools and four e-Sign tools, curated rather than generated. (A 60-operation auto-generated tool list from the
+Nineteen document tools, seven PDF tools, four reorganisation tools and four e-Sign tools, curated rather than generated. (A 60-operation auto-generated tool list from the
 OpenAPI spec would make agents *worse*, not better — the small, well-described surface is the point.)
 
 | Tool | Mode | What it does |
@@ -146,6 +146,7 @@ OpenAPI spec would make agents *worse*, not better — the small, well-described
 | `deleteDocument` | delete | Delete a document or folder (to the recycle bin when soft-delete is on). Requires the CLEANER role. |
 | `listVersions` | read | List a document's stored versions (versioned storage). |
 | `restoreVersion` | write | Restore a previous version as the current content. |
+| `getDocumentActivity` | read | The audit trail of a document or folder (who did what, when), most recent first. Needs the **AUDITOR** role, like `/api/v1/audit`. |
 | `downloadDocument` | read | Get a document's content — extracted text for text/PDF/Office, or a download link for binary files. |
 
 ### PDF tools

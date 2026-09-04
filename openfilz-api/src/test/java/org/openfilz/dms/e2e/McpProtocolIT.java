@@ -441,6 +441,8 @@ public class McpProtocolIT extends AbstractMcpIT {
                     {"sortBy":"updatedAt","sortOrder":"DESC","pageSize":5,"countOnly":false}""";
             case "readDocumentContent" -> """
                     {"documentName":"%s"}""".formatted(probe);
+            case "getDocumentActivity" -> """
+                    {"document":"%s","limit":5}""".formatted(probe);
             case "getDocumentPath" -> """
                     {"documentId":"%s"}""".formatted(UUID.randomUUID());
             case "describeImage" -> """
