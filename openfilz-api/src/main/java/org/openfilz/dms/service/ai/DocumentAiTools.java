@@ -545,6 +545,66 @@ public class DocumentAiTools {
         }
     }
 
+    @Tool(description = "Create a new blank Word, Excel, PowerPoint or plain-text document (an empty Office file the "
+            + "user can then edit in the app). Use writeFile instead when you have text content to save.")
+    public String createBlankDocument(
+            @ToolParam(description = "Name of the new document, without extension (e.g. 'Meeting notes'); the right extension is added") String name,
+            @ToolParam(description = "WORD (.docx), EXCEL (.xlsx), POWERPOINT (.pptx) or TEXT (.txt)") String documentType,
+            @ToolParam(required = false, description = "The folder name (or id) to create it in, or null for root") String folderName
+    ) {
+        String roleDenial = denyIfNotAllowed("createBlankDocument", ToolCapability.DOCUMENT_WRITE);
+        if (roleDenial != null) return roleDenial;
+        log.debug("[AI-TOOL] createBlankDocument called with: name='{}', type='{}', folder='{}'", name, documentType, folderName);
+        try {
+            if (name == null || name.isBlank()) {
+                return toolResult("createBlankDocument", "A document name is required.");
+            }
+            org.openfilz.dms.enums.DocumentTemplateType type = parseTemplateType(documentType);
+            if (type == null) {
+                return toolResult("createBlankDocument",
+                        "Unknown document type '%s'. Use WORD, EXCEL, POWERPOINT or TEXT.".formatted(documentType));
+            }
+            UUID parentId = null;
+            if (!isRootFolderName(folderName)) {
+                parentId = resolveToId(folderName);
+                if (parentId == null) {
+                    return toolResult("createBlankDocument",
+                            "No folder named '%s' exists. Ask the user whether to create it (createFolder), then retry.".formatted(folderName));
+                }
+            }
+            if (!canCreateIn(parentId)) {
+                return toolResult("createBlankDocument", "You don't have permission to create documents in %s.".formatted(
+                        parentId == null ? "the root folder" : "folder '%s'".formatted(folderName)));
+            }
+            var response = blockWithAuth(documentService.createBlankDocument(name.trim(), type, parentId));
+            if (response == null || response.id() == null) {
+                return toolResult("createBlankDocument", "Failed to create the document%s.".formatted(
+                        response != null && response.errorMessage() != null ? ": " + response.errorMessage() : ""));
+            }
+            String createdName = response.name() != null ? response.name() : name.trim();
+            register(response.id(), parentId, DocumentType.FILE.name(), createdName);
+            recordFolderModified(parentId);
+            recordAction("Created blank %s document '%s'".formatted(type.name().toLowerCase(), createdName));
+            log.info("[AI-TOOL] createBlankDocument: created '{}' ({}) in folder {}", createdName, type, parentId);
+            return toolResult("createBlankDocument", "Document '%s' created successfully (id %s).".formatted(createdName, response.id()));
+        } catch (Exception e) {
+            log.error("Error creating blank document", e);
+            return "Error creating document: " + e.getMessage();
+        }
+    }
+
+    private static org.openfilz.dms.enums.DocumentTemplateType parseTemplateType(String value) {
+        if (value == null || value.isBlank()) return null;
+        String normalized = value.trim().toUpperCase(java.util.Locale.ROOT).replace(".", "");
+        return switch (normalized) {
+            case "WORD", "DOCX", "DOC", "DOCUMENT" -> org.openfilz.dms.enums.DocumentTemplateType.WORD;
+            case "EXCEL", "XLSX", "XLS", "SPREADSHEET", "SHEET" -> org.openfilz.dms.enums.DocumentTemplateType.EXCEL;
+            case "POWERPOINT", "PPTX", "PPT", "PRESENTATION", "SLIDES" -> org.openfilz.dms.enums.DocumentTemplateType.POWERPOINT;
+            case "TEXT", "TXT", "PLAIN", "PLAINTEXT" -> org.openfilz.dms.enums.DocumentTemplateType.TEXT;
+            default -> null;
+        };
+    }
+
     @Tool(description = "Create a new folder. Returns the new folder's ID.")
     public String createFolder(
             @ToolParam(description = "Name of the new folder") String name,

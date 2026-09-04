@@ -254,9 +254,26 @@ sequenceDiagram
     S-->>User: SSE: MESSAGE (enriched text) + DONE   (ERROR on failure)
 ```
 
-- **Tools** (8 `@Tool` methods on `DocumentAiTools`): `queryDocuments`, `readDocumentContent`,
-  `describeImage` (vision — runs on the *resolved* model, so BYOK users get their own model),
-  `writeFile`, `createFolder`, `moveDocuments`, `renameDocument`, `getDocumentPath`.
+- **Tools**: the 18 document tools of `DocumentAiTools` (`queryDocuments`, `readDocumentContent`,
+  `describeImage` — vision, runs on the *resolved* model, so BYOK users get their own model —,
+  `writeFile`, `createBlankDocument`, `createFolder`, `moveDocuments`, `renameDocument`,
+  `getDocumentPath`, metadata get/search/update/delete, delete, versions, `downloadDocument`,
+  `whoami`), plus every `McpToolContributor` that opts into the chat with `exposeInChat()`: the
+  seven PDF tools, the four reorganisation tools and the four e-Sign tools. The same tool
+  objects serve the MCP server — see [mcp.md §3](mcp.md#3-the-tool-surface) for the catalogue.
+- **Reorganisation proposal cards**: when the assistant calls `proposeReorganizationPlan`, the
+  pipeline appends a `[[reorg-plan:id]]` marker to the answer (persisted with the message, stripped
+  from the history the model sees). The frontend renders it as an interactive card — the user ticks
+  the moves and applies or discards the plan through `/api/v1/ai/reorganization/{id}`. Contributed
+  tool objects report their side effects (modified folders, actions, proposed plans) through
+  `AiToolTurnEffects`, which is also how the file explorer learns to refresh and how the
+  failover logic knows a mutation already committed.
+- **Trimming the tool surface for small models**: the schema of every bound tool travels with
+  each request, and small local models (1–3B) stop calling tools once it grows too large — they
+  refuse, or emit the call as text. The e-Sign tools are bound only while
+  `openfilz.signature.active` is on, and `openfilz.ai.chat.excluded-contributors` (simple class
+  names, e.g. `OrganizeAiToolsContributor,SignatureAiToolsContributor,PdfAiToolsContributor`)
+  drops whole contributors from the chat without touching the MCP server. Read per request.
 - **Doc-link enrichment**: every tool call and RAG hit registers `{id, parentId, type, name}` in
   the request's `DocumentAiTools` registry; after streaming, document names in the answer are
   replaced with `[[doc:…]]` markers the frontend renders as clickable links.

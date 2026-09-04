@@ -69,8 +69,8 @@ therefore withheld unless you opt in:
 
 | Mode | Tools exposed |
 |---|---|
-| `READ_ONLY` (default) | `whoami`, `queryDocuments`, `readDocumentContent`, `getDocumentPath`, `describeImage`, the metadata/version reads |
-| `READ_WRITE` | the four above **plus** `writeFile`, `createFolder`, `moveDocuments`, `renameDocument` |
+| `READ_ONLY` (default) | every *read* tool: `whoami`, `queryDocuments`, `readDocumentContent`, `getDocumentPath`, `describeImage`, `downloadDocument`, the metadata / version reads, `getPdfInfo`, `planReorganization`, `getReorganizationPlan`, the e-Sign reads |
+| `READ_WRITE` | all of the above **plus** every *write* tool: `writeFile`, `createBlankDocument`, `createFolder`, `moveDocuments`, `renameDocument`, the metadata writes, `restoreVersion`, `deleteDocument`, the PDF transformations, `proposeReorganizationPlan` / `applyReorganizationPlan`, `sendForSignature` |
 
 In `READ_ONLY` the mutating tools are absent from `tools/list` — an agent cannot choose a tool it
 never saw — *and* refused if called anyway, so a client holding a cached tool list gains nothing.
@@ -95,9 +95,9 @@ opened it, and horizontal scaling needs no sticky sessions.
   |---|---|
   | `READER` | search and read documents |
   | `CONTRIBUTOR` | search, read **and** write (create, move, rename) |
-  | `CLEANER` | delete *(no tool exposes deletion yet)* |
+  | `CLEANER` | delete (`deleteDocument`) |
   | `AUDITOR` | read the audit trail *(no tool yet)* |
-  | `SIGN_REQUESTER` | initiate e-Sign requests, together with `CONTRIBUTOR` *(no tool yet)* |
+  | `SIGN_REQUESTER` | initiate e-Sign requests (`sendForSignature`), together with `CONTRIBUTOR` — only when `openfilz.signature.require-requester-role=true`; otherwise `CONTRIBUTOR` alone suffices |
   | `VIEW_SHARE` / `EDIT_SHARE` *(Enterprise)* | read / manage shares *(no tool yet)* |
   | `COMMENTER` *(Enterprise)* | read and add comments (`listComments`, `addComment`) |
 
@@ -124,7 +124,7 @@ opened it, and horizontal scaling needs no sticky sessions.
 
 ## 3. The tool surface
 
-Seventeen document tools plus seven PDF tools, curated rather than generated. (A 60-operation auto-generated tool list from the
+Eighteen document tools, seven PDF tools, four reorganisation tools and four e-Sign tools, curated rather than generated. (A 60-operation auto-generated tool list from the
 OpenAPI spec would make agents *worse*, not better — the small, well-described surface is the point.)
 
 | Tool | Mode | What it does |
@@ -135,6 +135,7 @@ OpenAPI spec would make agents *worse*, not better — the small, well-described
 | `getDocumentPath` | read | Full path (ancestors) of a document, from root to its parent folder. |
 | `describeImage` | read | Vision: describe/caption an image or PDF, OCR its text, or answer a question about it. Needs a local chat model — degrades with a clear message when there is none. |
 | `writeFile` | write | Write text content to a new file. |
+| `createBlankDocument` | write | Create an empty Word, Excel, PowerPoint or text document (the same templates as the app's "New document" menu), ready to edit. |
 | `createFolder` | write | Create a folder. |
 | `moveDocuments` | write | Move files or folders into another folder. |
 | `renameDocument` | write | Rename a file or folder. |
@@ -166,6 +167,45 @@ same syntax everywhere: `1-3,7,10-`, `odd`, `even`, `all`.
 
 In-place edits are refused on digitally signed PDFs (the signature would break — the tool says so and
 suggests a new document), on documents with an active e-Sign envelope, and under WORM mode.
+
+### Reorganisation tools
+
+Let an agent propose a new folder hierarchy for a messy folder — and let the *user* decide. The loop
+is **inventory → the model proposes → the backend validates and stores the proposal → the user
+confirms → apply**; the model only decides the taxonomy, everything that can go wrong is checked
+deterministically against the live library and the caller's permissions.
+
+| Tool | Mode | What it does |
+|---|---|---|
+| `planReorganization` | read | Inventory of a folder subtree (sub-folders, files with id / path / type / size / date / metadata) plus the JSON contract of a plan. |
+| `proposeReorganizationPlan` | write | Validate the model's plan — unknown documents, documents the caller may not move, folders it may not create in, a folder moved into itself, name clashes, no-op moves — and store it as a **proposal**. Nothing moves. Returns the plan id, what is applicable and what is blocked (and why). |
+| `applyReorganizationPlan` | write | Apply a proposed plan (all applicable items, or a selection): creates the missing folders, moves the documents one by one, reports what moved and what failed. |
+| `getReorganizationPlan` | read | A plan's status (proposed, applied, discarded…), its moves and their outcome. |
+
+In the OpenFilz app the assistant's proposal appears as an interactive **card** — the user ticks the
+moves they want and clicks *Apply* (or *Discard*); the card calls `/api/v1/ai/reorganization/{id}/apply`.
+An external agent asks its user and then calls `applyReorganizationPlan` itself. A plan can be
+applied once; it is re-validated at apply time, so a document that changed in the meantime is
+reported rather than moved blindly.
+
+### e-Sign tools
+
+Present whenever `openfilz.signature.active` is on (each call answers "disabled" otherwise). Field
+placement is the part a model cannot do — an envelope needs normalised page coordinates for every
+field — so `sendForSignature` takes one of two routes: an **e-Sign template** the user prepared in the
+app (its fields are already placed; the agent only binds the template's roles to people), or the
+**default placement**: one signature field per signer, stacked at the bottom of the last page.
+
+| Tool | Mode | What it does |
+|---|---|---|
+| `sendForSignature` | write | Send a PDF for signature. Recipients as `Alice Smith <alice@x.com>, bob@y.com` (`cc:` prefix for a copy recipient); with a template, `Tenant: alice@x.com; Landlord: bob@y.com` or one recipient per role in order. Options: title, message, expiry, sequential signing, `sendNow=false` to keep a draft. Requires `CONTRIBUTOR` (+ `SIGN_REQUESTER` when the deployment demands it). |
+| `listSignatureTemplates` | read | The caller's templates: name, id, roles to bind, whether a default document is attached. |
+| `listSignatureEnvelopes` | read | Envelopes the caller sent (optionally by status), or with `to-sign` those awaiting the caller's own signature. |
+| `getSignatureStatus` | read | Who has viewed, signed or declined, expiry, and where the signed PDF is once completed. |
+
+Only PDFs the caller can read are accepted, the per-document e-Sign access policy of the deployment
+applies (Enterprise: ownership / EDITOR share), and the invitation emails are the same as from the
+app — an agent never sees a signing link.
 
 The server also advertises usage guidance in its `initialize` response (the MCP `instructions`
 field), telling the calling agent to resolve names with `queryDocuments` first and that everything

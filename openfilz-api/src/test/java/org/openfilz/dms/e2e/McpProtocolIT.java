@@ -105,6 +105,10 @@ public class McpProtocolIT extends AbstractMcpIT {
         expected.addAll(DocumentAiToolsContributor.MUTATING_TOOLS);
         expected.addAll(PdfAiToolsContributor.READ_ONLY_TOOLS);
         expected.addAll(PdfAiToolsContributor.MUTATING_TOOLS);
+        expected.addAll(org.openfilz.dms.service.mcp.OrganizeAiToolsContributor.READ_ONLY_TOOLS);
+        expected.addAll(org.openfilz.dms.service.mcp.OrganizeAiToolsContributor.MUTATING_TOOLS);
+        expected.addAll(org.openfilz.dms.service.mcp.SignatureAiToolsContributor.READ_ONLY_TOOLS);
+        expected.addAll(org.openfilz.dms.service.mcp.SignatureAiToolsContributor.MUTATING_TOOLS);
 
         assertThat(advertisedToolNames()).containsExactlyInAnyOrderElementsOf(expected);
     }
@@ -480,6 +484,25 @@ public class McpProtocolIT extends AbstractMcpIT {
                     {"document":"%s.pdf","pages":"1"}""".formatted(probe);
             case "reorderPdfPages" -> """
                     {"document":"%s.pdf","pageOrder":"2,1"}""".formatted(probe);
+            case "createBlankDocument" -> """
+                    {"name":"%s-blank","documentType":"TEXT"}""".formatted(probe);
+            // Reorganisation tools (OrganizeAiTools): an unknown document / plan resolves to a text result
+            case "planReorganization" -> """
+                    {"maxDepth":2,"maxItems":20}""";
+            case "proposeReorganizationPlan" -> """
+                    {"planJson":"{\\"moves\\":[{\\"document\\":\\"%s\\",\\"target\\":\\"Sorted\\"}]}"}""".formatted(probe);
+            case "applyReorganizationPlan" -> """
+                    {"planId":"%s"}""".formatted(UUID.randomUUID());
+            case "getReorganizationPlan" -> """
+                    {"planId":"%s"}""".formatted(UUID.randomUUID());
+            // e-Sign tools (SignatureAiTools): disabled or not-found both answer with text
+            case "listSignatureTemplates" -> "{}";
+            case "listSignatureEnvelopes" -> """
+                    {"status":"SENT"}""";
+            case "getSignatureStatus" -> """
+                    {"envelope":"%s"}""".formatted(probe);
+            case "sendForSignature" -> """
+                    {"document":"%s.pdf","recipients":"Probe Signer <%s@example.com>"}""".formatted(probe, probe);
             default -> throw new AssertionError("""
                     Unknown MCP tool '%s'. A tool was added to DocumentAiTools without being \
                     classified here — add arguments for it (and list it in \
