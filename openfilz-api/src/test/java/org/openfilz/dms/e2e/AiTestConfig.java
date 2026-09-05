@@ -79,13 +79,16 @@ public class AiTestConfig {
                 p != null && p.getContents() != null && p.getContents().contains("INSIGHTS_V1"))))
                 .thenAnswer(invocation -> {
                     org.springframework.ai.chat.prompt.Prompt prompt = invocation.getArgument(0);
+                    // The test invoices carry "Invoice F-…" in their text; everything else is a report,
+                    // so the smart-filing suite can tell an invoice's neighbours from a report's.
+                    String category = prompt.getContents().contains("Invoice F-") ? "Invoice" : "Report";
                     String answer = prompt.getContents().contains("malformed")
                             ? "Sorry, I cannot produce that."
                             : """
                             ```json
-                            {"category": "Report", "summary": "A short test summary of the document.",
+                            {"category": "%s", "summary": "A short test summary of the document.",
                              "keywords": ["test", "report"], "language": "en", "entities": {"client": "ACME"}}
-                            ```""";
+                            ```""".formatted(category);
                     return new ChatResponse(List.of(new Generation(new AssistantMessage(answer))));
                 });
         // Smart filing (stage 2): the filing prompt carries its own marker; the mock proposes a

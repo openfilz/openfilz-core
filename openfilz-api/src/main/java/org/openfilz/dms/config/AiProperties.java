@@ -110,6 +110,17 @@ public class AiProperties {
         private double neighbourMinShare = 0.6;
         /** ...and its best neighbour must be at least this similar. */
         private double neighbourMinSimilarity = 0.5;
+        /**
+         * Only neighbours at least this fraction as similar as the best hit vote: the long tail of
+         * "everything scores 0.6" an embedding model returns for unrelated documents falls away.
+         */
+        private double neighbourMinRelativeSimilarity = 0.85;
+        /**
+         * A winning folder must be a home for the document's kind: among its files with a known
+         * category the dominant one must be the document's and hold this share of them, else the
+         * vote is discarded and the model decides — a mixed folder never wins stage 1.
+         */
+        private double neighbourMinFolderPurity = 0.7;
         /** Minimum model confidence to move into an existing folder. */
         private double llmMinConfidence = 0.7;
         /** Minimum model confidence to create a new folder. */

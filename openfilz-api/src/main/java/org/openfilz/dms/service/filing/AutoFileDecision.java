@@ -22,8 +22,11 @@ public final class AutoFileDecision {
     private AutoFileDecision() {
     }
 
-    /** A similar document and where it lives now. */
-    public record Neighbour(UUID documentId, UUID folderId, double similarity) {
+    /** A similar document, where it lives now, and its tier-2 category when known. */
+    public record Neighbour(UUID documentId, UUID folderId, double similarity, String category) {
+        public Neighbour(UUID documentId, UUID folderId, double similarity) {
+            this(documentId, folderId, similarity, null);
+        }
     }
 
     /** The winning folder of a vote and how convincing it was. */
@@ -36,13 +39,36 @@ public final class AutoFileDecision {
      * {@code minSimilarity} similar.
      */
     public static Optional<Vote> vote(Collection<Neighbour> neighbours, double minShare, double minSimilarity) {
+        return vote(neighbours, null, minShare, minSimilarity, 0);
+    }
+
+    /**
+     * The vote with the two guards of a mixed library: when the document's category is known, only
+     * neighbours of the same category (or of an unknown one) vote — an invoice is never filed by
+     * reports — and only neighbours at least {@code minRelativeSimilarity} as similar as the best
+     * hit count, so the long tail of unrelated-but-not-dissimilar hits an embedding model returns
+     * has no say. A folder used to win on headcount alone: whatever held the most embedded files
+     * attracted everything, and each document it won made it stronger.
+     */
+    public static Optional<Vote> vote(Collection<Neighbour> neighbours, String documentCategory, double minShare,
+                                      double minSimilarity, double minRelativeSimilarity) {
         if (neighbours == null || neighbours.isEmpty()) {
             return Optional.empty();
         }
-        Map<UUID, double[]> weights = new LinkedHashMap<>();   // [sum, best, count]
-        double total = 0;
+        List<Neighbour> eligible = new ArrayList<>();
+        double bestSimilarity = 0;
         for (Neighbour neighbour : neighbours) {
             if (neighbour == null || neighbour.similarity() <= 0) continue;
+            if (documentCategory != null && neighbour.category() != null
+                    && !sameCategory(documentCategory, neighbour.category())) continue;
+            eligible.add(neighbour);
+            bestSimilarity = Math.max(bestSimilarity, neighbour.similarity());
+        }
+        double floor = bestSimilarity * Math.max(0, Math.min(1, minRelativeSimilarity));
+        Map<UUID, double[]> weights = new LinkedHashMap<>();   // [sum, best, count]
+        double total = 0;
+        for (Neighbour neighbour : eligible) {
+            if (neighbour.similarity() < floor) continue;
             double[] w = weights.computeIfAbsent(neighbour.folderId(), k -> new double[3]);
             w[0] += neighbour.similarity();
             w[1] = Math.max(w[1], neighbour.similarity());
@@ -61,6 +87,39 @@ public final class AutoFileDecision {
         double share = best.getValue()[0] / total;
         Vote result = new Vote(best.getKey(), share, best.getValue()[1], (int) best.getValue()[2], neighbours.size());
         return share >= minShare && best.getValue()[1] >= minSimilarity ? Optional.of(result) : Optional.empty();
+    }
+
+    private static boolean sameCategory(String a, String b) {
+        return a.trim().equalsIgnoreCase(b.trim());
+    }
+
+    /**
+     * Is a folder a home for this kind of document? Among its files with a known category, the
+     * dominant one must be the document's and hold at least {@code minPurity} of them. A folder
+     * without a categorised file, or a document without a category, passes: nothing says otherwise.
+     * A grab-bag of invoices, reports and samples fails, and the model decides instead — it may
+     * create the folder this kind deserves.
+     */
+    public static boolean coherent(Map<String, Integer> histogram, String documentCategory, double minPurity) {
+        if (documentCategory == null || histogram == null || histogram.isEmpty()) {
+            return true;
+        }
+        int total = 0;
+        String dominant = null;
+        int dominantCount = 0;
+        for (Map.Entry<String, Integer> entry : histogram.entrySet()) {
+            int count = entry.getValue() == null ? 0 : entry.getValue();
+            if (count <= 0) continue;
+            total += count;
+            if (count > dominantCount) {
+                dominantCount = count;
+                dominant = entry.getKey();
+            }
+        }
+        if (total == 0 || dominant == null) {
+            return true;
+        }
+        return sameCategory(dominant, documentCategory) && dominantCount >= minPurity * total;
     }
 
     /** What the model answers in stage 2. */
