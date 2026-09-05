@@ -251,6 +251,9 @@ uploaded document seconds after the upload response (which carries `autoFile.job
 3. *stage 2, the model*: only when the vote is inconclusive — the scope's folder inventory
    (`ReorganizationPlanService.folderInventory`) plus the insight row; a new folder only above
    `new-folder-min-confidence`, at most `new-folder-max-depth` levels, and when the user allows it;
+   the scope root is never offered as a target (the document already lies there, unfiled, and a
+   root answer is a skip, "the model found no folder for it"), and the prompt names the unfiled
+   siblings found by the vector store so a batch of one kind gets one folder;
    the call goes through the fallback chain (`AiFallbackChain.callWithFailover`, the chat's
    verdicts) and so does the tier-2 insight call, so a 429 on the first model is retried on the
    next one; a model that cannot be reached at all yields FAILED with the provider's own message,

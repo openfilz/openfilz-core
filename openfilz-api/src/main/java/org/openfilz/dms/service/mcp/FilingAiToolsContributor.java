@@ -3,8 +3,10 @@ package org.openfilz.dms.service.mcp;
 import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.service.ai.AiToolRolePolicy;
 import org.openfilz.dms.service.ai.FilingAiTools;
+import org.openfilz.dms.service.ai.FilingAiToolsRuntimeHints;
 import org.openfilz.dms.service.ai.ToolCapability;
 import org.openfilz.dms.service.filing.AutoFileService;
+import org.springframework.context.annotation.ImportRuntimeHints;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
@@ -16,6 +18,7 @@ import java.util.stream.Collectors;
 /** Registers the smart-filing tool ({@link FilingAiTools#fileDocuments}) for MCP agents and the chat. */
 @Component
 @Lazy
+@ImportRuntimeHints(FilingAiToolsRuntimeHints.class)
 @RequiredArgsConstructor
 public class FilingAiToolsContributor implements McpToolContributor {
 

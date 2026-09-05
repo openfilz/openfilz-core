@@ -400,7 +400,8 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
 
         // Stage 1 — the neighbour vote
         AiProperties.AutoFile config = aiProperties.getAutoFile();
-        List<Neighbour> neighbours = neighbours(document, scopeRoot, text, caller);
+        NeighbourScan scan = neighbours(document, scopeRoot, text, caller);
+        List<Neighbour> neighbours = scan.votes();
         Optional<Vote> vote = AutoFileDecision.vote(neighbours, config.getNeighbourMinShare(), config.getNeighbourMinSimilarity());
         if (vote.isPresent()) {
             Vote winner = vote.get();
@@ -416,14 +417,9 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
         }
 
         // Stage 2 — the model
-        ModelAnswer answer;
+        String raw;
         try {
-            answer = askModel(document, scopeRoot, insight, text, caller, allowNewFolders);
-        } catch (IllegalArgumentException e) {
-            // The model answered, but not with the contract: not a decision we can act on, so the
-            // document stays where it is.
-            return outcome(documentId, document.getName(), FilingOutcome.SKIPPED, document.getParentId(), from,
-                    FilingOutcome.STAGE_MODEL, null, "model answer rejected (" + e.getMessage() + ")", null);
+            raw = askModel(document, scopeRoot, insight, text, scan.unfiledSiblings(), caller, allowNewFolders);
         } catch (Exception e) {
             // The model could not be asked at all (quota, outage, key), even through the fallback
             // chain: no decision was taken, so the outcome is FAILED — file it again later from
@@ -433,16 +429,34 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
             return outcome(documentId, document.getName(), FilingOutcome.FAILED, document.getParentId(), from,
                     FilingOutcome.STAGE_MODEL, null, "the model could not be asked (" + cause + ")", null);
         }
-        if (answer == null) {
+        if (raw == null) {
             return outcome(documentId, document.getName(), FilingOutcome.SKIPPED, document.getParentId(), from,
                     FilingOutcome.STAGE_MODEL, null, neighbours.isEmpty()
                             ? "no similar documents yet and no model to ask" : "no folder holds enough of its closest documents", null);
+        }
+        ModelAnswer answer;
+        try {
+            answer = ModelAnswer.parse(raw);
+        } catch (IllegalArgumentException e) {
+            // The model answered, but not with the contract: not a decision we can act on, so the
+            // document stays where it is. The answer goes to the log so the prompt can be tuned.
+            log.warn("[AUTOFILE] model answer rejected for '{}' ({}): {} — answer: {}", document.getName(), documentId,
+                    e.getMessage(), head(raw));
+            return outcome(documentId, document.getName(), FilingOutcome.SKIPPED, document.getParentId(), from,
+                    FilingOutcome.STAGE_MODEL, null, "model answer rejected (" + e.getMessage() + ")", null);
         }
         String target = answer.target() == null ? "" : answer.target().trim();
         if (answer.confidence() < config.getLlmMinConfidence()) {
             return outcome(documentId, document.getName(), FilingOutcome.SKIPPED, document.getParentId(), from,
                     FilingOutcome.STAGE_MODEL, answer.confidence(), "the model was not confident enough ("
                             + String.format(Locale.ROOT, "%.2f", answer.confidence()) + ")", null);
+        }
+        if (target.isEmpty() || target.equals(".") || target.equals("/")) {
+            // The scope root is where the document already lies, unfiled: the model saw nothing
+            // better than leaving it there, which is a skip, not a filing.
+            return outcome(documentId, document.getName(), FilingOutcome.SKIPPED, document.getParentId(), from,
+                    FilingOutcome.STAGE_MODEL, answer.confidence(), "the model found no folder for it"
+                            + (answer.reason() == null || answer.reason().isBlank() ? "" : " (" + answer.reason() + ")"), null);
         }
         boolean exists = planService.folderExists(scopeRoot, target, caller);
         if (!exists) {
@@ -517,10 +531,19 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
     // ── stage 1 ─────────────────────────────────────────────────────────────
 
     /** The nearest documents by content, each with the folder it lives in now (inside the scope, writable). */
-    private List<Neighbour> neighbours(Document document, UUID scopeRoot, String text, Caller caller) {
+    /**
+     * What the vector store says about a document: the neighbours that may vote (stage 1) and the
+     * neighbours lying unfiled next to it at the scope root, which vote for nothing but tell the
+     * model (stage 2) what else is waiting so a batch of one kind gets one folder.
+     */
+    private record NeighbourScan(List<Neighbour> votes, List<String> unfiledSiblings) {
+        static final NeighbourScan EMPTY = new NeighbourScan(List.of(), List.of());
+    }
+
+    private NeighbourScan neighbours(Document document, UUID scopeRoot, String text, Caller caller) {
         VectorStore vectorStore = vectorStoreProvider.getIfAvailable();
         if (vectorStore == null) {
-            return List.of();
+            return NeighbourScan.EMPTY;
         }
         int topK = Math.max(3, aiProperties.getAutoFile().getNeighbourTopK());
         List<org.springframework.ai.document.Document> hits;
@@ -531,7 +554,7 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
                     .build());
         } catch (Exception e) {
             log.warn("[AUTOFILE] similarity search failed for {}: {}", document.getId(), e.getMessage());
-            return List.of();
+            return NeighbourScan.EMPTY;
         }
         Map<UUID, Double> bestByDocument = new LinkedHashMap<>();
         for (org.springframework.ai.document.Document hit : hits) {
@@ -543,11 +566,11 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
             if (bestByDocument.size() >= topK) break;
         }
         if (bestByDocument.isEmpty()) {
-            return List.of();
+            return NeighbourScan.EMPTY;
         }
         List<Document> documents = blockWithAuth(documentRepository.findAllById(bestByDocument.keySet()).collectList(), caller);
         if (documents == null) {
-            return List.of();
+            return NeighbourScan.EMPTY;
         }
         Map<UUID, Boolean> scopeCache = new HashMap<>();
         Set<UUID> folderIds = documents.stream()
@@ -557,32 +580,39 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
                 : accessPolicy.permitAll() ? folderIds
                 : Optional.ofNullable(blockWithAuth(accessPolicy.modifiable(folderIds, caller.email()), caller)).orElse(Set.of());
         List<Neighbour> out = new ArrayList<>();
+        List<String> unfiledSiblings = new ArrayList<>();
         for (Document d : documents) {
             if (d.getType() != DocumentType.FILE || Boolean.FALSE.equals(d.getActive())) continue;
             UUID folder = d.getParentId();
             // A neighbour lying at the root has no say: a file at the root is unfiled by definition.
             // Counting root neighbours let a batch dropped at the root vote to keep each other there
             // ("already in the folder where its 3 closest documents live"), which is exactly the
-            // case the model stage exists for — so the root never wins stage 1.
-            if (folder == null) continue;
+            // case the model stage exists for — so the root never wins stage 1. When the document
+            // itself lies at the root, those neighbours are the rest of its batch: remembered for
+            // the model, so it picks one folder that suits them all.
+            if (folder == null) {
+                if (document.getParentId() == null) unfiledSiblings.add(d.getName());
+                continue;
+            }
             if (!writable.contains(folder)) continue;
             if (!planService.isWithin(folder, scopeRoot, scopeCache, caller)) continue;
             out.add(new Neighbour(d.getId(), folder, bestByDocument.getOrDefault(d.getId(), 0.0)));
         }
-        return out;
+        return new NeighbourScan(out, unfiledSiblings);
     }
 
     // ── stage 2 ─────────────────────────────────────────────────────────────
 
-    private ModelAnswer askModel(Document document, UUID scopeRoot, DocumentInsightView insight, String text,
-                                 Caller caller, boolean allowNewFolders) {
+    /** The model's raw answer for stage 2, or null when there is no model to ask. */
+    private String askModel(Document document, UUID scopeRoot, DocumentInsightView insight, String text,
+                            List<String> unfiledSiblings, Caller caller, boolean allowNewFolders) {
         ResolvedChat chat = model();
         if (chat == null) {
             return null;
         }
         String inventory = planService.folderInventory(scopeRoot, caller);
         String system = systemPrompt(allowNewFolders);
-        String user = userPrompt(document, scopeRoot, insight, text, inventory, caller);
+        String user = userPrompt(document, scopeRoot, insight, text, inventory, unfiledSiblings, caller);
         // Same failover as the chat: a quota hit on the filing model is retried on the next
         // candidate of the chain rather than skipping the document.
         String answer = fallbackChain.callWithFailover(chat, "AUTOFILE", candidate ->
@@ -592,30 +622,50 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
                         .options(ChatOptions.builder().temperature(0.0))
                         .call()
                         .content());
-        return ModelAnswer.parse(answer);
+        return answer;
     }
 
+    /**
+     * The scope root is deliberately not offered as a target: it is where the document already
+     * lies, unfiled, and the inventory shows it holding files (its loose ones), so a model given the
+     * choice picked it — "already in the target folder" — and the batch of annual reports stayed
+     * put. The only answers are an existing folder, a new one, or a low confidence.
+     */
     String systemPrompt(boolean allowNewFolders) {
         int maxDepth = aiProperties.getAutoFile().getNewFolderMaxDepth();
         return """
                 You file documents into a document management system (%s).
-                Given the folder tree of a scope and a document, choose the folder it belongs in and answer with ONE JSON object only:
-                {"target": "<folder path relative to the scope root, e.g. Finance/Invoices/2026; \\"\\" for the scope root itself>", \
+                Given the folder tree of a scope and a document lying unfiled at the scope root, choose the folder it belongs in \
+                and answer with ONE JSON object only:
+                {"target": "<path of the destination folder relative to the scope root, e.g. Finance/Invoices/2026>", \
                 "createFolders": ["<the new path when target does not exist yet>"], "confidence": <0.0-1.0>, "reason": "<one sentence>"}
+                The scope root itself is never the destination: the document is already there, unfiled, and the loose files \
+                listed at the root are waiting to be filed too. \
                 Prefer an existing folder whose documents resemble this one (same category, client, project, period). \
                 %s Never invent identifiers; be honest in the confidence.
                 """.formatted(PROMPT_MARKER, allowNewFolders
-                ? "Propose a new folder (at most " + maxDepth + " level(s) below an existing folder) only when no existing folder fits, and only with high confidence."
+                ? "When no existing folder fits, propose a new, well-named folder for this kind of document (at the scope root or "
+                        + "at most " + maxDepth + " level(s) below an existing folder): documents of one kind or series — the yearly "
+                        + "reports of one organisation, the invoices of one supplier — belong together in one folder, and the other "
+                        + "unfiled documents listed with this one will be filed right after it, so choose a folder that suits them too. "
+                        + "Answer with a low confidence only when you really cannot tell."
                 : "Do not propose new folders: choose an existing one or answer with low confidence.");
     }
 
-    String userPrompt(Document document, UUID scopeRoot, DocumentInsightView insight, String text, String inventory, Caller caller) {
+    String userPrompt(Document document, UUID scopeRoot, DocumentInsightView insight, String text, String inventory,
+                      List<String> unfiledSiblings, Caller caller) {
         StringBuilder sb = new StringBuilder();
         sb.append("Scope: ").append(planService.pathOf(scopeRoot, caller)).append('\n');
         sb.append(inventory).append('\n');
         sb.append("Document to file: ").append(document.getName());
         if (document.getContentType() != null) sb.append(" (").append(document.getContentType()).append(')');
         sb.append('\n');
+        sb.append("Current location: ").append(planService.pathOf(document.getParentId(), caller)).append(" (unfiled)\n");
+        if (unfiledSiblings != null && !unfiledSiblings.isEmpty()) {
+            sb.append("Other unfiled documents next to it that resemble it (to be filed after this one): ")
+                    .append(String.join(", ", unfiledSiblings.size() > 10 ? unfiledSiblings.subList(0, 10) : unfiledSiblings))
+                    .append(unfiledSiblings.size() > 10 ? ", ..." : "").append('\n');
+        }
         if (insight != null) {
             Map<String, Object> compact = DocumentInsightStore.compact(insight);
             if (!compact.isEmpty()) sb.append("Insights: ").append(compact).append('\n');
@@ -740,5 +790,12 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
 
     private static String reason(Exception e) {
         return e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+    }
+
+    /** The first 300 characters of a model answer, on one line, for the log. */
+    private static String head(String answer) {
+        if (answer == null) return "null";
+        String flat = answer.replace('\n', ' ').replace('\r', ' ');
+        return flat.length() > 300 ? flat.substring(0, 300) + "..." : flat;
     }
 }
