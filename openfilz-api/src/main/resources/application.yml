@@ -270,6 +270,44 @@ openfilz:
       7. When RAG context is provided, USE IT and mention the document name.
       8. You can analyze images and PDFs. When a user asks about an image file or wants to extract text from an image or scanned PDF, use the describeImage tool with the appropriate task ('describe', 'ocr', or 'answer').
       9. Be efficient: never repeat a tool call you have already made with the same arguments in this turn — reuse the result you already have. Plan the fewest steps needed.
+      10. To tidy, sort or restructure documents, call planReorganization first and design the hierarchy from the inventory (category, dates, activity, summaries). Only read a file's content when the inventory leaves its nature unclear. Propose with proposeReorganizationPlan; never move documents with moveDocuments as part of a reorganisation.
+    # Reorganisation tools (planReorganization): a produced inventory is served again for the same
+    # user + request shape for this long (dropped as soon as one of the user's tool calls mutates
+    # the library); the rate cap bounds looping agents (cached hits do not count).
+    # Tier-2 document insights: one cheap model call per uploaded file (category from the closed
+    # list below, summary, keywords, language, entities), stored in ai_document_insights and
+    # mirrored to the search index. Tier 1 (the file's own metadata) is always captured when
+    # full-text or AI runs Tika. Off by default: it spends tokens.
+    insights:
+      active: ${OPENFILZ_AI_INSIGHTS_ACTIVE:false}
+      model: ${OPENFILZ_AI_INSIGHTS_MODEL:}          # provider:model, empty = the chat model
+      max-chars: ${OPENFILZ_AI_INSIGHTS_MAX_CHARS:6000}
+      max-file-size: ${OPENFILZ_AI_INSIGHTS_MAX_FILE_SIZE:50MB}
+      concurrency: ${OPENFILZ_AI_INSIGHTS_CONCURRENCY:2}
+      daily-limit: ${OPENFILZ_AI_INSIGHTS_DAILY_LIMIT:2000}
+      categories: ${OPENFILZ_AI_INSIGHTS_CATEGORIES:invoice,quote,contract,report,letter,cv,presentation,spreadsheet,form,id-document,receipt,minutes,specification,manual,other}
+    # Smart filing on upload (design §13): on the user's explicit request (a remembered switch or
+    # autoFile=true on the upload), OpenFilz chooses the destination folder — the nearest documents'
+    # folder (one vector query, no model call) or, when they disagree, the model's choice among the
+    # scope's folders. Asynchronous: the upload lands where it was dropped and moves seconds later;
+    # below the thresholds it stays; every move is a normal audited move with an undo.
+    auto-file:
+      active: ${OPENFILZ_AI_AUTO_FILE_ACTIVE:false}
+      default-for-users: ${OPENFILZ_AI_AUTO_FILE_DEFAULT:false}
+      allow-new-folders: ${OPENFILZ_AI_AUTO_FILE_NEW_FOLDERS:true}
+      max-per-batch: 200
+      concurrency: 2
+      neighbour-top-k: 20
+      neighbour-min-share: 0.6
+      neighbour-min-similarity: 0.5
+      llm-min-confidence: 0.7
+      new-folder-min-confidence: 0.85
+      new-folder-max-depth: 2
+      wait-for-insights: 30s
+    reorganization:
+      inventory-cache-ttl: ${OPENFILZ_AI_REORG_INVENTORY_CACHE_TTL:2m}
+      plan-rate-limit: ${OPENFILZ_AI_REORG_PLAN_RATE_LIMIT:20}
+      plan-rate-window: 10m
     embedding:
       chunk-size: 1000       # Characters per text chunk
       chunk-overlap: 200     # Overlap between chunks

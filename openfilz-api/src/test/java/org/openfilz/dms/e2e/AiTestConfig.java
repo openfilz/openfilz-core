@@ -73,7 +73,28 @@ public class AiTestConfig {
                 .thenReturn(Flux.just(chatResponse));
         when(chatModel.call(any(org.springframework.ai.chat.prompt.Prompt.class)))
                 .thenReturn(chatResponse);
-
+        // Tier-2 document insights: the enrichment prompt carries a marker; answer the JSON
+        // contract — or garbage when the file name asks for it (DocumentInsightsTier2IT).
+        when(chatModel.call(org.mockito.ArgumentMatchers.argThat((org.springframework.ai.chat.prompt.Prompt p) ->
+                p != null && p.getContents() != null && p.getContents().contains("INSIGHTS_V1"))))
+                .thenAnswer(invocation -> {
+                    org.springframework.ai.chat.prompt.Prompt prompt = invocation.getArgument(0);
+                    String answer = prompt.getContents().contains("malformed")
+                            ? "Sorry, I cannot produce that."
+                            : """
+                            ```json
+                            {"category": "Report", "summary": "A short test summary of the document.",
+                             "keywords": ["test", "report"], "language": "en", "entities": {"client": "ACME"}}
+                            ```""";
+                    return new ChatResponse(List.of(new Generation(new AssistantMessage(answer))));
+                });
+        // Smart filing (stage 2): the filing prompt carries its own marker; the mock proposes a
+        // new folder with high confidence (AutoFileIT relies on it when no neighbours exist yet).
+        when(chatModel.call(org.mockito.ArgumentMatchers.argThat((org.springframework.ai.chat.prompt.Prompt p) ->
+                p != null && p.getContents() != null && p.getContents().contains("AUTOFILE_V1"))))
+                .thenAnswer(invocation -> new ChatResponse(List.of(new Generation(new AssistantMessage("""
+                        {"target": "Filed-by-model", "createFolders": ["Filed-by-model"], "confidence": 0.95,
+                         "reason": "The mocked model files everything into Filed-by-model"}""")))));
         return chatModel;
     }
 

@@ -120,6 +120,14 @@ public class McpRoleEnforcementIT extends AbstractMcpIT {
     }
 
     @Test
+    @DisplayName("getDocumentActivity is gated on the AUDITOR role, like /api/v1/audit")
+    void auditTrailToolIsGatedOnAuditor() {
+        as(READER);
+        assertThat(callToolText("getDocumentActivity", """
+                {"document":"%s"}""".formatted(UUID.randomUUID()))).contains("Not permitted");
+    }
+
+    @Test
     @DisplayName("a CONTRIBUTOR may write, so the gate is not simply refusing everyone")
     void contributorMayWrite() {
         String folderName = "mcp-role-ok-" + UUID.randomUUID().toString().substring(0, 8);

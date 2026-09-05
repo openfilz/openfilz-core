@@ -36,6 +36,14 @@ public class DocumentAiToolsFactory {
     private final org.openfilz.dms.service.DocumentVersionService versionService;
     private final org.openfilz.dms.config.CommonProperties commonProperties;
     private final org.openfilz.dms.security.DownloadTokenService downloadTokenService;
+    private final org.openfilz.dms.service.AuditService auditService;
+    /**
+     * The full-text index, present only when full-text search is configured: readDocumentContent
+     * serves the text extracted at upload from it instead of downloading and parsing the file again.
+     */
+    private final org.springframework.beans.factory.ObjectProvider<org.openfilz.dms.service.IndexService> indexServiceProvider;
+    private final org.springframework.beans.factory.ObjectProvider<org.openfilz.dms.service.insight.DocumentInsightStore> insightStoreProvider;
+    private final org.springframework.beans.factory.ObjectProvider<org.openfilz.dms.service.filing.AutoFileService> autoFileServiceProvider;
 
     /**
      * Create a tools instance bound to the requesting user: every document access inside
@@ -44,7 +52,9 @@ public class DocumentAiToolsFactory {
      * DAO overrides in extension layers see the caller's identity.
      */
     public DocumentAiTools create(ChatModel chatModel, String userEmail, org.springframework.security.core.Authentication authentication) {
-        return new DocumentAiTools(documentService, documentRepository, storageService, queryService, chatModel, accessPolicy, rolePolicy, versionService, commonProperties, downloadTokenService)
+        return new DocumentAiTools(documentService, documentRepository, storageService, queryService, chatModel, accessPolicy, rolePolicy, versionService, commonProperties, downloadTokenService,
+                auditService, indexServiceProvider.getIfAvailable(), insightStoreProvider.getIfAvailable(),
+                autoFileServiceProvider.getIfAvailable())
                 .forUser(userEmail, authentication);
     }
 }

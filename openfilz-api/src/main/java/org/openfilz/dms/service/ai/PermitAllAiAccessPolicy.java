@@ -4,6 +4,8 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
+import java.util.Collection;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -24,5 +26,15 @@ public class PermitAllAiAccessPolicy implements AiAccessPolicy {
     @Override
     public Mono<Boolean> canModify(UUID documentId, String userEmail) {
         return Mono.just(true);
+    }
+
+    @Override
+    public Mono<Set<UUID>> readable(Collection<UUID> documentIds, String userEmail) {
+        return Mono.just(documentIds == null ? Set.of() : Set.copyOf(documentIds));
+    }
+
+    @Override
+    public Mono<Set<UUID>> modifiable(Collection<UUID> documentIds, String userEmail) {
+        return Mono.just(documentIds == null ? Set.of() : Set.copyOf(documentIds));
     }
 }

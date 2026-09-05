@@ -43,6 +43,16 @@ public class DocumentEmbeddingServiceImpl implements DocumentEmbeddingService {
     private final AiProperties aiProperties;
     private final TikaService tikaService;
 
+    /** Tier-1 document insights (the file's own metadata), captured from the same Tika pass. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @Lazy
+    private org.openfilz.dms.service.insight.DocumentInsightStore insightStore;
+
+    /** Tier-2 document insights (model enrichment), queued with the text this pass extracted. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @Lazy
+    private org.openfilz.dms.service.insight.DocumentInsightService insightService;
+
     @Override
     public Mono<Void> embedDocument(Document document) {
         if (document.getType() != DocumentType.FILE) {
@@ -58,7 +68,8 @@ public class DocumentEmbeddingServiceImpl implements DocumentEmbeddingService {
         try {
             Path tempFile = Files.createTempFile("ai-embed-", ".tmp");
 
-            return tikaService.processResource(tempFile, storageService.loadFile(document.getStoragePath()))
+            return tikaService.processResource(tempFile, storageService.loadFile(document.getStoragePath()),
+                            metadata -> saveFileMetadata(document, metadata))
                     .reduce(new StringBuilder(), StringBuilder::append)
                     .flatMap(collectedText -> {
                         // Clean up temp file
@@ -71,6 +82,7 @@ public class DocumentEmbeddingServiceImpl implements DocumentEmbeddingService {
                         }
 
                         log.debug("[AI-EMBED] Tika extracted {} chars for '{}'", text.length(), document.getName());
+                        enqueueInsights(document, text);
                         return embedFromText(document, text);
                     })
                     .doOnError(e -> {
@@ -82,6 +94,31 @@ public class DocumentEmbeddingServiceImpl implements DocumentEmbeddingService {
         } catch (IOException e) {
             log.error("[AI-EMBED] Failed to create temp file for '{}': {}", document.getName(), e.getMessage());
             return Mono.empty();
+        }
+    }
+
+    /** Tier-2 insight: hand the text head to the enrichment queue (returns at once; off = no-op). */
+    private void enqueueInsights(Document document, String text) {
+        try {
+            if (insightService != null && insightService.isActive()) {
+                insightService.enqueue(document, text.substring(0, Math.min(text.length(), 12_000)));
+            }
+        } catch (Exception e) {
+            log.warn("[INSIGHTS] could not queue enrichment of {}: {}", document.getId(), e.getMessage());
+        }
+    }
+
+    /** Tier-1 insight from the parse that already ran (full-text off, AI on). */
+    private void saveFileMetadata(Document document, org.apache.tika.metadata.Metadata metadata) {
+        if (insightStore == null) {
+            return;
+        }
+        try {
+            insightStore.saveFileMetadata(document, org.openfilz.dms.service.insight.TikaFileMetadata.from(metadata))
+                    .subscribe(v -> { },
+                            e -> log.warn("[INSIGHTS] tier-1 save failed for {}: {}", document.getId(), e.getMessage()));
+        } catch (Exception e) {
+            log.warn("[INSIGHTS] tier-1 save failed for {}: {}", document.getId(), e.getMessage());
         }
     }
 

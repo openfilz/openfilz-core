@@ -22,6 +22,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Consumer;
 
 /**
  * Extracts text from uploaded documents using Apache Tika and streams it as a Flux<String>.
@@ -45,6 +46,17 @@ public class TikaService {
      * @return A Flux that emits text chunks as they are parsed from the document.
      */
     public Flux<String> processResource(Path stableTempFile, Mono<? extends Resource> resourceMono) {
+        return processResource(stableTempFile, resourceMono, null);
+    }
+
+    /**
+     * Same as {@link #processResource(Path, Mono)}, additionally handing the file's own metadata
+     * (title, author, dates, page count, as Tika found them) to {@code onMetadata} once the parse
+     * completed, before the text flux completes. The callback runs on the parsing thread and
+     * must not block; a failure inside it is logged and does not fail the extraction.
+     */
+    public Flux<String> processResource(Path stableTempFile, Mono<? extends Resource> resourceMono,
+                                        Consumer<Metadata> onMetadata) {
         // First, we need the actual Resource. The flatMapMany operator lets us work within the Mono
         // and return a Flux.
         return resourceMono.flatMapMany(resource -> {
@@ -61,8 +73,16 @@ public class TikaService {
                             log.debug("Starting Tika parsing from stable file path [{}].", stableTempFile);
                             try (TikaInputStream tikaStream = TikaInputStream.get(stableTempFile)) {
                                 ContentHandler handler = new FluxSinkContentHandler(sink);
-                                parser.parse(tikaStream, handler, new Metadata(), new ParseContext());
+                                Metadata metadata = new Metadata();
+                                parser.parse(tikaStream, handler, metadata, new ParseContext());
                                 log.debug("Tika parsing completed for stable file [{}].", stableTempFile);
+                                if (onMetadata != null) {
+                                    try {
+                                        onMetadata.accept(metadata);
+                                    } catch (Exception e) {
+                                        log.warn("Metadata callback failed for [{}]: {}", stableTempFile, e.getMessage());
+                                    }
+                                }
                                 sink.complete();
                             } catch (Throwable e) {
                                 // Catch Throwable to handle both Exception and Error types

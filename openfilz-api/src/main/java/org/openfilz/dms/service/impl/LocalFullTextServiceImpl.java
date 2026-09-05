@@ -70,6 +70,16 @@ public class LocalFullTextServiceImpl implements FullTextService {
     @org.springframework.beans.factory.annotation.Value("${openfilz.ai.active:false}")
     private boolean aiActive;
 
+    /** Tier-1 document insights (the file's own metadata), captured from the same Tika pass. */
+    @Autowired(required = false)
+    @Lazy
+    private org.openfilz.dms.service.insight.DocumentInsightStore insightStore;
+
+    /** Tier-2 document insights (model enrichment), queued with the text this pass extracted. */
+    @Autowired(required = false)
+    @Lazy
+    private org.openfilz.dms.service.insight.DocumentInsightService insightService;
+
     public LocalFullTextServiceImpl(IndexService indexService, TikaService tikaService, StorageService storageService) {
         this.indexService = indexService;
         this.tikaService = tikaService;
@@ -106,7 +116,8 @@ public class LocalFullTextServiceImpl implements FullTextService {
             final boolean shareWithAi = aiActive && documentEmbeddingService != null;
             final StringBuilder collectedText = shareWithAi ? new StringBuilder() : null;
 
-            Flux<String> tikaFlux = tikaService.processResource(tempFile, storageService.loadFile(document.getStoragePath()));
+            Flux<String> tikaFlux = tikaService.processResource(tempFile, storageService.loadFile(document.getStoragePath()),
+                    metadata -> saveFileMetadata(document, metadata));
 
             // If sharing with AI, tap into the stream to collect text (lightweight — just appending strings)
             if (shareWithAi) {
@@ -127,6 +138,7 @@ public class LocalFullTextServiceImpl implements FullTextService {
                             log.debug("[AI-EMBED] Sharing Tika-extracted text with AI embedding for '{}' ({} chars)",
                                     document.getName(), collectedText.length());
                             documentEmbeddingService.embedFromText(document, collectedText.toString()).subscribe();
+                            enqueueInsights(document, collectedText);
                         }
                     })),
                     document,
@@ -134,6 +146,31 @@ public class LocalFullTextServiceImpl implements FullTextService {
             );
         } catch (IOException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    /** Tier-2 insight: hand the text head to the enrichment queue (returns at once; off = no-op). */
+    private void enqueueInsights(Document document, CharSequence text) {
+        try {
+            if (insightService != null && insightService.isActive()) {
+                insightService.enqueue(document, text.subSequence(0, Math.min(text.length(), 12_000)).toString());
+            }
+        } catch (Exception e) {
+            log.warn("[INSIGHTS] could not queue enrichment of {}: {}", document.getId(), e.getMessage());
+        }
+    }
+
+    /** Tier-1 insight from the parse that already ran: no second Tika pass, no extra I/O. */
+    private void saveFileMetadata(Document document, org.apache.tika.metadata.Metadata metadata) {
+        if (insightStore == null) {
+            return;
+        }
+        try {
+            insightStore.saveFileMetadata(document, org.openfilz.dms.service.insight.TikaFileMetadata.from(metadata))
+                    .subscribe(v -> { },
+                            e -> log.warn("[INSIGHTS] tier-1 save failed for {}: {}", document.getId(), e.getMessage()));
+        } catch (Exception e) {
+            log.warn("[INSIGHTS] tier-1 save failed for {}: {}", document.getId(), e.getMessage());
         }
     }
 

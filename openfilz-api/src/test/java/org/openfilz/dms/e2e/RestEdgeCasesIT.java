@@ -466,6 +466,22 @@ public class RestEdgeCasesIT extends TestContainersBaseConfig {
         // Metadata might be null or empty when withMetadata=false
     }
 
+    // ============ AI reorganization endpoint when the AI feature is off ============
+
+    /**
+     * The proposal-card endpoint is gated on {@code openfilz.ai.active}, which is off in this
+     * deployment: it answers 404 per request rather than not being mapped at all — the toggle has
+     * to stay runtime-evaluated for the GraalVM native image.
+     */
+    @Test
+    void whenAiIsDisabled_thenReorganizationEndpointIsNotFound() {
+        String plan = RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_AI + "/reorganization/" + UUID.randomUUID();
+
+        getWebTestClient().get().uri(plan).exchange().expectStatus().isNotFound();
+        getWebTestClient().post().uri(plan + "/apply").exchange().expectStatus().isNotFound();
+        getWebTestClient().post().uri(plan + "/discard").exchange().expectStatus().isNotFound();
+    }
+
     // ==================== Helper Methods ====================
 
     private FolderResponse createFolder(String name, UUID parentId) {

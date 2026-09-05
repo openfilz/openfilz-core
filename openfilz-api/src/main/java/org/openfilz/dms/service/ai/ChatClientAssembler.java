@@ -44,11 +44,22 @@ public class ChatClientAssembler {
         for (int i = 0; i < extraTools.size(); i++) {
             toolObjects[i + 1] = extraTools.get(i);
         }
+        // openfilz.ai.chat.excluded-tools: drop single tools by name (small local models degrade as
+        // the schema grows — see excluded-contributors for whole contributors)
+        org.springframework.ai.tool.ToolCallback[] callbacks = MethodToolCallbackProvider.builder()
+                .toolObjects(toolObjects)
+                .build()
+                .getToolCallbacks();
+        java.util.Set<String> excluded = aiProperties.getChat().getExcludedTools().stream()
+                .filter(name -> name != null && !name.isBlank()).map(String::trim).collect(java.util.stream.Collectors.toSet());
+        if (!excluded.isEmpty()) {
+            callbacks = java.util.Arrays.stream(callbacks)
+                    .filter(callback -> !excluded.contains(callback.getToolDefinition().name()))
+                    .toArray(org.springframework.ai.tool.ToolCallback[]::new);
+        }
         return ChatClient.builder(chatModel)
                 .defaultSystem(aiProperties.getSystemPrompt())
-                .defaultToolCallbacks(MethodToolCallbackProvider.builder()
-                        .toolObjects(toolObjects)
-                        .build())
+                .defaultToolCallbacks(callbacks)
                 .defaultAdvisors(ToolCallingAdvisor.builder()
                         .toolCallingManager(toolCallingManager)
                         .build())

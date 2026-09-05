@@ -50,7 +50,8 @@ public class DocumentAiToolsContributor implements McpToolContributor {
             entry("deleteDocument", ToolCapability.DOCUMENT_DELETE),
             entry("listVersions", ToolCapability.DOCUMENT_READ),
             entry("restoreVersion", ToolCapability.DOCUMENT_WRITE),
-            entry("downloadDocument", ToolCapability.DOCUMENT_READ));
+            entry("downloadDocument", ToolCapability.DOCUMENT_READ),
+            entry("getDocumentActivity", ToolCapability.AUDIT_READ));
 
     /** The read/search tools — advertised in every mode. Derived so it cannot drift from the map. */
     public static final Set<String> READ_ONLY_TOOLS = CAPABILITIES.entrySet().stream()

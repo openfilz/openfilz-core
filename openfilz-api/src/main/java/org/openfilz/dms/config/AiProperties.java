@@ -6,6 +6,8 @@ import org.springframework.context.annotation.Configuration;
 
 import org.openfilz.dms.enums.AiProvider;
 
+import org.springframework.util.unit.DataSize;
+
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -69,6 +71,86 @@ public class AiProperties {
          * deployment on such a model can trim the surface to what it uses. Read per request.
          */
         private List<String> excludedContributors = new ArrayList<>();
+
+        /**
+         * Names of single tools the chat assistant must NOT bind (e.g. {@code getDocumentActivity}),
+         * the finer-grained twin of {@link #excludedContributors} for tools that live in
+         * {@code DocumentAiTools}. The MCP server is not affected. Read per request.
+         */
+        private List<String> excludedTools = new ArrayList<>();
+    }
+
+    /**
+     * Reorganisation tools ({@code planReorganization}): inventory cache and per-user rate cap.
+     * See {@code ReorganizationInventoryCache}.
+     */
+    private Reorganization reorganization = new Reorganization();
+
+    /** Tier-2 document insights (AI-derived category / summary / entities at ingestion). */
+    private Insights insights = new Insights();
+
+    /** Smart filing on upload: OpenFilz chooses the destination folder on the user's request. */
+    private AutoFile autoFile = new AutoFile();
+
+    @Data
+    public static class AutoFile {
+        /** Master switch; needs {@code openfilz.ai.active} and embeddings. */
+        private boolean active = false;
+        /** Initial value of the per-user switch. */
+        private boolean defaultForUsers = false;
+        /** Deployment ceiling for the per-user "may create folders" option. */
+        private boolean allowNewFolders = true;
+        /** Documents one upload batch may file; the rest stay put. */
+        private int maxPerBatch = 200;
+        /** Concurrent filings. */
+        private int concurrency = 2;
+        /** Nearest documents consulted by the neighbour vote. */
+        private int neighbourTopK = 20;
+        /** The leading folder must hold this share of the neighbours' similarity weight. */
+        private double neighbourMinShare = 0.6;
+        /** ...and its best neighbour must be at least this similar. */
+        private double neighbourMinSimilarity = 0.5;
+        /** Minimum model confidence to move into an existing folder. */
+        private double llmMinConfidence = 0.7;
+        /** Minimum model confidence to create a new folder. */
+        private double newFolderMinConfidence = 0.85;
+        /** New folders may be at most this many levels below an existing one. */
+        private int newFolderMaxDepth = 2;
+        /** How long a filing waits for the document's tier-2 insight before deciding without it. */
+        private Duration waitForInsights = Duration.ofSeconds(30);
+    }
+
+    @Data
+    public static class Insights {
+        /** Runtime toggle of the enrichment; needs {@code openfilz.ai.active} too. */
+        private boolean active = false;
+        /** {@code provider:model} for the enrichment (e.g. {@code anthropic:claude-haiku-4-5}); empty = the chat model. */
+        private String model = "";
+        /** Characters of text sent per document. */
+        private int maxChars = 6000;
+        /** Files larger than this are not enriched (tier 1 is still written). */
+        private DataSize maxFileSize = DataSize.ofMegabytes(50);
+        /** Concurrent model calls. */
+        private int concurrency = 2;
+        /** Files enriched per day; beyond it rows are SKIPPED and a later backfill picks them up. Zero disables the cap. */
+        private int dailyLimit = 2000;
+        /** The closed category list the model must pick from ({@code other} is always accepted). */
+        private List<String> categories = new ArrayList<>(List.of(
+                "invoice", "quote", "contract", "report", "letter", "cv", "presentation", "spreadsheet",
+                "form", "id-document", "receipt", "minutes", "specification", "manual", "other"));
+    }
+
+    @Data
+    public static class Reorganization {
+        /**
+         * How long a produced inventory is served again for the same user and request shape. It
+         * is dropped earlier as soon as one of the user's tool calls mutates the library. Zero
+         * disables the cache.
+         */
+        private Duration inventoryCacheTtl = Duration.ofMinutes(2);
+        /** Inventories a user may produce per {@link #planRateWindow}; cached hits do not count. Zero disables the cap. */
+        private int planRateLimit = 20;
+        private Duration planRateWindow = Duration.ofMinutes(10);
     }
 
     /**

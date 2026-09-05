@@ -414,6 +414,45 @@ public class AiFallbackChain {
         return (value == null || value.isBlank() || "disabled".equalsIgnoreCase(value)) ? null : value;
     }
 
+    /**
+     * A deployment-configured {@code provider:model} (e.g. {@code openfilz.ai.insights.model}),
+     * built with the provider's server key (the fallback key pool, else
+     * {@code spring.ai.<provider>.api-key}) and cached. Empty when unset, unparseable, without a
+     * key, or when the client refuses to build; callers then use the chat model.
+     */
+    public java.util.Optional<ResolvedChat> configuredModel(String providerModel) {
+        if (providerModel == null || providerModel.isBlank()) {
+            return java.util.Optional.empty();
+        }
+        List<ChainEntry> entries = parseChain(List.of(providerModel.trim()),
+                rejected -> log.warn("[AI] configured model ignored: {}", rejected));
+        if (entries.isEmpty()) {
+            return java.util.Optional.empty();
+        }
+        ChainEntry entry = entries.getFirst();
+        List<String> keys = keyPool(entry.provider());
+        if (keys.isEmpty()) {
+            log.warn("[AI] configured model {} has no API key for {}", providerModel, entry.provider());
+            return java.util.Optional.empty();
+        }
+        String apiKey = keys.getFirst();
+        String keyRef = AiKeyRef.of(apiKey);
+        String modelKey = cooldownKey(entry.provider().name(), keyRef, entry.model());
+        ResolvedChat cached = models.get(modelKey);
+        if (cached != null) {
+            return java.util.Optional.of(cached);
+        }
+        try {
+            ChatModel chatModel = resolver.buildChatModel(entry.provider(), apiKey, baseUrl(entry.provider()), entry.model());
+            ResolvedChat built = new ResolvedChat(chatModel, entry.provider().name(), entry.model(), keyRef);
+            models.put(modelKey, built);
+            return java.util.Optional.of(built);
+        } catch (Exception e) {
+            log.warn("[AI] configured model {} could not be built: {}", providerModel, e.toString());
+            return java.util.Optional.empty();
+        }
+    }
+
     private String baseUrl(AiProvider provider) {
         return provider == AiProvider.OPENAI_COMPATIBLE
                 ? environment.getProperty("spring.ai.openai.base-url")

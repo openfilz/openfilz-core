@@ -759,6 +759,54 @@ The AI migrations (`V1_4__add_ai_support.sql`, `V1_5__add_embedding_registry.sql
 | `ai_embedding_registry` | Records which embedding model produced the stored vectors (one-time deployment decision, enforced at startup) |
 | `user_ai_settings` | Per-user BYOK chat-LLM overrides (provider, model, AES-256-GCM-encrypted API key) |
 
+### Document insights & smart filing
+
+Two optional layers on top of the AI feature (both need `OPENFILZ_AI_ACTIVE=true`):
+
+**Document insights.** Every file's own metadata (title, author, dates, page count, language) is
+captured at upload whenever full-text or AI runs Tika — no configuration, no model call. With
+`OPENFILZ_AI_INSIGHTS_ACTIVE=true`, a model additionally labels each uploaded file: a category from a
+closed list, a one-sentence summary, keywords, the language and a few entities (client, invoice
+number, period…). Shown in the details panel, used by the AI assistant to organise folders, and
+searchable (`category` facet).
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `OPENFILZ_AI_INSIGHTS_ACTIVE` | `false` | Turn the model enrichment on |
+| `OPENFILZ_AI_INSIGHTS_MODEL` | *(chat model)* | `provider:model` for the enrichment, e.g. `anthropic:claude-haiku-4-5` — a cheap model is enough |
+| `OPENFILZ_AI_INSIGHTS_MAX_CHARS` | `6000` | Characters of text sent per file |
+| `OPENFILZ_AI_INSIGHTS_MAX_FILE_SIZE` | `50MB` | Larger files are not enriched |
+| `OPENFILZ_AI_INSIGHTS_CONCURRENCY` | `2` | Parallel model calls |
+| `OPENFILZ_AI_INSIGHTS_DAILY_LIMIT` | `2000` | Files enriched per day; the rest wait for a backfill |
+| `OPENFILZ_AI_INSIGHTS_CATEGORIES` | invoice, quote, contract, report, letter, cv, presentation, spreadsheet, form, id-document, receipt, minutes, specification, manual, other | The closed category list |
+
+Existing documents: `POST /api/v1/ai/insights/backfill` (`{"folderId": …, "force": false}`, CONTRIBUTOR
+role) enriches everything that has no current insight; `force: true` re-enriches all. Follow it with
+`GET /api/v1/ai/insights/backfill/{jobId}`.
+
+> **Privacy.** Like the RAG embeddings, the enrichment sends up to `max-chars` characters of each
+> document's text to the configured model. Keep the model local (Ollama) when documents must not
+> leave the deployment.
+
+**Smart filing.** With `OPENFILZ_AI_AUTO_FILE_ACTIVE=true`, users get a switch in the upload area
+("Let OpenFilz choose the folder"), remembered per user, and API clients can pass `autoFile=true` on
+uploads. The upload completes as usual; seconds later the document is moved to the folder where its
+closest documents live (one vector query), or to the folder the model picks among the scope's
+folders — the folder it was dropped in is the scope, the root level means the whole library. Below
+the confidence thresholds the document stays where it was. Every move is a normal audited move with
+an undo, and the details panel shows "Filed by OpenFilz" with the reason.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `OPENFILZ_AI_AUTO_FILE_ACTIVE` | `false` | Master switch |
+| `OPENFILZ_AI_AUTO_FILE_DEFAULT` | `false` | Initial value of the per-user switch |
+| `OPENFILZ_AI_AUTO_FILE_NEW_FOLDERS` | `true` | Whether filing may create folders (deployment ceiling) |
+
+Thresholds (`openfilz.ai.auto-file.*` in `application.yml`: `neighbour-min-share` 0.6,
+`neighbour-min-similarity` 0.5, `llm-min-confidence` 0.7, `new-folder-min-confidence` 0.85,
+`new-folder-max-depth` 2, `max-per-batch` 200) are deliberately conservative; every filing record
+carries its reason so they can be tuned from real outcomes.
+
 ### MCP Server (External AI Agents)
 
 OpenFilz can expose its document tools over the

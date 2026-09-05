@@ -110,7 +110,9 @@ public class AiRealLlmE2EIT extends TestContainersBaseConfig {
         // tools — those have their own ITs — so trim the chat surface the way a deployment on a
         // small model would (openfilz.ai.chat.excluded-contributors).
         registry.add("openfilz.ai.chat.excluded-contributors",
-                () -> "OrganizeAiToolsContributor,SignatureAiToolsContributor");
+                () -> "OrganizeAiToolsContributor,SignatureAiToolsContributor,FilingAiToolsContributor");
+        // ...and the single tools added to DocumentAiTools since the 25-tool surface was measured
+        registry.add("openfilz.ai.chat.excluded-tools", () -> "getDocumentActivity");
     }
 
     // ========================= Embeddings (deterministic) =========================
