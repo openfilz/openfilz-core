@@ -97,6 +97,8 @@ public class McpWithChatModelIT extends AbstractMcpIT {
         expected.addAll(org.openfilz.dms.service.mcp.OrganizeAiToolsContributor.MUTATING_TOOLS);
         expected.addAll(org.openfilz.dms.service.mcp.SignatureAiToolsContributor.READ_ONLY_TOOLS);
         expected.addAll(org.openfilz.dms.service.mcp.SignatureAiToolsContributor.MUTATING_TOOLS);
+        expected.addAll(org.openfilz.dms.service.mcp.FilingAiToolsContributor.READ_ONLY_TOOLS);
+        expected.addAll(org.openfilz.dms.service.mcp.FilingAiToolsContributor.MUTATING_TOOLS);
 
         assertThat(advertisedToolNames()).containsExactlyInAnyOrderElementsOf(expected);
     }

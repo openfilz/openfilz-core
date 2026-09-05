@@ -71,6 +71,13 @@ public class AiProperties {
          * deployment on such a model can trim the surface to what it uses. Read per request.
          */
         private List<String> excludedContributors = new ArrayList<>();
+
+        /**
+         * Names of single tools the chat assistant must NOT bind (e.g. {@code getDocumentActivity}),
+         * the finer-grained twin of {@link #excludedContributors} for tools that live in
+         * {@code DocumentAiTools}. The MCP server is not affected. Read per request.
+         */
+        private List<String> excludedTools = new ArrayList<>();
     }
 
     /**

@@ -336,7 +336,9 @@ sequenceDiagram
   refuse, or emit the call as text. The e-Sign tools are bound only while
   `openfilz.signature.active` is on, and `openfilz.ai.chat.excluded-contributors` (simple class
   names, e.g. `OrganizeAiToolsContributor,SignatureAiToolsContributor,PdfAiToolsContributor`)
-  drops whole contributors from the chat without touching the MCP server. Read per request.
+  drops whole contributors from the chat without touching the MCP server, and
+  `openfilz.ai.chat.excluded-tools` (tool names, e.g. `getDocumentActivity`) drops single tools of
+  `DocumentAiTools` the same way. Read per request.
 - **Doc-link enrichment**: every tool call and RAG hit registers `{id, parentId, type, name}` in
   the request's `DocumentAiTools` registry; after streaming, document names in the answer are
   replaced with `[[doc:…]]` markers the frontend renders as clickable links.

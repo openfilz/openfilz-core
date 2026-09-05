@@ -120,7 +120,9 @@ class ReorganizationEdgeCasesIT extends AbstractMcpIT {
                 .contains(file.id().toString())
                 .contains("| txt |")
                 .contains("category=invoice-" + suffix)
-                .contains("Files (id | path | ext | size | modified | metadata)");
+                // Phase D header: the rows carry the insights and the audit activity too
+                .contains("Files (id | path | ext | size | modified by")
+                .contains("last ").contains("action");
     }
 
     @Test
