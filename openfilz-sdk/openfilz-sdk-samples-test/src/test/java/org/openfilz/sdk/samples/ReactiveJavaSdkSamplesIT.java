@@ -81,6 +81,7 @@ public class ReactiveJavaSdkSamplesIT extends SdkSamplesBaseConfig {
         StepVerifier.create(documentApi.uploadDocument1(
                         tempFile.toFile(),
                         true,
+                        null,        // autoFile: leave the file where it is (smart filing off)
                         folderId.toString(),
                         null
                 ))
