@@ -214,4 +214,33 @@ public final class AiFailoverPolicy {
         }
         return false;
     }
+
+    /**
+     * One line for a log or a stored reason: the verdict and the deepest informative message,
+     * e.g. {@code "QUOTA_EXHAUSTED: 429 . RESOURCE_EXHAUSTED. You exceeded your current quota."}.
+     * Spring AI's wrapper says only "Failed to generate content"; what an operator needs is
+     * always further down the cause chain.
+     */
+    public static String describe(Throwable error) {
+        Failure failure = classify(error);
+        String detail = rootMessage(error);
+        return failure == Failure.NOT_FAILOVER ? detail : failure + ": " + detail;
+    }
+
+    /** The deepest non-blank message in the cause chain, or the deepest exception's type name. */
+    public static String rootMessage(Throwable error) {
+        String message = null;
+        Throwable deepest = error;
+        Throwable current = error;
+        for (int depth = 0; current != null && depth < MAX_CAUSE_DEPTH; depth++) {
+            if (current.getMessage() != null && !current.getMessage().isBlank()) {
+                message = current.getMessage().trim();
+            }
+            deepest = current;
+            Throwable cause = current.getCause();
+            current = (cause == current) ? null : cause;
+        }
+        if (message != null) return message;
+        return deepest == null ? "unknown error" : deepest.getClass().getSimpleName();
+    }
 }

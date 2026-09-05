@@ -20,6 +20,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 /**
  * The ordered list of (model, API key) candidates to try for one request, plus the cooldown
@@ -104,11 +105,86 @@ public class AiFallbackChain {
      * is returned anyway: a real error from a real attempt beats refusing to try.
      */
     public List<ResolvedChat> candidates(ResolvedChat primary) {
+        return candidatesFor(primary, Instant.now());
+    }
+
+    /** {@link #candidates(ResolvedChat)} at a given instant — the seam the tests drive time through. */
+    List<ResolvedChat> candidatesFor(ResolvedChat primary, Instant now) {
         AiProperties.Fallback config = aiProperties.getFallback();
         if (!config.isEnabled() || config.getChain().isEmpty() || isLocal(primary)) {
             return List.of(primary);
         }
-        return candidates(primary, Instant.now());
+        return candidates(primary, now);
+    }
+
+    /**
+     * Run one blocking model call with the same failover the chat stream gets
+     * ({@code AiChatServiceImpl#streamWithFailover}): walk the candidates best first, classify each
+     * failure ({@link AiFailoverPolicy}), bench the model that failed so later calls skip it, and
+     * retry on the next usable candidate when the verdict allows it. A refused key surfaces when it
+     * is the primary's own (an operator has to fix it) and is dropped from the pool when it came
+     * from one. The last failure propagates unchanged when nothing is left to try, so the caller
+     * can still classify and describe it.
+     * <p>
+     * Built for the background callers — document insights, smart filing — whose single call per
+     * document used to die on the first 429 of a busy minute.
+     *
+     * @param tag  log prefix, e.g. {@code INSIGHTS}
+     * @param call the call to make; it receives the candidate to use
+     */
+    public <T> T callWithFailover(ResolvedChat primary, String tag, Function<ResolvedChat, T> call) {
+        return callWithFailover(primary, tag, call, Instant.now());
+    }
+
+    /** Package-private seam so tests can drive cooldown expiry without sleeping. */
+    <T> T callWithFailover(ResolvedChat primary, String tag, Function<ResolvedChat, T> call, Instant now) {
+        List<ResolvedChat> candidates = candidatesFor(primary, now);
+        RuntimeException last = null;
+        for (int index = 0; index < candidates.size(); index++) {
+            ResolvedChat candidate = candidates.get(index);
+            if (!isUsable(candidate)) {
+                continue;   // its key was disabled earlier in this same walk
+            }
+            try {
+                return call.apply(candidate);
+            } catch (RuntimeException e) {
+                last = e;
+                Failure failure = AiFailoverPolicy.classify(e);
+                trip(candidate, failure, now);
+                // A pool key the provider refuses is retryable on the next key, though not on
+                // another model of the same key — so it gets its own path rather than
+                // Failure.shouldFailover().
+                boolean pooledKeyRefused = failure == Failure.CREDENTIALS_REJECTED && candidate != primary;
+                if (pooledKeyRefused && disableKey(candidate)) {
+                    log.error("[{}] {} rejected the fallback API key {} — dropping it from the pool for the rest "
+                                    + "of this process; fix or remove it in AI_FALLBACK_KEYS_{}",
+                            tag, candidate.provider(), candidate.keyRef(), candidate.provider().toUpperCase(Locale.ROOT));
+                }
+                if (!failure.shouldFailover() && !pooledKeyRefused) {
+                    throw e;
+                }
+                ResolvedChat next = nextUsable(candidates, index);
+                if (next == null) {
+                    log.error("[{}] {} on {} ({}, key {}) and no fallback model left: {}", tag, failure,
+                            candidate.provider(), candidate.model(), candidate.keyRef(), AiFailoverPolicy.rootMessage(e));
+                    throw e;
+                }
+                log.warn("[{}] {} on {} ({}, key {}) — falling back to {} ({}, key {})", tag, failure,
+                        candidate.provider(), candidate.model(), candidate.keyRef(),
+                        next.provider(), next.model(), next.keyRef());
+            }
+        }
+        throw last != null ? last : new IllegalStateException("no usable model in the fallback chain");
+    }
+
+    /** The next candidate after {@code index} whose key is still in rotation, or null. */
+    private ResolvedChat nextUsable(List<ResolvedChat> candidates, int index) {
+        for (int i = index + 1; i < candidates.size(); i++) {
+            if (isUsable(candidates.get(i))) {
+                return candidates.get(i);
+            }
+        }
+        return null;
     }
 
     /**

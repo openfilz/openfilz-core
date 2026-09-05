@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -258,30 +259,47 @@ class AiFallbackChainTest {
 
     private final SimulatedProviders providers = new SimulatedProviders();
 
-    /** One chat request, mirroring {@code AiChatServiceImpl#streamWithFailover}. */
+    /**
+     * One blocking request through the production walk ({@link AiFallbackChain#callWithFailover}),
+     * the same loop {@code AiChatServiceImpl#streamWithFailover} runs for the chat: the answer, or
+     * "ERROR:" plus the provider's own message once the walk gives up.
+     */
     private String ask(ResolvedChat primary, Instant now) {
-        for (ResolvedChat candidate : chain.candidates(primary, now)) {
-            if (!chain.isUsable(candidate)) {
-                continue;   // its key was disabled earlier in this same walk
-            }
-            try {
-                return providers.call(candidate);
-            } catch (RuntimeException e) {
-                Failure failure = AiFailoverPolicy.classify(e);
-                chain.trip(candidate, failure, now);
-                // Mirrors AiChatServiceImpl#streamWithFailover: a key the provider refuses is
-                // dropped and the walk continues when it came from a pool; on the primary it
-                // surfaces, so a single-key deployment sees its own broken key.
-                boolean pooledKeyRefused = failure == Failure.CREDENTIALS_REJECTED && candidate != primary;
-                if (pooledKeyRefused) {
-                    chain.disableKey(candidate);
-                }
-                if (!failure.shouldFailover() && !pooledKeyRefused) {
-                    return "ERROR:" + e.getCause().getMessage();
-                }
-            }
+        try {
+            return chain.callWithFailover(primary, "TEST", providers::call, now);
+        } catch (RuntimeException e) {
+            return "ERROR:" + AiFailoverPolicy.rootMessage(e);
         }
-        return "NO_CANDIDATE";
+    }
+
+    @Test
+    @DisplayName("a request we built wrong surfaces at once, without burning the chain")
+    void nonFailoverErrorSurfacesUnchanged() {
+        chain("google:m1");
+        keys(AiProvider.GOOGLE, GOOGLE_A);
+        ResolvedChat primary = primary("gemini-2.5-flash", GOOGLE_A);
+        RuntimeException boom = new RuntimeException("Failed to generate content",
+                new RuntimeException("400 . INVALID_ARGUMENT. Unknown name 'foo'"));
+
+        assertThatThrownBy(() -> chain.callWithFailover(primary, "TEST", candidate -> { throw boom; }, T0))
+                .isSameAs(boom);
+        assertThat(providers.calls).isEmpty();
+        // Nothing benched: the primary still leads the next request
+        assertThat(view(chain.candidates(primary, T0.plusSeconds(1))).getFirst())
+                .isEqualTo("google-genai/gemini-2.5-flash/google-key-A");
+    }
+
+    @Test
+    @DisplayName("a quota hit on the primary is retried on the chain and the answer comes from the fallback")
+    void quotaOnPrimaryFallsToTheChain() {
+        chain("google:m1");
+        keys(AiProvider.GOOGLE, GOOGLE_A);
+        ResolvedChat primary = primary("gemini-2.5-flash", GOOGLE_A);
+        providers.allow(GOOGLE_A, "gemini-2.5-flash", 0);   // spent
+
+        assertThat(ask(primary, T0)).isEqualTo("GOOGLE|" + AiKeyRef.of(GOOGLE_A) + "|m1");
+        assertThat(providers.callsMatching("gemini-2.5-flash")).isEqualTo(1);
+        assertThat(providers.callsMatching("|m1")).isEqualTo(1);
     }
 
     @Test
