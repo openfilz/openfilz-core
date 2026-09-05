@@ -213,6 +213,19 @@ spec:
               value: {{ .Values.ai.google.chat.enabled | quote }}
             - name: GOOGLE_CHAT_MODEL
               value: {{ .Values.ai.google.chat.model | quote }}
+            # Document insights (AI category / summary at upload) and smart filing on upload
+            - name: OPENFILZ_AI_INSIGHTS_ACTIVE
+              value: {{ .Values.ai.insights.active | quote }}
+            - name: OPENFILZ_AI_INSIGHTS_MODEL
+              value: {{ .Values.ai.insights.model | quote }}
+            - name: OPENFILZ_AI_INSIGHTS_DAILY_LIMIT
+              value: {{ .Values.ai.insights.dailyLimit | quote }}
+            - name: OPENFILZ_AI_AUTO_FILE_ACTIVE
+              value: {{ .Values.ai.autoFile.active | quote }}
+            - name: OPENFILZ_AI_AUTO_FILE_DEFAULT
+              value: {{ .Values.ai.autoFile.defaultForUsers | quote }}
+            - name: OPENFILZ_AI_AUTO_FILE_NEW_FOLDERS
+              value: {{ .Values.ai.autoFile.allowNewFolders | quote }}
             - name: AI_USER_SETTINGS_ENABLED
               value: {{ .Values.ai.userSettings.enabled | quote }}
             - name: AI_SETTINGS_ENCRYPTION_KEY

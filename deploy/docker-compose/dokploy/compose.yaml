@@ -284,6 +284,15 @@ services:
       # Per-user AI settings (BYOK) — needs an encryption key: openssl rand -base64 32
       AI_USER_SETTINGS_ENABLED: ${AI_USER_SETTINGS_ENABLED:-false}
       AI_SETTINGS_ENCRYPTION_KEY: ${AI_SETTINGS_ENCRYPTION_KEY:-}
+      # Document insights (AI category / summary / entities at upload) and smart filing on
+      # upload (OpenFilz chooses the folder on the user's request). Both need
+      # OPENFILZ_AI_ACTIVE=true; smart filing also needs embeddings. See docs/ai.md §3b.
+      OPENFILZ_AI_INSIGHTS_ACTIVE: ${OPENFILZ_AI_INSIGHTS_ACTIVE:-false}
+      OPENFILZ_AI_INSIGHTS_MODEL: ${OPENFILZ_AI_INSIGHTS_MODEL:-}
+      OPENFILZ_AI_INSIGHTS_DAILY_LIMIT: ${OPENFILZ_AI_INSIGHTS_DAILY_LIMIT:-2000}
+      OPENFILZ_AI_AUTO_FILE_ACTIVE: ${OPENFILZ_AI_AUTO_FILE_ACTIVE:-false}
+      OPENFILZ_AI_AUTO_FILE_DEFAULT: ${OPENFILZ_AI_AUTO_FILE_DEFAULT:-false}
+      OPENFILZ_AI_AUTO_FILE_NEW_FOLDERS: ${OPENFILZ_AI_AUTO_FILE_NEW_FOLDERS:-true}
 
       # MCP server — external AI agents over POST /mcp (see docs/mcp.md).
       OPENFILZ_MCP_ACTIVE: ${OPENFILZ_MCP_ACTIVE:-false}

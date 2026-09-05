@@ -1,0 +1,162 @@
+# OpenFilz - Local Dev Side Services
+#
+# Standalone stack for developing with openfilz-api / collaboration-api running in your IDE
+# and openfilz-web running with `npm start`. Contains ONLY the external services:
+#
+#   - opensearch  (single node, security disabled, NO dashboards)  -> http://localhost:9200
+#   - onlyoffice  (document server, JWT enabled)                   -> http://localhost:8084
+#   - gotenberg   (thumbnails / PDF conversion)                    -> http://localhost:8083
+#   - redis       (webhooks-api event stream, OPT-IN profile)      -> localhost:6379
+#
+# NOTE: ports are hardcoded on purpose - the .env sitting next to this file (used by the full
+# docker-compose.yml stack) sets ONLYOFFICE_PORT=8080, which would otherwise clash with a
+# locally-running collaboration-api.
+#
+# Redis is behind the `redis` profile because a Memurai (Redis-compatible) Windows service may
+# already own 127.0.0.1:6379 on this machine - two servers cannot both bind it. Use whichever:
+#   - keep Memurai            -> plain `up -d` (below); webhooks-api's localhost:6379 default hits it
+#   - use this container      -> stop the Memurai service first, then add `--profile redis`
+#
+# Start:  docker compose -f docker-compose.local-dev.yml up -d
+# Stop:   docker compose -f docker-compose.local-dev.yml down
+# Wipe:   docker compose -f docker-compose.local-dev.yml down -v
+# Logs:   docker compose -f docker-compose.local-dev.yml logs -f
+#
+# Point your locally-running API at them with these env vars / application-local.yml values:
+#
+#   OPENFILZ_FULLTEXT_ACTIVE=true
+#   OPENFILZ_FULLTEXT_OPENSEARCH_HOST=localhost
+#   OPENFILZ_FULLTEXT_OPENSEARCH_PORT=9200
+#   OPENFILZ_FULLTEXT_OPENSEARCH_SCHEME=http        # security plugin is disabled here
+#   ONLYOFFICE_ENABLED=true
+#   ONLYOFFICE_URL=http://localhost:8084
+#   ONLYOFFICE_JWT_SECRET=openfilz-onlyoffice-jwt-secret-2024
+#   GOTENBERG_URL=http://localhost:8083             # + openfilz.thumbnail.active=true
+#
+# OnlyOffice reaches your IDE-hosted API through host.docker.internal; the API default
+# openfilz.onlyoffice.api-internal-base-url=http://host.docker.internal:8081 already matches
+# (set OPENFILZ_INTERNAL_API_BASE_URL=http://host.docker.internal:8080 for collaboration-api).
+
+name: openfilz-local-dev
+
+volumes:
+  opensearch-data:
+  redis-data:
+  onlyoffice-data:
+  onlyoffice-logs:
+
+services:
+
+  # ===========================================================================
+  # OpenSearch - single node, security plugin off (http, no credentials)
+  # ===========================================================================
+  opensearch:
+    image: opensearchproject/opensearch:2.19.1
+    container_name: openfilz-dev-opensearch
+    restart: unless-stopped
+    environment:
+      cluster.name: openfilz-dev
+      node.name: opensearch-node1
+      discovery.type: single-node
+      bootstrap.memory_lock: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+      DISABLE_SECURITY_PLUGIN: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # ===========================================================================
+  # OnlyOffice Document Server
+  # ===========================================================================
+  onlyoffice:
+    image: onlyoffice/documentserver:latest
+    container_name: openfilz-dev-onlyoffice
+    restart: unless-stopped
+    environment:
+      JWT_ENABLED: "true"
+      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-openfilz-onlyoffice-jwt-secret-2024}
+      JWT_HEADER: Authorization
+      ALLOW_META_IP_ADDRESS: "true"
+      ALLOW_PRIVATE_IP_ADDRESS: "true"
+    ports:
+      - "8084:80"
+    volumes:
+      - onlyoffice-data:/var/www/onlyoffice/Data
+      - onlyoffice-logs:/var/log/onlyoffice
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+  # ===========================================================================
+  # Gotenberg - thumbnails + Office/PDF conversion
+  # ===========================================================================
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: openfilz-dev-gotenberg
+    restart: unless-stopped
+    command:
+      - "gotenberg"
+      - "--api-timeout=60s"
+      - "--libreoffice-restart-after=100"
+      - "--libreoffice-auto-start=true"
+      - "--log-level=info"
+    ports:
+      - "8083:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ===========================================================================
+  # Redis - event stream backing webhooks-api (Redis Streams)
+  #
+  # Opt-in:  docker compose -f docker-compose.local-dev.yml --profile redis up -d
+  #
+  # No password on purpose: both the producer (collaboration-api, `ee` profile) and the
+  # consumer (webhooks-api) default to REDIS_PASSWORD="" on localhost:6379, so nothing to
+  # configure. Production uses --requirepass; see dokploy-compose-ee.yml (redis-webhooks).
+  #
+  # Redis alone is not enough to run webhooks-api: it also needs its own Postgres database
+  # (WEBHOOKS_DB_NAME, default `webhooks_db`) and OPENFILZ_WEBHOOKS_ENABLED=true on BOTH
+  # webhooks-api and collaboration-api.
+  # ===========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: openfilz-dev-redis
+    profiles: ["redis"]
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
