@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[888729fdec80a42](https://github.com/openfilz/openfilz-core/commit/888729fdec80a42) maven-release-bot[bot] *2026-09-05 10:25:33*
+[6fe0b29f4de3608](https://github.com/openfilz/openfilz-core/commit/6fe0b29f4de3608) maven-release-bot[bot] *2026-09-05 13:26:40*
 
 
-## v1.3.5
+## v1.3.6
 ### No issue
 
-**[maven-release-plugin] prepare release v1.3.5**
+**[maven-release-plugin] prepare release v1.3.6**
 
 
-[a6203cf589357ff](https://github.com/openfilz/openfilz-core/commit/a6203cf589357ff) maven-release-bot[bot] *2026-09-05 10:25:30*
+[cd8d9ba68543912](https://github.com/openfilz/openfilz-core/commit/cd8d9ba68543912) maven-release-bot[bot] *2026-09-05 13:26:37*
 
-**Merge pull request #227 from openfilz/develop**
+**Merge pull request #228 from openfilz/develop**
 
- * Implement phases A-E of smart reorganization with coverage improvements
+ * Fix root neighbour voting and improve AI fallback handling
 
-[dfabaaf21be92d4](https://github.com/openfilz/openfilz-core/commit/dfabaaf21be92d4) Yann Demel *2026-09-05 10:22:43*
+[71ae38d57f76e69](https://github.com/openfilz/openfilz-core/commit/71ae38d57f76e69) Yann Demel *2026-09-05 13:23:36*
 
 
