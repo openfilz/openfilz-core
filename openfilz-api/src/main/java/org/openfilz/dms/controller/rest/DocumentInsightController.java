@@ -7,7 +7,7 @@ import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.response.DocumentInsightView;
 import org.openfilz.dms.service.DocumentService;
 import org.openfilz.dms.service.insight.DocumentInsightStore;
-import org.springframework.context.annotation.Lazy;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,11 +30,15 @@ import java.util.UUID;
 public class DocumentInsightController {
 
     private final DocumentService documentService;
-    private final DocumentInsightStore insightStore;
+    // ObjectProvider, not @Lazy: DocumentInsightStore is a concrete class with no interface, so a
+    // @Lazy injection point yields a CGLIB lazy-resolution proxy that has no reflection metadata
+    // in a native image (MissingReflectionRegistrationError on CGLIB$FACTORY_DATA at boot).
+    private final ObjectProvider<DocumentInsightStore> insightStoreProvider;
 
-    public DocumentInsightController(DocumentService documentService, @Lazy DocumentInsightStore insightStore) {
+    public DocumentInsightController(DocumentService documentService,
+                                     ObjectProvider<DocumentInsightStore> insightStoreProvider) {
         this.documentService = documentService;
-        this.insightStore = insightStore;
+        this.insightStoreProvider = insightStoreProvider;
     }
 
     @GetMapping(value = "/{documentId}/insights", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -44,7 +48,7 @@ public class DocumentInsightController {
                     + "openfilz.ai.insights.active is on. 404 when the document is not visible or has no insights yet.")
     public Mono<DocumentInsightView> getInsights(@PathVariable UUID documentId) {
         return documentService.findDocumentToDownloadById(documentId)
-                .flatMap(document -> insightStore.find(document.getId()))
+                .flatMap(document -> insightStoreProvider.getObject().find(document.getId()))
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "No insights for this document")))
                 .map(DocumentInsightStore::toView);
     }

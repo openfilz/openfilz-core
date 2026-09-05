@@ -142,6 +142,19 @@ mcp:
 ai:
   # @param ai.active Enable AI document chat (RAG, function calling, SSE streaming)
   active: false
+  # -- Document insights: a model labels each uploaded file (category from a closed list,
+  # summary, keywords, language, entities). Needs ai.active. See docs/ai.md §3b.
+  insights:
+    active: false
+    # provider:model for the enrichment (e.g. anthropic:claude-haiku-4-5); empty = the chat model
+    model: ""
+    dailyLimit: 2000
+  # -- Smart filing on upload: OpenFilz chooses the destination folder on the user's request.
+  # Needs ai.active and embeddings.
+  autoFile:
+    active: false
+    defaultForUsers: false
+    allowNewFolders: true
   # -- Ollama (local LLM)
   ollama:
     baseUrl: "http://ollama:11434"

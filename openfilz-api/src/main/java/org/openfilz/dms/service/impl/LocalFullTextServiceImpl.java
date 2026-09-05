@@ -71,9 +71,11 @@ public class LocalFullTextServiceImpl implements FullTextService {
     private boolean aiActive;
 
     /** Tier-1 document insights (the file's own metadata), captured from the same Tika pass. */
-    @Autowired(required = false)
-    @Lazy
-    private org.openfilz.dms.service.insight.DocumentInsightStore insightStore;
+    // ObjectProvider, not @Lazy: DocumentInsightStore is a concrete class with no interface, so a
+    // @Lazy injection point yields a CGLIB lazy-resolution proxy that has no reflection metadata
+    // in a native image (MissingReflectionRegistrationError on CGLIB$FACTORY_DATA at boot).
+    @Autowired
+    private org.springframework.beans.factory.ObjectProvider<org.openfilz.dms.service.insight.DocumentInsightStore> insightStoreProvider;
 
     /** Tier-2 document insights (model enrichment), queued with the text this pass extracted. */
     @Autowired(required = false)
@@ -162,6 +164,7 @@ public class LocalFullTextServiceImpl implements FullTextService {
 
     /** Tier-1 insight from the parse that already ran: no second Tika pass, no extra I/O. */
     private void saveFileMetadata(Document document, org.apache.tika.metadata.Metadata metadata) {
+        org.openfilz.dms.service.insight.DocumentInsightStore insightStore = insightStoreProvider.getIfAvailable();
         if (insightStore == null) {
             return;
         }
