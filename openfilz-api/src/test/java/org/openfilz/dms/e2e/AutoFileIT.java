@@ -14,6 +14,8 @@ import org.openfilz.dms.dto.response.FilingOutcome;
 import org.openfilz.dms.dto.response.FolderResponse;
 import org.openfilz.dms.dto.response.Settings;
 import org.openfilz.dms.dto.response.UploadResponse;
+import org.openfilz.dms.service.insight.InsightCompletionSignal;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.io.ByteArrayResource;
@@ -55,6 +57,9 @@ class AutoFileIT extends TestContainersBaseConfig {
     private static final String AUTO_FILE = RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_AI + "/auto-file";
     private static final String PREFERENCES = RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_SETTINGS + "/ai/preferences";
     private static final String DOCUMENTS = RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_DOCUMENTS;
+
+    @Autowired
+    private InsightCompletionSignal insightSignal;
 
     AutoFileIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
         super(webTestClient, customJacksonJsonEncoder);
@@ -106,6 +111,8 @@ class AutoFileIT extends TestContainersBaseConfig {
         assertThat(record).isNotNull();
         assertThat(record.status()).isEqualTo("FILED");
         assertThat(record.reason()).contains("Filed-by-model");
+        // The filing waited on the insight signal, then let go of its registration
+        assertThat(insightSignal.pending()).as("no insight waiter left behind").isZero();
     }
 
     @Test

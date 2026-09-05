@@ -195,8 +195,13 @@ sequenceDiagram
   full-text deployments.
 - **Chunk metadata is the RAG join key**: `document_id`/`document_name`/`parent_id` on each chunk
   let the chat pipeline turn similarity hits back into clickable document links.
-- **Deletion**: document delete → `removeEmbeddings(documentId)` → `vector_store` rows deleted by
-  `document_id` filter (OpenSearch delete goes through `FullTextService.deleteDocument`).
+- **Deletion**: a *soft* delete keeps everything (row, OpenSearch document with `active=false`,
+  chunks, insight row) so a restore has nothing to recompute; a *hard* delete (soft delete off,
+  recycle-bin purge, retention) goes through `MetadataPostProcessor.deleteDocument`, which drops the
+  OpenSearch document, the thumbnail and — `removeEmbeddings(documentId)` — the `vector_store` rows
+  by a `document_id` metadata filter (chunk ids are random, the tag is the only handle). The insight
+  row goes with the `documents` row (FK cascade). A re-index of the same document (new version)
+  replaces its chunks instead of adding to them.
 - **Search vs RAG**: OpenSearch powers the app's search bar (full-text + metadata + suggestions);
   `vector_store` powers *only* the chat's semantic retrieval. They are independent — either can
   be enabled without the other.
@@ -257,7 +262,10 @@ uploaded document seconds after the upload response (which carries `autoFile.job
    the call goes through the fallback chain (`AiFallbackChain.callWithFailover`, the chat's
    verdicts) and so does the tier-2 insight call, so a 429 on the first model is retried on the
    next one; a model that cannot be reached at all yields FAILED with the provider's own message,
-   to be filed again from the selection later;
+   to be filed again from the selection later. Before asking, the filing waits (at most
+   `wait-for-insights`) for the tier-2 row: the insight worker completes an in-process
+   `InsightCompletionSignal` at every terminal write (DONE / FAILED / SKIPPED), so the wait wakes the
+   moment the row lands, with a 5 s fallback re-read for a row finished by another node;
 4. *stage 3*: a one-item reorganisation plan (`origin = AUTO_FILE`, `document_id`, `details`,
    Flyway `V1_10`) validated and applied through `ReorganizationPlanService.fileDocument`: same
    permission / name-clash / no-op checks as a chat proposal, same audited move. Below the

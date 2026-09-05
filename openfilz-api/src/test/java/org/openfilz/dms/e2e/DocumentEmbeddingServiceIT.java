@@ -3,6 +3,8 @@ package org.openfilz.dms.e2e;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.openfilz.dms.config.RestApiVersion;
+import org.openfilz.dms.dto.request.DeleteRequest;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.DocumentType;
@@ -13,14 +15,17 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.codec.json.JacksonJsonEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import org.springframework.web.reactive.function.BodyInserters;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.test.StepVerifier;
 
+import java.util.List;
 import java.util.UUID;
 
 import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
@@ -128,16 +133,69 @@ public class DocumentEmbeddingServiceIT extends TestContainersBaseConfig {
     // ========================= removeEmbeddings =========================
 
     @Test
-    void removeEmbeddings_existingDocument_completesSuccessfully() {
-        // Upload and embed
+    void removeEmbeddings_existingDocument_dropsItsChunks() {
         UploadResponse uploaded = uploadDocument(newFileBuilder("test.txt"));
         Document document = documentRepository.findById(uploaded.id()).block();
+        documentEmbeddingService.embedDocument(document).block();
+        Assertions.assertFalse(chunksOf(uploaded.id()).isEmpty(), "the document was embedded");
+
+        StepVerifier.create(documentEmbeddingService.removeEmbeddings(uploaded.id()))
+                .verifyComplete();
+
+        Assertions.assertTrue(chunksOf(uploaded.id()).isEmpty(), "no chunk of the document is left");
+    }
+
+    @Test
+    void embedDocument_twice_keepsOneSetOfChunks() {
+        // A re-index (new version, replaced content) replaces the chunks instead of piling them up
+        UploadResponse uploaded = uploadDocument(newFileBuilder("test.txt"));
+        Document document = documentRepository.findById(uploaded.id()).block();
+        documentEmbeddingService.embedDocument(document).block();
+        int once = chunksOf(uploaded.id()).size();
+        Assertions.assertTrue(once > 0);
 
         documentEmbeddingService.embedDocument(document).block();
 
-        // Remove should complete without error
-        StepVerifier.create(documentEmbeddingService.removeEmbeddings(uploaded.id()))
-                .verifyComplete();
+        Assertions.assertEquals(once, chunksOf(uploaded.id()).size(), "the second embedding replaced the first");
+    }
+
+    @Test
+    void hardDelete_removesTheChunks() {
+        UploadResponse uploaded = uploadDocument(newFileBuilder("test.txt"));
+        Document document = documentRepository.findById(uploaded.id()).block();
+        documentEmbeddingService.embedDocument(document).block();
+        Assertions.assertFalse(chunksOf(uploaded.id()).isEmpty(), "the document was embedded");
+
+        // Soft delete is off in the tests, so this is the hard delete: the post-processor drops the chunks
+        getWebTestClient().method(HttpMethod.DELETE)
+                .uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_FILES)
+                .body(BodyInserters.fromValue(new DeleteRequest(List.of(uploaded.id()))))
+                .exchange()
+                .expectStatus().isNoContent();
+
+        // The removal runs off the request thread
+        for (int attempt = 0; attempt < 40 && !chunksOf(uploaded.id()).isEmpty(); attempt++) {
+            sleep(250);
+        }
+        Assertions.assertTrue(chunksOf(uploaded.id()).isEmpty(), "the chunks of a hard-deleted document are gone");
+    }
+
+    /** Every chunk tagged with the document, whatever its similarity (the mock embeds everything alike). */
+    private List<org.springframework.ai.document.Document> chunksOf(UUID documentId) {
+        return vectorStore.similaritySearch(SearchRequest.builder()
+                .query("anything")
+                .topK(1000)
+                .similarityThreshold(0.0)
+                .filterExpression("document_id == '" + documentId + "'")
+                .build());
+    }
+
+    private static void sleep(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     @Test

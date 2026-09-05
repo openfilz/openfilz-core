@@ -9,6 +9,8 @@ import org.openfilz.dms.service.DocumentEmbeddingService;
 import org.openfilz.dms.service.StorageService;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.Filter;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
@@ -156,6 +158,8 @@ public class DocumentEmbeddingServiceImpl implements DocumentEmbeddingService {
             }
 
             if (!chunks.isEmpty()) {
+                // A re-index (new version, replaced content) must not pile new chunks on the old ones.
+                vectorStore.delete(byDocument(document.getId()));
                 vectorStore.add(chunks);
                 log.info("[AI-EMBED] Stored {} chunks for '{}' in vector store", chunks.size(), document.getName());
             } else {
@@ -174,11 +178,18 @@ public class DocumentEmbeddingServiceImpl implements DocumentEmbeddingService {
         log.debug("[AI-EMBED] Removing embeddings for document: {}", documentId);
         return Mono.fromRunnable(() -> {
             try {
-                vectorStore.delete(List.of("document_id:" + documentId.toString()));
+                // A filter on the chunk metadata: chunk ids are random UUIDs, only the document_id tag
+                // ties a chunk to its document (the id-list overload would silently delete nothing).
+                vectorStore.delete(byDocument(documentId));
                 log.info("[AI-EMBED] Removed embeddings for document: {}", documentId);
             } catch (Exception e) {
                 log.warn("[AI-EMBED] Failed to remove embeddings for document: {}", documentId, e);
             }
         }).subscribeOn(Schedulers.boundedElastic()).then();
+    }
+
+    /** Every chunk of one document, by the metadata tag set at embedding time. */
+    private static Filter.Expression byDocument(UUID documentId) {
+        return new FilterExpressionBuilder().eq("document_id", documentId.toString()).build();
     }
 }
