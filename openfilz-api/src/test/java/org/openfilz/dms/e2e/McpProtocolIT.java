@@ -499,6 +499,8 @@ public class McpProtocolIT extends AbstractMcpIT {
                     {"planJson":"{\\"moves\\":[{\\"document\\":\\"%s\\",\\"target\\":\\"Sorted\\"}]}"}""".formatted(probe);
             case "applyReorganizationPlan" -> """
                     {"planId":"%s"}""".formatted(UUID.randomUUID());
+            case "proposeReorganizationByKind" -> """
+                    {"folder":"%s"}""".formatted(probe);
             case "getReorganizationPlan" -> """
                     {"planId":"%s"}""".formatted(UUID.randomUUID());
             // e-Sign tools (SignatureAiTools): disabled or not-found both answer with text

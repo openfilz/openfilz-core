@@ -49,6 +49,7 @@ public class OrganizeAiTools implements AiToolTurnEffects {
 
     private final ReorganizationPlanService service;
     private final AiToolRolePolicy rolePolicy;
+    private final CategoryReorganizationPlanner byKindPlanner;
 
     private String userEmail;
     private Authentication authentication;
@@ -59,8 +60,13 @@ public class OrganizeAiTools implements AiToolTurnEffects {
     private final List<UUID> proposedPlanIds = new CopyOnWriteArrayList<>();
 
     public OrganizeAiTools(ReorganizationPlanService service, AiToolRolePolicy rolePolicy) {
+        this(service, rolePolicy, null);
+    }
+
+    public OrganizeAiTools(ReorganizationPlanService service, AiToolRolePolicy rolePolicy, CategoryReorganizationPlanner byKindPlanner) {
         this.service = service;
         this.rolePolicy = rolePolicy;
+        this.byKindPlanner = byKindPlanner;
     }
 
     public OrganizeAiTools forUser(String userEmail, Authentication authentication) {
@@ -157,6 +163,32 @@ public class OrganizeAiTools implements AiToolTurnEffects {
                     + "Summarise the proposed hierarchy to the user; they can review and apply it from the "
                     + "proposal card shown in the OpenFilz app. Only call applyReorganizationPlan yourself if the "
                     + "user explicitly confirms in this conversation. Plan id: " + view.id();
+        });
+    }
+
+    @Tool(description = "Propose a reorganisation BY KIND of document without designing it yourself: every folder of the "
+            + "scope holding documents of several kinds (invoices among reports, say) gets one sub-folder per kind, named "
+            + "like the existing folders (Invoices / Factures…), and the files move there. Deterministic and instant, from "
+            + "the documents' insight categories. Nothing is moved: the plan is stored for the user to review and apply, "
+            + "like proposeReorganizationPlan. Prefer it when the user asks to tidy or sort a folder by type of document.")
+    public String proposeReorganizationByKind(
+            @ToolParam(required = false, description = "Name (or id) of the folder to reorganise; null or 'root' for the root level") String folder) {
+        String denial = deny("proposeReorganizationByKind", ToolCapability.DOCUMENT_WRITE);
+        if (denial != null) return denial;
+        if (byKindPlanner == null) {
+            return "Reorganisation by kind is not available in this deployment.";
+        }
+        return run(() -> {
+            UUID root = service.rootIdOf(folder, caller());
+            ReorganizationPlanView view = byKindPlanner.propose(root, conversationId, caller());
+            if (view.id() == null) {
+                return view.rationale() == null ? "Every folder of this scope already holds documents of one kind." : view.rationale();
+            }
+            proposedPlanIds.add(view.id());
+            return render(view) + "\n\nNEXT: the plan is stored as a proposal and NOTHING has moved yet. "
+                    + "Summarise it to the user; they can review and apply it from the proposal card shown in the "
+                    + "OpenFilz app. Only call applyReorganizationPlan yourself if the user explicitly confirms in this "
+                    + "conversation. Plan id: " + view.id();
         });
     }
 

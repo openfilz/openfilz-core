@@ -778,7 +778,16 @@ searchable (`category` facet).
 | `OPENFILZ_AI_INSIGHTS_MAX_FILE_SIZE` | `50MB` | Larger files are not enriched |
 | `OPENFILZ_AI_INSIGHTS_CONCURRENCY` | `2` | Parallel model calls |
 | `OPENFILZ_AI_INSIGHTS_DAILY_LIMIT` | `2000` | Files enriched per day; the rest wait for a backfill |
-| `OPENFILZ_AI_INSIGHTS_CATEGORIES` | invoice, quote, contract, report, letter, cv, presentation, spreadsheet, form, id-document, receipt, minutes, specification, manual, other | The closed category list |
+| `OPENFILZ_AI_INSIGHTS_CATEGORIES` | invoice, quote, contract, report, letter, cv, presentation, spreadsheet, form, id-document, receipt, minutes, specification, manual, other | The closed category list — also what the details panel's kind editor offers |
+| `OPENFILZ_AI_INSIGHTS_CLASSIFIER` | `llm` | Who names the category: `llm` (the chat model), `prototype` (embedding descriptions, no model), `learned` (the library's own labelled documents vote, descriptions as cold start, no model), `auto` (learned, then the model when unsure) |
+| `OPENFILZ_AI_INSIGHTS_CLASSIFIER_MIN_CONFIDENCE` | `0.5` | In `auto` mode, a local verdict at or above this confidence is kept without asking the model |
+| `OPENFILZ_AI_INSIGHTS_CLASSIFIER_LEARN_FROM` | `model,user` | Whose labels teach the learned classifier; add `prototype,learned` to let it feed itself |
+
+Users correct a document's kind from the details panel (the category chip); the correction is
+theirs for good — never overwritten by a non-forced backfill — and, in `learned` / `auto` mode, the
+next documents of that kind take it. Measured on a real library (`docs/ai.md` §3c): the learned
+classifier 84–88 %, the descriptions 47 %, a local `qwen2.5:1.5b` 53 % at 17 s a document — run
+the benchmarks on your own documents before switching.
 
 Existing documents: `POST /api/v1/ai/insights/backfill` (`{"folderId": …, "force": false}`, CONTRIBUTOR
 role) enriches everything that has no current insight; `force: true` re-enriches all. Follow it with
@@ -801,6 +810,14 @@ an undo, and the details panel shows "Filed by OpenFilz" with the reason.
 | `OPENFILZ_AI_AUTO_FILE_ACTIVE` | `false` | Master switch |
 | `OPENFILZ_AI_AUTO_FILE_DEFAULT` | `false` | Initial value of the per-user switch |
 | `OPENFILZ_AI_AUTO_FILE_NEW_FOLDERS` | `true` | Whether filing may create folders (deployment ceiling) |
+| `OPENFILZ_AI_AUTO_FILE_COHERENCE` | `category` | How the winning folder is judged a home for the document: by its files' categories, by their similarity to the document (`similarity`, no category needed), or `both` |
+| `OPENFILZ_AI_AUTO_FILE_STAGE1` | `vote` | How the folder is picked among the neighbours' folders: the vote, or the `fit` (purity × closeness) |
+| `OPENFILZ_AI_AUTO_FILE_RULE_FOLDERS` | `true` | The rule stage: a document of a known kind with no home goes to the scope's folder for that kind (`Invoices` / `Factures` / `Rechnungen`…), found by name in any language or created — no model |
+| `OPENFILZ_AI_AUTO_FILE_DEFAULT_LANGUAGE` | `en` | Language of a rule-created folder when neither the existing folder names nor the document tell |
+
+Reorganisation by kind — `POST /api/v1/ai/reorganization/by-kind {"rootFolderId": …}` or the
+assistant's `proposeReorganizationByKind` tool — splits every mixed folder of a scope into one
+sub-folder per kind from the same table, as an ordinary plan to review and apply; no model.
 
 Thresholds (`openfilz.ai.auto-file.*` in `application.yml`: `neighbour-min-share` 0.6,
 `neighbour-min-similarity` 0.5, `llm-min-confidence` 0.7, `new-folder-min-confidence` 0.85,

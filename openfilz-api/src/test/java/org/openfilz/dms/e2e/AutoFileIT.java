@@ -41,10 +41,11 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 
 /**
  * Smart filing on upload against the mocked models of {@link AiTestConfig} (constant embeddings,
- * so every document is equally similar and the vote is decided by counts; the mocked filing
+ * a hashed bag of words, so documents sharing words are neighbours; the mocked filing
  * model always proposes the folder "Filed-by-model" with high confidence):
  * <ol>
- *   <li>the first upload has no neighbours, so the model decides and a new folder is created;</li>
+ *   <li>a document of no known kind and no neighbours goes to the model, which creates a folder;</li>
+ *   <li>a document of a known kind with no home goes to the folder of its kind (the rule, no model);</li>
  *   <li>a folder seeded with many documents then wins the neighbour vote for a new upload;</li>
  *   <li>undo moves the batch back; autoFile=false and the user's switch are honoured;</li>
  *   <li>the settings and the filing record are exposed.</li>
@@ -89,14 +90,15 @@ class AutoFileIT extends TestContainersBaseConfig {
 
     @Test
     @Order(1)
-    @DisplayName("with no similar document yet, the model decides and a new folder is created")
+    @DisplayName("with no similar document and no known kind, the model decides and a new folder is created")
     void firstUploadIsFiledByTheModel() {
         Settings settings = getWebTestClient().get().uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_SETTINGS)
                 .exchange().expectStatus().isOk().expectBody(Settings.class).returnResult().getResponseBody();
         assertThat(settings).isNotNull();
         assertThat(settings.aiAutoFileActive()).isTrue();
 
-        UploadResponse uploaded = upload("first-" + UUID.randomUUID() + ".txt", "Annual report of ACME, revenue and outlook.", null, true);
+        // "Miscellaneous" makes the insight mock answer the category "other": the rule stage has no folder for it
+        UploadResponse uploaded = upload("first-" + UUID.randomUUID() + ".txt", "Miscellaneous notes of ACME, odds and ends.", null, true);
         assertThat(uploaded.autoFile()).as("the upload response carries the filing ticket").isNotNull();
 
         AutoFileJobView job = awaitJob(uploaded.autoFile().jobId(), j -> "DONE".equals(j.status()));
@@ -188,8 +190,8 @@ class AutoFileIT extends TestContainersBaseConfig {
     @Order(4)
     @DisplayName("documents lying at the root never vote to keep a new upload there")
     void rootNeighboursNeverKeepADocumentAtTheRoot() {
-        // A batch dropped at the root. With the mocked embeddings every document is a perfect
-        // neighbour of every other one, so if root documents could vote, the root would win
+        // A batch dropped at the root. The seeded texts are near-identical, so every one is a
+        // close neighbour of the new upload, and if root documents could vote, the root would win
         // outright here and the new upload would be "already in the folder where its closest
         // documents live" — the trap a batch of similar files uploaded together used to fall in.
         for (int i = 0; i < 40; i++) {
@@ -209,12 +211,13 @@ class AutoFileIT extends TestContainersBaseConfig {
 
     @Test
     @Order(5)
-    @DisplayName("a mixed folder never wins the vote: an invoice whose neighbours live among reports goes to the model")
-    void mixedFolderHandsOverToTheModel() {
+    @DisplayName("a mixed folder never wins the vote: an invoice whose neighbours live among reports goes to the folder of its kind")
+    void mixedFolderHandsOverToTheRule() {
         // A grab-bag folder — invoices and reports side by side — holds the majority of the
         // invoices, so it wins the headcount. It is no home for an invoice (barely half of its
-        // files are), so the vote is discarded and the model decides, and may create the folder
-        // this kind deserves (the mock always answers Filed-by-model).
+        // files are, by category and by similarity alike), so the vote is discarded and the rule
+        // creates the folder this kind deserves, named in the library's language — English here,
+        // as no root folder is named in any language and the insight mock says "en".
         FolderResponse mixed = createFolder("Mixed-" + UUID.randomUUID().toString().substring(0, 8));
         List<UUID> seeded = new ArrayList<>();
         for (int i = 0; i < 24; i++) {
@@ -235,10 +238,58 @@ class AutoFileIT extends TestContainersBaseConfig {
         AutoFileJobView job = awaitJob(uploaded.autoFile().jobId(), j -> "DONE".equals(j.status()));
         FilingOutcome item = job.items().getFirst();
         assertThat(item.status()).as(job.toString()).isEqualTo("FILED");
-        assertThat(item.stage()).as("the mixed folder was refused and the model decided").isEqualTo("MODEL");
+        assertThat(item.stage()).as("the mixed folder was refused and the rule decided").isEqualTo("RULE");
         assertThat(item.toFolderId()).isNotEqualTo(mixed.id());
-        assertThat(item.toPath()).isEqualTo("/Filed-by-model");
+        assertThat(item.toPath()).isEqualTo("/Invoices");
+        assertThat(item.reason()).contains("invoice");
         assertThat(info(uploaded.id()).parentId()).isEqualTo(item.toFolderId());
+
+        // The next invoice with the same neighbours finds the folder by name: no second "Invoices"
+        UploadResponse next = upload("mixed-next-" + UUID.randomUUID() + ".txt", "Invoice F-2026-0600 from Globex, amount due.", null, true);
+        FilingOutcome nextItem = awaitJob(next.autoFile().jobId(), j -> "DONE".equals(j.status())).items().getFirst();
+        assertThat(nextItem.status()).as(nextItem.toString()).isEqualTo("FILED");
+        assertThat(nextItem.toFolderId()).as("the same Invoices folder, by name or by vote").isEqualTo(item.toFolderId());
+    }
+
+    @Test
+    @Order(6)
+    @DisplayName("a document of a known kind with no close neighbour goes to the folder of its kind, named in the scope's language")
+    void ruleNamesTheFolderInTheLibrarysLanguage() {
+        // A French library: its folders are named in French, so the new folder for a report is "Rapports"
+        FolderResponse fr = createFolder("FR-" + UUID.randomUUID().toString().substring(0, 8));
+        createFolder("Contrats", fr.id());
+        createFolder("Courriers", fr.id());
+        UploadResponse report = upload("rapport-" + UUID.randomUUID() + ".txt",
+                "Rapport annuel de la société Globex, chiffre d'affaires et perspectives.", fr.id(), true);
+        assertThat(report.autoFile()).isNotNull();
+        FilingOutcome filed = awaitJob(report.autoFile().jobId(), j -> "DONE".equals(j.status())).items().getFirst();
+        assertThat(filed.status()).as(filed.toString()).isEqualTo("FILED");
+        assertThat(filed.stage()).isEqualTo("RULE");
+        assertThat(filed.toPath()).isEqualTo("/" + fr.name() + "/Rapports");
+        assertThat(filed.reason()).contains("named in fr");
+        assertThat(info(report.id()).parentId()).isEqualTo(filed.toFolderId());
+
+        // An existing folder that denotes the kind, in any language, is found by name — even a German one
+        FolderResponse de = createFolder("DE-" + UUID.randomUUID().toString().substring(0, 8));
+        FolderResponse rechnungen = createFolder("Rechnungen", de.id());
+        UploadResponse invoice = upload("rechnung-" + UUID.randomUUID() + ".txt",
+                "Invoice F-2026-0810 an Stark GmbH, Betrag fällig.", de.id(), true);
+        FilingOutcome found = awaitJob(invoice.autoFile().jobId(), j -> "DONE".equals(j.status())).items().getFirst();
+        assertThat(found.status()).as(found.toString()).isEqualTo("FILED");
+        assertThat(found.stage()).isEqualTo("RULE");
+        assertThat(found.toFolderId()).isEqualTo(rechnungen.id());
+        assertThat(info(invoice.id()).parentId()).isEqualTo(rechnungen.id());
+
+        // Creating folders off: the rule has nothing to offer, the model decides
+        FolderResponse noNew = createFolder("NoNew-" + UUID.randomUUID().toString().substring(0, 8));
+        UploadResponse loose = upload("loose-" + UUID.randomUUID() + ".txt", "Quarterly report of Initech, results.", noNew.id(), false);
+        AutoFileJobView job = getWebTestClient().post().uri(AUTO_FILE)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(BodyInserters.fromValue("{\"documentIds\":[\"" + loose.id() + "\"],\"allowNewFolders\":false}"))
+                .exchange().expectStatus().isOk().expectBody(AutoFileJobView.class).returnResult().getResponseBody();
+        assertThat(job).isNotNull();
+        FilingOutcome byModel = awaitJob(job.jobId(), j -> "DONE".equals(j.status())).items().getFirst();
+        assertThat(byModel.stage()).as(byModel.toString()).isEqualTo("MODEL");
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────
@@ -276,6 +327,13 @@ class AutoFileIT extends TestContainersBaseConfig {
                 .body(BodyInserters.fromMultipartData(builder.build()))
                 .exchange().expectStatus().isCreated()
                 .expectBody(UploadResponse.class).returnResult().getResponseBody();
+    }
+
+    private FolderResponse createFolder(String name, UUID parentId) {
+        return getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/folders")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(BodyInserters.fromValue(new CreateFolderRequest(name, parentId)))
+                .exchange().expectStatus().isCreated().expectBody(FolderResponse.class).returnResult().getResponseBody();
     }
 
     private FolderResponse createFolder(String name) {

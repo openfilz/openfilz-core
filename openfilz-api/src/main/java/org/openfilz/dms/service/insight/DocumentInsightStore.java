@@ -76,6 +76,19 @@ public class DocumentInsightStore {
                 error = NULL,
                 updated_at = now()""";
 
+    /** A category alone (the user's correction, or a learned verdict): the other tier-2 fields are kept when present. */
+    private static final String UPSERT_CATEGORY = """
+            INSERT INTO ai_document_insights (document_id, category, tier, model, prompt_version, status, error, created_at, updated_at)
+            VALUES (:id, :category, 2, :model, :promptVersion, 'DONE', NULL, now(), now())
+            ON CONFLICT (document_id) DO UPDATE SET
+                category = EXCLUDED.category,
+                tier = 2,
+                model = EXCLUDED.model,
+                prompt_version = EXCLUDED.prompt_version,
+                status = 'DONE',
+                error = NULL,
+                updated_at = now()""";
+
     /** Active files without a current DONE tier-2 row (none, older prompt version, not DONE), or every file when forced; most recently updated first. */
     private static final String BACKFILL_CANDIDATES = """
             SELECT d.id FROM documents d
@@ -134,6 +147,16 @@ public class DocumentInsightStore {
                 ? spec.bindNull("entities", Json.class)
                 : spec.bind("entities", Json.of(JSON.writeValueAsString(result.entities())));
         return spec.fetch().rowsUpdated().then();
+    }
+
+    /** Set the category only — the user's correction ({@code model = "user"}) — keeping summary, keywords and entities. */
+    public Mono<Void> saveCategory(UUID documentId, String category, String model, int promptVersion) {
+        return databaseClient.sql(UPSERT_CATEGORY)
+                .bind("id", documentId)
+                .bind("category", category == null ? InsightResult.OTHER : category)
+                .bind("model", model)
+                .bind("promptVersion", promptVersion)
+                .fetch().rowsUpdated().then();
     }
 
     public Flux<UUID> findBackfillCandidates(UUID folderId, boolean force, int promptVersion, int limit) {

@@ -32,15 +32,18 @@ import org.openfilz.dms.service.ai.UserChatClientResolver;
 import org.openfilz.dms.service.ai.UserChatClientResolver.ResolvedChat;
 import org.openfilz.dms.service.filing.AutoFileDecision.ModelAnswer;
 import org.openfilz.dms.service.filing.AutoFileDecision.Neighbour;
+import org.openfilz.dms.service.filing.AutoFileDecision.FolderFit;
 import org.openfilz.dms.service.filing.AutoFileDecision.Vote;
 import org.openfilz.dms.service.impl.TikaService;
 import org.openfilz.dms.service.insight.DocumentInsightService;
 import org.openfilz.dms.service.insight.DocumentInsightStore;
+import org.openfilz.dms.service.insight.InsightResult;
 import org.openfilz.dms.service.insight.InsightCompletionSignal;
 import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.vectorstore.SearchRequest;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -132,6 +135,7 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
     private volatile ResolvedChat model;
     /** Serialises the stage-2 applies that create a folder — see the model stage below. */
     private final Object createFolderLock = new Object();
+    private final CategoryFolderNames folderNames;
 
     public DefaultAutoFileService(AiProperties aiProperties, DocumentRepository documentRepository,
                                   DocumentService documentService, AiAccessPolicy accessPolicy, AiToolRolePolicy rolePolicy,
@@ -159,6 +163,7 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
         this.tikaService = tikaService;
         this.storageService = storageService;
         this.events = events;
+        this.folderNames = new CategoryFolderNames(aiProperties.getAutoFile().getFolderNames());
     }
 
     private record Task(UUID documentId, Caller caller, boolean allowNewFolders, UUID jobId) {
@@ -405,21 +410,39 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
                     FilingOutcome.STAGE_NONE, null, "no extractable text to compare with other documents", null);
         }
 
-        // Stage 1 — the neighbour vote
+        // Stage 1 — the neighbour vote (or the fit)
         AiProperties.AutoFile config = aiProperties.getAutoFile();
         NeighbourScan scan = neighbours(document, scopeRoot, text, caller);
         List<Neighbour> neighbours = scan.votes();
         String category = insight == null ? null : insight.category();
         Optional<Vote> vote = AutoFileDecision.vote(neighbours, category, config.getNeighbourMinShare(),
                 config.getNeighbourMinSimilarity(), config.getNeighbourMinRelativeSimilarity());
-        if (vote.isPresent() && !Objects.equals(vote.get().folderId(), document.getParentId())
-                && !AutoFileDecision.coherent(folderCategories(vote.get().folderId(), caller), category,
-                        config.getNeighbourMinFolderPurity())) {
+        boolean incoherent = false;
+        if (config.getStage1() == AiProperties.AutoFile.Stage1.FIT && !neighbours.isEmpty()) {
+            // The fit: the voted folders re-ranked by purity × closeness, so a small tight folder of
+            // the document's kind beats a large mixed one; nothing coherent = no stage-1 answer.
+            Optional<FolderFit> fit = fit(neighbours, document, text, config, caller);
+            if (fit.isPresent()) {
+                FolderFit best = fit.get();
+                if (Objects.equals(best.folderId(), document.getParentId())) {
+                    return outcome(documentId, document.getName(), FilingOutcome.SKIPPED, document.getParentId(), from,
+                            FilingOutcome.STAGE_NEIGHBOURS, best.score(), "already in the folder that fits it best", null);
+                }
+                String relative = planService.relativePath(best.folderId(), scopeRoot, caller);
+                String reason = "Fits the " + best.members() + " document" + (best.members() == 1 ? "" : "s") + " in "
+                        + planService.pathOf(best.folderId(), caller) + " (" + Math.round(best.purity() * 100) + "% of its kind)";
+                return applyMove(document, from, scopeRoot, relative, FilingOutcome.STAGE_NEIGHBOURS, best.score(), reason, caller);
+            }
+            incoherent = vote.isPresent();
+            vote = Optional.empty();
+        } else if (vote.isPresent() && !Objects.equals(vote.get().folderId(), document.getParentId())
+                && !coherent(vote.get().folderId(), category, text, config, caller)) {
             // The neighbours live in a mixed folder — a dumping ground, not a home for this kind of
-            // document: the vote is discarded and the model decides, and may create the proper folder.
-            log.debug("[AUTOFILE] '{}' ({}): folder {} won the vote but is no home for a '{}' — asking the model",
+            // document: the vote is discarded; the rule or the model decides, and may create the proper folder.
+            log.debug("[AUTOFILE] '{}' ({}): folder {} won the vote but is no home for a '{}' — not filing there",
                     document.getName(), documentId, vote.get().folderId(), category);
             vote = Optional.empty();
+            incoherent = true;
         }
         if (vote.isPresent()) {
             Vote winner = vote.get();
@@ -432,6 +455,21 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
             String reason = "Similar to " + winner.documents() + " document" + (winner.documents() == 1 ? "" : "s")
                     + " in " + planService.pathOf(winner.folderId(), caller);
             return applyMove(document, from, scopeRoot, relative, FilingOutcome.STAGE_NEIGHBOURS, winner.share(), reason, caller);
+        }
+
+        // Stage 1b — the rule: a document of a known kind with no home among its neighbours (none
+        // close enough, or a grab-bag) goes to the scope's folder for that kind, found by name in any language or
+        // created and named in the language of the existing folders. No model. When the neighbours
+        // are split between coherent folders (two clients' invoices, say) the rule stays out: that
+        // choice is the model's.
+        // Neighbours below the similarity floor say nothing about a folder: they do not keep the rule out.
+        boolean credibleNeighbours = neighbours.stream().anyMatch(n -> n.similarity() >= config.getNeighbourMinSimilarity());
+        if (config.isRuleFolders() && (!credibleNeighbours || incoherent)
+                && category != null && !InsightResult.OTHER.equalsIgnoreCase(category)) {
+            FilingOutcome ruled = fileByKind(document, from, scopeRoot, category, insight, caller, allowNewFolders);
+            if (ruled != null) {
+                return ruled;
+            }
         }
 
         // Stage 2 — the model
@@ -622,6 +660,125 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
 
     /** Files of a folder read for its category histogram; a bigger folder is judged on its first ones. */
     private static final int FOLDER_HISTOGRAM_CAP = 500;
+    /** Folders the fit compares, the most voted first. */
+    private static final int FIT_CANDIDATES = 5;
+
+    /**
+     * Is the folder a home for the document? By the categories of its files, by their similarity
+     * to the document, or both ({@code auto-file.coherence}). The similarity judgement needs no
+     * category at all: the folder's files are read with one filtered vector query and the share
+     * of them close to the document is its purity.
+     */
+    private boolean coherent(UUID folderId, String category, String text, AiProperties.AutoFile config, Caller caller) {
+        AiProperties.AutoFile.Coherence mode = config.getCoherence() == null ? AiProperties.AutoFile.Coherence.CATEGORY : config.getCoherence();
+        if (mode != AiProperties.AutoFile.Coherence.SIMILARITY
+                && !AutoFileDecision.coherent(folderCategories(folderId, caller), category, config.getNeighbourMinFolderPurity())) {
+            return false;
+        }
+        return mode == AiProperties.AutoFile.Coherence.CATEGORY
+                || AutoFileDecision.coherentBySimilarity(folderSimilarities(folderId, text, caller),
+                        config.getFolderSimilarityGap(), config.getNeighbourMinFolderPurity(), config.getFolderMinMembers());
+    }
+
+    /** The best-fitting folder among the neighbours' folders, the most voted ones first. */
+    private Optional<FolderFit> fit(List<Neighbour> neighbours, Document document, String text, AiProperties.AutoFile config, Caller caller) {
+        Map<UUID, Integer> votes = new LinkedHashMap<>();
+        neighbours.forEach(n -> votes.merge(n.folderId(), 1, Integer::sum));
+        Map<UUID, List<Double>> candidates = new LinkedHashMap<>();
+        votes.entrySet().stream()
+                .sorted(Map.Entry.<UUID, Integer>comparingByValue().reversed())
+                .limit(FIT_CANDIDATES)
+                .forEach(e -> candidates.put(e.getKey(), folderSimilarities(e.getKey(), text, caller)));
+        return AutoFileDecision.fit(candidates, config.getFolderSimilarityGap(), config.getNeighbourMinFolderPurity(),
+                config.getNeighbourMinSimilarity(), config.getFolderMinMembers());
+    }
+
+    /**
+     * Each file of a folder with its best chunk's similarity to the document: one vector query
+     * filtered on the folder's files (the document itself left out). Files without a chunk yet
+     * are unknown and absent.
+     */
+    private List<Double> folderSimilarities(UUID folderId, String text, Caller caller) {
+        VectorStore vectorStore = vectorStoreProvider.getIfAvailable();
+        if (vectorStore == null || folderId == null) {
+            return List.of();
+        }
+        List<Document> files = blockWithAuth(documentRepository.findByParentIdAndActiveIsTrue(folderId)
+                .filter(d -> d.getType() == DocumentType.FILE).take(FOLDER_HISTOGRAM_CAP).collectList(), caller);
+        if (files == null || files.isEmpty()) {
+            return List.of();
+        }
+        List<Object> ids = files.stream().map(d -> (Object) d.getId().toString()).toList();
+        List<org.springframework.ai.document.Document> hits;
+        try {
+            hits = vectorStore.similaritySearch(SearchRequest.builder()
+                    .query(text.length() > QUERY_CHARS ? text.substring(0, QUERY_CHARS) : text)
+                    .topK(Math.min(ids.size() * 3, 2000))
+                    .similarityThreshold(0.0)
+                    .filterExpression(new FilterExpressionBuilder().in("document_id", ids).build())
+                    .build());
+        } catch (Exception e) {
+            log.warn("[AUTOFILE] folder similarity search failed for {}: {}", folderId, e.getMessage());
+            return List.of();
+        }
+        Map<UUID, Double> best = new LinkedHashMap<>();
+        for (org.springframework.ai.document.Document hit : hits) {
+            Object raw = hit.getMetadata() == null ? null : hit.getMetadata().get("document_id");
+            UUID id = raw == null ? null : parseUuid(raw.toString());
+            if (id == null) continue;
+            best.merge(id, hit.getScore() == null ? 0 : hit.getScore(), Math::max);
+        }
+        return new ArrayList<>(best.values());
+    }
+
+    // ── stage 1b: the rule ──────────────────────────────────────────────────
+
+    /**
+     * The scope's folder for the document's kind: an existing child of the scope root whose name
+     * denotes the kind in any language, else a new one named in the language of the existing
+     * folder names (then the document's, then the deployment default). Null when the rule has
+     * nothing to say (no name for the kind, or a new folder is not allowed).
+     */
+    private FilingOutcome fileByKind(Document document, String from, UUID scopeRoot, String category, DocumentInsightView insight,
+                                     Caller caller, boolean allowNewFolders) {
+        AiProperties.AutoFile config = aiProperties.getAutoFile();
+        List<Document> folders = blockWithAuth((scopeRoot == null
+                ? documentRepository.findByParentIdIsNullAndActiveIsTrue()
+                : documentRepository.findByParentIdAndActiveIsTrue(scopeRoot))
+                .filter(d -> d.getType() == DocumentType.FOLDER).collectList(), caller);
+        if (folders == null) {
+            folders = List.of();
+        }
+        for (Document folder : folders) {
+            if (folderNames.categoryOf(folder.getName()).filter(category::equalsIgnoreCase).isEmpty()) continue;
+            if (!writable(folder.getId(), caller)) continue;
+            String reason = "A " + category + " belongs in " + planService.pathOf(folder.getId(), caller);
+            return applyMove(document, from, scopeRoot, folder.getName(), FilingOutcome.STAGE_RULE, 1.0, reason, caller);
+        }
+        if (!allowNewFolders) {
+            return null;
+        }
+        String language = folderNames.languageOf(folders.stream().map(Document::getName).toList())
+                .or(() -> Optional.ofNullable(insight == null ? null : insight.language()))
+                .orElse(config.getDefaultLanguage() == null || config.getDefaultLanguage().isBlank()
+                        ? CategoryFolderNames.DEFAULT_LANGUAGE : config.getDefaultLanguage());
+        Optional<String> name = folderNames.nameOf(category, language);
+        if (name.isEmpty()) {
+            return null;
+        }
+        String reason = "A " + category + " belongs in a folder of its kind: " + name.get() + " (new, named in " + language + ")";
+        synchronized (createFolderLock) {
+            return applyMove(document, from, scopeRoot, name.get(), FilingOutcome.STAGE_RULE, 1.0, reason, caller);
+        }
+    }
+
+    private boolean writable(UUID folderId, Caller caller) {
+        if (accessPolicy.permitAll()) {
+            return true;
+        }
+        Set<UUID> modifiable = blockWithAuth(accessPolicy.modifiable(Set.of(folderId), caller.email()), caller);
+        return modifiable != null && modifiable.contains(folderId);
+    }
 
     /** The tier-2 category of each document that has one: one batched read. */
     private Map<UUID, String> categoriesOf(List<UUID> ids, Caller caller) {
@@ -674,7 +831,8 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
                 ChatClient.builder(candidate.chatModel()).build().prompt()
                         .system(system)
                         .user(user)
-                        .options(ChatOptions.builder().temperature(0.0))
+                        // Capped: a small local model at temperature 0 can loop on a JSON contract until its context shifts
+                        .options(ChatOptions.builder().temperature(0.0).maxTokens(512))
                         .call()
                         .content());
         return answer;

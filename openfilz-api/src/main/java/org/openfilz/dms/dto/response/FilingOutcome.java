@@ -32,6 +32,8 @@ public record FilingOutcome(
     public static final String PENDING = "PENDING";
 
     public static final String STAGE_NEIGHBOURS = "NEIGHBOURS";
+    /** The folder for the document's kind, found by name or created from the folder-name table — no model. */
+    public static final String STAGE_RULE = "RULE";
     public static final String STAGE_MODEL = "MODEL";
     public static final String STAGE_NONE = "NONE";
 

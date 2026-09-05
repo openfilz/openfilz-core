@@ -12,6 +12,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** The smart-filing decisions: the neighbour vote thresholds and the model-answer contract. */
@@ -84,6 +85,44 @@ class AutoFileDecisionTest {
         assertThat(vote).isPresent();
         assertThat(vote.get().folderId()).isEqualTo(INVOICES);
         assertThat(vote.get().documents()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("similarity purity: the share of a folder's files close to the document, no category needed")
+    void similarityPurity() {
+        // An invoice seen from a folder of 3 invoices and 2 reports: two clusters, a gap of 0.33 between them
+        List<Double> mixed = List.of(0.92, 0.90, 0.88, 0.55, 0.50);
+        assertThat(AutoFileDecision.similarityPurity(mixed, 0.1)).isCloseTo(0.6, within(0.001));
+        // Same-kind documents spread out without a gap: one cluster, a home
+        assertThat(AutoFileDecision.similarityPurity(List.of(0.90, 0.84, 0.79, 0.73, 0.66), 0.1)).isEqualTo(1.0);
+        assertThat(AutoFileDecision.similarityPurity(List.of(), 0.1)).isNaN();
+        assertThat(AutoFileDecision.coherentBySimilarity(mixed, 0.1, 0.7, 3)).as("a grab-bag").isFalse();
+        assertThat(AutoFileDecision.coherentBySimilarity(List.of(0.9, 0.85, 0.8), 0.1, 0.7, 3)).as("a home").isTrue();
+        assertThat(AutoFileDecision.coherentBySimilarity(List.of(0.9, 0.4), 0.1, 0.7, 3)).as("too young to judge").isTrue();
+        assertThat(AutoFileDecision.coherentBySimilarity(null, 0.1, 0.7, 3)).isTrue();
+    }
+
+    @Test
+    @DisplayName("the fit: a small tight folder of the document's kind beats a large mixed one")
+    void fit() {
+        UUID tight = UUID.randomUUID();
+        UUID mixed = UUID.randomUUID();
+        UUID far = UUID.randomUUID();
+        UUID lone = UUID.randomUUID();
+        Map<UUID, List<Double>> candidates = Map.of(
+                tight, List.of(0.90, 0.88, 0.87),
+                mixed, List.of(0.93, 0.92, 0.91, 0.60, 0.58, 0.55, 0.50, 0.45),
+                far, List.of(0.40, 0.38, 0.35),
+                lone, List.of(0.99));
+        Optional<AutoFileDecision.FolderFit> best = AutoFileDecision.fit(candidates, 0.1, 0.7, 0.5, 3);
+        assertThat(best).isPresent();
+        assertThat(best.get().folderId()).as("a single member is trivially pure: not a candidate").isEqualTo(tight);
+        assertThat(best.get().purity()).isEqualTo(1.0);
+        assertThat(best.get().members()).isEqualTo(3);
+        assertThat(best.get().score()).isCloseTo(0.8833, within(0.001));
+        // Nothing coherent and close: no stage-1 answer
+        assertThat(AutoFileDecision.fit(Map.of(mixed, candidates.get(mixed), far, candidates.get(far)), 0.1, 0.7, 0.5, 3)).isEmpty();
+        assertThat(AutoFileDecision.fit(Map.of(), 0.1, 0.7, 0.5, 3)).isEmpty();
     }
 
     @Test

@@ -76,6 +76,8 @@ public class SettingsServiceImpl implements SettingsService {
 
     private final QuotaProperties quotaProperties;
 
+    private final org.openfilz.dms.config.AiProperties aiProperties;
+
     /** MCP server config — surfaced so a user can connect their own agent without asking an admin. */
     private final McpProperties mcpProperties;
 
@@ -154,6 +156,8 @@ public class SettingsServiceImpl implements SettingsService {
                .aiActive(aiActive)
                .aiUserSettingsEnabled(aiActive && aiUserSettingsEnabled)
                .aiInsightsActive(Boolean.TRUE.equals(aiActive) && Boolean.TRUE.equals(aiInsightsActive))
+               .aiInsightsCategories(Boolean.TRUE.equals(aiActive) && Boolean.TRUE.equals(aiInsightsActive)
+                       ? List.copyOf(aiProperties.getInsights().getCategories()) : List.of())
                .aiAutoFileActive(Boolean.TRUE.equals(aiActive) && Boolean.TRUE.equals(aiAutoFileActive))
                .signatureActive(Boolean.TRUE.equals(signatureActive))
                .pdfToolsActive(Boolean.TRUE.equals(pdfToolsActive))

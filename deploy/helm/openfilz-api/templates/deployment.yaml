@@ -226,6 +226,22 @@ spec:
               value: {{ .Values.ai.autoFile.defaultForUsers | quote }}
             - name: OPENFILZ_AI_AUTO_FILE_NEW_FOLDERS
               value: {{ .Values.ai.autoFile.allowNewFolders | quote }}
+            - name: OPENFILZ_AI_INSIGHTS_CATEGORIES
+              value: {{ join "," .Values.ai.insights.categories | quote }}
+            - name: OPENFILZ_AI_INSIGHTS_CLASSIFIER
+              value: {{ .Values.ai.insights.classifier.mode | quote }}
+            - name: OPENFILZ_AI_INSIGHTS_CLASSIFIER_MIN_CONFIDENCE
+              value: {{ .Values.ai.insights.classifier.minConfidence | quote }}
+            - name: OPENFILZ_AI_INSIGHTS_CLASSIFIER_LEARN_FROM
+              value: {{ join "," .Values.ai.insights.classifier.learnFrom | quote }}
+            - name: OPENFILZ_AI_AUTO_FILE_COHERENCE
+              value: {{ .Values.ai.autoFile.coherence | quote }}
+            - name: OPENFILZ_AI_AUTO_FILE_STAGE1
+              value: {{ .Values.ai.autoFile.stage1 | quote }}
+            - name: OPENFILZ_AI_AUTO_FILE_RULE_FOLDERS
+              value: {{ .Values.ai.autoFile.ruleFolders | quote }}
+            - name: OPENFILZ_AI_AUTO_FILE_DEFAULT_LANGUAGE
+              value: {{ .Values.ai.autoFile.defaultLanguage | quote }}
             - name: AI_USER_SETTINGS_ENABLED
               value: {{ .Values.ai.userSettings.enabled | quote }}
             - name: AI_SETTINGS_ENCRYPTION_KEY

@@ -8,6 +8,8 @@ public record Settings(Integer emptyBinInterval, Integer fileQuotaMB, Integer us
                        boolean aiUserSettingsEnabled,
                        /** True when tier-2 document insights (AI category / summary at upload) are on: the frontend shows the Insights section and category facets. */
                        boolean aiInsightsActive,
+                       /** The closed category list of tier-2 insights (openfilz.ai.insights.categories) — the details panel offers it when a user corrects a document's kind. */
+                       java.util.List<String> aiInsightsCategories,
                        /** True when smart filing on upload is on: the upload area shows the "Let OpenFilz choose the folder" switch. */
                        boolean aiAutoFileActive,
                        boolean signatureActive,

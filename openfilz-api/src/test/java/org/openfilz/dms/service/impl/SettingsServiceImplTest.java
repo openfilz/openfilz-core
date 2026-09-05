@@ -31,7 +31,7 @@ class SettingsServiceImplTest {
 
     private Settings getSettings(boolean aiActive, boolean aiUserSettingsEnabled,
                                  McpProperties mcpProperties, CommonProperties commonProperties) {
-        SettingsServiceImpl service = new SettingsServiceImpl(new RecycleBinProperties(), new QuotaProperties(),
+        SettingsServiceImpl service = new SettingsServiceImpl(new RecycleBinProperties(), new QuotaProperties(), new org.openfilz.dms.config.AiProperties(),
                 mcpProperties, commonProperties, java.util.List.of(), java.util.List.of());
         ReflectionTestUtils.setField(service, "softDelete", false);
         ReflectionTestUtils.setField(service, "thumbnailActive", false);

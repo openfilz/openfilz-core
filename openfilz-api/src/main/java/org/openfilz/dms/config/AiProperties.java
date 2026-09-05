@@ -121,6 +121,40 @@ public class AiProperties {
          * vote is discarded and the model decides — a mixed folder never wins stage 1.
          */
         private double neighbourMinFolderPurity = 0.7;
+        /**
+         * How a winning folder is judged a home for the document: by the tier-2 categories of its
+         * files ({@code CATEGORY}), by their similarity to the document ({@code SIMILARITY} — no
+         * category needed, one filtered vector query), or both ({@code BOTH}). Default {@code CATEGORY}:
+         * on the reference corpus the category guards filed 92 % of the documents right and none into
+         * a grab-bag, while the similarity judgement abstained far more often (see the docs).
+         */
+        private Coherence coherence = Coherence.CATEGORY;
+        /**
+         * Similarity coherence: the members' similarities to the document form one cluster (a home)
+         * unless two consecutive values, sorted, are further apart than this — then the share above
+         * the gap is the folder's purity for the document.
+         */
+        private double folderSimilarityGap = 0.1;
+        /** A folder with fewer known members than this is not judged (a young folder passes). */
+        private int folderMinMembers = 3;
+        /**
+         * How stage 1 picks the folder: the neighbour vote ({@code VOTE}, default — folders ranked by
+         * their neighbours' similarity weight) or the fit ({@code FIT} — the voted folders re-ranked by
+         * purity × the mean similarity of their close members, so a small tight folder of the same
+         * kind beats a large mixed one).
+         */
+        private Stage1 stage1 = Stage1.VOTE;
+        /**
+         * The rule stage between the vote and the model: a document of a known kind with no home
+         * among its neighbours goes to the scope's folder for that kind ({@code Invoices},
+         * {@code Factures}…) — found by name in any language, or created, named in the language of
+         * the existing folder names — without asking a model. Off: straight to the model.
+         */
+        private boolean ruleFolders = true;
+        /** The language of a rule-created folder when neither the existing folder names nor the document tell. */
+        private String defaultLanguage = "en";
+        /** Folder names per language and kind on top of the built-in table: {@code folder-names.fr.invoice: Factures}. */
+        private Map<String, Map<String, String>> folderNames = new LinkedHashMap<>();
         /** Minimum model confidence to move into an existing folder. */
         private double llmMinConfidence = 0.7;
         /** Minimum model confidence to create a new folder. */
@@ -129,6 +163,10 @@ public class AiProperties {
         private int newFolderMaxDepth = 2;
         /** How long a filing waits for the document's tier-2 insight before deciding without it. */
         private Duration waitForInsights = Duration.ofSeconds(30);
+
+        public enum Coherence { CATEGORY, SIMILARITY, BOTH }
+
+        public enum Stage1 { VOTE, FIT }
     }
 
     @Data
@@ -149,6 +187,58 @@ public class AiProperties {
         private List<String> categories = new ArrayList<>(List.of(
                 "invoice", "quote", "contract", "report", "letter", "cv", "presentation", "spreadsheet",
                 "form", "id-document", "receipt", "minutes", "specification", "manual", "other"));
+        /** Who names the category: the chat model, the prototype classifier, or the classifier first and the model when unsure. */
+        private Classifier classifier = new Classifier();
+
+        @Data
+        public static class Classifier {
+            /** How the tier-2 category is produced. */
+            public enum Mode {
+                /** The chat model answers the full insight (category, summary, keywords, language, entities). */
+                LLM,
+                /** The prototype classifier alone: category only, no model call, no summary or entities. */
+                PROTOTYPE,
+                /**
+                 * The library's own labelled documents classify (the nearest ones vote), the prototype
+                 * descriptions as the cold start; no model.
+                 */
+                LEARNED,
+                /** The learned classifier first (descriptions as cold start); the model only when its confidence is below {@code min-confidence}. */
+                AUTO
+            }
+
+            private Mode mode = Mode.LLM;
+            /** In {@code auto} mode, a prototype verdict at or above this confidence is kept without asking the model. */
+            private double minConfidence = 0.5;
+            /** Softmax temperature over the cosine similarities: lower = sharper confidences. */
+            private double temperature = 0.02;
+            /** Best similarity below which no category fits and the answer is {@code other}; zero disables the floor. */
+            private double minSimilarity = 0.0;
+            /** Characters of the document head embedded for the classification. */
+            private int maxChars = 2000;
+            /** Task prefix prepended to prototypes and documents alike (nomic models expect {@code "classification: "}). */
+            private String prefix = "";
+            /** Prototype description per category, overriding the built-in one for that key. */
+            private Map<String, String> prototypes = new LinkedHashMap<>();
+            /** The learned classifier ({@code learned} and {@code auto} modes). */
+            private Learned learned = new Learned();
+
+            @Data
+            public static class Learned {
+                /** Nearest labelled documents that vote. */
+                private int k = 5;
+                /** Fewer labelled neighbours than this: the cold-start classifier answers. */
+                private int minNeighbours = 3;
+                /** Neighbours below this similarity do not vote. */
+                private double minSimilarity = 0.5;
+                /** The winning share of the vote below which the cold-start classifier answers. */
+                private double minConfidence = 0.5;
+                /** Whose labels teach: the model's and the user's by default, never the classifier's own or the descriptions'. */
+                private java.util.List<org.openfilz.dms.service.insight.LearnedCategoryClassifier.Source> learnFrom =
+                        new ArrayList<>(java.util.List.of(org.openfilz.dms.service.insight.LearnedCategoryClassifier.Source.MODEL,
+                                org.openfilz.dms.service.insight.LearnedCategoryClassifier.Source.USER));
+            }
+        }
     }
 
     @Data
@@ -162,6 +252,12 @@ public class AiProperties {
         /** Inventories a user may produce per {@link #planRateWindow}; cached hits do not count. Zero disables the cap. */
         private int planRateLimit = 20;
         private Duration planRateWindow = Duration.ofMinutes(10);
+        /** By-kind split: a folder is judged only from this many categorised files. */
+        private int splitMinFiles = 6;
+        /** By-kind split: a kind gets its own sub-folder only from this many files. */
+        private int splitMinGroup = 3;
+        /** By-kind split: a folder whose dominant kind holds at least this share is left alone. */
+        private double splitMinPurity = 0.7;
     }
 
     /**
