@@ -62,7 +62,8 @@ import java.util.stream.Stream;
  *   <li>{@code bench.google} — a Google model to compare; the key is read from {@code GOOGLE_API_KEY} and never printed;</li>
  *   <li>{@code bench.categories} — the closed list, default the deployment's;</li>
  *   <li>{@code bench.max-chars} — text head per document, {@code 2000} for the prototypes, {@code 6000} for the models;</li>
- *   <li>{@code bench.limit} — files per category, {@code 0} = all.</li>
+ *   <li>{@code bench.limit} — files per category, {@code 0} = all;</li>
+ *   <li>{@code bench.learned} — also score a classifier learned from the corpus itself (nearest centroid, k-NN, leave-one-out), {@code true}.</li>
  * </ul>
  * The report goes to the console and to {@code target/bench/category-benchmark-<time>.md}.
  */
@@ -136,6 +137,68 @@ class CategoryClassifierBenchmark {
                 }
                 summarise("prototype " + embeddingName + (prefix.isEmpty() ? " (no prefix)" : " (prefix \"" + prefix.trim() + "\")")
                         + " T=" + temperature, outcomes, true);
+            }
+        }
+
+        // ── learned from examples: nearest centroid and k-NN over the corpus itself, leave-one-out ──
+        // What a classifier that learns the categories from the library's own labelled documents
+        // (the model's or the user's labels) would reach on this corpus — including "other", which
+        // a description can never name. Same embedding, no prototype text at all.
+        if (!"false".equals(prop("bench.learned", "true"))) {
+            List<float[]> vectors = new ArrayList<>();
+            List<Long> timings = new ArrayList<>();
+            for (Sample sample : corpus) {
+                String head = sample.text().length() > protoChars ? sample.text().substring(0, protoChars) : sample.text();
+                long t0 = System.nanoTime();
+                vectors.add(embeddingModel.embed("File name: " + sample.fileName() + "\n" + head));
+                timings.add(System.nanoTime() - t0);
+            }
+            for (int k : new int[] {0, 1, 3}) {
+                List<Outcome> outcomes = new ArrayList<>();
+                for (int i = 0; i < corpus.size(); i++) {
+                    Map<String, double[]> centroids = new LinkedHashMap<>();
+                    List<Map.Entry<String, Double>> scored = new ArrayList<>();
+                    for (int j = 0; j < corpus.size(); j++) {
+                        if (j == i) continue;
+                        double sim = cosine(vectors.get(i), vectors.get(j));
+                        scored.add(Map.entry(corpus.get(j).category(), sim));
+                        float[] other = vectors.get(j);
+                        double[] acc = centroids.computeIfAbsent(corpus.get(j).category(), c -> new double[other.length + 1]);
+                        for (int d = 0; d < other.length; d++) acc[d] += other[d];
+                        acc[other.length]++;
+                    }
+                    String predicted;
+                    double confidence;
+                    if (k == 0) {
+                        // nearest centroid: the mean vector of every other document of the category
+                        String best = null;
+                        double bestSim = -2, second = -2;
+                        for (Map.Entry<String, double[]> e : centroids.entrySet()) {
+                            double[] acc = e.getValue();
+                            float[] centroid = new float[acc.length - 1];
+                            for (int d = 0; d < centroid.length; d++) centroid[d] = (float) (acc[d] / acc[acc.length - 1]);
+                            double sim = cosine(vectors.get(i), centroid);
+                            if (sim > bestSim) { second = bestSim; bestSim = sim; best = e.getKey(); }
+                            else if (sim > second) second = sim;
+                        }
+                        predicted = best;
+                        confidence = 1 / (1 + Math.exp(-(bestSim - second) / 0.02));
+                    } else {
+                        // k nearest documents vote, weighted by similarity
+                        scored.sort(Map.Entry.<String, Double>comparingByValue().reversed());
+                        Map<String, Double> votes = new LinkedHashMap<>();
+                        double total = 0;
+                        for (Map.Entry<String, Double> e : scored.subList(0, Math.min(k, scored.size()))) {
+                            votes.merge(e.getKey(), e.getValue(), Double::sum);
+                            total += e.getValue();
+                        }
+                        Map.Entry<String, Double> top = votes.entrySet().stream().max(Map.Entry.comparingByValue()).orElseThrow();
+                        predicted = top.getKey();
+                        confidence = total == 0 ? 0 : top.getValue() / total;
+                    }
+                    outcomes.add(new Outcome(corpus.get(i), predicted, confidence, scored.isEmpty() ? 0 : scored.getFirst().getValue(), timings.get(i)));
+                }
+                summarise("learned from the corpus, leave-one-out: " + (k == 0 ? "nearest centroid" : k + "-NN"), outcomes, true);
             }
         }
 
@@ -246,6 +309,16 @@ class CategoryClassifierBenchmark {
     private void flush() {
         System.out.print(report.substring(printed));
         printed = report.length();
+    }
+
+    private static double cosine(float[] a, float[] b) {
+        double dot = 0, na = 0, nb = 0;
+        for (int i = 0; i < a.length; i++) {
+            dot += a[i] * b[i];
+            na += a[i] * a[i];
+            nb += b[i] * b[i];
+        }
+        return na == 0 || nb == 0 ? 0 : dot / Math.sqrt(na * nb);
     }
 
     private static double mean(List<Outcome> outcomes, boolean correct) {

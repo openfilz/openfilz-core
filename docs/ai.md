@@ -368,6 +368,29 @@ on a CPU, local `qwen2.5` through Ollama; a real library will differ — run it 
 | vote + similarity coherence, no category | 13 / 0 / 88 % | 25 / 0 / 75 % |
 | fit (purity × closeness), no category | 13 / 75 / 13 % | 0 / 15 / 2 % (83 % wrong) |
 
+A second run on a **real library** (a name-labelled subset of personal administrative documents,
+51 readable files of 7 kinds, French, 12 of them of a kind the closed list does not know —
+bank statements, payslips, tax notices — labelled `other`) tells a different story, and the one
+that matters:
+
+| classifier | accuracy | latency / document |
+|---|---|---|
+| prototype descriptions, `nomic-embed-text` | 47.1 % (`other` 0/12, contracts 0/3; `form` and `receipt` attract every administrative page) | 0.3 s |
+| `qwen2.5:1.5b` | 52.9 % (10 unparseable or timed-out answers) | 17 s |
+| **learned from the library itself**, nearest centroid over the other documents' embeddings, leave-one-out | 84.3 % (`other` 12/12, reports 14/14, CVs 15/15; misses on kinds with 2–3 examples) | 0.3 s |
+| learned, 1-NN | 88.2 % | 0.3 s |
+
+Descriptions are enough for a clean corpus and not for real documents; a small local model is
+no better and fifty times slower. What works is the library's own labelled documents as the
+prototypes — the model's or the user's labels, which also make `other` learnable. The benchmark
+scores that variant with `bench.learned` (on by default); a `learned` classifier mode that keeps
+per-category centroids from the stored insight rows is the next step. The filing benchmark on
+the same library, organised by subject (Courtier, Djibi, CHR…) rather than by kind, showed the
+category guards sending 36 % of the documents to the rule or the model and filing 11 % into the
+wrong subject folder (the relative floor alone: 32 % and 6 %), while being the only strategy that
+never files into a grab-bag — a by-subject library is legitimately mixed by kind, which the
+similarity judgement (67 % abstain) does not see either.
+
 The uncapped small model was the "Ollama is too slow" of the early trials: at temperature 0 it
 looped on the JSON contract until its context shifted (22 000 tokens on one document); every
 model call now passes `maxTokens(512)`. Run both benchmarks:
