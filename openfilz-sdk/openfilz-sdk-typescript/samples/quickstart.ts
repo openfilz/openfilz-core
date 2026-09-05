@@ -59,6 +59,7 @@ export async function runQuickStart(): Promise<void> {
   const uploaded = await documentApi.uploadDocument1(
     new File([fileBuffer], 'quickstart-demo.txt', { type: 'text/plain' }),
     true,       // allowDuplicateFileNames
+    undefined,  // autoFile (smart filing: leave the file where it is)
     folderId,   // parentFolderId
     undefined,  // metadata
   );

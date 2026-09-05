@@ -58,6 +58,7 @@ describe('TypeScript SDK Quick Start', () => {
     const resp = await documentApi.uploadDocument1(
       new File([fileBuffer], 'test-upload.txt', { type: 'text/plain' }),
       true,
+      undefined,  // autoFile: leave the file where it is (smart filing off)
       folderId,
       undefined,
     );
