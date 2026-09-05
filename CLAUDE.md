@@ -303,14 +303,24 @@ what OpenFilz derives from a file: tier 1 = Tika file metadata captured from the
 (`TikaService.processResource(path, resource, onMetadata)`, `TikaFileMetadata`, `DocumentInsightStore`); tier 2 = the model's
 category (closed list `openfilz.ai.insights.categories`) / summary / keywords / language / entities (`AiDocumentInsightService`,
 bounded queue, daily cap, backfill `POST /api/v1/ai/insights/backfill`; `NoOp…` + `DocumentInsightConfig` = native-safe runtime
-toggle `openfilz.ai.insights.active`; mirrored to OpenSearch `category`/`summary`/`language`). `GET /documents/{id}/insights`,
+toggle `openfilz.ai.insights.active`; mirrored to OpenSearch `category`/`summary`/`language`). `openfilz.ai.insights.classifier.mode`
+(`llm` | `prototype` | `auto`) puts the `CategoryClassifier` seam in front of the model: `PrototypeCategoryClassifier` names the
+category by nearest embedded description with the deployment's embedding model (no chat model, category-only row); `auto` keeps
+its verdict above `min-confidence` and asks the model otherwise; `CategoryClassifierBenchmark` (test sources, `-Dbench.dir=`)
+measures both on a labelled corpus — see `docs/ai.md` §3c. Reorganisation by kind without a model: `CategoryReorganizationPlanner`
+(`POST /ai/reorganization/by-kind`, tool `proposeReorganizationByKind`) splits mixed folders into one sub-folder per kind
+(`reorganization.split-*`) as an ordinary stored plan; `FilingStrategyBenchmark` compares the stage-1 strategies offline.
+`GET /documents/{id}/insights`,
 `getMetadata` block, `queryDocuments(category)`. Smart filing (`openfilz.ai.auto-file.active`, `DefaultAutoFileService` +
 `NoOp…` + `AutoFileConfig`): `autoFile` on `/upload`, `/upload-multiple`, TUS finalize, `writeFile`, or the user's switch
 (`user_ai_preferences`, `GET/PUT /settings/ai/preferences`); the neighbour vote on the vector store (live `documents.parent_id`,
 never the chunk metadata; neighbours lying at the root never vote — a file at the root is unfiled; only neighbours of the
 document's tier-2 category vote, only those within `neighbour-min-relative-similarity` of the best hit, and the winning folder
-must be a home for that kind — dominant category = the document's at ≥ `neighbour-min-folder-purity` — else the vote is
-discarded, so a mixed dumping ground never wins on headcount) then the model
+must be a home for that kind — dominant category = the document's at ≥ `neighbour-min-folder-purity`, and/or by similarity
+(`auto-file.coherence`, one vector query filtered on the folder's files, no category needed; `stage1: fit` re-ranks by
+purity × closeness) — else the vote is discarded, so a mixed dumping ground never wins on headcount), then the rule
+(`rule-folders`: a known kind with no home goes to the scope's folder for that kind, found by name in any language or created
+from the `CategoryFolderNames` table in the language of the existing folder names; stage `RULE`, no model), then the model
 (both through `AiFallbackChain.callWithFailover`, like tier-2 insights; the filing waits for the tier-2 row on the in-process
 `InsightCompletionSignal` the insight worker completes at every terminal write, 5 s fallback re-read, no 500 ms polling), applied as a one-item `AiReorganizationPlan` (`origin = AUTO_FILE`, `document_id`,
 `details`, V1_10) via `ReorganizationPlanService.fileDocument`; `/api/v1/ai/auto-file/**` (job, undo, filing record),

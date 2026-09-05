@@ -9,6 +9,8 @@ import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.ReorganizationApplyRequest;
 import org.openfilz.dms.dto.response.ReorganizationApplyResult;
 import org.openfilz.dms.dto.response.ReorganizationPlanView;
+import org.openfilz.dms.dto.request.ReorganizationByKindRequest;
+import org.openfilz.dms.service.ai.CategoryReorganizationPlanner;
 import org.openfilz.dms.service.ai.ReorganizationPlanService;
 import org.openfilz.dms.service.ai.ReorganizationPlanService.Caller;
 import org.openfilz.dms.utils.UserInfoService;
@@ -25,6 +27,7 @@ import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 
@@ -53,12 +56,25 @@ import java.util.concurrent.Callable;
 public class AiReorganizationController implements UserInfoService {
 
     private final ObjectProvider<ReorganizationPlanService> planService;
+    private final ObjectProvider<CategoryReorganizationPlanner> byKindPlanner;
     private final AiProperties aiProperties;
 
     public AiReorganizationController(ObjectProvider<ReorganizationPlanService> planService,
+                                      ObjectProvider<CategoryReorganizationPlanner> byKindPlanner,
                                       AiProperties aiProperties) {
         this.planService = planService;
+        this.byKindPlanner = byKindPlanner;
         this.aiProperties = aiProperties;
+    }
+
+    @PostMapping(value = "/by-kind", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Propose a reorganisation by kind of document — no model involved",
+            description = "Every folder of the scope holding documents of several kinds (their insight category) gets one "
+                    + "sub-folder per kind, named like the existing folders (Invoices / Factures…), and the files move there. "
+                    + "The answer is a stored plan to review and apply; a plan without an id means nothing needs splitting.")
+    public Mono<ReorganizationPlanView> proposeByKind(@RequestBody(required = false) ReorganizationByKindRequest request) {
+        UUID root = request == null ? null : request.rootFolderId();
+        return withCaller((service, caller) -> byKindPlanner.getObject().propose(root, null, caller));
     }
 
     @GetMapping(value = "/{planId}", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -93,10 +109,13 @@ public class AiReorganizationController implements UserInfoService {
         }
         // Resolved only past the gate, so the lazy service is first built on the first real call.
         ReorganizationPlanService service = planService.getObject();
+        // No-auth deployments have no Authentication at all: the caller is then anonymous, as for smart filing
         return getAuthenticationMono()
-                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not authenticated")))
+                .map(Optional::of)
+                .defaultIfEmpty(Optional.empty())
                 .flatMap(authentication -> getConnectedUserEmail()
-                        .map(email -> new Caller(email, authentication)))
+                        .map(email -> new Caller(UserInfoService.ANONYMOUS_USER.equals(email) ? null : email,
+                                authentication.orElse(null))))
                 .flatMap(caller -> Mono.fromCallable((Callable<T>) () -> action.run(service, caller))
                         .subscribeOn(Schedulers.boundedElastic()));
     }

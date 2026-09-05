@@ -286,6 +286,20 @@ openfilz:
       concurrency: ${OPENFILZ_AI_INSIGHTS_CONCURRENCY:2}
       daily-limit: ${OPENFILZ_AI_INSIGHTS_DAILY_LIMIT:2000}
       categories: ${OPENFILZ_AI_INSIGHTS_CATEGORIES:invoice,quote,contract,report,letter,cv,presentation,spreadsheet,form,id-document,receipt,minutes,specification,manual,other}
+      # Who names the category. llm: the chat model answers the whole insight (default). prototype:
+      # the embedding model alone — one short description per category is embedded once and the
+      # nearest one wins; no model call, category only (no summary, keywords or entities).
+      # auto: the prototype verdict when its confidence reaches min-confidence, the model otherwise.
+      # The benchmark in docs/ai.md §3c measures both on your own documents before you switch.
+      classifier:
+        mode: ${OPENFILZ_AI_INSIGHTS_CLASSIFIER:llm}
+        min-confidence: ${OPENFILZ_AI_INSIGHTS_CLASSIFIER_MIN_CONFIDENCE:0.5}
+        temperature: 0.02          # softmax over the cosine similarities; lower = sharper confidences
+        min-similarity: 0.0        # best similarity under which the answer is "other"; 0 = no floor
+        max-chars: 2000            # document head embedded for the classification
+        prefix: ${OPENFILZ_AI_INSIGHTS_CLASSIFIER_PREFIX:}   # nomic models expect "classification: "
+        # prototypes:              # override a built-in description, e.g.
+        #   invoice: "Facture fournisseur avec numéro, montant TTC, TVA et échéance."
     # Smart filing on upload (design §13): on the user's explicit request (a remembered switch or
     # autoFile=true on the upload), OpenFilz chooses the destination folder — the nearest documents'
     # folder (one vector query, no model call) or, when they disagree, the model's choice among the
@@ -306,6 +320,25 @@ openfilz:
       # model decides. Neighbours of another category never vote when the document's is known.
       neighbour-min-relative-similarity: 0.85
       neighbour-min-folder-purity: 0.7
+      # How a winning folder is judged a home for the document: category (its files' tier-2
+      # categories), similarity (its files' similarity to the document — no category needed, one
+      # filtered vector query), or both. folder-min-members: a younger folder is not judged.
+      # Default category: measured best (docs/ai.md §3c). folder-similarity-gap: a similarity guard
+      # calls a folder mixed when its members' similarities to the document split by more than this.
+      coherence: ${OPENFILZ_AI_AUTO_FILE_COHERENCE:category}
+      folder-min-members: 3
+      folder-similarity-gap: 0.1
+      # vote (default): folders ranked by their neighbours' similarity weight. fit: the voted folders
+      # re-ranked by purity x closeness of their members, so a small tight folder beats a large mixed one.
+      stage1: ${OPENFILZ_AI_AUTO_FILE_STAGE1:vote}
+      # The rule stage: a document of a known kind with no home among its neighbours goes to the
+      # scope's folder for that kind (Invoices / Factures / Rechnungen...), found by name in any
+      # language or created, named in the language of the existing folder names — no model call.
+      rule-folders: ${OPENFILZ_AI_AUTO_FILE_RULE_FOLDERS:true}
+      default-language: ${OPENFILZ_AI_AUTO_FILE_DEFAULT_LANGUAGE:en}
+      # folder-names:            # add to or override the built-in table (en, fr, de, es, it, nl, pt, ar)
+      #   fr:
+      #     invoice: Factures fournisseurs
       llm-min-confidence: 0.7
       new-folder-min-confidence: 0.85
       new-folder-max-depth: 2
@@ -314,6 +347,12 @@ openfilz:
       inventory-cache-ttl: ${OPENFILZ_AI_REORG_INVENTORY_CACHE_TTL:2m}
       plan-rate-limit: ${OPENFILZ_AI_REORG_PLAN_RATE_LIMIT:20}
       plan-rate-window: 10m
+      # Reorganisation by kind (POST /api/v1/ai/reorganization/by-kind, tool proposeReorganizationByKind):
+      # a folder with at least split-min-files categorised files whose dominant kind holds less than
+      # split-min-purity of them gets one sub-folder per kind of at least split-min-group files.
+      split-min-files: 6
+      split-min-group: 3
+      split-min-purity: 0.7
     embedding:
       chunk-size: 1000       # Characters per text chunk
       chunk-overlap: 200     # Overlap between chunks

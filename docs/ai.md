@@ -258,9 +258,30 @@ uploaded document seconds after the upload response (which carries `autoFile.job
    one) vote; only neighbours at least `neighbour-min-relative-similarity` (0.85) as similar as
    the best hit count; and the winning folder must be a home for that kind — its dominant
    category is the document's and holds `neighbour-min-folder-purity` (0.7) of its categorised
-   files — else the vote is discarded and the model decides, and may create the folder this kind
-   deserves; one vector query plus two small reads, no model call;
-3. *stage 2, the model*: only when the vote is inconclusive — the scope's folder inventory
+   files (`auto-file.coherence: category`, the default) and/or, with no category at all
+   (`similarity` / `both`), the share of its files of the document's kind by similarity: one
+   vector query filtered on the folder's files gives each file's similarity to the document,
+   and when the sorted values split by more than `folder-similarity-gap` the share above the gap
+   is the purity (`AutoFileDecision.similarityPurity`; a folder younger than `folder-min-members`
+   is not judged) — else the vote is discarded; `auto-file.stage1: fit` instead re-ranks the
+   voted folders by purity × the mean similarity of their members of the document's kind
+   (`AutoFileDecision.fit`). Measured on the reference corpus (§3c, `FilingStrategyBenchmark`),
+   the category guards with the prototype category file 92 % of the documents right, 2 % wrong,
+   none into a grab-bag, and hand 6 % over; the similarity judgement abstains on 75–88 % — same-kind
+   documents in two languages or templates are two clusters by similarity, one kind by category —
+   and the fit files 75 % wrong (the tightest voted folder is not the right kind). Hence the
+   defaults: `category` and `vote`; the others stay for libraries without insight rows and for
+   the next measurement. One vector query plus small reads, no model call;
+2b. *stage 1b, the rule* (`auto-file.rule-folders`, on by default): a document of a known kind
+   (tier-2 category, from the model or the prototype classifier, §3c) whose neighbours offer no
+   home — none close enough, or a grab-bag — goes to the scope's folder for that kind: an existing
+   child of the scope root whose name denotes the kind in any language (`Invoices`, `Factures`,
+   `Rechnungen`, singulars and common aliases — `CategoryFolderNames`), or a new one named in the
+   language most of the scope's folder names are in, else the document's language, else
+   `auto-file.default-language` (deployments extend the table with `auto-file.folder-names.<lang>.<kind>`).
+   Stage `RULE`, confidence 1. When the neighbours are split between coherent folders (two
+   clients' invoices) the rule stays out — that choice is the model's;
+3. *stage 2, the model*: only when neither the vote nor the rule decided — the scope's folder inventory
    (`ReorganizationPlanService.folderInventory`) plus the insight row; a new folder only above
    `new-folder-min-confidence`, at most `new-folder-max-depth` levels, and when the user allows it;
    the scope root is never offered as a target (the document already lies there, unfiled, and a
@@ -284,6 +305,83 @@ uploaded document seconds after the upload response (which carries `autoFile.job
 the same inline for agents. `AutoFileConfig` selects the real / no-op service at runtime;
 `Settings.aiAutoFileActive` drives the upload-area switch. Every filed document publishes a Spring
 `DocumentFiledEvent` (relayed as `document.filed` by the enterprise webhook producer).
+
+**Reorganisation by kind, without a model** (`POST /api/v1/ai/reorganization/by-kind {rootFolderId}`,
+tool `proposeReorganizationByKind`): `CategoryReorganizationPlanner` walks the scope and, for every
+folder holding documents of several kinds (at least `reorganization.split-min-files` categorised
+files, the dominant kind below `split-min-purity` of them), proposes one sub-folder per kind of at
+least `split-min-group` files — an existing child that denotes the kind, else a new one named in
+the library's language from the same folder-name table — and the moves into them; loose files at
+the scope root are grouped the same way, `other` and uncategorised files stay. The answer is an
+ordinary stored `ReorganizationPlanView` (proposed, reviewed, applied, undone like a model's plan;
+a view without an id means nothing needs splitting). Deterministic and instant; the model remains
+the tool for anything that is not "by kind" (by client, by project, by period).
+
+## 3c. The category without a model: the prototype classifier
+
+The tier-2 category is the one model-produced signal the neighbour vote and the reorganisation
+plans lean on, and the model call that produces it is the slow, expensive part of ingestion (one
+generation per upload; prohibitive on a CPU-only Ollama). `openfilz.ai.insights.classifier.mode`
+puts a `CategoryClassifier` seam in front of it:
+
+- `llm` (default) — the chat model answers the whole insight, as before;
+- `prototype` — `PrototypeCategoryClassifier`: one short multilingual description per category
+  (`DEFAULT_PROTOTYPES`, overridable per key by `classifier.prototypes.<category>`) is embedded
+  once with the deployment's embedding model, the document's head (`classifier.max-chars`, file
+  name first, optional task `prefix` — nomic models expect `classification: `) is embedded with
+  the same model, and the nearest description wins. One embedding call, tens of milliseconds, no
+  chat model needed. The row is category-only (no summary, keywords, language or entities), its
+  `model` column reads `prototype:<embedding model>`, the daily cap does not apply. The confidence
+  is the softmax share of the best similarity at `classifier.temperature`; below
+  `classifier.min-similarity` (off by default) the answer is `other`;
+- `auto` — the prototype verdict when its confidence reaches `classifier.min-confidence` (0.5),
+  the model for the rest (and the prototype verdict again once the daily model cap is spent).
+
+Coarse kinds (invoice / report / contract / cv) separate well by prototype; fine ones (supplier
+vs customer invoice) do not — that distinction is the neighbour vote's job, not the category's.
+Whether the trade is worth it for a given library is measured, not guessed: the benchmark
+`CategoryClassifierBenchmark` (test sources, skipped unless `bench.dir` is set) reads a corpus laid
+out as `<category>/<files>` (anything Tika parses), runs every prototype variant (prefix ×
+temperature) and any chat model named, and writes accuracy, per-label recall, confusions, latency
+and the auto-mode curve (share decided locally at each `min-confidence`, and its accuracy) to
+`target/bench/category-benchmark-<time>.md`; `FilingStrategyBenchmark` does the same for stage 1,
+holding each document of the corpus out in turn and asking every strategy (headcount vote,
+relative floor, category guards with the true or the prototype category, similarity coherence,
+fit) where it would file it, in a pure library and in one where two kinds share a "Mixed" folder —
+correct / wrong / into the grab-bag / abstain, and the extra vector queries each costs.
+Reference run (2026-09-05, 48 synthetic documents of 8 kinds in English and French, `nomic-embed-text`
+on a CPU, local `qwen2.5` through Ollama; a real library will differ — run it on yours):
+
+| classifier | accuracy | latency / document |
+|---|---|---|
+| prototype, `nomic-embed-text`, no prefix, T = 0.02 | 91.7 % (auto mode at 0.5: 83 % decided locally, all right) | 73 ms |
+| prototype with the `classification: ` prefix | 75.0 % | 71 ms |
+| `qwen2.5:1.5b` (the tier-2 prompt, answer capped at 512 tokens) | 83.3 % | 7.2 s |
+| `qwen2.5:0.5b` | 22.9 % | 5.2 s |
+
+| stage-1 strategy | pure library: right / wrong / abstain | grab-bag library: right / into the grab-bag / abstain |
+|---|---|---|
+| headcount vote (before this work) | 0 / 0 / 100 % | 25 / 0 / 75 % |
+| vote + relative floor | 98 / 0 / 2 % | 73 / **25** / 2 % |
+| vote + category guards, true category | 100 / 0 / 0 % | 100 / 0 / 0 % |
+| vote + category guards, prototype category (**default**) | 92 / 2 / 6 % | 92 / 0 / 6 % |
+| vote + similarity coherence, no category | 13 / 0 / 88 % | 25 / 0 / 75 % |
+| fit (purity × closeness), no category | 13 / 75 / 13 % | 0 / 15 / 2 % (83 % wrong) |
+
+The uncapped small model was the "Ollama is too slow" of the early trials: at temperature 0 it
+looped on the JSON contract until its context shifted (22 000 tokens on one document); every
+model call now passes `maxTokens(512)`. Run both benchmarks:
+
+```bash
+mvn -pl openfilz-api test -Dtest=CategoryClassifierBenchmark -Dsurefire.failIfNoSpecifiedTests=false \
+    -Dbench.dir=/path/to/corpus -Dbench.chat=qwen2.5:1.5b,qwen2.5 [-Dbench.google=gemini-2.5-flash-lite]
+```
+
+`bench.ollama.url`, `bench.embedding`, `bench.prefixes` (`|`-separated), `bench.temperatures`,
+`bench.categories`, `bench.max-chars`, `bench.limit` tune it (system properties or the same names
+as upper-snake environment variables); the Google key comes from `GOOGLE_API_KEY` and is never
+printed. Read the auto-mode curve to pick `min-confidence`: the threshold where the kept share is
+high and its accuracy matches the model's is the one to configure.
 
 ---
 

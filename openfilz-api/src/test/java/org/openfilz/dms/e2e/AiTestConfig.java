@@ -30,23 +30,60 @@ import static org.mockito.Mockito.*;
 @TestConfiguration
 public class AiTestConfig {
 
+    /**
+     * A deterministic "embedding": a hashed bag of words in 768 dimensions, L2-normalised. Texts
+     * sharing words are similar, texts sharing none are not, so the vector store, the neighbour
+     * vote, the folder coherence and the prototype classifier behave as they would with a real
+     * model — at zero cost and with no network. (The former constant vector made every document
+     * equally similar to every other, which no filing test could tell apart.)
+     */
     @Bean
     @Primary
     public EmbeddingModel testEmbeddingModel() {
-        EmbeddingModel embeddingModel = mock(EmbeddingModel.class);
-        // Return a 768-dimensional unit vector for any embedding request (non-zero to avoid norm issues)
-        float[] unitVector = new float[768];
-        java.util.Arrays.fill(unitVector, 1.0f / 768);
-        when(embeddingModel.embed(any(String.class))).thenReturn(unitVector);
-        when(embeddingModel.embed(any(org.springframework.ai.document.Document.class))).thenReturn(unitVector);
-        when(embeddingModel.dimensions()).thenReturn(768);
+        return new BagOfWordsEmbeddingModel();
+    }
 
-        var embedding = new Embedding(unitVector, 0);
-        var embeddingResponse = new EmbeddingResponse(List.of(embedding));
-        when(embeddingModel.call(any(org.springframework.ai.embedding.EmbeddingRequest.class)))
-                .thenReturn(embeddingResponse);
+    public static final class BagOfWordsEmbeddingModel implements EmbeddingModel {
+        static final int DIMENSIONS = 768;
 
-        return embeddingModel;
+        @Override
+        public EmbeddingResponse call(org.springframework.ai.embedding.EmbeddingRequest request) {
+            List<Embedding> out = new java.util.ArrayList<>();
+            for (int i = 0; i < request.getInstructions().size(); i++) {
+                out.add(new Embedding(embed(request.getInstructions().get(i)), i));
+            }
+            return new EmbeddingResponse(out);
+        }
+
+        @Override
+        public float[] embed(org.springframework.ai.document.Document document) {
+            return embed(document.getText());
+        }
+
+        @Override
+        public float[] embed(String text) {
+            float[] v = new float[DIMENSIONS];
+            if (text != null) {
+                for (String token : text.toLowerCase(java.util.Locale.ROOT).split("[^\\p{L}\\p{N}]+")) {
+                    if (token.length() < 2) continue;
+                    v[Math.floorMod(token.hashCode(), DIMENSIONS)] += 1;
+                }
+            }
+            double norm = 0;
+            for (float x : v) norm += x * x;
+            if (norm == 0) {
+                v[0] = 1;   // an empty text still has a direction
+                return v;
+            }
+            float scale = (float) (1 / Math.sqrt(norm));
+            for (int i = 0; i < v.length; i++) v[i] *= scale;
+            return v;
+        }
+
+        @Override
+        public int dimensions() {
+            return DIMENSIONS;
+        }
     }
 
     @Bean
@@ -81,7 +118,8 @@ public class AiTestConfig {
                     org.springframework.ai.chat.prompt.Prompt prompt = invocation.getArgument(0);
                     // The test invoices carry "Invoice F-…" in their text; everything else is a report,
                     // so the smart-filing suite can tell an invoice's neighbours from a report's.
-                    String category = prompt.getContents().contains("Invoice F-") ? "Invoice" : "Report";
+                    String category = prompt.getContents().contains("Invoice F-") ? "Invoice"
+                            : prompt.getContents().contains("Miscellaneous") ? "Other" : "Report";
                     String answer = prompt.getContents().contains("malformed")
                             ? "Sorry, I cannot produce that."
                             : """

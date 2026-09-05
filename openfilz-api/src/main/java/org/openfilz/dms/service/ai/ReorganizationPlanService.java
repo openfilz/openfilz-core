@@ -699,13 +699,13 @@ public class ReorganizationPlanService {
         }
         OffsetDateTime now = OffsetDateTime.now();
         AiReorganizationPlan entity = AiReorganizationPlan.builder()
-                .createdBy(caller.email())
+                .createdBy(ownerOf(caller))
                 .conversationId(conversationId)
                 .rootFolderId(view.rootFolderId())
                 .status(STATUS_PROPOSED)
                 .createdAt(now)
                 .build();
-        ReorganizationPlanView draft = view.withPersistence(null, STATUS_PROPOSED, caller.email(), now, null, null);
+        ReorganizationPlanView draft = view.withPersistence(null, STATUS_PROPOSED, ownerOf(caller), now, null, null);
         entity.setPlan(Json.of(JSON.writeValueAsString(new StoredPlan(request, draft))));
         AiReorganizationPlan saved = planRepository.save(entity).block();
         if (saved == null) {
@@ -713,7 +713,7 @@ public class ReorganizationPlanService {
         }
         log.info("[REORG] Plan {} proposed by {}: {} applicable, {} blocked, {} folder(s) to create",
                 saved.getId(), caller.email(), view.applicable(), view.blocked(), view.foldersToCreate().size());
-        return draft.withPersistence(saved.getId(), STATUS_PROPOSED, caller.email(), now, null, null);
+        return draft.withPersistence(saved.getId(), STATUS_PROPOSED, ownerOf(caller), now, null, null);
     }
 
     /** A plan of the caller's; someone else's plan answers 404 so its existence is not revealed. */
@@ -973,6 +973,11 @@ public class ReorganizationPlanService {
         return null;
     }
 
+    /** The scope a tool names: a folder id or exact name the caller can read, null for the root level. */
+    public UUID rootIdOf(String rootFolder, Caller caller) {
+        return resolveRoot(rootFolder, caller);
+    }
+
     private UUID resolveRoot(String rootFolder, Caller caller) {
         if (rootFolder == null || rootFolder.isBlank() || "null".equalsIgnoreCase(rootFolder.trim())
                 || "root".equalsIgnoreCase(rootFolder.trim()) || "/".equals(rootFolder.trim())) {
@@ -1046,10 +1051,14 @@ public class ReorganizationPlanService {
         return Boolean.TRUE.equals(taken);
     }
 
+    /** Who owns a plan: the caller's email, or the anonymous user of a no-auth deployment (the column is not null). */
+    static String ownerOf(Caller caller) {
+        return caller == null || caller.email() == null ? "anonymousUser" : caller.email();
+    }
+
     private AiReorganizationPlan loadOwned(UUID planId, Caller caller) {
         AiReorganizationPlan entity = planId == null ? null : planRepository.findById(planId).block();
-        String owner = caller.email() == null ? "anonymousUser" : caller.email();
-        if (entity == null || !owner.equalsIgnoreCase(entity.getCreatedBy())) {
+        if (entity == null || !ownerOf(caller).equalsIgnoreCase(entity.getCreatedBy())) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Plan not found");
         }
         return entity;

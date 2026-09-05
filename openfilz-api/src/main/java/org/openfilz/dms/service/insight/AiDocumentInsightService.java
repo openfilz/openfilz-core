@@ -4,6 +4,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.AiProperties;
+import org.openfilz.dms.config.AiProperties.Insights.Classifier.Mode;
 import org.openfilz.dms.dto.response.InsightBackfillStatus;
 import org.openfilz.dms.entity.AiDocumentInsight;
 import org.openfilz.dms.entity.Document;
@@ -67,6 +68,13 @@ public class AiDocumentInsightService implements DocumentInsightService {
     /** Marker the test configuration keys its stub on; also documents which prompt produced a row. */
     static final String PROMPT_MARKER = "INSIGHTS_V1";
 
+    /**
+     * The longest sane answer: the JSON contract fits in a few hundred tokens, and a small local
+     * model at temperature 0 otherwise loops on it until its context shifts — a worker stuck for
+     * ten minutes per document was the "Ollama is too slow" of the early trials.
+     */
+    static final int MAX_ANSWER_TOKENS = 512;
+
     private static final int MAX_QUEUE = 20_000;
     private static final int BACKFILL_LIMIT = 10_000;
 
@@ -80,6 +88,7 @@ public class AiDocumentInsightService implements DocumentInsightService {
     private final ObjectProvider<IndexService> indexServiceProvider;
     private final org.springframework.context.ApplicationEventPublisher events;
     private final InsightCompletionSignal signal;
+    private final ObjectProvider<CategoryClassifier> classifierProvider;
 
     private final Sinks.Many<Task> queue = Sinks.many().unicast().onBackpressureBuffer();
     private final Map<UUID, Job> jobs = new ConcurrentHashMap<>();
@@ -93,7 +102,7 @@ public class AiDocumentInsightService implements DocumentInsightService {
                                     DocumentRepository documentRepository, StorageService storageService,
                                     TikaService tikaService, ObjectProvider<IndexService> indexServiceProvider,
                                     org.springframework.context.ApplicationEventPublisher events,
-                                    InsightCompletionSignal signal) {
+                                    InsightCompletionSignal signal, ObjectProvider<CategoryClassifier> classifierProvider) {
         this.aiProperties = aiProperties;
         this.store = store;
         this.resolver = resolver;
@@ -104,6 +113,7 @@ public class AiDocumentInsightService implements DocumentInsightService {
         this.indexServiceProvider = indexServiceProvider;
         this.events = events;
         this.signal = signal;
+        this.classifierProvider = classifierProvider;
     }
 
     /** One queued enrichment: the document to enrich, the text head when already known, the job it belongs to. */
@@ -241,7 +251,8 @@ public class AiDocumentInsightService implements DocumentInsightService {
                     if (document.getSize() != null && document.getSize() > maxBytes) {
                         return outcome(task, AiDocumentInsight.STATUS_SKIPPED, "file larger than the insights size limit");
                     }
-                    if (!underDailyCap()) {
+                    // The daily cap counts model calls: with a local classifier there is always an answer
+                    if (classifierMode() == Mode.LLM && !underDailyCap()) {
                         return outcome(task, AiDocumentInsight.STATUS_SKIPPED, "daily enrichment limit reached");
                     }
                     return store.markPending(document.getId())
@@ -255,6 +266,10 @@ public class AiDocumentInsightService implements DocumentInsightService {
 
     private Mono<Void> enrich(Task task, Document document, String text) {
         return Mono.fromCallable(() -> {
+                    Map.Entry<String, InsightResult> local = classifyLocally(document, text);
+                    if (local != null) {
+                        return local;
+                    }
                     ResolvedChat primary = model();
                     AtomicReference<ResolvedChat> used = new AtomicReference<>(primary);
                     // One call, with the chat's failover: a 429 on the insights model is retried on
@@ -264,7 +279,7 @@ public class AiDocumentInsightService implements DocumentInsightService {
                         return ChatClient.builder(candidate.chatModel()).build().prompt()
                                 .system(systemPrompt())
                                 .user(userPrompt(document, text))
-                                .options(ChatOptions.builder().temperature(0.0))
+                                .options(ChatOptions.builder().temperature(0.0).maxTokens(MAX_ANSWER_TOKENS))
                                 .call()
                                 .content();
                     });
@@ -277,12 +292,12 @@ public class AiDocumentInsightService implements DocumentInsightService {
                                 document.getId(), e.getMessage(), head(answer));
                         throw e;
                     }
-                    return Map.entry(used.get(), result);
+                    enrichedToday.incrementAndGet();
+                    return Map.entry(used.get().provider().toLowerCase(Locale.ROOT) + ":" + used.get().model(), result);
                 })
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(entry -> {
-                    enrichedToday.incrementAndGet();
-                    String modelName = entry.getKey().provider().toLowerCase(Locale.ROOT) + ":" + entry.getKey().model();
+                    String modelName = entry.getKey();
                     return store.saveEnrichment(document.getId(), entry.getValue(), modelName, PROMPT_VERSION)
                             // The row is committed: whoever waits on it (smart filing) may read it now.
                             .doOnSuccess(v -> signal.complete(document.getId()))
@@ -299,6 +314,51 @@ public class AiDocumentInsightService implements DocumentInsightService {
                     log.warn("[INSIGHTS] '{}' ({}) failed: {}", document.getName(), document.getId(), reason);
                     return outcome(task, AiDocumentInsight.STATUS_FAILED, reason);
                 });
+    }
+
+    /**
+     * The category from the local classifier when the mode wants it: always in {@code prototype}
+     * mode, in {@code auto} mode when it is sure enough (or the daily model cap is spent), never in
+     * {@code llm} mode. A category-only insight: no summary, keywords or entities.
+     */
+    private Map.Entry<String, InsightResult> classifyLocally(Document document, String text) {
+        Mode mode = classifierMode();
+        if (mode == Mode.LLM) {
+            return null;
+        }
+        CategoryClassifier classifier = classifierProvider.getIfAvailable();
+        if (classifier == null) {
+            log.warn("[INSIGHTS] classifier mode {} but no CategoryClassifier bean — asking the model", mode);
+            return null;
+        }
+        AiProperties.Insights.Classifier config = aiProperties.getInsights().getClassifier();
+        CategoryClassifier.CategoryPrediction prediction = classifier.classify(document.getName(),
+                head(text, Math.max(200, config.getMaxChars())));
+        if (!acceptLocal(mode, prediction.confidence(), config.getMinConfidence(), underDailyCap())) {
+            log.debug("[INSIGHTS] '{}' ({}): {} says {} at {} — below {}, asking the model", document.getName(),
+                    document.getId(), classifier.name(), prediction.category(), fmt(prediction.confidence()), config.getMinConfidence());
+            return null;
+        }
+        log.debug("[INSIGHTS] '{}' ({}): {} says {} at {}", document.getName(), document.getId(), classifier.name(),
+                prediction.category(), fmt(prediction.confidence()));
+        return Map.entry(classifier.name(), new InsightResult(prediction.category(), null, List.of(), null, Map.of()));
+    }
+
+    /** Is a local verdict final? In {@code prototype} mode always; in {@code auto} mode when sure, or when no model call is left today. */
+    static boolean acceptLocal(Mode mode, double confidence, double minConfidence, boolean modelAllowed) {
+        if (mode == null || mode == Mode.LLM) {
+            return false;
+        }
+        return mode == Mode.PROTOTYPE || confidence >= minConfidence || !modelAllowed;
+    }
+
+    private Mode classifierMode() {
+        Mode mode = aiProperties.getInsights().getClassifier().getMode();
+        return mode == null ? Mode.LLM : mode;
+    }
+
+    private static String fmt(double value) {
+        return String.format(Locale.ROOT, "%.2f", value);
     }
 
     /** The first 300 characters of a model answer, on one line, for the log. */
@@ -414,25 +474,10 @@ public class AiDocumentInsightService implements DocumentInsightService {
     // ── prompt ──────────────────────────────────────────────────────────────
 
     String systemPrompt() {
-        List<String> categories = aiProperties.getInsights().getCategories();
-        return """
-                You label documents for a document management system (%s).
-                Given the beginning of a document's text and its file name, answer with ONE JSON object and nothing else:
-                {"category": "<one of: %s>", "summary": "<one or two sentences, in the document's own language>", \
-                "keywords": ["<up to 8 short keywords>"], "language": "<BCP-47 primary tag, e.g. fr>", \
-                "entities": {"<key>": "<value>"}}
-                Rules: the category MUST be one of the listed values ("other" when none fits); entities are the few \
-                identifiers that matter for filing the document (client, supplier, invoice_number, contract_reference, \
-                period, project, person) — omit what is absent; never invent facts; no Markdown, no commentary.
-                """.formatted(PROMPT_MARKER, String.join(", ", categories == null ? List.of(InsightResult.OTHER) : categories));
+        return InsightPrompts.system(PROMPT_MARKER, aiProperties.getInsights().getCategories());
     }
 
     String userPrompt(Document document, String text) {
-        String name = document.getName() == null ? "" : document.getName();
-        int dot = name.lastIndexOf('.');
-        String extension = dot > 0 ? name.substring(dot + 1).toLowerCase(Locale.ROOT) : "";
-        return "File name: " + name + "\nType: " + (extension.isEmpty() ? "unknown" : extension)
-                + (document.getContentType() != null ? " (" + document.getContentType() + ")" : "")
-                + "\n\nText (beginning):\n" + text;
+        return InsightPrompts.user(document.getName(), document.getContentType(), text);
     }
 }

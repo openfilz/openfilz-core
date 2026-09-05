@@ -5,6 +5,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -120,6 +121,82 @@ public final class AutoFileDecision {
             return true;
         }
         return sameCategory(dominant, documentCategory) && dominantCount >= minPurity * total;
+    }
+
+    /**
+     * The share of a folder's members that are of the document's kind, judged by similarity alone:
+     * the members' similarities to the document, sorted, either form one cluster (a home: every
+     * member is about as close, the largest gap between consecutive values stays under
+     * {@code minGap}) or fall apart in two — the invoices at 0.85 and the reports at 0.55 seen
+     * from an invoice — and the share above the largest gap is the purity. A relative floor
+     * would not do: same-kind documents spread from 0.6 to 0.9 with a real embedding model, and
+     * cutting at 85 % of the best called every honest folder a grab-bag (measured 92 % abstain).
+     * NaN when nothing is known.
+     */
+    public static double similarityPurity(Collection<Double> memberSimilarities, double minGap) {
+        List<Double> sorted = memberSimilarities == null ? List.of() : memberSimilarities.stream()
+                .filter(s -> s != null && !s.isNaN()).sorted(Comparator.reverseOrder()).toList();
+        if (sorted.isEmpty()) {
+            return Double.NaN;
+        }
+        double largestGap = 0;
+        int above = sorted.size();
+        for (int i = 1; i < sorted.size(); i++) {
+            double gap = sorted.get(i - 1) - sorted.get(i);
+            if (gap > largestGap) {
+                largestGap = gap;
+                above = i;
+            }
+        }
+        return largestGap < Math.max(0, minGap) ? 1.0 : (double) above / sorted.size();
+    }
+
+    /**
+     * Is a folder a home for the document, judged by similarity alone? Fewer than
+     * {@code minMembers} known members say nothing (a young folder passes); else its
+     * {@link #similarityPurity} must reach {@code minPurity}.
+     */
+    public static boolean coherentBySimilarity(Collection<Double> memberSimilarities, double minGap,
+                                               double minPurity, int minMembers) {
+        long known = memberSimilarities == null ? 0 : memberSimilarities.stream().filter(s -> s != null && !s.isNaN()).count();
+        if (known < Math.max(1, minMembers)) {
+            return true;
+        }
+        return similarityPurity(memberSimilarities, minGap) >= minPurity;
+    }
+
+    /** How well a folder fits the document: its purity times the mean similarity of its close members. */
+    public record FolderFit(UUID folderId, int members, double purity, double meanClose, double score) {
+    }
+
+    /**
+     * The best-fitting folder among candidates, each given by its members' similarities to the
+     * document: a folder scores by purity × the mean similarity of its members of the document's
+     * kind (those above the largest gap), so a tight folder of the same kind beats a large mixed
+     * one — the alternative to counting heads. A folder with fewer than {@code minMembers} known
+     * members is not a candidate (one member is trivially pure). Empty when no candidate is
+     * coherent ({@code minPurity}) or close enough ({@code minSimilarity}).
+     */
+    public static Optional<FolderFit> fit(Map<UUID, ? extends Collection<Double>> candidates, double minGap,
+                                          double minPurity, double minSimilarity, int minMembers) {
+        if (candidates == null || candidates.isEmpty()) {
+            return Optional.empty();
+        }
+        FolderFit best = null;
+        for (Map.Entry<UUID, ? extends Collection<Double>> entry : candidates.entrySet()) {
+            List<Double> sims = entry.getValue() == null ? List.of() : entry.getValue().stream()
+                    .filter(s -> s != null && !s.isNaN()).sorted(Comparator.reverseOrder()).toList();
+            if (sims.size() < Math.max(1, minMembers)) continue;
+            double purity = similarityPurity(sims, minGap);
+            if (Double.isNaN(purity) || purity < minPurity) continue;
+            if (sims.getFirst() < minSimilarity) continue;
+            int close = (int) Math.round(purity * sims.size());
+            double meanClose = sims.subList(0, Math.max(1, Math.min(close, sims.size()))).stream()
+                    .mapToDouble(Double::doubleValue).average().orElse(0);
+            FolderFit candidate = new FolderFit(entry.getKey(), sims.size(), purity, meanClose, purity * meanClose);
+            if (best == null || candidate.score() > best.score()) best = candidate;
+        }
+        return Optional.ofNullable(best);
     }
 
     /** What the model answers in stage 2. */

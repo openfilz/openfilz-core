@@ -2,10 +2,12 @@ package org.openfilz.dms.service.mcp;
 
 import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.service.ai.AiToolRolePolicy;
+import org.openfilz.dms.service.ai.CategoryReorganizationPlanner;
 import org.openfilz.dms.service.ai.OrganizeAiTools;
 import org.openfilz.dms.service.ai.OrganizeAiToolsRuntimeHints;
 import org.openfilz.dms.service.ai.ReorganizationPlanService;
 import org.openfilz.dms.service.ai.ToolCapability;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.ImportRuntimeHints;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.security.core.Authentication;
@@ -33,6 +35,7 @@ public class OrganizeAiToolsContributor implements McpToolContributor {
             "planReorganization", ToolCapability.DOCUMENT_READ,
             "getReorganizationPlan", ToolCapability.DOCUMENT_READ,
             "proposeReorganizationPlan", ToolCapability.DOCUMENT_WRITE,
+            "proposeReorganizationByKind", ToolCapability.DOCUMENT_WRITE,
             "applyReorganizationPlan", ToolCapability.DOCUMENT_WRITE);
 
     /** Advertised in every MCP mode. */
@@ -49,10 +52,12 @@ public class OrganizeAiToolsContributor implements McpToolContributor {
 
     private final ReorganizationPlanService planService;
     private final AiToolRolePolicy rolePolicy;
+    /** Deferred: the by-kind planner is lazy and only needed when its tool is called. */
+    private final ObjectProvider<CategoryReorganizationPlanner> byKindPlanner;
 
     @Override
     public Object bind(String userEmail, Authentication authentication) {
-        return new OrganizeAiTools(planService, rolePolicy).forUser(userEmail, authentication);
+        return new OrganizeAiTools(planService, rolePolicy, byKindPlanner.getIfAvailable()).forUser(userEmail, authentication);
     }
 
     @Override
