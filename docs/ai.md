@@ -351,8 +351,10 @@ puts a `CategoryClassifier` seam in front of it:
 deployment's categories or `other`; modify access required): the row becomes a tier-2 `DONE` row
 written by `user`, never overwritten by a non-forced backfill, mirrored to the index, and from then
 on it votes for its neighbours in `learned` / `auto` mode and counts for the by-kind reorganisation
-and the filing rule like a model's label. A UI for it is the natural next step (the details panel
-already shows the category).
+and the filing rule like a model's label. In the web app the category chip of the details panel's
+Insights section is the editor: it opens a select of the deployment's categories (served as
+`Settings.aiInsightsCategories`, translated in the eight locales), and a person icon marks a kind a
+user set.
 
 Coarse kinds (invoice / report / contract / cv) separate well by prototype; fine ones (supplier
 vs customer invoice) do not — that distinction is the neighbour vote's job, not the category's.
