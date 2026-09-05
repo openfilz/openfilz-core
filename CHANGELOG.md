@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[49efeff52220e77](https://github.com/openfilz/openfilz-core/commit/49efeff52220e77) maven-release-bot[bot] *2026-09-04 00:47:12*
+[888729fdec80a42](https://github.com/openfilz/openfilz-core/commit/888729fdec80a42) maven-release-bot[bot] *2026-09-05 10:25:33*
 
 
-## v1.3.4
+## v1.3.5
 ### No issue
 
-**[maven-release-plugin] prepare release v1.3.4**
+**[maven-release-plugin] prepare release v1.3.5**
 
 
-[4b15298df898d0d](https://github.com/openfilz/openfilz-core/commit/4b15298df898d0d) maven-release-bot[bot] *2026-09-04 00:47:10*
+[a6203cf589357ff](https://github.com/openfilz/openfilz-core/commit/a6203cf589357ff) maven-release-bot[bot] *2026-09-05 10:25:30*
 
-**Merge pull request #226 from openfilz/develop**
+**Merge pull request #227 from openfilz/develop**
 
- * AI tools: e-Sign, blank documents, reorganisation proposals
+ * Implement phases A-E of smart reorganization with coverage improvements
 
-[752117d9de058be](https://github.com/openfilz/openfilz-core/commit/752117d9de058be) Yann Demel *2026-09-04 00:44:04*
+[dfabaaf21be92d4](https://github.com/openfilz/openfilz-core/commit/dfabaaf21be92d4) Yann Demel *2026-09-05 10:22:43*
 
 
