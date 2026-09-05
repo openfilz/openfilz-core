@@ -265,7 +265,15 @@ public class AiDocumentInsightService implements DocumentInsightService {
                                 .call()
                                 .content();
                     });
-                    InsightResult result = InsightResult.parse(answer, aiProperties.getInsights().getCategories());
+                    InsightResult result;
+                    try {
+                        result = InsightResult.parse(answer, aiProperties.getInsights().getCategories());
+                    } catch (IllegalArgumentException e) {
+                        // The answer itself goes to the log (not to the row) so the prompt can be tuned.
+                        log.warn("[INSIGHTS] model answer rejected for '{}' ({}): {} — answer: {}", document.getName(),
+                                document.getId(), e.getMessage(), head(answer));
+                        throw e;
+                    }
                     return Map.entry(used.get(), result);
                 })
                 .subscribeOn(Schedulers.boundedElastic())
@@ -286,6 +294,13 @@ public class AiDocumentInsightService implements DocumentInsightService {
                     log.warn("[INSIGHTS] '{}' ({}) failed: {}", document.getName(), document.getId(), reason);
                     return outcome(task, AiDocumentInsight.STATUS_FAILED, reason);
                 });
+    }
+
+    /** The first 300 characters of a model answer, on one line, for the log. */
+    private static String head(String answer) {
+        if (answer == null) return "null";
+        String flat = answer.replace('\n', ' ').replace('\r', ' ');
+        return flat.length() > 300 ? flat.substring(0, 300) + "..." : flat;
     }
 
     private void publishReady(Document document, InsightResult result) {
