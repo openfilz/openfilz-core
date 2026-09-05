@@ -20,6 +20,7 @@ import org.openfilz.dms.service.DocumentService;
 import org.openfilz.dms.service.IndexService;
 import org.openfilz.dms.service.StorageService;
 import org.openfilz.dms.service.ai.AiAccessPolicy;
+import org.openfilz.dms.service.ai.AiFailoverPolicy;
 import org.openfilz.dms.service.ai.AiFallbackChain;
 import org.openfilz.dms.service.ai.AiToolRolePolicy;
 import org.openfilz.dms.service.ai.ReorganizationInventoryCache;
@@ -123,6 +124,8 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
     private final Map<UUID, Job> jobs = new ConcurrentHashMap<>();
     private volatile Disposable worker;
     private volatile ResolvedChat model;
+    /** Serialises the stage-2 applies that create a folder — see the model stage below. */
+    private final Object createFolderLock = new Object();
 
     public DefaultAutoFileService(AiProperties aiProperties, DocumentRepository documentRepository,
                                   DocumentService documentService, AiAccessPolicy accessPolicy, AiToolRolePolicy rolePolicy,
@@ -416,9 +419,19 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
         ModelAnswer answer;
         try {
             answer = askModel(document, scopeRoot, insight, text, caller, allowNewFolders);
-        } catch (Exception e) {
+        } catch (IllegalArgumentException e) {
+            // The model answered, but not with the contract: not a decision we can act on, so the
+            // document stays where it is.
             return outcome(documentId, document.getName(), FilingOutcome.SKIPPED, document.getParentId(), from,
-                    FilingOutcome.STAGE_MODEL, null, "no confident destination (" + e.getMessage() + ")", null);
+                    FilingOutcome.STAGE_MODEL, null, "model answer rejected (" + e.getMessage() + ")", null);
+        } catch (Exception e) {
+            // The model could not be asked at all (quota, outage, key), even through the fallback
+            // chain: no decision was taken, so the outcome is FAILED — file it again later from
+            // the selection — with the provider's own message rather than Spring AI's wrapper.
+            String cause = AiFailoverPolicy.describe(e);
+            log.warn("[AUTOFILE] the model could not be asked for '{}' ({}): {}", document.getName(), documentId, cause);
+            return outcome(documentId, document.getName(), FilingOutcome.FAILED, document.getParentId(), from,
+                    FilingOutcome.STAGE_MODEL, null, "the model could not be asked (" + cause + ")", null);
         }
         if (answer == null) {
             return outcome(documentId, document.getName(), FilingOutcome.SKIPPED, document.getParentId(), from,
@@ -448,7 +461,15 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
             }
         }
         String reason = answer.reason() == null || answer.reason().isBlank() ? "Chosen by the model" : answer.reason();
-        return applyMove(document, from, scopeRoot, target, FilingOutcome.STAGE_MODEL, answer.confidence(), reason, caller);
+        if (exists) {
+            return applyMove(document, from, scopeRoot, target, FilingOutcome.STAGE_MODEL, answer.confidence(), reason, caller);
+        }
+        // Two documents of one batch, filed in parallel, may both propose the same new folder:
+        // serialise the creating applies so the second one finds the folder the first created
+        // (the plan resolves existing folders by name before creating) instead of clashing on it.
+        synchronized (createFolderLock) {
+            return applyMove(document, from, scopeRoot, target, FilingOutcome.STAGE_MODEL, answer.confidence(), reason, caller);
+        }
     }
 
     private FilingOutcome applyMove(Document document, String from, UUID scopeRoot, String relativeTarget, String stage,
@@ -539,13 +560,13 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
         for (Document d : documents) {
             if (d.getType() != DocumentType.FILE || Boolean.FALSE.equals(d.getActive())) continue;
             UUID folder = d.getParentId();
-            if (folder == null) {
-                // A neighbour at the root level votes for the root only when the scope is the whole library
-                if (scopeRoot != null || !Boolean.TRUE.equals(accessPolicy.canCreateAtRoot(caller.email()).block())) continue;
-            } else {
-                if (!writable.contains(folder)) continue;
-                if (!planService.isWithin(folder, scopeRoot, scopeCache, caller)) continue;
-            }
+            // A neighbour lying at the root has no say: a file at the root is unfiled by definition.
+            // Counting root neighbours let a batch dropped at the root vote to keep each other there
+            // ("already in the folder where its 3 closest documents live"), which is exactly the
+            // case the model stage exists for — so the root never wins stage 1.
+            if (folder == null) continue;
+            if (!writable.contains(folder)) continue;
+            if (!planService.isWithin(folder, scopeRoot, scopeCache, caller)) continue;
             out.add(new Neighbour(d.getId(), folder, bestByDocument.getOrDefault(d.getId(), 0.0)));
         }
         return out;
@@ -560,12 +581,17 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
             return null;
         }
         String inventory = planService.folderInventory(scopeRoot, caller);
-        String answer = ChatClient.builder(chat.chatModel()).build().prompt()
-                .system(systemPrompt(allowNewFolders))
-                .user(userPrompt(document, scopeRoot, insight, text, inventory, caller))
-                .options(ChatOptions.builder().temperature(0.0))
-                .call()
-                .content();
+        String system = systemPrompt(allowNewFolders);
+        String user = userPrompt(document, scopeRoot, insight, text, inventory, caller);
+        // Same failover as the chat: a quota hit on the filing model is retried on the next
+        // candidate of the chain rather than skipping the document.
+        String answer = fallbackChain.callWithFailover(chat, "AUTOFILE", candidate ->
+                ChatClient.builder(candidate.chatModel()).build().prompt()
+                        .system(system)
+                        .user(user)
+                        .options(ChatOptions.builder().temperature(0.0))
+                        .call()
+                        .content());
         return ModelAnswer.parse(answer);
     }
 

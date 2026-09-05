@@ -245,11 +245,16 @@ uploaded document seconds after the upload response (which carries `autoFile.job
 1. *eligibility*: an active FILE the caller may move, with a live session;
 2. *stage 1, the neighbour vote*: the vector store's nearest documents, resolved to their **live**
    folders (never the chunk metadata's `parent_id`), inside the scope (the folder it was dropped in;
-   root = whole library) and writable — the leading folder wins at `neighbour-min-share` /
+   root = whole library) and writable — neighbours lying at the root never vote, a file at the root
+   being unfiled by definition — the leading folder wins at `neighbour-min-share` /
    `neighbour-min-similarity`; one vector query, no model call;
 3. *stage 2, the model*: only when the vote is inconclusive — the scope's folder inventory
    (`ReorganizationPlanService.folderInventory`) plus the insight row; a new folder only above
    `new-folder-min-confidence`, at most `new-folder-max-depth` levels, and when the user allows it;
+   the call goes through the fallback chain (`AiFallbackChain.callWithFailover`, the chat's
+   verdicts) and so does the tier-2 insight call, so a 429 on the first model is retried on the
+   next one; a model that cannot be reached at all yields FAILED with the provider's own message,
+   to be filed again from the selection later;
 4. *stage 3*: a one-item reorganisation plan (`origin = AUTO_FILE`, `document_id`, `details`,
    Flyway `V1_10`) validated and applied through `ReorganizationPlanService.fileDocument`: same
    permission / name-clash / no-op checks as a chat proposal, same audited move. Below the

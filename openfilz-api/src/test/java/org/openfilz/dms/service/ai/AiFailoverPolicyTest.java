@@ -205,4 +205,16 @@ class AiFailoverPolicyTest {
         }
         assertThat(AiFailoverPolicy.classify(tooDeep)).isEqualTo(Failure.NOT_FAILOVER);
     }
+
+    @Test
+    @DisplayName("describe() names the verdict and digs the provider's message out of Spring AI's wrapper")
+    void describeShowsTheRootCause() {
+        RuntimeException wrapped = new RuntimeException("Failed to generate content",
+                new ClientException("429 . RESOURCE_EXHAUSTED. You exceeded your current quota."));
+        assertThat(AiFailoverPolicy.describe(wrapped))
+                .isEqualTo("QUOTA_EXHAUSTED: 429 . RESOURCE_EXHAUSTED. You exceeded your current quota.");
+        assertThat(AiFailoverPolicy.describe(new RuntimeException("plain"))).isEqualTo("plain");
+        assertThat(AiFailoverPolicy.rootMessage(new RuntimeException((String) null))).isEqualTo("RuntimeException");
+        assertThat(AiFailoverPolicy.rootMessage(new RuntimeException("outer", new RuntimeException(" ")))).isEqualTo("outer");
+    }
 }

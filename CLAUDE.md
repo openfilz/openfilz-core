@@ -307,7 +307,8 @@ toggle `openfilz.ai.insights.active`; mirrored to OpenSearch `category`/`summary
 `getMetadata` block, `queryDocuments(category)`. Smart filing (`openfilz.ai.auto-file.active`, `DefaultAutoFileService` +
 `NoOp…` + `AutoFileConfig`): `autoFile` on `/upload`, `/upload-multiple`, TUS finalize, `writeFile`, or the user's switch
 (`user_ai_preferences`, `GET/PUT /settings/ai/preferences`); the neighbour vote on the vector store (live `documents.parent_id`,
-never the chunk metadata) then the model, applied as a one-item `AiReorganizationPlan` (`origin = AUTO_FILE`, `document_id`,
+never the chunk metadata; neighbours lying at the root never vote — a file at the root is unfiled) then the model
+(both through `AiFallbackChain.callWithFailover`, like tier-2 insights), applied as a one-item `AiReorganizationPlan` (`origin = AUTO_FILE`, `document_id`,
 `details`, V1_10) via `ReorganizationPlanService.fileDocument`; `/api/v1/ai/auto-file/**` (job, undo, filing record),
 `fileDocuments` tool (`FilingAiToolsContributor`). Core publishes `DocumentFiledEvent` / `DocumentInsightsReadyEvent`
 (Spring events) for the EE webhook producer. Tests: `DocumentInsightsIT`, `DocumentInsightsTier2IT` (AiTestConfig answers the

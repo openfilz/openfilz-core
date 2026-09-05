@@ -66,6 +66,8 @@ class AutoFileIT extends TestContainersBaseConfig {
         registry.add("openfilz.ai.insights.active", () -> true);
         registry.add("openfilz.ai.auto-file.active", () -> true);
         registry.add("openfilz.ai.auto-file.wait-for-insights", () -> "10s");
+        // Wide enough for every test document to be a neighbour of the one being filed
+        registry.add("openfilz.ai.auto-file.neighbour-top-k", () -> 100);
         registry.add("spring.ai.openai.api-key", () -> "test-dummy-key");
         registry.add("spring.ai.model.chat", () -> "none");
         registry.add("spring.ai.model.embedding", () -> "none");
@@ -170,6 +172,29 @@ class AutoFileIT extends TestContainersBaseConfig {
         assertThat(onDemand).isNotNull();
         AutoFileJobView done = awaitJob(onDemand.jobId(), j -> "DONE".equals(j.status()));
         assertThat(done.items().getFirst().status()).as(done.toString()).isIn("FILED", "SKIPPED");
+    }
+
+    @Test
+    @Order(4)
+    @DisplayName("documents lying at the root never vote to keep a new upload there")
+    void rootNeighboursNeverKeepADocumentAtTheRoot() {
+        // A batch dropped at the root. With the mocked embeddings every document is a perfect
+        // neighbour of every other one, so if root documents could vote, the root would win
+        // outright here and the new upload would be "already in the folder where its closest
+        // documents live" — the trap a batch of similar files uploaded together used to fall in.
+        for (int i = 0; i < 40; i++) {
+            upload("loose-" + i + "-" + UUID.randomUUID() + ".txt", "Board minutes " + i + " of ACME, decisions and actions.", null, false);
+        }
+        sleep(1500);
+
+        UploadResponse uploaded = upload("loose-new-" + UUID.randomUUID() + ".txt", "Board minutes 99 of ACME, decisions and actions.", null, true);
+        assertThat(uploaded.autoFile()).isNotNull();
+        AutoFileJobView job = awaitJob(uploaded.autoFile().jobId(), j -> "DONE".equals(j.status()));
+        FilingOutcome item = job.items().getFirst();
+        assertThat(item.reason()).as(job.toString()).doesNotContain("already in the folder");
+        assertThat(item.status()).as(job.toString()).isEqualTo("FILED");
+        assertThat(item.toFolderId()).isNotNull();
+        assertThat(info(uploaded.id()).parentId()).as("moved out of the root").isEqualTo(item.toFolderId());
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────

@@ -12,6 +12,7 @@ import org.openfilz.dms.enums.OpenSearchDocumentKey;
 import org.openfilz.dms.repository.DocumentRepository;
 import org.openfilz.dms.service.IndexService;
 import org.openfilz.dms.service.StorageService;
+import org.openfilz.dms.service.ai.AiFailoverPolicy;
 import org.openfilz.dms.service.ai.AiFallbackChain;
 import org.openfilz.dms.service.ai.UserChatClientResolver;
 import org.openfilz.dms.service.ai.UserChatClientResolver.ResolvedChat;
@@ -41,6 +42,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * The real tier-2 insight service: one model call per document on a bounded queue.
@@ -250,15 +252,21 @@ public class AiDocumentInsightService implements DocumentInsightService {
 
     private Mono<Void> enrich(Task task, Document document, String text) {
         return Mono.fromCallable(() -> {
-                    ResolvedChat chat = model();
-                    String answer = ChatClient.builder(chat.chatModel()).build().prompt()
-                            .system(systemPrompt())
-                            .user(userPrompt(document, text))
-                            .options(ChatOptions.builder().temperature(0.0))
-                            .call()
-                            .content();
+                    ResolvedChat primary = model();
+                    AtomicReference<ResolvedChat> used = new AtomicReference<>(primary);
+                    // One call, with the chat's failover: a 429 on the insights model is retried on
+                    // the next candidate of the chain instead of leaving the row FAILED.
+                    String answer = fallbackChain.callWithFailover(primary, "INSIGHTS", candidate -> {
+                        used.set(candidate);
+                        return ChatClient.builder(candidate.chatModel()).build().prompt()
+                                .system(systemPrompt())
+                                .user(userPrompt(document, text))
+                                .options(ChatOptions.builder().temperature(0.0))
+                                .call()
+                                .content();
+                    });
                     InsightResult result = InsightResult.parse(answer, aiProperties.getInsights().getCategories());
-                    return Map.entry(chat, result);
+                    return Map.entry(used.get(), result);
                 })
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(entry -> {
@@ -272,7 +280,9 @@ public class AiDocumentInsightService implements DocumentInsightService {
                                     entry.getValue().category(), modelName));
                 })
                 .onErrorResume(e -> {
-                    String reason = e instanceof IllegalArgumentException ? "model answer rejected: " + e.getMessage() : e.toString();
+                    String reason = e instanceof IllegalArgumentException
+                            ? "model answer rejected: " + e.getMessage()
+                            : AiFailoverPolicy.describe(e);
                     log.warn("[INSIGHTS] '{}' ({}) failed: {}", document.getName(), document.getId(), reason);
                     return outcome(task, AiDocumentInsight.STATUS_FAILED, reason);
                 });
