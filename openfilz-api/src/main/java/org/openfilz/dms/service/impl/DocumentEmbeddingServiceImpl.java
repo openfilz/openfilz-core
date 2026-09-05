@@ -44,9 +44,11 @@ public class DocumentEmbeddingServiceImpl implements DocumentEmbeddingService {
     private final TikaService tikaService;
 
     /** Tier-1 document insights (the file's own metadata), captured from the same Tika pass. */
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
-    @Lazy
-    private org.openfilz.dms.service.insight.DocumentInsightStore insightStore;
+    // ObjectProvider, not @Lazy: DocumentInsightStore is a concrete class with no interface, so a
+    // @Lazy injection point yields a CGLIB lazy-resolution proxy that has no reflection metadata
+    // in a native image (MissingReflectionRegistrationError on CGLIB$FACTORY_DATA at boot).
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.beans.factory.ObjectProvider<org.openfilz.dms.service.insight.DocumentInsightStore> insightStoreProvider;
 
     /** Tier-2 document insights (model enrichment), queued with the text this pass extracted. */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -110,6 +112,7 @@ public class DocumentEmbeddingServiceImpl implements DocumentEmbeddingService {
 
     /** Tier-1 insight from the parse that already ran (full-text off, AI on). */
     private void saveFileMetadata(Document document, org.apache.tika.metadata.Metadata metadata) {
+        org.openfilz.dms.service.insight.DocumentInsightStore insightStore = insightStoreProvider.getIfAvailable();
         if (insightStore == null) {
             return;
         }
