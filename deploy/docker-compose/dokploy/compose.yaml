@@ -293,6 +293,22 @@ services:
       OPENFILZ_AI_AUTO_FILE_ACTIVE: ${OPENFILZ_AI_AUTO_FILE_ACTIVE:-false}
       OPENFILZ_AI_AUTO_FILE_DEFAULT: ${OPENFILZ_AI_AUTO_FILE_DEFAULT:-false}
       OPENFILZ_AI_AUTO_FILE_NEW_FOLDERS: ${OPENFILZ_AI_AUTO_FILE_NEW_FOLDERS:-true}
+      # The closed category list of the insights (also offered by the details panel's kind editor)
+      OPENFILZ_AI_INSIGHTS_CATEGORIES: ${OPENFILZ_AI_INSIGHTS_CATEGORIES:-invoice,quote,contract,report,letter,cv,presentation,spreadsheet,form,id-document,receipt,minutes,specification,manual,other}
+      # Who names the category: llm (the chat model, default), prototype (embedding descriptions,
+      # no model), learned (the library's own labelled documents, no model), auto (learned, then
+      # the model below the confidence). learned-from: whose labels teach (model,user by default).
+      OPENFILZ_AI_INSIGHTS_CLASSIFIER: ${OPENFILZ_AI_INSIGHTS_CLASSIFIER:-llm}
+      OPENFILZ_AI_INSIGHTS_CLASSIFIER_MIN_CONFIDENCE: ${OPENFILZ_AI_INSIGHTS_CLASSIFIER_MIN_CONFIDENCE:-0.5}
+      OPENFILZ_AI_INSIGHTS_CLASSIFIER_LEARN_FROM: ${OPENFILZ_AI_INSIGHTS_CLASSIFIER_LEARN_FROM:-model,user}
+      # Smart filing stage 1: how a winning folder is judged a home (category | similarity | both),
+      # how the folder is picked (vote | fit); the rule stage (a known kind with no home goes to the
+      # scope's Invoices / Factures / Rechnungen folder, found or created, no model) and its
+      # fallback language. See docs/ai.md §3b–3c for the measurements behind the defaults.
+      OPENFILZ_AI_AUTO_FILE_COHERENCE: ${OPENFILZ_AI_AUTO_FILE_COHERENCE:-category}
+      OPENFILZ_AI_AUTO_FILE_STAGE1: ${OPENFILZ_AI_AUTO_FILE_STAGE1:-vote}
+      OPENFILZ_AI_AUTO_FILE_RULE_FOLDERS: ${OPENFILZ_AI_AUTO_FILE_RULE_FOLDERS:-true}
+      OPENFILZ_AI_AUTO_FILE_DEFAULT_LANGUAGE: ${OPENFILZ_AI_AUTO_FILE_DEFAULT_LANGUAGE:-en}
 
       # MCP server — external AI agents over POST /mcp (see docs/mcp.md).
       OPENFILZ_MCP_ACTIVE: ${OPENFILZ_MCP_ACTIVE:-false}

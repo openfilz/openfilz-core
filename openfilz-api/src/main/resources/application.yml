@@ -302,7 +302,7 @@ openfilz:
           min-neighbours: 3        # fewer labelled neighbours: the cold start (descriptions) answers
           min-similarity: 0.5      # neighbours below this similarity do not vote
           min-confidence: 0.5      # winning share of the vote below which the cold start answers
-          learn-from: model,user   # whose labels teach; add prototype,learned to let the classifier feed itself
+          learn-from: ${OPENFILZ_AI_INSIGHTS_CLASSIFIER_LEARN_FROM:model,user}   # whose labels teach; add prototype,learned to let the classifier feed itself
         temperature: 0.02          # softmax over the cosine similarities; lower = sharper confidences
         min-similarity: 0.0        # best similarity under which the answer is "other"; 0 = no floor
         max-chars: 2000            # document head embedded for the classification

@@ -149,12 +149,31 @@ ai:
     # provider:model for the enrichment (e.g. anthropic:claude-haiku-4-5); empty = the chat model
     model: ""
     dailyLimit: 2000
+    # The closed category list; the details panel's kind editor offers it
+    categories: [invoice, quote, contract, report, letter, cv, presentation, spreadsheet, form, id-document, receipt, minutes, specification, manual, other]
+    # Who names the category: llm (the chat model), prototype (embedding descriptions, no model),
+    # learned (the library's own labelled documents vote, no model), auto (learned, then the model
+    # below minConfidence). learnFrom: whose labels teach the learned classifier
+    # (model, user; add prototype, learned to let it feed itself). See docs/ai.md §3c.
+    classifier:
+      mode: llm
+      minConfidence: 0.5
+      learnFrom: [model, user]
   # -- Smart filing on upload: OpenFilz chooses the destination folder on the user's request.
   # Needs ai.active and embeddings.
   autoFile:
     active: false
     defaultForUsers: false
     allowNewFolders: true
+    # How a winning folder is judged a home for the document: category (default) | similarity | both
+    coherence: category
+    # How the folder is picked among the neighbours' folders: vote (default) | fit
+    stage1: vote
+    # The rule stage: a known kind with no home goes to the scope's folder for that kind
+    # (Invoices / Factures / Rechnungen…), found by name in any language or created in the
+    # language of the existing folders (defaultLanguage when none tells). No model.
+    ruleFolders: true
+    defaultLanguage: en
   # -- Ollama (local LLM)
   ollama:
     baseUrl: "http://ollama:11434"
