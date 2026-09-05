@@ -79,6 +79,7 @@ public class AiDocumentInsightService implements DocumentInsightService {
     private final TikaService tikaService;
     private final ObjectProvider<IndexService> indexServiceProvider;
     private final org.springframework.context.ApplicationEventPublisher events;
+    private final InsightCompletionSignal signal;
 
     private final Sinks.Many<Task> queue = Sinks.many().unicast().onBackpressureBuffer();
     private final Map<UUID, Job> jobs = new ConcurrentHashMap<>();
@@ -91,7 +92,8 @@ public class AiDocumentInsightService implements DocumentInsightService {
                                     UserChatClientResolver resolver, AiFallbackChain fallbackChain,
                                     DocumentRepository documentRepository, StorageService storageService,
                                     TikaService tikaService, ObjectProvider<IndexService> indexServiceProvider,
-                                    org.springframework.context.ApplicationEventPublisher events) {
+                                    org.springframework.context.ApplicationEventPublisher events,
+                                    InsightCompletionSignal signal) {
         this.aiProperties = aiProperties;
         this.store = store;
         this.resolver = resolver;
@@ -101,6 +103,7 @@ public class AiDocumentInsightService implements DocumentInsightService {
         this.tikaService = tikaService;
         this.indexServiceProvider = indexServiceProvider;
         this.events = events;
+        this.signal = signal;
     }
 
     /** One queued enrichment: the document to enrich, the text head when already known, the job it belongs to. */
@@ -281,6 +284,8 @@ public class AiDocumentInsightService implements DocumentInsightService {
                     enrichedToday.incrementAndGet();
                     String modelName = entry.getKey().provider().toLowerCase(Locale.ROOT) + ":" + entry.getKey().model();
                     return store.saveEnrichment(document.getId(), entry.getValue(), modelName, PROMPT_VERSION)
+                            // The row is committed: whoever waits on it (smart filing) may read it now.
+                            .doOnSuccess(v -> signal.complete(document.getId()))
                             .then(mirrorToIndex(document.getId(), entry.getValue()))
                             .then(finish(task, AiDocumentInsight.STATUS_DONE))
                             .doOnSuccess(v -> publishReady(document, entry.getValue()))
@@ -316,7 +321,7 @@ public class AiDocumentInsightService implements DocumentInsightService {
         Mono<Void> mark = AiDocumentInsight.STATUS_FAILED.equals(status)
                 ? store.markFailed(task.documentId(), reason)
                 : store.markSkipped(task.documentId(), reason);
-        return mark.then(finish(task, status));
+        return mark.doOnSuccess(v -> signal.complete(task.documentId())).then(finish(task, status));
     }
 
     private Mono<Void> finish(Task task, String status) {

@@ -36,6 +36,7 @@ import org.openfilz.dms.service.filing.AutoFileDecision.Vote;
 import org.openfilz.dms.service.impl.TikaService;
 import org.openfilz.dms.service.insight.DocumentInsightService;
 import org.openfilz.dms.service.insight.DocumentInsightStore;
+import org.openfilz.dms.service.insight.InsightCompletionSignal;
 import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
@@ -58,6 +59,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -111,6 +116,7 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
     private final ReorganizationInventoryCache inventoryCache;
     private final DocumentInsightStore insightStore;
     private final DocumentInsightService insightService;
+    private final InsightCompletionSignal insightSignal;
     private final AiPreferencesService preferences;
     private final ObjectProvider<VectorStore> vectorStoreProvider;
     private final ObjectProvider<IndexService> indexServiceProvider;
@@ -131,7 +137,7 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
                                   DocumentService documentService, AiAccessPolicy accessPolicy, AiToolRolePolicy rolePolicy,
                                   ReorganizationPlanService planService, ReorganizationInventoryCache inventoryCache,
                                   DocumentInsightStore insightStore, DocumentInsightService insightService,
-                                  AiPreferencesService preferences, ObjectProvider<VectorStore> vectorStoreProvider,
+                                  InsightCompletionSignal insightSignal, AiPreferencesService preferences, ObjectProvider<VectorStore> vectorStoreProvider,
                                   ObjectProvider<IndexService> indexServiceProvider, UserChatClientResolver resolver,
                                   AiFallbackChain fallbackChain, TikaService tikaService, StorageService storageService,
                                   ApplicationEventPublisher events) {
@@ -144,6 +150,7 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
         this.inventoryCache = inventoryCache;
         this.insightStore = insightStore;
         this.insightService = insightService;
+        this.insightSignal = insightSignal;
         this.preferences = preferences;
         this.vectorStoreProvider = vectorStoreProvider;
         this.indexServiceProvider = indexServiceProvider;
@@ -690,30 +697,64 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
 
     // ── inputs ──────────────────────────────────────────────────────────────
 
-    /** Wait (bounded) for the insight row to reach a terminal state; null when insights are off or late. */
+    /** A waiter that got no signal re-reads the row this often: the net under a row finished elsewhere. */
+    static final long INSIGHT_FALLBACK_POLL_MILLIS = 5_000;
+
+    /**
+     * Wait (bounded) for the insight row to reach a terminal state; null when insights are off or late.
+     *
+     * <p>The wait is signal-driven: the insight worker completes {@link InsightCompletionSignal} at
+     * every terminal write (DONE, FAILED, SKIPPED), so the filing wakes the moment the row lands
+     * instead of polling it. The waiter registers <em>before</em> its first read, so a row completed
+     * in between is not missed, and re-reads every {@link #INSIGHT_FALLBACK_POLL_MILLIS} ms in case
+     * the signal never comes (a row finished by another node).
+     */
     private DocumentInsightView awaitInsight(UUID documentId) {
         Duration budget = aiProperties.getAutoFile().getWaitForInsights();
         boolean wait = insightService != null && insightService.isActive() && budget != null && !budget.isZero();
-        long deadline = System.currentTimeMillis() + (wait ? budget.toMillis() : 0);
-        while (true) {
+        if (!wait) {
             AiDocumentInsight row = insightStore.find(documentId).block();
-            if (row != null && (!wait || row.getStatus() == null || !AiDocumentInsight.STATUS_PENDING.equals(row.getStatus()))) {
-                boolean terminal = row.getStatus() == null || !AiDocumentInsight.STATUS_PENDING.equals(row.getStatus());
-                if (terminal && (row.getTier() != null && row.getTier() >= 2 || !wait || AiDocumentInsight.STATUS_FAILED.equals(row.getStatus())
-                        || AiDocumentInsight.STATUS_SKIPPED.equals(row.getStatus()))) {
-                    return DocumentInsightStore.toView(row);
-                }
-            }
-            if (System.currentTimeMillis() >= deadline) {
-                return row == null ? null : DocumentInsightStore.toView(row);
-            }
-            try {
-                Thread.sleep(500);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return row == null ? null : DocumentInsightStore.toView(row);
-            }
+            return row == null ? null : DocumentInsightStore.toView(row);
         }
+        long deadline = System.currentTimeMillis() + budget.toMillis();
+        CompletableFuture<Void> ready = insightSignal.register(documentId);
+        try {
+            AiDocumentInsight row = insightStore.find(documentId).block();
+            while (!settled(row)) {
+                long remaining = deadline - System.currentTimeMillis();
+                if (remaining <= 0) {
+                    break;
+                }
+                try {
+                    ready.get(Math.min(remaining, INSIGHT_FALLBACK_POLL_MILLIS), TimeUnit.MILLISECONDS);
+                } catch (TimeoutException e) {
+                    // no signal within the slice: fall through to the re-read
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                } catch (ExecutionException e) {
+                    // the signal completes with null, never exceptionally
+                }
+                if (ready.isDone()) {
+                    // woken: re-arm before the read so a further write is not missed either
+                    ready = insightSignal.register(documentId);
+                }
+                row = insightStore.find(documentId).block();
+            }
+            return row == null ? null : DocumentInsightStore.toView(row);
+        } finally {
+            insightSignal.forget(documentId, ready);
+        }
+    }
+
+    /** Terminal for the filing: a tier-2 row that is DONE, or a FAILED / SKIPPED one; nothing more will come. */
+    static boolean settled(AiDocumentInsight row) {
+        if (row == null || AiDocumentInsight.STATUS_PENDING.equals(row.getStatus())) {
+            return false;
+        }
+        return (row.getTier() != null && row.getTier() >= 2)
+                || AiDocumentInsight.STATUS_FAILED.equals(row.getStatus())
+                || AiDocumentInsight.STATUS_SKIPPED.equals(row.getStatus());
     }
 
     /** The text head: the index when full-text is on, else a Tika pass on the file. */

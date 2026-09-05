@@ -39,4 +39,12 @@ public class EmptyMetadataPostProcessor implements MetadataPostProcessor {
             documentEmbeddingService.embedDocument(document).subscribe();
         }
     }
+
+    @Override
+    public void deleteDocument(UUID id) {
+        // A hard delete must not leave chunks behind: the chat would keep surfacing a vanished document.
+        if (aiActive && documentEmbeddingService != null) {
+            documentEmbeddingService.removeEmbeddings(id).subscribe();
+        }
+    }
 }

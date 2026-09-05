@@ -112,5 +112,10 @@ public class DefaultMetadataPostProcessor implements MetadataPostProcessor {
         if(thumbnails) {
             thumbnailPostProcessor.deleteDocument(id);
         }
+        // A hard delete (soft delete off, recycle-bin purge, retention) must not leave chunks behind:
+        // the chat would keep surfacing a document that no longer exists.
+        if(aiActive) {
+            documentEmbeddingService.removeEmbeddings(id).subscribe();
+        }
     }
 }
