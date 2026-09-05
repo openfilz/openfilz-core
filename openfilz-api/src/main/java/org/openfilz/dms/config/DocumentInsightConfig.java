@@ -3,8 +3,11 @@ package org.openfilz.dms.config;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.service.insight.CategoryClassifier;
 import org.openfilz.dms.service.insight.DocumentInsightService;
+import org.openfilz.dms.service.insight.DocumentInsightStore;
+import org.openfilz.dms.service.insight.LearnedCategoryClassifier;
 import org.openfilz.dms.service.insight.PrototypeCategoryClassifier;
 import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
@@ -12,6 +15,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Primary;
 import org.springframework.core.env.Environment;
+
+import java.util.UUID;
 
 /**
  * Runtime selection of the tier-2 insight service (native-safe: both implementations are in
@@ -39,33 +44,48 @@ public class DocumentInsightConfig {
     }
 
     /**
-     * The prototype category classifier on the deployment's embedding model. Lazy: built on the
-     * first tier-2 enrichment in {@code prototype} / {@code auto} mode, never in {@code llm} mode;
-     * without an embedding model it exists but every classification fails with a clear message.
+     * The category classifier of the deployment, by {@code classifier.mode}: the prototype
+     * descriptions on the embedding model ({@code prototype}), or the library's own labelled
+     * documents with the descriptions as cold start ({@code learned}, {@code auto}). Lazy: built on
+     * the first tier-2 enrichment, never in {@code llm} mode; without an embedding model it exists
+     * but every classification fails with a clear message.
      */
     @Bean
     @Lazy
-    public CategoryClassifier prototypeCategoryClassifier(AiProperties aiProperties, Environment environment,
-                                                          ObjectProvider<EmbeddingModel> embeddingModelProvider) {
+    public CategoryClassifier categoryClassifier(AiProperties aiProperties, Environment environment,
+                                                 ObjectProvider<EmbeddingModel> embeddingModelProvider,
+                                                 ObjectProvider<VectorStore> vectorStoreProvider,
+                                                 ObjectProvider<DocumentInsightStore> insightStoreProvider) {
+        AiProperties.Insights.Classifier config = aiProperties.getInsights().getClassifier();
         EmbeddingModel embeddingModel = embeddingModelProvider.getIfAvailable();
         String provider = environment.getProperty("spring.ai.model.embedding", "");
         String modelName = provider.isBlank() ? "" : environment.getProperty("spring.ai." + provider + ".embedding.model", provider);
+        CategoryClassifier prototype;
         if (embeddingModel == null) {
             log.warn("openfilz.ai.insights.classifier.mode is {} but no embedding model is configured — tier-2 categories will fail",
-                    aiProperties.getInsights().getClassifier().getMode());
-            return new CategoryClassifier() {
+                    config.getMode());
+            prototype = new CategoryClassifier() {
                 @Override
                 public String name() {
                     return "prototype:none";
                 }
 
                 @Override
-                public CategoryPrediction classify(String fileName, String text) {
+                public CategoryPrediction classify(UUID documentId, String fileName, String text) {
                     throw new IllegalStateException("no embedding model for the prototype category classifier");
                 }
             };
+        } else {
+            prototype = new PrototypeCategoryClassifier(embeddingModel, modelName, aiProperties.getInsights().getCategories(), config);
         }
-        return new PrototypeCategoryClassifier(embeddingModel, modelName, aiProperties.getInsights().getCategories(),
-                aiProperties.getInsights().getClassifier());
+        AiProperties.Insights.Classifier.Mode mode = config.getMode() == null ? AiProperties.Insights.Classifier.Mode.LLM : config.getMode();
+        if (mode == AiProperties.Insights.Classifier.Mode.LEARNED || mode == AiProperties.Insights.Classifier.Mode.AUTO) {
+            DocumentInsightStore insightStore = insightStoreProvider.getIfAvailable();
+            if (insightStore != null) {
+                return new LearnedCategoryClassifier(vectorStoreProvider, insightStore, prototype, config);
+            }
+            log.warn("openfilz.ai.insights.classifier.mode is {} but there is no insight store — the prototype descriptions classify", mode);
+        }
+        return prototype;
     }
 }

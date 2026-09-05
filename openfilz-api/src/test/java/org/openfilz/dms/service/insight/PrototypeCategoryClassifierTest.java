@@ -153,5 +153,6 @@ class PrototypeCategoryClassifierTest {
         assertThat(AiDocumentInsightService.acceptLocal(Mode.AUTO, 0.5, 0.6, true)).isFalse();
         assertThat(AiDocumentInsightService.acceptLocal(Mode.AUTO, 0.5, 0.6, false)).as("no model call left today").isTrue();
         assertThat(AiDocumentInsightService.acceptLocal(Mode.LLM, 1.0, 0.6, true)).as("never consulted in llm mode").isFalse();
+        assertThat(AiDocumentInsightService.acceptLocal(Mode.LEARNED, 0.1, 0.6, true)).as("learned verdicts are final").isTrue();
     }
 }

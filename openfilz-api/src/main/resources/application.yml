@@ -289,11 +289,20 @@ openfilz:
       # Who names the category. llm: the chat model answers the whole insight (default). prototype:
       # the embedding model alone — one short description per category is embedded once and the
       # nearest one wins; no model call, category only (no summary, keywords or entities).
-      # auto: the prototype verdict when its confidence reaches min-confidence, the model otherwise.
-      # The benchmark in docs/ai.md §3c measures both on your own documents before you switch.
+      # learned: the library's own labelled documents classify — the nearest ones vote with the
+      # label the model or the user gave them (PATCH /documents/{id}/insights) — the descriptions
+      # as the cold start; no model. auto: learned first, the model when the confidence is below
+      # min-confidence. The benchmarks in docs/ai.md §3c measure all of them on your own documents:
+      # on a real library, learned reached 84-88 % where the descriptions reached 47 %.
       classifier:
         mode: ${OPENFILZ_AI_INSIGHTS_CLASSIFIER:llm}
         min-confidence: ${OPENFILZ_AI_INSIGHTS_CLASSIFIER_MIN_CONFIDENCE:0.5}
+        learned:
+          k: 5                     # nearest labelled documents that vote
+          min-neighbours: 3        # fewer labelled neighbours: the cold start (descriptions) answers
+          min-similarity: 0.5      # neighbours below this similarity do not vote
+          min-confidence: 0.5      # winning share of the vote below which the cold start answers
+          learn-from: model,user   # whose labels teach; add prototype,learned to let the classifier feed itself
         temperature: 0.02          # softmax over the cosine similarities; lower = sharper confidences
         min-similarity: 0.0        # best similarity under which the answer is "other"; 0 = no floor
         max-chars: 2000            # document head embedded for the classification

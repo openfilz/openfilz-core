@@ -332,7 +332,7 @@ public class AiDocumentInsightService implements DocumentInsightService {
             return null;
         }
         AiProperties.Insights.Classifier config = aiProperties.getInsights().getClassifier();
-        CategoryClassifier.CategoryPrediction prediction = classifier.classify(document.getName(),
+        CategoryClassifier.CategoryPrediction prediction = classifier.classify(document.getId(), document.getName(),
                 head(text, Math.max(200, config.getMaxChars())));
         if (!acceptLocal(mode, prediction.confidence(), config.getMinConfidence(), underDailyCap())) {
             log.debug("[INSIGHTS] '{}' ({}): {} says {} at {} — below {}, asking the model", document.getName(),
@@ -344,12 +344,12 @@ public class AiDocumentInsightService implements DocumentInsightService {
         return Map.entry(classifier.name(), new InsightResult(prediction.category(), null, List.of(), null, Map.of()));
     }
 
-    /** Is a local verdict final? In {@code prototype} mode always; in {@code auto} mode when sure, or when no model call is left today. */
+    /** Is a local verdict final? In {@code prototype} and {@code learned} modes always; in {@code auto} mode when sure, or when no model call is left today. */
     static boolean acceptLocal(Mode mode, double confidence, double minConfidence, boolean modelAllowed) {
         if (mode == null || mode == Mode.LLM) {
             return false;
         }
-        return mode == Mode.PROTOTYPE || confidence >= minConfidence || !modelAllowed;
+        return mode == Mode.PROTOTYPE || mode == Mode.LEARNED || confidence >= minConfidence || !modelAllowed;
     }
 
     private Mode classifierMode() {

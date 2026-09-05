@@ -65,7 +65,8 @@ public record InsightResult(String category, String summary, List<String> keywor
         return text;
     }
 
-    private static String category(String raw, List<String> categories) {
+    /** A category of the closed list as stored (lower case, hyphens), {@value #OTHER} when the value names none. */
+    public static String category(String raw, List<String> categories) {
         if (raw == null) {
             return OTHER;
         }

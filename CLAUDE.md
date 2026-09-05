@@ -304,10 +304,12 @@ what OpenFilz derives from a file: tier 1 = Tika file metadata captured from the
 category (closed list `openfilz.ai.insights.categories`) / summary / keywords / language / entities (`AiDocumentInsightService`,
 bounded queue, daily cap, backfill `POST /api/v1/ai/insights/backfill`; `NoOp…` + `DocumentInsightConfig` = native-safe runtime
 toggle `openfilz.ai.insights.active`; mirrored to OpenSearch `category`/`summary`/`language`). `openfilz.ai.insights.classifier.mode`
-(`llm` | `prototype` | `auto`) puts the `CategoryClassifier` seam in front of the model: `PrototypeCategoryClassifier` names the
-category by nearest embedded description with the deployment's embedding model (no chat model, category-only row); `auto` keeps
-its verdict above `min-confidence` and asks the model otherwise; `CategoryClassifierBenchmark` (test sources, `-Dbench.dir=`)
-measures both on a labelled corpus — see `docs/ai.md` §3c. Reorganisation by kind without a model: `CategoryReorganizationPlanner`
+(`llm` | `prototype` | `learned` | `auto`) puts the `CategoryClassifier` seam in front of the model: `PrototypeCategoryClassifier`
+names the category by nearest embedded description (no chat model, category-only row); `LearnedCategoryClassifier` lets the
+nearest labelled documents vote with their stored category (the model's and the user's labels, `learned.learn-from`), descriptions
+as cold start — `PATCH /documents/{id}/insights {category}` is the user's correction that teaches it; `auto` keeps the local
+verdict above `min-confidence` and asks the model otherwise; `CategoryClassifierBenchmark` (test sources, `-Dbench.dir=`)
+measures all of them on a labelled corpus — see `docs/ai.md` §3c (real library: learned 84–88 %, descriptions 47 %). Reorganisation by kind without a model: `CategoryReorganizationPlanner`
 (`POST /ai/reorganization/by-kind`, tool `proposeReorganizationByKind`) splits mixed folders into one sub-folder per kind
 (`reorganization.split-*`) as an ordinary stored plan; `FilingStrategyBenchmark` compares the stage-1 strategies offline.
 `GET /documents/{id}/insights`,

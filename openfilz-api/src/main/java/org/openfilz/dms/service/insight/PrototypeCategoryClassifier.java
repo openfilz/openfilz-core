@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Categories by prototype: one short multilingual description per category is embedded once,
@@ -119,7 +120,7 @@ public class PrototypeCategoryClassifier implements CategoryClassifier {
     }
 
     @Override
-    public CategoryPrediction classify(String fileName, String text) {
+    public CategoryPrediction classify(UUID documentId, String fileName, String text) {
         return decide(similarities(fileName, text), temperature, minSimilarity);
     }
 

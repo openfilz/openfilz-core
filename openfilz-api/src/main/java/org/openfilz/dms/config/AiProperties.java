@@ -198,7 +198,12 @@ public class AiProperties {
                 LLM,
                 /** The prototype classifier alone: category only, no model call, no summary or entities. */
                 PROTOTYPE,
-                /** The prototype classifier first; the model only when its confidence is below {@code min-confidence}. */
+                /**
+                 * The library's own labelled documents classify (the nearest ones vote), the prototype
+                 * descriptions as the cold start; no model.
+                 */
+                LEARNED,
+                /** The learned classifier first (descriptions as cold start); the model only when its confidence is below {@code min-confidence}. */
                 AUTO
             }
 
@@ -215,6 +220,24 @@ public class AiProperties {
             private String prefix = "";
             /** Prototype description per category, overriding the built-in one for that key. */
             private Map<String, String> prototypes = new LinkedHashMap<>();
+            /** The learned classifier ({@code learned} and {@code auto} modes). */
+            private Learned learned = new Learned();
+
+            @Data
+            public static class Learned {
+                /** Nearest labelled documents that vote. */
+                private int k = 5;
+                /** Fewer labelled neighbours than this: the cold-start classifier answers. */
+                private int minNeighbours = 3;
+                /** Neighbours below this similarity do not vote. */
+                private double minSimilarity = 0.5;
+                /** The winning share of the vote below which the cold-start classifier answers. */
+                private double minConfidence = 0.5;
+                /** Whose labels teach: the model's and the user's by default, never the classifier's own or the descriptions'. */
+                private java.util.List<org.openfilz.dms.service.insight.LearnedCategoryClassifier.Source> learnFrom =
+                        new ArrayList<>(java.util.List.of(org.openfilz.dms.service.insight.LearnedCategoryClassifier.Source.MODEL,
+                                org.openfilz.dms.service.insight.LearnedCategoryClassifier.Source.USER));
+            }
         }
     }
 

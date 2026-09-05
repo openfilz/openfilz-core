@@ -106,7 +106,7 @@ class FilingStrategyBenchmark {
                 long t0 = System.nanoTime();
                 float[] vector = embeddingModel.embed(head);
                 embedNanos += System.nanoTime() - t0;
-                String predicted = classifier.classify(file.getKey(), head).category();
+                String predicted = classifier.classify(null, file.getKey(), head).category();
                 docs.add(new Doc(UUID.randomUUID(), entry.getKey(), file.getKey(), head, vector, predicted));
             }
         }

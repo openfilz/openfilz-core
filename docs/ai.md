@@ -334,8 +334,25 @@ puts a `CategoryClassifier` seam in front of it:
   `model` column reads `prototype:<embedding model>`, the daily cap does not apply. The confidence
   is the softmax share of the best similarity at `classifier.temperature`; below
   `classifier.min-similarity` (off by default) the answer is `other`;
-- `auto` — the prototype verdict when its confidence reaches `classifier.min-confidence` (0.5),
-  the model for the rest (and the prototype verdict again once the daily model cap is spent).
+- `learned` — `LearnedCategoryClassifier`: the library teaches its own classifier. The document's
+  nearest labelled neighbours (the vector store's closest chunks, `learned.k` documents at least
+  `learned.min-similarity` similar, resolved to their stored tier-2 category) vote, weighted by
+  similarity; every label the model or the user ever wrote is an example, `other` included. Which
+  labels teach is `learned.learn-from` (`model,user` by default — the classifier's own verdicts and
+  the descriptions' are left out so a wrong guess does not breed). With fewer than
+  `learned.min-neighbours` labelled neighbours (a young library, an unusual document) or a winning
+  share below `learned.min-confidence`, the prototype descriptions answer as the cold start. Rows
+  read `learned:knn`. One vector query plus one read, no model;
+- `auto` — the learned classifier (descriptions as cold start) when its confidence reaches
+  `classifier.min-confidence` (0.5), the model for the rest (and the local verdict again once the
+  daily model cap is spent).
+
+**The user teaches it** with `PATCH /api/v1/documents/{id}/insights {"category": "…"}` (one of the
+deployment's categories or `other`; modify access required): the row becomes a tier-2 `DONE` row
+written by `user`, never overwritten by a non-forced backfill, mirrored to the index, and from then
+on it votes for its neighbours in `learned` / `auto` mode and counts for the by-kind reorganisation
+and the filing rule like a model's label. A UI for it is the natural next step (the details panel
+already shows the category).
 
 Coarse kinds (invoice / report / contract / cv) separate well by prototype; fine ones (supplier
 vs customer invoice) do not — that distinction is the neighbour vote's job, not the category's.
@@ -383,8 +400,9 @@ that matters:
 Descriptions are enough for a clean corpus and not for real documents; a small local model is
 no better and fifty times slower. What works is the library's own labelled documents as the
 prototypes — the model's or the user's labels, which also make `other` learnable. The benchmark
-scores that variant with `bench.learned` (on by default); a `learned` classifier mode that keeps
-per-category centroids from the stored insight rows is the next step. The filing benchmark on
+scores that variant with `bench.learned` (on by default), and it is what the `learned` mode
+above ships: the k-NN over the library's labelled documents, with the descriptions as the cold
+start and the user's corrections as the teacher. The filing benchmark on
 the same library, organised by subject (Courtier, Djibi, CHR…) rather than by kind, showed the
 category guards sending 36 % of the documents to the rule or the model and filing 11 % into the
 wrong subject folder (the relative floor alone: 32 % and 6 %), while being the only strategy that

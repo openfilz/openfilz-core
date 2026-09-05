@@ -1,6 +1,7 @@
 package org.openfilz.dms.service.insight;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Names the kind of a document ({@code invoice}, {@code contract}, …) from its text, without
@@ -16,11 +17,18 @@ public interface CategoryClassifier {
     String name();
 
     /**
-     * @param fileName the document's name, a strong hint for many kinds ("facture-2026-03.pdf")
-     * @param text     the head of the document's text (the caller bounds it)
+     * @param documentId the document being classified (null for text that is no document yet), so a
+     *                   classifier that learns from the library never lets a document teach itself
+     * @param fileName   the document's name, a strong hint for many kinds ("facture-2026-03.pdf")
+     * @param text       the head of the document's text (the caller bounds it)
      * @return the best category with the classifier's own confidence in it, never null
      */
-    CategoryPrediction classify(String fileName, String text);
+    CategoryPrediction classify(UUID documentId, String fileName, String text);
+
+    /** Text that is no stored document yet. */
+    default CategoryPrediction classify(String fileName, String text) {
+        return classify(null, fileName, text);
+    }
 
     /** One category and how sure the classifier is, with the runners-up for the record. */
     record CategoryPrediction(String category, double confidence, List<Scored> alternatives) {
