@@ -4,21 +4,20 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[6fe0b29f4de3608](https://github.com/openfilz/openfilz-core/commit/6fe0b29f4de3608) maven-release-bot[bot] *2026-09-05 13:26:40*
+[1152caa4c2d0e77](https://github.com/openfilz/openfilz-core/commit/1152caa4c2d0e77) maven-release-bot[bot] *2026-09-05 15:42:52*
 
 
-## v1.3.6
+## v1.3.7
 ### No issue
 
-**[maven-release-plugin] prepare release v1.3.6**
+**[maven-release-plugin] prepare release v1.3.7**
 
 
-[cd8d9ba68543912](https://github.com/openfilz/openfilz-core/commit/cd8d9ba68543912) maven-release-bot[bot] *2026-09-05 13:26:37*
+[307cf660346c0f4](https://github.com/openfilz/openfilz-core/commit/307cf660346c0f4) maven-release-bot[bot] *2026-09-05 15:42:49*
 
-**Merge pull request #228 from openfilz/develop**
+**Merge branch 'develop' into main — FilingAiTools native hints + smart-filing scope-root fix for v1.9.7**
 
- * Fix root neighbour voting and improve AI fallback handling
 
-[71ae38d57f76e69](https://github.com/openfilz/openfilz-core/commit/71ae38d57f76e69) Yann Demel *2026-09-05 13:23:36*
+[f94766e9478ca20](https://github.com/openfilz/openfilz-core/commit/f94766e9478ca20) yann *2026-09-05 14:12:46*
 
 
