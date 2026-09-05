@@ -300,6 +300,12 @@ openfilz:
       neighbour-top-k: 20
       neighbour-min-share: 0.6
       neighbour-min-similarity: 0.5
+      # Guards of a mixed library: only neighbours at least this fraction as similar as the best
+      # hit vote, and a winning folder must be a home for the document's category (its dominant
+      # category is the document's and holds this share of its categorised files) — else the
+      # model decides. Neighbours of another category never vote when the document's is known.
+      neighbour-min-relative-similarity: 0.85
+      neighbour-min-folder-purity: 0.7
       llm-min-confidence: 0.7
       new-folder-min-confidence: 0.85
       new-folder-max-depth: 2

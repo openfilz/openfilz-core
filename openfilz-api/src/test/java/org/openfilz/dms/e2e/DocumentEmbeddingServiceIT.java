@@ -136,6 +136,7 @@ public class DocumentEmbeddingServiceIT extends TestContainersBaseConfig {
     void removeEmbeddings_existingDocument_dropsItsChunks() {
         UploadResponse uploaded = uploadDocument(newFileBuilder("test.txt"));
         Document document = documentRepository.findById(uploaded.id()).block();
+        awaitUploadEmbedding(uploaded.id());
         documentEmbeddingService.embedDocument(document).block();
         Assertions.assertFalse(chunksOf(uploaded.id()).isEmpty(), "the document was embedded");
 
@@ -150,6 +151,7 @@ public class DocumentEmbeddingServiceIT extends TestContainersBaseConfig {
         // A re-index (new version, replaced content) replaces the chunks instead of piling them up
         UploadResponse uploaded = uploadDocument(newFileBuilder("test.txt"));
         Document document = documentRepository.findById(uploaded.id()).block();
+        awaitUploadEmbedding(uploaded.id());
         documentEmbeddingService.embedDocument(document).block();
         int once = chunksOf(uploaded.id()).size();
         Assertions.assertTrue(once > 0);
@@ -163,6 +165,7 @@ public class DocumentEmbeddingServiceIT extends TestContainersBaseConfig {
     void hardDelete_removesTheChunks() {
         UploadResponse uploaded = uploadDocument(newFileBuilder("test.txt"));
         Document document = documentRepository.findById(uploaded.id()).block();
+        awaitUploadEmbedding(uploaded.id());
         documentEmbeddingService.embedDocument(document).block();
         Assertions.assertFalse(chunksOf(uploaded.id()).isEmpty(), "the document was embedded");
 
@@ -178,6 +181,17 @@ public class DocumentEmbeddingServiceIT extends TestContainersBaseConfig {
             sleep(250);
         }
         Assertions.assertTrue(chunksOf(uploaded.id()).isEmpty(), "the chunks of a hard-deleted document are gone");
+    }
+
+    /**
+     * The upload itself embeds the document off the request thread (the metadata post-processor
+     * fires and forgets): let that land before embedding by hand, or the two runs interleave and the
+     * chunk count is whatever the race left behind.
+     */
+    private void awaitUploadEmbedding(UUID documentId) {
+        for (int attempt = 0; attempt < 40 && chunksOf(documentId).isEmpty(); attempt++) {
+            sleep(250);
+        }
     }
 
     /** Every chunk tagged with the document, whatever its similarity (the mock embeds everything alike). */

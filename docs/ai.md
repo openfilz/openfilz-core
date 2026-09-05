@@ -252,7 +252,14 @@ uploaded document seconds after the upload response (which carries `autoFile.job
    folders (never the chunk metadata's `parent_id`), inside the scope (the folder it was dropped in;
    root = whole library) and writable — neighbours lying at the root never vote, a file at the root
    being unfiled by definition — the leading folder wins at `neighbour-min-share` /
-   `neighbour-min-similarity`; one vector query, no model call;
+   `neighbour-min-similarity`, with three guards for a mixed library (a folder used to win on
+   headcount alone: whatever held the most embedded files attracted everything): when the
+   document's tier-2 category is known, only neighbours of the same category (or of an unknown
+   one) vote; only neighbours at least `neighbour-min-relative-similarity` (0.85) as similar as
+   the best hit count; and the winning folder must be a home for that kind — its dominant
+   category is the document's and holds `neighbour-min-folder-purity` (0.7) of its categorised
+   files — else the vote is discarded and the model decides, and may create the folder this kind
+   deserves; one vector query plus two small reads, no model call;
 3. *stage 2, the model*: only when the vote is inconclusive — the scope's folder inventory
    (`ReorganizationPlanService.folderInventory`) plus the insight row; a new folder only above
    `new-folder-min-confidence`, at most `new-folder-max-depth` levels, and when the user allows it;

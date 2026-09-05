@@ -409,7 +409,18 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
         AiProperties.AutoFile config = aiProperties.getAutoFile();
         NeighbourScan scan = neighbours(document, scopeRoot, text, caller);
         List<Neighbour> neighbours = scan.votes();
-        Optional<Vote> vote = AutoFileDecision.vote(neighbours, config.getNeighbourMinShare(), config.getNeighbourMinSimilarity());
+        String category = insight == null ? null : insight.category();
+        Optional<Vote> vote = AutoFileDecision.vote(neighbours, category, config.getNeighbourMinShare(),
+                config.getNeighbourMinSimilarity(), config.getNeighbourMinRelativeSimilarity());
+        if (vote.isPresent() && !Objects.equals(vote.get().folderId(), document.getParentId())
+                && !AutoFileDecision.coherent(folderCategories(vote.get().folderId(), caller), category,
+                        config.getNeighbourMinFolderPurity())) {
+            // The neighbours live in a mixed folder — a dumping ground, not a home for this kind of
+            // document: the vote is discarded and the model decides, and may create the proper folder.
+            log.debug("[AUTOFILE] '{}' ({}): folder {} won the vote but is no home for a '{}' — asking the model",
+                    document.getName(), documentId, vote.get().folderId(), category);
+            vote = Optional.empty();
+        }
         if (vote.isPresent()) {
             Vote winner = vote.get();
             if (Objects.equals(winner.folderId(), document.getParentId())) {
@@ -579,6 +590,7 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
         if (documents == null) {
             return NeighbourScan.EMPTY;
         }
+        Map<UUID, String> categories = categoriesOf(documents.stream().map(Document::getId).toList(), caller);
         Map<UUID, Boolean> scopeCache = new HashMap<>();
         Set<UUID> folderIds = documents.stream()
                 .filter(d -> d.getType() == DocumentType.FILE && !Boolean.FALSE.equals(d.getActive()) && d.getParentId() != null)
@@ -603,9 +615,45 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
             }
             if (!writable.contains(folder)) continue;
             if (!planService.isWithin(folder, scopeRoot, scopeCache, caller)) continue;
-            out.add(new Neighbour(d.getId(), folder, bestByDocument.getOrDefault(d.getId(), 0.0)));
+            out.add(new Neighbour(d.getId(), folder, bestByDocument.getOrDefault(d.getId(), 0.0), categories.get(d.getId())));
         }
         return new NeighbourScan(out, unfiledSiblings);
+    }
+
+    /** Files of a folder read for its category histogram; a bigger folder is judged on its first ones. */
+    private static final int FOLDER_HISTOGRAM_CAP = 500;
+
+    /** The tier-2 category of each document that has one: one batched read. */
+    private Map<UUID, String> categoriesOf(List<UUID> ids, Caller caller) {
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        try {
+            List<AiDocumentInsight> rows = blockWithAuth(insightStore.findAll(ids).collectList(), caller);
+            Map<UUID, String> out = new HashMap<>();
+            if (rows != null) {
+                for (AiDocumentInsight row : rows) {
+                    if (row.getCategory() != null) out.put(row.getDocumentId(), row.getCategory());
+                }
+            }
+            return out;
+        } catch (Exception e) {
+            log.debug("[AUTOFILE] category lookup failed: {}", e.getMessage());
+            return Map.of();
+        }
+    }
+
+    /** The category histogram of a folder's files, for the coherence check of a winning vote. */
+    private Map<String, Integer> folderCategories(UUID folderId, Caller caller) {
+        List<Document> files = blockWithAuth(documentRepository.findByParentIdAndActiveIsTrue(folderId)
+                .filter(d -> d.getType() == DocumentType.FILE).take(FOLDER_HISTOGRAM_CAP).collectList(), caller);
+        if (files == null || files.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Integer> histogram = new HashMap<>();
+        categoriesOf(files.stream().map(Document::getId).toList(), caller).values()
+                .forEach(c -> histogram.merge(c.toLowerCase(Locale.ROOT), 1, Integer::sum));
+        return histogram;
     }
 
     // ── stage 2 ─────────────────────────────────────────────────────────────
@@ -649,6 +697,9 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
                 The scope root itself is never the destination: the document is already there, unfiled, and the loose files \
                 listed at the root are waiting to be filed too. \
                 Prefer an existing folder whose documents resemble this one (same category, client, project, period). \
+                A folder holding documents of many kinds (see its categories) is a dumping ground, not a home: never file \
+                there — choose or propose a folder dedicated to this kind of document. \
+                Name any new folder in the language of the existing folder names, or of the document when there are none. \
                 %s Never invent identifiers; be honest in the confidence.
                 """.formatted(PROMPT_MARKER, allowNewFolders
                 ? "When no existing folder fits, propose a new, well-named folder for this kind of document (at the scope root or "

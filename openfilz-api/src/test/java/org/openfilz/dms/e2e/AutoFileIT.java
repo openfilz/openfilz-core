@@ -10,6 +10,7 @@ import org.openfilz.dms.dto.request.CreateFolderRequest;
 import org.openfilz.dms.dto.response.AiPreferencesView;
 import org.openfilz.dms.dto.response.AutoFileJobView;
 import org.openfilz.dms.dto.response.DocumentInfo;
+import org.openfilz.dms.dto.response.DocumentInsightView;
 import org.openfilz.dms.dto.response.FilingOutcome;
 import org.openfilz.dms.dto.response.FolderResponse;
 import org.openfilz.dms.dto.response.Settings;
@@ -30,6 +31,8 @@ import org.springframework.web.reactive.function.BodyInserters;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.function.Predicate;
 
@@ -72,7 +75,7 @@ class AutoFileIT extends TestContainersBaseConfig {
         registry.add("openfilz.ai.auto-file.active", () -> true);
         registry.add("openfilz.ai.auto-file.wait-for-insights", () -> "10s");
         // Wide enough for every test document to be a neighbour of the one being filed
-        registry.add("openfilz.ai.auto-file.neighbour-top-k", () -> 100);
+        registry.add("openfilz.ai.auto-file.neighbour-top-k", () -> 200);
         registry.add("spring.ai.openai.api-key", () -> "test-dummy-key");
         registry.add("spring.ai.model.chat", () -> "none");
         registry.add("spring.ai.model.embedding", () -> "none");
@@ -204,7 +207,57 @@ class AutoFileIT extends TestContainersBaseConfig {
         assertThat(info(uploaded.id()).parentId()).as("moved out of the root").isEqualTo(item.toFolderId());
     }
 
+    @Test
+    @Order(5)
+    @DisplayName("a mixed folder never wins the vote: an invoice whose neighbours live among reports goes to the model")
+    void mixedFolderHandsOverToTheModel() {
+        // A grab-bag folder — invoices and reports side by side — holds the majority of the
+        // invoices, so it wins the headcount. It is no home for an invoice (barely half of its
+        // files are), so the vote is discarded and the model decides, and may create the folder
+        // this kind deserves (the mock always answers Filed-by-model).
+        FolderResponse mixed = createFolder("Mixed-" + UUID.randomUUID().toString().substring(0, 8));
+        List<UUID> seeded = new ArrayList<>();
+        for (int i = 0; i < 24; i++) {
+            seeded.add(upload("mixed-invoice-" + i + "-" + UUID.randomUUID() + ".txt",
+                    "Invoice F-2026-05" + i + " from Globex, amount due.", mixed.id(), false).id());
+        }
+        for (int i = 0; i < 25; i++) {
+            seeded.add(upload("mixed-report-" + i + "-" + UUID.randomUUID() + ".txt",
+                    "Monthly report " + i + " of Globex, figures and outlook.", mixed.id(), false).id());
+        }
+        // The vote reads the neighbours' categories: wait for their tier-2 rows, not just the embeddings
+        for (UUID id : seeded) {
+            awaitTier2(id);
+        }
+
+        UploadResponse uploaded = upload("mixed-new-" + UUID.randomUUID() + ".txt", "Invoice F-2026-0599 from Globex, amount due.", null, true);
+        assertThat(uploaded.autoFile()).isNotNull();
+        AutoFileJobView job = awaitJob(uploaded.autoFile().jobId(), j -> "DONE".equals(j.status()));
+        FilingOutcome item = job.items().getFirst();
+        assertThat(item.status()).as(job.toString()).isEqualTo("FILED");
+        assertThat(item.stage()).as("the mixed folder was refused and the model decided").isEqualTo("MODEL");
+        assertThat(item.toFolderId()).isNotEqualTo(mixed.id());
+        assertThat(item.toPath()).isEqualTo("/Filed-by-model");
+        assertThat(info(uploaded.id()).parentId()).isEqualTo(item.toFolderId());
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────
+
+    /** Wait for a document's tier-2 insight row; the row appears only once the upload's indexing ran. */
+    private void awaitTier2(UUID documentId) {
+        for (int attempt = 0; attempt < 240; attempt++) {
+            var result = getWebTestClient().get().uri(DOCUMENTS + "/" + documentId + "/insights")
+                    .exchange().returnResult(DocumentInsightView.class);
+            if (result.getStatus().is2xxSuccessful()) {
+                DocumentInsightView view = result.getResponseBody().blockFirst();
+                if (view != null && view.tier() == 2 && "DONE".equals(view.status())) {
+                    return;
+                }
+            }
+            sleep(250);
+        }
+        throw new AssertionError("no tier-2 insight for " + documentId);
+    }
 
     private UploadResponse upload(String name, String content, UUID parentId, Boolean autoFile) {
         MultipartBodyBuilder builder = new MultipartBodyBuilder();

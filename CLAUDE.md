@@ -307,7 +307,10 @@ toggle `openfilz.ai.insights.active`; mirrored to OpenSearch `category`/`summary
 `getMetadata` block, `queryDocuments(category)`. Smart filing (`openfilz.ai.auto-file.active`, `DefaultAutoFileService` +
 `NoOp…` + `AutoFileConfig`): `autoFile` on `/upload`, `/upload-multiple`, TUS finalize, `writeFile`, or the user's switch
 (`user_ai_preferences`, `GET/PUT /settings/ai/preferences`); the neighbour vote on the vector store (live `documents.parent_id`,
-never the chunk metadata; neighbours lying at the root never vote — a file at the root is unfiled) then the model
+never the chunk metadata; neighbours lying at the root never vote — a file at the root is unfiled; only neighbours of the
+document's tier-2 category vote, only those within `neighbour-min-relative-similarity` of the best hit, and the winning folder
+must be a home for that kind — dominant category = the document's at ≥ `neighbour-min-folder-purity` — else the vote is
+discarded, so a mixed dumping ground never wins on headcount) then the model
 (both through `AiFallbackChain.callWithFailover`, like tier-2 insights; the filing waits for the tier-2 row on the in-process
 `InsightCompletionSignal` the insight worker completes at every terminal write, 5 s fallback re-read, no 500 ms polling), applied as a one-item `AiReorganizationPlan` (`origin = AUTO_FILE`, `document_id`,
 `details`, V1_10) via `ReorganizationPlanService.fileDocument`; `/api/v1/ai/auto-file/**` (job, undo, filing record),
