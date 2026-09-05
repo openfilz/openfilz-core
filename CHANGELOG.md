@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[069740f2cccb715](https://github.com/openfilz/openfilz-core/commit/069740f2cccb715) maven-release-bot[bot] *2026-09-05 19:34:01*
+[5c7d42e76ee45a6](https://github.com/openfilz/openfilz-core/commit/5c7d42e76ee45a6) maven-release-bot[bot] *2026-09-05 23:10:34*
 
 
-## v1.3.9
+## v1.3.10
 ### No issue
 
-**[maven-release-plugin] prepare release v1.3.9**
+**[maven-release-plugin] prepare release v1.3.10**
 
 
-[e420b9b477c023a](https://github.com/openfilz/openfilz-core/commit/e420b9b477c023a) maven-release-bot[bot] *2026-09-05 19:33:59*
+[6529269bba4ded3](https://github.com/openfilz/openfilz-core/commit/6529269bba4ded3) maven-release-bot[bot] *2026-09-05 23:10:31*
 
-**Merge pull request #230 from openfilz/develop**
+**Merge pull request #231 from openfilz/develop**
 
- * Implement smart filing with category-based folder voting
+ * Implement learned category classifier and enhance filing features
 
-[76df385d685766a](https://github.com/openfilz/openfilz-core/commit/76df385d685766a) Yann Demel *2026-09-05 19:31:40*
+[50c1f58b68af8d0](https://github.com/openfilz/openfilz-core/commit/50c1f58b68af8d0) Yann Demel *2026-09-05 23:07:32*
 
 
