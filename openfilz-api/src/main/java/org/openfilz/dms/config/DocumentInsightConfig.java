@@ -53,13 +53,17 @@ public class DocumentInsightConfig {
     @Bean
     @Lazy
     public CategoryClassifier categoryClassifier(AiProperties aiProperties, Environment environment,
-                                                 ObjectProvider<EmbeddingModel> embeddingModelProvider,
+                                                 ObjectProvider<EmbeddingModels> embeddingModelsProvider,
                                                  ObjectProvider<VectorStore> vectorStoreProvider,
                                                  ObjectProvider<DocumentInsightStore> insightStoreProvider) {
         AiProperties.Insights.Classifier config = aiProperties.getInsights().getClassifier();
-        EmbeddingModel embeddingModel = embeddingModelProvider.getIfAvailable();
-        String provider = environment.getProperty("spring.ai.model.embedding", "");
-        String modelName = provider.isBlank() ? "" : environment.getProperty("spring.ai." + provider + ".embedding.model", provider);
+        EmbeddingModels models = embeddingModelsProvider.getIfAvailable();
+        EmbeddingModel embeddingModel = models == null ? null : models.effective();
+        String provider = models == null ? "" : models.provider(environment.getProperty("spring.ai.model.embedding", ""));
+        String modelName = provider == null || provider.isBlank() ? ""
+                : EmbeddingModels.TRANSFORMERS_PROVIDER.equals(provider)
+                ? aiProperties.getTransformers().getEmbedding().getModel()
+                : environment.getProperty("spring.ai." + provider + ".embedding.model", provider);
         CategoryClassifier prototype;
         if (embeddingModel == null) {
             log.warn("openfilz.ai.insights.classifier.mode is {} but no embedding model is configured — tier-2 categories will fail",

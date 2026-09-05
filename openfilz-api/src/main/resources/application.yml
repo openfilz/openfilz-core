@@ -211,6 +211,20 @@ openfilz:
         enabled: ${OPENAI_CHAT_ENABLED:false}
       embedding:
         enabled: ${OPENAI_EMBEDDING_ENABLED:false}
+    # In-process embeddings: the model runs inside the API through ONNX Runtime — no Ollama, no
+    # embedding server, and every API replica embeds on its own CPUs. Wins over Ollama/OpenAI when
+    # enabled. The model and tokenizer are fetched once into cache-directory (mount it). Default:
+    # nomic-embed-text-v1.5 quantised, the family Ollama's nomic-embed-text belongs to (768 dims).
+    # Changing the model later is a change of embedding space like any other (EmbeddingRegistryGuard).
+    # JVM images only: the ONNX runtime loads native libraries the native image does not carry.
+    transformers:
+      embedding:
+        enabled: ${TRANSFORMERS_EMBEDDING_ENABLED:false}
+        model: ${TRANSFORMERS_EMBEDDING_MODEL:nomic-embed-text-v1.5}
+        model-uri: ${TRANSFORMERS_EMBEDDING_MODEL_URI:https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/onnx/model_quantized.onnx}
+        tokenizer-uri: ${TRANSFORMERS_EMBEDDING_TOKENIZER_URI:https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/tokenizer.json}
+        cache-directory: ${TRANSFORMERS_EMBEDDING_CACHE_DIR:}
+        model-output-name: last_hidden_state
     anthropic:
       chat:
         enabled: ${ANTHROPIC_CHAT_ENABLED:false}  # chat only — Anthropic has no embeddings API
