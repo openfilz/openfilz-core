@@ -171,7 +171,9 @@ replacing the previous chunks. The text comes from the search index when full-te
 `OPENFILZ_AI_EMBEDDING_BACKFILL_CONCURRENCY` (2) bounds the parallel documents. On a CPU with the
 in-process model that is about 170 ms per document plus extraction; through Ollama, about twice.
 The same job is a tool of the assistant and of MCP agents (`backfillEmbeddings` /
-`getEmbeddingBackfillStatus`, `EmbeddingAiToolsContributor`, CONTRIBUTOR), see `mcp.md`.
+`getEmbeddingBackfillStatus`, `EmbeddingAiToolsContributor`, CONTRIBUTOR), see `mcp.md`, and a
+button of the web app's settings page ("AI maintenance", shown to contributors when AI is on,
+next to "Re-enrich the documents" for the insights backfill), which follows the job's counters.
 
 ```mermaid
 sequenceDiagram
