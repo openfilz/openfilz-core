@@ -20,6 +20,7 @@ import org.openfilz.dms.repository.WorkflowInstanceRepository;
 import org.openfilz.dms.service.AuditService;
 import org.openfilz.dms.service.workflow.WorkflowAccessPolicy;
 import org.openfilz.dms.service.workflow.WorkflowDefinitionService;
+import org.openfilz.dms.service.workflow.WorkflowService;
 import org.openfilz.dms.service.workflow.WorkflowSpecValidator;
 import org.openfilz.dms.utils.WorkflowJson;
 import org.springframework.http.HttpStatus;
@@ -48,18 +49,19 @@ public class WorkflowDefinitionServiceImpl implements WorkflowDefinitionService 
     private final TransactionalOperator tx;
 
     @Override
-    public Flux<WorkflowDefinitionDTO> list(Boolean active) {
+    public Flux<WorkflowDefinitionDTO> list(Boolean active, WorkflowService.Actor actor) {
         Flux<WorkflowDefinition> all = active == null ? repo.findAllByOrderByNameAsc() : repo.findAllByActiveOrderByNameAsc(active);
-        return all.concatMap(this::toDto);
+        return all.concatMap(d -> toDto(d, actor));
     }
 
     @Override
-    public Mono<WorkflowDefinitionDTO> get(UUID id) {
-        return find(id).flatMap(this::toDto);
+    public Mono<WorkflowDefinitionDTO> get(UUID id, WorkflowService.Actor actor) {
+        return find(id).flatMap(d -> toDto(d, actor));
     }
 
     @Override
-    public Mono<WorkflowDefinitionDTO> create(SaveWorkflowDefinitionRequest request, String userEmail) {
+    public Mono<WorkflowDefinitionDTO> create(SaveWorkflowDefinitionRequest request, WorkflowService.Actor actor) {
+        String userEmail = actor.email();
         requireValid(request);
         OffsetDateTime now = OffsetDateTime.now();
         WorkflowDefinition d = WorkflowDefinition.builder()
@@ -81,14 +83,16 @@ public class WorkflowDefinitionServiceImpl implements WorkflowDefinitionService 
                 .flatMap(saved -> auditService.logAction(AuditAction.WORKFLOW_DEFINITION_CREATED, DocumentType.FILE, saved.getId())
                         .thenReturn(saved))
                 .as(tx::transactional)
-                .flatMap(this::toDto);
+                .flatMap(created -> toDto(created, actor));
     }
 
     @Override
-    public Mono<WorkflowDefinitionDTO> update(UUID id, SaveWorkflowDefinitionRequest request, String userEmail) {
+    public Mono<WorkflowDefinitionDTO> update(UUID id, SaveWorkflowDefinitionRequest request, WorkflowService.Actor actor) {
+        String userEmail = actor.email();
         requireValid(request);
         return requireUsableFolders(request, userEmail)
                 .then(Mono.defer(() -> find(id)))
+                .flatMap(d -> requireOwnership(d, actor))
                 .flatMap(d -> requireUniqueName(request.name().trim(), id).thenReturn(d))
                 .flatMap(d -> {
                     d.setName(request.name().trim());
@@ -104,12 +108,13 @@ public class WorkflowDefinitionServiceImpl implements WorkflowDefinitionService 
                 .flatMap(saved -> auditService.logAction(AuditAction.WORKFLOW_DEFINITION_UPDATED, DocumentType.FILE, saved.getId())
                         .thenReturn(saved))
                 .as(tx::transactional)
-                .flatMap(this::toDto);
+                .flatMap(d -> toDto(d, actor));
     }
 
     @Override
-    public Mono<Void> delete(UUID id, String userEmail) {
+    public Mono<Void> delete(UUID id, WorkflowService.Actor actor) {
         return find(id)
+                .flatMap(d -> requireOwnership(d, actor))
                 .flatMap(d -> instances.countByDefinitionIdAndStatus(id, WorkflowInstanceStatus.RUNNING)
                         .flatMap(running -> running > 0
                                 ? Mono.error(new ResponseStatusException(HttpStatus.CONFLICT,
@@ -180,17 +185,28 @@ public class WorkflowDefinitionServiceImpl implements WorkflowDefinitionService 
                         "A workflow named '" + name + "' already exists")));
     }
 
+    /**
+     * Changing a definition needs more than the designer role: 403 when the policy says this caller
+     * is not its owner. Reading and starting stay open — the catalogue is shared on purpose.
+     */
+    private Mono<WorkflowDefinition> requireOwnership(WorkflowDefinition d, WorkflowService.Actor actor) {
+        return accessPolicy.canEditDefinition(d, actor.email(), actor.roles())
+                .flatMap(ok -> ok ? Mono.just(d)
+                        : Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN,
+                                "This workflow belongs to " + d.getCreatedBy() + " — only its author can change it")));
+    }
+
     private Mono<WorkflowDefinition> find(UUID id) {
         return repo.findById(id)
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Workflow definition not found")));
     }
 
-    private Mono<WorkflowDefinitionDTO> toDto(WorkflowDefinition d) {
-        return instances.countByDefinitionIdAndStatus(d.getId(), WorkflowInstanceStatus.RUNNING)
-                .defaultIfEmpty(0L)
-                .map(running -> new WorkflowDefinitionDTO(d.getId(), d.getName(), d.getDescription(), d.isActive(),
+    private Mono<WorkflowDefinitionDTO> toDto(WorkflowDefinition d, WorkflowService.Actor actor) {
+        return Mono.zip(instances.countByDefinitionIdAndStatus(d.getId(), WorkflowInstanceStatus.RUNNING).defaultIfEmpty(0L),
+                        accessPolicy.canEditDefinition(d, actor.email(), actor.roles()))
+                .map(t -> new WorkflowDefinitionDTO(d.getId(), d.getName(), d.getDescription(), d.isActive(),
                         WorkflowJson.toSpec(d.getSpec()), WorkflowJson.toUuidList(d.getTriggerFolderIds()), d.getVersion(),
-                        d.getCreatedBy(), d.getCreatedAt(), d.getUpdatedAt(), running));
+                        d.getCreatedBy(), d.getCreatedAt(), d.getUpdatedAt(), t.getT1(), t.getT2()));
     }
 
     private static String blankToNull(String s) {

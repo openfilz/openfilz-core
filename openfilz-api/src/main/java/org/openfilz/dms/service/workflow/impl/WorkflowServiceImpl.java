@@ -3,7 +3,9 @@ package org.openfilz.dms.service.workflow.impl;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.CommonProperties;
 import org.openfilz.dms.config.WorkflowProperties;
+import org.openfilz.dms.dto.audit.WorkflowActionFailureAudit;
 import org.openfilz.dms.dto.audit.WorkflowAudit;
+import org.openfilz.dms.dto.audit.WorkflowAuditCause;
 import org.openfilz.dms.dto.request.MoveRequest;
 import org.openfilz.dms.dto.request.UpdateMetadataRequest;
 import org.openfilz.dms.dto.workflow.CancelInstanceRequest;
@@ -299,18 +301,43 @@ public class WorkflowServiceImpl implements WorkflowService {
                 .all().collectList();
     }
 
-    /** On-enter actions run after the commit, each failure recorded as ACTION_FAILED and never propagated. */
+    /**
+     * On-enter actions run after the commit, each failure recorded as ACTION_FAILED and never propagated.
+     * <p>
+     * Each one carries a {@link WorkflowAuditCause} in its context, so the audit entry the action
+     * itself writes (MOVE_FILE, UPDATE_DOCUMENT_METADATA…) says it was the workflow doing it — under
+     * the name of the person who caused it, which the {@code SideEffects} Authentication supplies.
+     */
     private void queueActions(WorkflowInstance instance, WorkflowState state, SideEffects effects) {
+        WorkflowAuditCause cause = new WorkflowAuditCause(instance.getId(), instance.getDefinitionName(), state.label());
         for (WorkflowAction action : state.onEnter()) {
             effects.add(() -> runAction(instance, state, action)
+                    .contextWrite(ctx -> ctx.put(WorkflowAuditCause.CONTEXT_KEY, cause))
                     .then(event(instance, WorkflowEventType.ACTION_APPLIED, null, state.key(), null, null, null,
                             Map.of("action", action.type().name(), "target", describe(action))))
                     .onErrorResume(e -> {
                         log.warn("[workflows] action {} on {} failed: {}", action.type(), instance.getDocumentId(), e.toString());
-                        return event(instance, WorkflowEventType.ACTION_FAILED, null, state.key(), null, null, null,
-                                Map.of("action", action.type().name(), "target", describe(action), "error", String.valueOf(e.getMessage())));
+                        // A failed action leaves no trace of its own — the move simply did not happen —
+                        // so the document's audit trail has to carry the attempt, not just the timeline.
+                        return auditActionFailure(instance, state, action, e)
+                                .then(event(instance, WorkflowEventType.ACTION_FAILED, null, state.key(), null, null, null,
+                                        Map.of("action", action.type().name(), "target", describe(action), "error", String.valueOf(e.getMessage()))));
                     }));
         }
+    }
+
+    /** The failed attempt, on the document, under the actor the side effects run as. */
+    private Mono<Void> auditActionFailure(WorkflowInstance instance, WorkflowState state, WorkflowAction action, Throwable error) {
+        WorkflowActionFailureAudit details = new WorkflowActionFailureAudit(
+                action.type().name(), describe(action), String.valueOf(error.getMessage()));
+        details.setWorkflowInstanceId(instance.getId());
+        details.setWorkflow(instance.getDefinitionName());
+        details.setWorkflowState(state.label());
+        return auditService.logAction(AuditAction.WORKFLOW_ACTION_FAILED, DocumentType.FILE, instance.getDocumentId(), details)
+                .onErrorResume(e -> {
+                    log.warn("[workflows] could not audit the failed action: {}", e.toString());
+                    return Mono.empty();
+                });
     }
 
     private Mono<Void> runAction(WorkflowInstance instance, WorkflowState state, WorkflowAction action) {

@@ -2,6 +2,8 @@ package org.openfilz.dms.e2e.workflow;
 
 import org.junit.jupiter.api.Test;
 import org.openfilz.dms.dto.audit.AuditLog;
+import org.openfilz.dms.dto.audit.AuditLogDetails;
+import org.openfilz.dms.dto.audit.WorkflowActionFailureAudit;
 import org.openfilz.dms.dto.response.DocumentInfo;
 import org.openfilz.dms.dto.workflow.CancelInstanceRequest;
 import org.openfilz.dms.dto.workflow.MyTasksCountDTO;
@@ -139,6 +141,11 @@ class WorkflowInstanceIT extends AbstractWorkflowIT {
                 AuditAction.WORKFLOW_COMPLETED, AuditAction.MOVE_FILE, AuditAction.UPDATE_DOCUMENT_METADATA);
         assertThat(audit.stream().filter(a -> a.action() == AuditAction.WORKFLOW_COMPLETED).findFirst().orElseThrow().username()).isEqualTo(ADMIN_EMAIL);
         assertThat(audit.stream().filter(a -> a.action() == AuditAction.MOVE_FILE).findFirst().orElseThrow().username()).isEqualTo(ADMIN_EMAIL);
+        // ...and says the workflow did it, so it cannot be read as a move that person made by hand.
+        AuditLogDetails moved = audit.stream().filter(a -> a.action() == AuditAction.MOVE_FILE).findFirst().orElseThrow().details();
+        assertThat(moved.getWorkflow()).isEqualTo(def.name());
+        assertThat(moved.getWorkflowInstanceId()).isEqualTo(started.id());
+        assertThat(moved.getWorkflowState()).isNotBlank();
 
         // Monitor listing + summary.
         WorkflowInstancePage page = getWebTestClient().get().uri(u -> u.path(INST).queryParam("documentId", doc).build())
@@ -309,5 +316,18 @@ class WorkflowInstanceIT extends AbstractWorkflowIT {
         WorkflowEventDTO failed = detail.history().stream().filter(e -> e.type() == WorkflowEventType.ACTION_FAILED).findFirst().orElseThrow();
         assertThat(failed.details()).containsEntry("action", "MOVE_TO_FOLDER");
         assertThat(failed.details()).containsKey("error");
+
+        // The timeline is not enough: the document's own trail must carry the attempt, or it shows
+        // the transition and no move at all, with nothing saying one was meant to happen.
+        List<AuditLog> audit = getWebTestClient().get().uri("/api/v1/audit/" + doc)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + admin)
+                .exchange().expectStatus().isOk().expectBodyList(AuditLog.class).returnResult().getResponseBody();
+        AuditLog failure = audit.stream().filter(a -> a.action() == AuditAction.WORKFLOW_ACTION_FAILED).findFirst().orElseThrow();
+        assertThat(failure.username()).isEqualTo(ADMIN_EMAIL);          // the person, never a service account
+        WorkflowActionFailureAudit details = (WorkflowActionFailureAudit) failure.details();
+        assertThat(details.getAction()).isEqualTo("MOVE_TO_FOLDER");
+        assertThat(details.getError()).isNotBlank();
+        assertThat(details.getWorkflow()).isEqualTo(def.name());
+        assertThat(details.getWorkflowInstanceId()).isEqualTo(started.id());
     }
 }

@@ -15,5 +15,12 @@ public record WorkflowDefinitionDTO(UUID id,
                                     OffsetDateTime createdAt,
                                     OffsetDateTime updatedAt,
                                     /** Instances currently RUNNING on this definition. */
-                                    long runningCount) {
+                                    long runningCount,
+                                    /**
+                                     * May the caller change this definition (edit, activate/deactivate, delete)?
+                                     * Everyone who may design workflows sees and starts every definition; the
+                                     * Enterprise Edition reserves the changes to its author and to admins, so the
+                                     * designer can grey out what it cannot touch instead of failing on save.
+                                     */
+                                    boolean canEdit) {
 }

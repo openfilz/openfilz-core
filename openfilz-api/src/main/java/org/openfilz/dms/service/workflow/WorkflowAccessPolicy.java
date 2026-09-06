@@ -2,9 +2,11 @@ package org.openfilz.dms.service.workflow;
 
 import org.openfilz.dms.dto.workflow.WorkflowInstanceScope;
 import org.openfilz.dms.entity.Document;
+import org.openfilz.dms.entity.WorkflowDefinition;
 import org.openfilz.dms.entity.WorkflowInstance;
 import reactor.core.publisher.Mono;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -42,6 +44,18 @@ public interface WorkflowAccessPolicy {
      * Checked when a definition is saved, so the API does not depend on the designer's folder picker.
      */
     default Mono<Boolean> canUseFolder(UUID folderId, String userEmail) {
+        return Mono.just(true);
+    }
+
+    /**
+     * May this user change that definition — edit it, activate/deactivate it, delete it?
+     * <p>
+     * Reading and starting are deliberately not asked about: a workflow is designed to be used by
+     * the team, so the catalogue stays shared. It is the <em>changes</em> that need an owner, or
+     * one designer silently rewrites another's workflow. Core has no notion of ownership and
+     * allows everyone; the Enterprise Edition answers "its author, or an admin".
+     */
+    default Mono<Boolean> canEditDefinition(WorkflowDefinition definition, String userEmail, List<String> roles) {
         return Mono.just(true);
     }
 }

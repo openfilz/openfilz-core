@@ -63,35 +63,33 @@ public class WorkflowController implements UserInfoService {
     @GetMapping(value = "/definitions", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "List workflow definitions")
     public Flux<WorkflowDefinitionDTO> listDefinitions(@RequestParam(required = false) Boolean active) {
-        requireActive();
-        return definitionService.list(active);
+        return actor().flatMapMany(a -> definitionService.list(active, a));
     }
 
     @GetMapping(value = "/definitions/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Get a workflow definition")
     public Mono<WorkflowDefinitionDTO> getDefinition(@PathVariable UUID id) {
-        requireActive();
-        return definitionService.get(id);
+        return actor().flatMap(a -> definitionService.get(id, a));
     }
 
     @PostMapping(value = "/definitions", produces = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Create a workflow definition (400 with the problem list when invalid)")
     public Mono<WorkflowDefinitionDTO> createDefinition(@Valid @RequestBody SaveWorkflowDefinitionRequest req) {
-        return email().flatMap(e -> definitionService.create(req, e));
+        return actor().flatMap(a -> definitionService.create(req, a));
     }
 
     @PutMapping(value = "/definitions/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Update a workflow definition (running instances keep their snapshot)")
     public Mono<WorkflowDefinitionDTO> updateDefinition(@PathVariable UUID id, @Valid @RequestBody SaveWorkflowDefinitionRequest req) {
-        return email().flatMap(e -> definitionService.update(id, req, e));
+        return actor().flatMap(a -> definitionService.update(id, req, a));
     }
 
     @DeleteMapping("/definitions/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Delete a workflow definition (409 while instances are running)")
     public Mono<Void> deleteDefinition(@PathVariable UUID id) {
-        return email().flatMap(e -> definitionService.delete(id, e));
+        return actor().flatMap(a -> definitionService.delete(id, a));
     }
 
     @PostMapping(value = "/definitions/validate", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -181,6 +179,11 @@ public class WorkflowController implements UserInfoService {
         return getAuthenticationMono()
                 .map(this::emailOf)
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not authenticated")));
+    }
+
+    /** The caller, with no locale — the definition endpoints send no mail. */
+    private Mono<WorkflowService.Actor> actor() {
+        return actor(null);
     }
 
     private Mono<WorkflowService.Actor> actor(String acceptLanguage) {

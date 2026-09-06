@@ -5,6 +5,10 @@ import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import io.swagger.v3.oas.annotations.media.DiscriminatorMapping;
 import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.Getter;
+import lombok.Setter;
+
+import java.util.UUID;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = AuditLogDetails.DISCRIMINATOR)
@@ -21,7 +25,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
         @JsonSubTypes.Type(value = UpdateMetadataAudit.class, name = AuditLogDetails.UPDATE_METADATA),
         @JsonSubTypes.Type(value = UploadAudit.class, name = AuditLogDetails.UPLOAD),
         @JsonSubTypes.Type(value = PdfTransformAudit.class, name = AuditLogDetails.PDF_TRANSFORM),
-        @JsonSubTypes.Type(value = WorkflowAudit.class, name = AuditLogDetails.WORKFLOW)
+        @JsonSubTypes.Type(value = WorkflowAudit.class, name = AuditLogDetails.WORKFLOW),
+        @JsonSubTypes.Type(value = WorkflowActionFailureAudit.class, name = AuditLogDetails.WORKFLOW_ACTION_FAILURE)
 
 })
 @Schema(
@@ -38,10 +43,34 @@ import io.swagger.v3.oas.annotations.media.Schema;
                 @DiscriminatorMapping(value = AuditLogDetails.UPDATE_METADATA, schema = UpdateMetadataAudit.class),
                 @DiscriminatorMapping(value = AuditLogDetails.UPLOAD, schema = UploadAudit.class),
                 @DiscriminatorMapping(value = AuditLogDetails.PDF_TRANSFORM, schema = PdfTransformAudit.class),
-                @DiscriminatorMapping(value = AuditLogDetails.WORKFLOW, schema = WorkflowAudit.class)
+                @DiscriminatorMapping(value = AuditLogDetails.WORKFLOW, schema = WorkflowAudit.class),
+                @DiscriminatorMapping(value = AuditLogDetails.WORKFLOW_ACTION_FAILURE, schema = WorkflowActionFailureAudit.class)
         }
 )
 public abstract class AuditLogDetails implements IAuditLogDetails {
+
+    /**
+     * When an action was performed <em>by a workflow</em>, these say which one — on the entry the
+     * action itself produced (a MOVE_FILE, an UPDATE_DOCUMENT_METADATA…), not on a separate row.
+     * <p>
+     * The actor stays the person who caused it: whoever took the transition, or the uploader for a
+     * hot folder. That is what an audit trail must record. But without this, that person's move is
+     * indistinguishable from one they made by hand — so the trail also has to say the workflow did
+     * it, in which status. Stamped by {@code AuditServiceImpl} from the reactive context the
+     * workflow engine writes around its on-enter actions; {@code null} on every manual action, and
+     * omitted from the JSON.
+     */
+    @Getter @Setter
+    @Schema(description = "Workflow instance this action was part of, when a workflow caused it")
+    private UUID workflowInstanceId;
+
+    @Getter @Setter
+    @Schema(description = "Name of the workflow that caused this action")
+    private String workflow;
+
+    @Getter @Setter
+    @Schema(description = "Label of the workflow status whose entry caused this action")
+    private String workflowState;
 
     public static final String DISCRIMINATOR = "type";
 
@@ -57,4 +86,5 @@ public abstract class AuditLogDetails implements IAuditLogDetails {
     public static final String UPLOAD = "upload";
     public static final String PDF_TRANSFORM = "pdfTransform";
     public static final String WORKFLOW = "workflow";
+    public static final String WORKFLOW_ACTION_FAILURE = "workflowActionFailure";
 }

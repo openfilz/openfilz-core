@@ -8,7 +8,9 @@ import org.openfilz.dms.dto.audit.AuditLog;
 import org.openfilz.dms.dto.audit.AuditVerificationResult;
 import org.openfilz.dms.dto.audit.AuditVerificationResult.AuditVerificationStatus;
 import org.openfilz.dms.dto.audit.AuditVerificationResult.BrokenLink;
+import org.openfilz.dms.dto.audit.AuditLogDetails;
 import org.openfilz.dms.dto.audit.IAuditLogDetails;
+import org.openfilz.dms.dto.audit.WorkflowAuditCause;
 import org.openfilz.dms.dto.request.SearchByAuditLogRequest;
 import org.openfilz.dms.enums.AuditAction;
 import org.openfilz.dms.enums.DocumentType;
@@ -42,7 +44,23 @@ public class AuditServiceImpl implements AuditService {
         if (!isAuditable(action)) {
             return Mono.empty();
         }
-        return auditDAO.logAction(action, resourceType, resourceId, details);
+        return Mono.deferContextual(ctx -> auditDAO.logAction(action, resourceType, resourceId, stampCause(details, ctx)));
+    }
+
+    /**
+     * Marks the entry as caused by a workflow when the engine is the one running this action —
+     * it puts a {@link WorkflowAuditCause} in the reactive context around its on-enter actions.
+     * The actor is untouched: it stays the person the workflow acted for.
+     */
+    private IAuditLogDetails stampCause(IAuditLogDetails details, reactor.util.context.ContextView ctx) {
+        if (!(details instanceof AuditLogDetails d) || !ctx.hasKey(WorkflowAuditCause.CONTEXT_KEY)) {
+            return details;
+        }
+        WorkflowAuditCause cause = ctx.get(WorkflowAuditCause.CONTEXT_KEY);
+        d.setWorkflowInstanceId(cause.instanceId());
+        d.setWorkflow(cause.workflow());
+        d.setWorkflowState(cause.state());
+        return d;
     }
 
     @Override
