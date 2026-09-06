@@ -485,6 +485,29 @@ server.port: 8081
 
 ---
 
+### Adding a configuration property (env var) — the wiring checklist
+
+A `${VAR:default}` placeholder in `application.yml` reaches a container **only where it is listed**:
+Compose passes the keys a service names, and the Helm chart what its deployment template names.
+Every new variable is therefore added, in the same change, to:
+
+1. `deploy/docker-compose/docker-compose.yml` (base) or `docker-compose.ai.yml` (AI overlay) — CE local / demo,
+2. `deploy/docker-compose/dokploy/compose.yaml` — CE Dokploy,
+3. `openfilz-enterprise/docker/dokploy-compose-ee.yml` — EE Dokploy (the enterprise repo),
+4. `deploy/helm/openfilz-api/values.yaml` + `templates/deployment.yaml` — Helm,
+5. the env examples (`deploy/docker-compose/.env.example`, `dokploy/.env.example`, EE `docker/.env.dokploy-ee`)
+   and the variable table of `docs/admin-guide.md`.
+
+Then run the check, which lists every AI / MCP placeholder missing from a target (exit 1 on a gap;
+`--prefix`/`--all` widen it, `--ee` adds the enterprise compose):
+
+```bash
+python deploy/check-env-wiring.py --ee ../openfilz-enterprise/docker/dokploy-compose-ee.yml
+```
+
+and render what changed (`docker compose -f … config -q`, `helm template t deploy/helm/openfilz-api --set ai.active=true`):
+a volume block pasted inside `environment:` once shipped as an invalid overlay that only `config` caught.
+
 ## 12. Key Concepts
 
 **Layered:** Controllers → Services → DAOs → Database/Storage
@@ -779,6 +802,13 @@ external agents (Claude Code/Desktop, n8n, custom agents, Spring AI clients) ove
   the URL transits chat logs and browser history. Tests: `DownloadTokenServiceTest` (fail-closed
   matrix) + `McpProtocolIT.signedDownloadLinkServesTheDocument` (unauthenticated redemption,
   tamper → 404, token-on-wrong-document → 404, token-less path still 401).
+- **Adding a contributor (or a tool to one) touches five suites, or CI fails on the one you forgot**
+  (`EmbeddingAiToolsContributor`, run 34026036736, failed on the fourth): `McpProtocolIT` (expected set +
+  `argumentsFor` case — the layer-2 trace must call the tool), `McpReadOnlyModeIT`, `McpWithChatModelIT`
+  (the same expected set: it proves the surface is unchanged next to a `ChatModel`), the
+  `openfilz.ai.chat.excluded-contributors` list of `AiRealLlmE2EIT` when the contributor opts into the
+  chat, and the enterprise `McpNativeE2EIT` (`READ_ONLY_TOOLS` / `MUTATING_TOOLS` + `argumentsFor`).
+  `grep -rl FilingAiToolsContributor src/test ../openfilz-enterprise/modules/*/src/test` lists them all.
 - **Tests:** `McpRuntimeHintsTest` (hints), `McpProtocolIT` (read-write, full protocol),
   `McpReadOnlyModeIT` (default posture), `McpWithChatModelIT` (MCP + a real `ChatModel`),
   `DefaultAiToolRolePolicyTest` + `ToolRoleParityWithRestTest` + `McpRoleEnforcementIT` (roles),
