@@ -28,6 +28,7 @@ import org.openfilz.dms.service.ai.ReorganizationPlanService;
 import org.openfilz.dms.service.ai.ReorganizationPlanService.Caller;
 import org.openfilz.dms.service.ai.ReorganizationPlanService.FilingApplyResult;
 import org.openfilz.dms.service.ai.ToolCapability;
+import org.openfilz.dms.service.ai.ModelAnswers;
 import org.openfilz.dms.service.ai.UserChatClientResolver;
 import org.openfilz.dms.service.ai.UserChatClientResolver.ResolvedChat;
 import org.openfilz.dms.service.filing.AutoFileDecision.ModelAnswer;
@@ -825,17 +826,18 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
         String inventory = planService.folderInventory(scopeRoot, caller);
         String system = systemPrompt(allowNewFolders);
         String user = userPrompt(document, scopeRoot, insight, text, inventory, unfiledSiblings, caller);
+        // Capped: a small local model at temperature 0 can loop on a JSON contract until its
+        // context shifts; a thinking model must fit its thoughts in the same cap (see AiProperties)
+        int cap = aiProperties.getMaxAnswerTokens();
         // Same failover as the chat: a quota hit on the filing model is retried on the next
         // candidate of the chain rather than skipping the document.
-        String answer = fallbackChain.callWithFailover(chat, "AUTOFILE", candidate ->
-                ChatClient.builder(candidate.chatModel()).build().prompt()
+        return fallbackChain.callWithFailover(chat, "AUTOFILE", candidate ->
+                ModelAnswers.text(ChatClient.builder(candidate.chatModel()).build().prompt()
                         .system(system)
                         .user(user)
-                        // Capped: a small local model at temperature 0 can loop on a JSON contract until its context shifts
-                        .options(ChatOptions.builder().temperature(0.0).maxTokens(512))
+                        .options(ChatOptions.builder().temperature(0.0).maxTokens(cap))
                         .call()
-                        .content());
-        return answer;
+                        .chatResponse(), "AUTOFILE", cap));
     }
 
     /**

@@ -31,6 +31,16 @@ public interface DocumentEmbeddingService {
     Mono<Void> embedFromText(Document document, String extractedText);
 
     /**
+     * Embed an existing document again, without re-running the insights: the text from the
+     * search index when full-text keeps it, else from a fresh Tika pass on the stored file.
+     * Unlike the two entry points above, errors propagate — the backfill counts them.
+     *
+     * @param document the document entity
+     * @return the number of chunks stored, 0 when the file yields no text
+     */
+    Mono<Integer> reembed(Document document);
+
+    /**
      * Remove all embeddings for a given document.
      *
      * @param documentId the document UUID

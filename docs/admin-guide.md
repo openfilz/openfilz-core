@@ -777,6 +777,8 @@ searchable (`category` facet).
 | `OPENFILZ_AI_INSIGHTS_MODEL` | *(chat model)* | `provider:model` for the enrichment, e.g. `anthropic:claude-haiku-4-5` — a cheap model is enough |
 | `OPENFILZ_AI_INSIGHTS_MAX_CHARS` | `6000` | Characters of text sent per file |
 | `OPENFILZ_AI_INSIGHTS_MAX_FILE_SIZE` | `50MB` | Larger files are not enriched |
+| `OPENFILZ_AI_EMBEDDING_BACKFILL_CONCURRENCY` | `2` | Documents embedded in parallel by `POST /api/v1/ai/embeddings/backfill` — the job that re-embeds a library after an embedding-provider switch (wipe `vector_store` and `ai_embedding_registry` first, restart, then call it as a CONTRIBUTOR; without `force` it embeds only the files that have no vector, so it also repairs a failed upload embedding) |
+| `OPENFILZ_AI_MAX_ANSWER_TOKENS` | `4096` | Longest answer of the insights / smart-filing model calls (stops a looping small local model). A thinking model such as Gemini counts its thoughts against it — raise it when the log says the model stopped at the answer cap |
 | `OPENFILZ_AI_INSIGHTS_CONCURRENCY` | `2` | Parallel model calls |
 | `OPENFILZ_AI_INSIGHTS_DAILY_LIMIT` | `2000` | Files enriched per day; the rest wait for a backfill |
 | `OPENFILZ_AI_INSIGHTS_CATEGORIES` | invoice, quote, contract, report, letter, cv, presentation, spreadsheet, form, id-document, receipt, minutes, specification, manual, other | The closed category list — also what the details panel's kind editor offers |

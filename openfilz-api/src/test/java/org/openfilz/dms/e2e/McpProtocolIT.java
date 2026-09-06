@@ -111,6 +111,8 @@ public class McpProtocolIT extends AbstractMcpIT {
         expected.addAll(org.openfilz.dms.service.mcp.SignatureAiToolsContributor.MUTATING_TOOLS);
         expected.addAll(org.openfilz.dms.service.mcp.FilingAiToolsContributor.READ_ONLY_TOOLS);
         expected.addAll(org.openfilz.dms.service.mcp.FilingAiToolsContributor.MUTATING_TOOLS);
+        expected.addAll(org.openfilz.dms.service.mcp.EmbeddingAiToolsContributor.READ_ONLY_TOOLS);
+        expected.addAll(org.openfilz.dms.service.mcp.EmbeddingAiToolsContributor.MUTATING_TOOLS);
 
         assertThat(advertisedToolNames()).containsExactlyInAnyOrderElementsOf(expected);
     }
@@ -447,6 +449,11 @@ public class McpProtocolIT extends AbstractMcpIT {
                     {"document":"%s","limit":5}""".formatted(probe);
             case "fileDocuments" -> """
                     {"documentIds":"%s"}""".formatted(UUID.randomUUID());
+            // embedding backfill (EmbeddingAiTools): a folder that does not exist answers with text, a job id is unknown
+            case "backfillEmbeddings" -> """
+                    {"folder":"%s"}""".formatted(probe);
+            case "getEmbeddingBackfillStatus" -> """
+                    {"jobId":"%s"}""".formatted(UUID.randomUUID());
             case "getDocumentPath" -> """
                     {"documentId":"%s"}""".formatted(UUID.randomUUID());
             case "describeImage" -> """

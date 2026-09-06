@@ -318,10 +318,14 @@ services:
       OPENFILZ_AI_INSIGHTS_CLASSIFIER_PREFIX: ${OPENFILZ_AI_INSIGHTS_CLASSIFIER_PREFIX:-}
       OPENFILZ_AI_INSIGHTS_MAX_CHARS: ${OPENFILZ_AI_INSIGHTS_MAX_CHARS:-6000}
       OPENFILZ_AI_INSIGHTS_MAX_FILE_SIZE: ${OPENFILZ_AI_INSIGHTS_MAX_FILE_SIZE:-50MB}
+      # Longest answer of the insights / filing model calls; a thinking model counts its thoughts in it
+      OPENFILZ_AI_MAX_ANSWER_TOKENS: ${OPENFILZ_AI_MAX_ANSWER_TOKENS:-4096}
       # Embedding-model change policy: fail-fast (default) refuses to start when the embedding
       # provider/model changed while vectors exist; warn starts anyway (mixed vector spaces until
       # the library is re-embedded) — what a provider switch (Ollama -> in-process) needs.
       OPENFILZ_AI_EMBEDDING_VALIDATION: ${OPENFILZ_AI_EMBEDDING_VALIDATION:-fail-fast}
+      # Documents embedded in parallel by POST /api/v1/ai/embeddings/backfill (after a provider switch)
+      OPENFILZ_AI_EMBEDDING_BACKFILL_CONCURRENCY: ${OPENFILZ_AI_EMBEDDING_BACKFILL_CONCURRENCY:-2}
       OPENFILZ_AI_REORG_INVENTORY_CACHE_TTL: ${OPENFILZ_AI_REORG_INVENTORY_CACHE_TTL:-2m}
       OPENFILZ_AI_REORG_PLAN_RATE_LIMIT: ${OPENFILZ_AI_REORG_PLAN_RATE_LIMIT:-20}
       # Smart filing stage 1: how a winning folder is judged a home (category | similarity | both),
@@ -336,6 +340,8 @@ services:
       # MCP server — external AI agents over POST /mcp (see docs/mcp.md).
       OPENFILZ_MCP_ACTIVE: ${OPENFILZ_MCP_ACTIVE:-false}
       OPENFILZ_MCP_MODE: ${OPENFILZ_MCP_MODE:-READ_ONLY}
+      # OAuth scopes advertised to MCP hosts in the protected-resource metadata
+      OPENFILZ_MCP_SCOPES_SUPPORTED: ${OPENFILZ_MCP_SCOPES_SUPPORTED:-openid,profile,email,offline_access}
       # Advertised in the RFC 9728 protected-resource metadata and the settings page.
       # KEYCLOAK_REALM_URL above is the internal hostname, unreachable by MCP hosts —
       # this must be the public realm URL.

@@ -485,6 +485,29 @@ server.port: 8081
 
 ---
 
+### Adding a configuration property (env var) — the wiring checklist
+
+A `${VAR:default}` placeholder in `application.yml` reaches a container **only where it is listed**:
+Compose passes the keys a service names, and the Helm chart what its deployment template names.
+Every new variable is therefore added, in the same change, to:
+
+1. `deploy/docker-compose/docker-compose.yml` (base) or `docker-compose.ai.yml` (AI overlay) — CE local / demo,
+2. `deploy/docker-compose/dokploy/compose.yaml` — CE Dokploy,
+3. `openfilz-enterprise/docker/dokploy-compose-ee.yml` — EE Dokploy (the enterprise repo),
+4. `deploy/helm/openfilz-api/values.yaml` + `templates/deployment.yaml` — Helm,
+5. the env examples (`deploy/docker-compose/.env.example`, `dokploy/.env.example`, EE `docker/.env.dokploy-ee`)
+   and the variable table of `docs/admin-guide.md`.
+
+Then run the check, which lists every AI / MCP placeholder missing from a target (exit 1 on a gap;
+`--prefix`/`--all` widen it, `--ee` adds the enterprise compose):
+
+```bash
+python deploy/check-env-wiring.py --ee ../openfilz-enterprise/docker/dokploy-compose-ee.yml
+```
+
+and render what changed (`docker compose -f … config -q`, `helm template t deploy/helm/openfilz-api --set ai.active=true`):
+a volume block pasted inside `environment:` once shipped as an invalid overlay that only `config` caught.
+
 ## 12. Key Concepts
 
 **Layered:** Controllers → Services → DAOs → Database/Storage
@@ -615,7 +638,7 @@ The AI feature (`openfilz.ai.active=true`) runs on Spring AI 2.0. Five things bi
   switches to it too; `TransformersRuntimeHints` + `ai.onnxruntime`/`ai.djl` run-time initialisation carry the JNI. Proven by
   `TransformersEmbeddingIT` (JVM) and EE `EmbeddingOnnxNativeE2EIT` (native container, pgvector Postgres). `EmbeddingProviderBenchmark`
   measures providers; the in-process and Ollama nomic are different vector spaces (cosine 0.94): switching = re-embedding. See `docs/ai.md` §2.
-- **The embedding model is a one-time deployment decision — the chat model is not.** The chat LLM is stateless and can be swapped freely; every vector in `vector_store` was produced by one specific embedding model, and vectors from different models are incomparable (changing the model silently breaks similarity search, it doesn't degrade it). `EmbeddingRegistryGuard` records the configured provider/model in `ai_embedding_registry` (`V1_5`, ai-migration) on first AI-enabled startup and on later startups refuses to start (default `openfilz.ai.embedding.validation=fail-fast`; `warn` starts anyway) when the configuration changed while indexed vectors exist — the ways out are restoring the old config or `TRUNCATE TABLE vector_store; DELETE FROM ai_embedding_registry` plus re-embedding (re-uploading) documents. It also checks `EmbeddingModel.dimensions()` against the fixed `vector(768)` column (`AiConfig.EMBEDDING_DIMENSIONS`); OpenAI's `text-embedding-3-*` therefore get `spring.ai.openai.embedding.dimensions=768` (native shortening) in `application.yml`. The guard skips when the `spring.ai.model.embedding` selector is `none`/absent (mocked tests), and treats unresolvable dimensions (provider down, mock returning 0) as unknown rather than failing.
+- **The embedding model is a one-time deployment decision — the chat model is not.** The chat LLM is stateless and can be swapped freely; every vector in `vector_store` was produced by one specific embedding model, and vectors from different models are incomparable (changing the model silently breaks similarity search, it doesn't degrade it). `EmbeddingRegistryGuard` records the configured provider/model in `ai_embedding_registry` (`V1_5`, ai-migration) on first AI-enabled startup and on later startups refuses to start (default `openfilz.ai.embedding.validation=fail-fast`; `warn` starts anyway) when the configuration changed while indexed vectors exist — the ways out are restoring the old config or `TRUNCATE TABLE vector_store; DELETE FROM ai_embedding_registry` plus `POST /api/v1/ai/embeddings/backfill` (`EmbeddingBackfillService`: every active file that tags no chunk in `vector_store`, or all of them with `force`, optionally under one folder; `DocumentEmbeddingService.reembed` takes the text from the index or a Tika pass and does not re-run the insights; CONTRIBUTOR, 404 when AI is off; `EmbeddingBackfillIT` runs it on a real `PgVectorStore` over the test pgvector Postgres — the candidate query reads the table, which the in-memory test store could not prove; tools `backfillEmbeddings` / `getEmbeddingBackfillStatus` through `EmbeddingAiToolsContributor`, excluded in `AiRealLlmE2EIT` like the other contributed surfaces). It also checks `EmbeddingModel.dimensions()` against the fixed `vector(768)` column (`AiConfig.EMBEDDING_DIMENSIONS`); OpenAI's `text-embedding-3-*` therefore get `spring.ai.openai.embedding.dimensions=768` (native shortening) in `application.yml`. The guard skips when the `spring.ai.model.embedding` selector is `none`/absent (mocked tests), and treats unresolvable dimensions (provider down, mock returning 0) as unknown rather than failing.
 - **The frontend follows the backend flag.** `openfilz.ai.active` is surfaced as `aiActive` on `GET /api/v1/settings` (same shape as `thumbnailsActive`), and openfilz-web gates its chat FAB on that — there is no `NG_APP_*` AI toggle to keep in sync.
 - **Tool execution moved to a `ToolCallingAdvisor`** on the ChatClient. Only the *auto-configured* `ChatClient.Builder` registers it — a client built from `ChatClient.builder(chatModel)` emits tool-call requests nobody executes. `ChatClientAssembler` registers the advisor explicitly.
 - **`ChatModel.getOptions()` must not be null**: `DefaultChatClientUtils` calls `getOptions().mutate()` on every request, so mocked chat models need it stubbed.
@@ -779,6 +802,13 @@ external agents (Claude Code/Desktop, n8n, custom agents, Spring AI clients) ove
   the URL transits chat logs and browser history. Tests: `DownloadTokenServiceTest` (fail-closed
   matrix) + `McpProtocolIT.signedDownloadLinkServesTheDocument` (unauthenticated redemption,
   tamper → 404, token-on-wrong-document → 404, token-less path still 401).
+- **Adding a contributor (or a tool to one) touches five suites, or CI fails on the one you forgot**
+  (`EmbeddingAiToolsContributor`, run 34026036736, failed on the fourth): `McpProtocolIT` (expected set +
+  `argumentsFor` case — the layer-2 trace must call the tool), `McpReadOnlyModeIT`, `McpWithChatModelIT`
+  (the same expected set: it proves the surface is unchanged next to a `ChatModel`), the
+  `openfilz.ai.chat.excluded-contributors` list of `AiRealLlmE2EIT` when the contributor opts into the
+  chat, and the enterprise `McpNativeE2EIT` (`READ_ONLY_TOOLS` / `MUTATING_TOOLS` + `argumentsFor`).
+  `grep -rl FilingAiToolsContributor src/test ../openfilz-enterprise/modules/*/src/test` lists them all.
 - **Tests:** `McpRuntimeHintsTest` (hints), `McpProtocolIT` (read-write, full protocol),
   `McpReadOnlyModeIT` (default posture), `McpWithChatModelIT` (MCP + a real `ChatModel`),
   `DefaultAiToolRolePolicyTest` + `ToolRoleParityWithRestTest` + `McpRoleEnforcementIT` (roles),

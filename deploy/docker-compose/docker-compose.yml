@@ -88,6 +88,8 @@ services:
       # authorization-server-url falls back to KEYCLOAK_REALM_URL in application.yml.
       OPENFILZ_MCP_ACTIVE: ${OPENFILZ_MCP_ACTIVE:-false}
       OPENFILZ_MCP_MODE: ${OPENFILZ_MCP_MODE:-READ_ONLY}
+      # OAuth scopes advertised to MCP hosts in the protected-resource metadata
+      OPENFILZ_MCP_SCOPES_SUPPORTED: ${OPENFILZ_MCP_SCOPES_SUPPORTED:-openid,profile,email,offline_access}
 
       # Server configuration
       SERVER_PORT: 8081

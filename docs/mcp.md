@@ -223,6 +223,16 @@ is scoped to the caller's permissions.
 `queryDocuments` also accepts `category` (one of `openfilz.ai.insights.categories`) to list only
 documents whose AI-derived insight carries that category.
 
+### Embedding backfill tools
+
+`EmbeddingAiToolsContributor` (chat + MCP), the conversational side of
+`POST /api/v1/ai/embeddings/backfill` (see `ai.md` §2, re-embedding a library):
+
+| Tool | Kind | What it does |
+|---|---|---|
+| `backfillEmbeddings` | write | Start a backfill: embed the documents that have no vector (or every document with `force`), optionally under one folder (`folder` by name or id). Returns the job id; nothing is moved or changed |
+| `getEmbeddingBackfillStatus` | read | Progress of a job: queued / embedded / skipped / failed, done or running |
+
 ### Enterprise tools
 
 The Enterprise edition adds tools for its collaboration features, advertised automatically
