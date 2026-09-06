@@ -128,7 +128,8 @@ and the tokenizers (JNI, reflection, their Linux libraries as resources) and the
 `native-image.properties` initialises `ai.onnxruntime` / `ai.djl` at run time. Only
 `spring-ai-transformers` is on the classpath, never its auto-configuration, which would build the
 model whenever no selector is set. Proven end to end by `TransformersEmbeddingIT` (JVM, core) and
-`EmbeddingOnnxNativeE2EIT` (the enterprise native container).
+`EmbeddingOnnxNativeE2EIT` (the enterprise container: the same upload, embedding and
+classification against the image the e2e suite runs — the native one in the release flow).
 
 Measured with `EmbeddingProviderBenchmark` (test sources, `-Dbench.dir=<documents>
 -Dbench.providers=onnx,ollama[,openai]`; latency, batch throughput on one and several threads,
