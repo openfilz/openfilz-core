@@ -187,6 +187,9 @@ ai:
   # changed while vectors exist; warn starts anyway (mixed vector spaces until the library is re-embedded)
   embedding:
     validation: fail-fast
+  # -- Longest answer of the insights / smart-filing model calls: stops a looping small local model;
+  # a thinking model (Gemini) counts its thoughts against it, so it cannot be tight
+  maxAnswerTokens: 4096
   # -- Reorganisation: inventory cache per user + request shape; plans a user may produce per 10 min (0 = no cap)
   reorganization:
     inventoryCacheTtl: 2m

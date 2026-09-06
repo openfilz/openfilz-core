@@ -460,7 +460,14 @@ similarity judgement (67 % abstain) does not see either.
 
 The uncapped small model was the "Ollama is too slow" of the early trials: at temperature 0 it
 looped on the JSON contract until its context shifted (22 000 tokens on one document); every
-model call now passes `maxTokens(512)`. Run both benchmarks:
+model call now passes `maxTokens(openfilz.ai.max-answer-tokens)` (`OPENFILZ_AI_MAX_ANSWER_TOKENS`,
+default 4096; the benchmarks use 512). The cap cannot be tight: a thinking model counts its
+thoughts against `maxOutputTokens`, and at 512 Gemini had a few dozen tokens of visible text left —
+every answer was cut and rejected as "no JSON object in the answer". The finish reason now names
+it in the log (`the model stopped at the N-token answer cap`); raise the cap or lower the model's
+thinking budget. Gemini 3 also answers in several parts, which Spring AI maps to several
+generations: the answer is read from all of them (`ModelAnswers`), never through `content()`,
+which keeps the first part only. Run both benchmarks:
 
 ```bash
 mvn -pl openfilz-api test -Dtest=CategoryClassifierBenchmark -Dsurefire.failIfNoSpecifiedTests=false \

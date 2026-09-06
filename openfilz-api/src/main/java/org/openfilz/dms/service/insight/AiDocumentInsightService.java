@@ -15,6 +15,7 @@ import org.openfilz.dms.service.IndexService;
 import org.openfilz.dms.service.StorageService;
 import org.openfilz.dms.service.ai.AiFailoverPolicy;
 import org.openfilz.dms.service.ai.AiFallbackChain;
+import org.openfilz.dms.service.ai.ModelAnswers;
 import org.openfilz.dms.service.ai.UserChatClientResolver;
 import org.openfilz.dms.service.ai.UserChatClientResolver.ResolvedChat;
 import org.openfilz.dms.service.impl.TikaService;
@@ -67,13 +68,6 @@ public class AiDocumentInsightService implements DocumentInsightService {
     public static final int PROMPT_VERSION = 1;
     /** Marker the test configuration keys its stub on; also documents which prompt produced a row. */
     static final String PROMPT_MARKER = "INSIGHTS_V1";
-
-    /**
-     * The longest sane answer: the JSON contract fits in a few hundred tokens, and a small local
-     * model at temperature 0 otherwise loops on it until its context shifts — a worker stuck for
-     * ten minutes per document was the "Ollama is too slow" of the early trials.
-     */
-    static final int MAX_ANSWER_TOKENS = 512;
 
     private static final int MAX_QUEUE = 20_000;
     private static final int BACKFILL_LIMIT = 10_000;
@@ -272,16 +266,18 @@ public class AiDocumentInsightService implements DocumentInsightService {
                     }
                     ResolvedChat primary = model();
                     AtomicReference<ResolvedChat> used = new AtomicReference<>(primary);
+                    // The answer cap: a looping small model stops there, a thinking model must fit its thoughts in it
+                    int cap = aiProperties.getMaxAnswerTokens();
                     // One call, with the chat's failover: a 429 on the insights model is retried on
                     // the next candidate of the chain instead of leaving the row FAILED.
                     String answer = fallbackChain.callWithFailover(primary, "INSIGHTS", candidate -> {
                         used.set(candidate);
-                        return ChatClient.builder(candidate.chatModel()).build().prompt()
+                        return ModelAnswers.text(ChatClient.builder(candidate.chatModel()).build().prompt()
                                 .system(systemPrompt())
                                 .user(userPrompt(document, text))
-                                .options(ChatOptions.builder().temperature(0.0).maxTokens(MAX_ANSWER_TOKENS))
+                                .options(ChatOptions.builder().temperature(0.0).maxTokens(cap))
                                 .call()
-                                .content();
+                                .chatResponse(), "INSIGHTS", cap);
                     });
                     InsightResult result;
                     try {

@@ -288,6 +288,9 @@ openfilz:
     # Reorganisation tools (planReorganization): a produced inventory is served again for the same
     # user + request shape for this long (dropped as soon as one of the user's tool calls mutates
     # the library); the rate cap bounds looping agents (cached hits do not count).
+    # Longest answer of the JSON-contract calls (tier-2 insights, smart filing): stops a looping small
+    # local model; a thinking model (Gemini) counts its thoughts against it, so it cannot be tight.
+    max-answer-tokens: ${OPENFILZ_AI_MAX_ANSWER_TOKENS:4096}
     # Tier-2 document insights: one cheap model call per uploaded file (category from the closed
     # list below, summary, keywords, language, entities), stored in ai_document_insights and
     # mirrored to the search index. Tier 1 (the file's own metadata) is always captured when

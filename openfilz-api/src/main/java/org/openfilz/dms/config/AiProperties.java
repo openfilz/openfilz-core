@@ -35,6 +35,16 @@ public class AiProperties {
     private boolean active = false;
 
     /**
+     * Longest answer accepted from the JSON-contract calls (tier-2 insights, smart filing stage 2),
+     * passed as {@code maxTokens}. The contract itself fits in a few hundred tokens; the cap exists
+     * because a small local model at temperature 0 otherwise loops on it until its context shifts
+     * (22 000 tokens per document in the early Ollama trials). It cannot be tight, though: a
+     * thinking model (Gemini) counts its thoughts against the same limit, and 512 left it a few
+     * dozen visible tokens — every answer was truncated and rejected.
+     */
+    private int maxAnswerTokens = 4096;
+
+    /**
      * The system prompt used by the AI assistant.
      */
     private String systemPrompt = """
