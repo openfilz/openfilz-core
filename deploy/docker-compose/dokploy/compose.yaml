@@ -270,6 +270,7 @@ services:
       OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4o}
       OPENAI_EMBEDDING_ENABLED: ${OPENAI_EMBEDDING_ENABLED:-false}
       OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      OPENAI_EMBEDDING_DIMENSIONS: ${OPENAI_EMBEDDING_DIMENSIONS:-768}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_CHAT_ENABLED: ${ANTHROPIC_CHAT_ENABLED:-false}
       ANTHROPIC_CHAT_MODEL: ${ANTHROPIC_CHAT_MODEL:-claude-opus-5}
@@ -313,6 +314,15 @@ services:
       OPENFILZ_AI_INSIGHTS_CLASSIFIER: ${OPENFILZ_AI_INSIGHTS_CLASSIFIER:-llm}
       OPENFILZ_AI_INSIGHTS_CLASSIFIER_MIN_CONFIDENCE: ${OPENFILZ_AI_INSIGHTS_CLASSIFIER_MIN_CONFIDENCE:-0.5}
       OPENFILZ_AI_INSIGHTS_CLASSIFIER_LEARN_FROM: ${OPENFILZ_AI_INSIGHTS_CLASSIFIER_LEARN_FROM:-model,user}
+      OPENFILZ_AI_INSIGHTS_CLASSIFIER_PREFIX: ${OPENFILZ_AI_INSIGHTS_CLASSIFIER_PREFIX:-}
+      OPENFILZ_AI_INSIGHTS_MAX_CHARS: ${OPENFILZ_AI_INSIGHTS_MAX_CHARS:-6000}
+      OPENFILZ_AI_INSIGHTS_MAX_FILE_SIZE: ${OPENFILZ_AI_INSIGHTS_MAX_FILE_SIZE:-50MB}
+      # Embedding-model change policy: fail-fast (default) refuses to start when the embedding
+      # provider/model changed while vectors exist; warn starts anyway (mixed vector spaces until
+      # the library is re-embedded) — what a provider switch (Ollama -> in-process) needs.
+      OPENFILZ_AI_EMBEDDING_VALIDATION: ${OPENFILZ_AI_EMBEDDING_VALIDATION:-fail-fast}
+      OPENFILZ_AI_REORG_INVENTORY_CACHE_TTL: ${OPENFILZ_AI_REORG_INVENTORY_CACHE_TTL:-2m}
+      OPENFILZ_AI_REORG_PLAN_RATE_LIMIT: ${OPENFILZ_AI_REORG_PLAN_RATE_LIMIT:-20}
       # Smart filing stage 1: how a winning folder is judged a home (category | similarity | both),
       # how the folder is picked (vote | fit); the rule stage (a known kind with no home goes to the
       # scope's Invoices / Factures / Rechnungen folder, found or created, no model) and its

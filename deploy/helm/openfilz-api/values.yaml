@@ -161,6 +161,12 @@ ai:
       mode: llm
       minConfidence: 0.5
       learnFrom: [model, user]
+      # task prefix for the prototype descriptions and documents ("classification: " for nomic; measured worse)
+      prefix: ""
+    # characters of text sent per file, files above maxFileSize are not enriched, parallel model calls
+    maxChars: 6000
+    maxFileSize: "50MB"
+    concurrency: 2
   # -- Smart filing on upload: OpenFilz chooses the destination folder on the user's request.
   # Needs ai.active and embeddings.
   autoFile:
@@ -178,6 +184,30 @@ ai:
     # language of the existing folders (defaultLanguage when none tells). No model.
     ruleFolders: true
     defaultLanguage: en
+    # concurrent filings
+    concurrency: 2
+  # -- Embedding-model change policy: fail-fast refuses to start when the embedding provider/model
+  # changed while vectors exist; warn starts anyway (mixed vector spaces until the library is re-embedded)
+  embedding:
+    validation: fail-fast
+  # -- Reorganisation: inventory cache per user + request shape; plans a user may produce per 10 min (0 = no cap)
+  reorganization:
+    inventoryCacheTtl: 2m
+    planRateLimit: 20
+  # -- Chat-model failover: provider:model entries tried in order when the active model refuses
+  # (quota, retired model, outage); each provider needs its key (below, or the provider's own apiKey).
+  # Ignored when the chat provider is Ollama. Docs: docs/ai.md §5b.
+  fallback:
+    enabled: false
+    chain: ""
+    validation: FAIL_FAST
+    quotaCooldown: 5m
+    unavailableCooldown: 6h
+    keys:
+      anthropic: ""
+      google: ""
+      openai: ""
+      openaiCompatible: ""
   # -- In-process embeddings: the API runs the embedding model itself through ONNX Runtime — no
   # Ollama, no embedding server, every replica embeds on its own CPUs (JVM image). Wins over
   # Ollama/OpenAI when enabled. The model (~140 MB) is fetched once from modelUri into cacheDir:
@@ -225,6 +255,8 @@ ai:
     embedding:
       enabled: false
       model: "text-embedding-3-small"
+      # native shortening of text-embedding-3-* to the vector(768) column
+      dimensions: 768
   # -- Anthropic Claude (chat only — Anthropic has no embeddings API, keep Ollama/OpenAI embeddings)
   anthropic:
     apiKey: ""
