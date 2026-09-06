@@ -30,6 +30,10 @@ public record Settings(Integer emptyBinInterval, Integer fileQuotaMB, Integer us
                        boolean signatureRemindersActive,
                        /** True when the openfilz-cloud seal provider is configured — the Settings page shows the subscription card. */
                        boolean signatureCloudActive,
+                       /** True when the workflow engine (statuses / transitions / tasks) is on — the frontend shows the Workflows menu. */
+                       boolean workflowsActive,
+                       /** True when editing workflow definitions additionally requires the WORKFLOW_DESIGNER role — the frontend hides the Designer from users without it. */
+                       boolean workflowDesignerRoleRequired,
                        /** True on shared public demo deployments — the frontend shows the demo disclaimers. */
                        boolean demoMode,
                        /** Effective e-Sign seal provider id (null when e-Sign is off) — lets the frontend warn about the untrusted dev seal. */

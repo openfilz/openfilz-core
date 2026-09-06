@@ -38,6 +38,15 @@ public enum AuditAction {
     SIGNATURE_TEMPLATE_DELETED,
     // PDF tools: a document produced or replaced by merge / split / organize / rotate (details carry the provenance)
     PDF_TRANSFORM,
+    // Workflows (statuses + transitions + tasks) — see docs/workflows.md
+    WORKFLOW_STARTED,
+    WORKFLOW_TRANSITIONED,
+    WORKFLOW_COMPLETED,
+    WORKFLOW_CANCELLED,
+    WORKFLOW_TASK_REASSIGNED,
+    WORKFLOW_DEFINITION_CREATED,
+    WORKFLOW_DEFINITION_UPDATED,
+    WORKFLOW_DEFINITION_DELETED,
     // Audit chain actions
     CHAIN_GENESIS // Marks the start of the hash chain
 }

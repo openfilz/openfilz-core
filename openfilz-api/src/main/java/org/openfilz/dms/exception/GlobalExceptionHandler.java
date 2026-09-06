@@ -90,6 +90,13 @@ public class GlobalExceptionHandler {
         return Mono.just(ResponseEntity.status(ex.getStatus()).body(new ErrorResponse(ex.getStatus().value(), ex.getMessage())));
     }
 
+    @ExceptionHandler(WorkflowValidationException.class)
+    public Mono<ResponseEntity<WorkflowValidationException.Body>> handleWorkflowValidation(WorkflowValidationException ex) {
+        log.debug("Workflow definition rejected: {}", ex.getMessage());
+        return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new WorkflowValidationException.Body(HttpStatus.BAD_REQUEST.value(), ex.getMessage(), ex.getProblems())));
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public Mono<ResponseEntity<ErrorResponse>> handleIllegalArgumentException(IllegalArgumentException ex) {
         log.warn("Illegal argument : {}", ex.getMessage());

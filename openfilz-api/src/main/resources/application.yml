@@ -179,6 +179,21 @@ openfilz:
       product-name: ${OPENFILZ_SIGNATURE_PRODUCT_NAME:OpenFilz}
       logo-url: ${OPENFILZ_SIGNATURE_LOGO_URL:}
 
+  # Workflows (statuses + transitions + tasks) — see docs/workflows.md
+  workflows:
+    active: ${OPENFILZ_WORKFLOWS_ACTIVE:false}   # runtime toggle: menu, endpoints, reminder sweeper
+    # When true, creating / editing workflow definitions also requires the WORKFLOW_DESIGNER role.
+    require-designer-role: ${OPENFILZ_WORKFLOWS_REQUIRE_DESIGNER_ROLE:false}
+    web-base-url: ${OPENFILZ_WORKFLOWS_WEB_BASE_URL:}   # overrides openfilz.common.web-public-base-url in workflow e-mails
+    max-states: ${OPENFILZ_WORKFLOWS_MAX_STATES:30}
+    sweep:
+      cron: ${OPENFILZ_WORKFLOWS_SWEEP_CRON:0 0 * * * ?}   # overdue task reminders
+    mail:
+      from: ${OPENFILZ_WORKFLOWS_MAIL_FROM:no-reply@openfilz.com}
+      from-name: ${OPENFILZ_WORKFLOWS_MAIL_FROM_NAME:OpenFilz Workflows}
+      product-name: ${OPENFILZ_WORKFLOWS_PRODUCT_NAME:OpenFilz}
+      logo-url: ${OPENFILZ_WORKFLOWS_LOGO_URL:}
+
   # PDF tools (merge / split / rotate / organize pages) — see docs/pdf-tools.md
   pdf-tools:
     active: ${OPENFILZ_PDF_TOOLS_ACTIVE:true}   # runtime toggle: endpoints 404 when off, UI hides the actions

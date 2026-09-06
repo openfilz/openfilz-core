@@ -70,6 +70,11 @@ public class TusController {
     @org.springframework.context.annotation.Lazy
     private org.openfilz.dms.service.filing.AutoFileService autoFileService;
 
+    /** Workflow hot folders: starts the definitions triggered by the upload folder (docs/workflows.md §4). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    private org.openfilz.dms.service.workflow.WorkflowTriggerService workflowTriggerService;
+
     private String baseUrl;
 
     @PostConstruct
@@ -396,6 +401,9 @@ public class TusController {
                                     log.warn("Smart filing could not be scheduled: {}", e.getMessage());
                                     return Mono.just(response);
                                 }))
+                // Workflow hot folders (docs/workflows.md §4) — never fails the upload
+                .flatMap(response -> workflowTriggerService == null ? Mono.just(response)
+                        : workflowTriggerService.afterUpload(java.util.List.of(response)).map(java.util.List::getFirst))
                 .map(response -> ResponseEntity.status(HttpStatus.CREATED).body(response));
     }
 

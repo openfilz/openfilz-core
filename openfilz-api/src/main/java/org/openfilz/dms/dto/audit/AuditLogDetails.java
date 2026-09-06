@@ -20,7 +20,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
         @JsonSubTypes.Type(value = RestoreVersionAudit.class, name = AuditLogDetails.RESTORE_VERSION),
         @JsonSubTypes.Type(value = UpdateMetadataAudit.class, name = AuditLogDetails.UPDATE_METADATA),
         @JsonSubTypes.Type(value = UploadAudit.class, name = AuditLogDetails.UPLOAD),
-        @JsonSubTypes.Type(value = PdfTransformAudit.class, name = AuditLogDetails.PDF_TRANSFORM)
+        @JsonSubTypes.Type(value = PdfTransformAudit.class, name = AuditLogDetails.PDF_TRANSFORM),
+        @JsonSubTypes.Type(value = WorkflowAudit.class, name = AuditLogDetails.WORKFLOW)
 
 })
 @Schema(
@@ -36,7 +37,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
                 @DiscriminatorMapping(value = AuditLogDetails.RESTORE_VERSION, schema = RestoreVersionAudit.class),
                 @DiscriminatorMapping(value = AuditLogDetails.UPDATE_METADATA, schema = UpdateMetadataAudit.class),
                 @DiscriminatorMapping(value = AuditLogDetails.UPLOAD, schema = UploadAudit.class),
-                @DiscriminatorMapping(value = AuditLogDetails.PDF_TRANSFORM, schema = PdfTransformAudit.class)
+                @DiscriminatorMapping(value = AuditLogDetails.PDF_TRANSFORM, schema = PdfTransformAudit.class),
+                @DiscriminatorMapping(value = AuditLogDetails.WORKFLOW, schema = WorkflowAudit.class)
         }
 )
 public abstract class AuditLogDetails implements IAuditLogDetails {
@@ -54,4 +56,5 @@ public abstract class AuditLogDetails implements IAuditLogDetails {
     public static final String UPDATE_METADATA = "updateMetadata";
     public static final String UPLOAD = "upload";
     public static final String PDF_TRANSFORM = "pdfTransform";
+    public static final String WORKFLOW = "workflow";
 }

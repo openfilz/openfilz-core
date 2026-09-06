@@ -297,6 +297,35 @@ resolution, the split-mode and page-selection vocabulary, in-place vs. new-docum
 `PdfToolsDisabledIT`; the MCP suites include the PDF tools in their advertised-set assertions
 (`McpProtocolIT.argumentsFor`).
 
+### Workflows (statuses / transitions / tasks)
+See `docs/workflows.md`. A native state machine per document, no external engine. Definition = JSON
+`WorkflowSpec` (`dto/workflow/*`: states with `kind` START/STEP/END, `assignees` INITIATOR/USERS/ROLE/
+CHOSEN_AT_START, `dueInDays`, `transitions` (buttons, optional `requireComment`), `onEnter` actions
+MOVE_TO_FOLDER/SET_METADATA/NOTIFY) validated by the pure `WorkflowSpecValidator` (mirrored in the web
+designer, problems carry a JSON-pointer-like `path`). Flyway `V1_11`: `workflow_definition`,
+`workflow_instance` (spec **snapshotted** at start, partial unique index = one RUNNING instance per
+document), `workflow_task` + `workflow_task_candidate` (e-mail candidates; `candidate_role` for ROLE
+tasks), `workflow_event` (timeline). Engine `WorkflowServiceImpl`: every mutation is one transaction,
+notifications / mails / on-enter actions are queued in a `SideEffects` bag and run **after the commit
+under the actor's Authentication** (audit names the real person; a failed action is an `ACTION_FAILED`
+event, never a failed transition). Task completion is a conditional `UPDATE … WHERE status='OPEN'`
+(two racing candidates → 409). Hot folders: `WorkflowTriggerService.afterUpload` is called by
+`DocumentController` / `TusController` after smart filing and takes the START status' first transition.
+Runtime toggle `openfilz.workflows.active` (controllers always mapped, 404 per request; sweeper
+`WorkflowReminderSweeper` self-guards; `Settings.workflowsActive` / `workflowDesignerRoleRequired`).
+Security: `AbstractSecurityService.isWorkflowAuthorized` — GET and `POST /tasks/{id}/complete` →
+READER/CONTRIBUTOR (the engine binds completion to the candidate list), definition writes →
+CONTRIBUTOR (+ `WORKFLOW_DESIGNER` when `require-designer-role`), everything else CONTRIBUTOR; sits above
+the DELETE branch. Seams in `service/workflow/` with core defaults: `WorkflowNotifier` (noop → EE
+bell), `WorkflowMailer` (`SmtpWorkflowMailer` / `LoggingWorkflowMailer`, bundles `workflow-mail/`),
+`WorkflowAccessPolicy` (active file / everyone / initiator), `WorkflowCommentBridge` (noop → EE threaded
+comments), `WorkflowActorResolver` (synthetic JWT). No user directory in core: assignees are e-mails
+(lower-cased, matched to the `email` claim) or realm roles (`WorkflowRoles` reads them like the
+security service). Audit `WORKFLOW_*` actions with `WorkflowAudit` details — **mirror new constants
+into the EE `AuditAction` copy**. Tests: `WorkflowSpecValidatorTest`, `e2e/workflow/*IT`
+(`AbstractWorkflowIT` + `CapturingWorkflowMailer`; test realm role `WORKFLOW_DESIGNER` on `admin-user`).
+With `no-auth=true` there is no caller identity, so the feature answers 401 — like e-Sign.
+
 ### Document insights & smart filing (AI)
 See `docs/ai-overview.md` for the plain-language explanation of the whole AI surface (chat in-app + external MCP client, reorganisation, auto-filing) and the five deployment profiles — **including the no-LLM ones and what the UI hides in each**; `docs/ai.md` §3b for the internals and the design in `openfilz-enterprise/docs/smart-reorganization.md`. `ai_document_insights` (V1_9) holds
 what OpenFilz derives from a file: tier 1 = Tika file metadata captured from the parse indexing/embedding already run
@@ -367,6 +396,8 @@ GET    /api/v1/settings
 GET    /api/v1/suggestions
 GET    /api/v1/pdf/{id}/info          PDF tools (see docs/pdf-tools.md)
 POST   /api/v1/pdf/merge | /split | /organize | /rotate
+GET    /api/v1/workflows/definitions | /instances | /tasks/mine   Workflows (see docs/workflows.md)
+POST   /api/v1/workflows/instances | /tasks/{id}/complete | /tasks/{id}/reassign | /instances/{id}/cancel
 ```
 
 ### TUS Endpoints

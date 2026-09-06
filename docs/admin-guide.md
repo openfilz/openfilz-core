@@ -981,6 +981,43 @@ openfilz:
 > `acknowledgeSignatureLoss=true` (`409 PDF_SIGNED` otherwise), and never while an e-Sign envelope
 > is active on them. See [PDF Tools](pdf-tools.md) for the API and design.
 
+### Workflows
+
+Statuses, transitions and tasks on documents — *Draft → Pending approval → Approved | Rejected* —
+run natively, with no external engine: a **Designer** (templates, statuses, who acts, due delays,
+on-enter actions, hot folders), a **Monitor** (diagram, timeline, reassign / cancel) and **My tasks**
+(the transition buttons right on the card). Invitations and overdue reminders go out by e-mail
+through the same `spring.mail.*` block as e-Sign. **Disabled by default**; while it is off, every
+`/api/v1/workflows/**` endpoint answers `404`, the reminder sweeper idles, and `GET /api/v1/settings`
+reports `workflowsActive: false` so the web UI hides the menu.
+
+```yaml
+openfilz:
+  workflows:
+    active: true                          # OPENFILZ_WORKFLOWS_ACTIVE
+    require-designer-role: false          # OPENFILZ_WORKFLOWS_REQUIRE_DESIGNER_ROLE
+    web-base-url: ""                      # OPENFILZ_WORKFLOWS_WEB_BASE_URL — overrides openfilz.common.web-public-base-url in the e-mails
+    max-states: 30                        # OPENFILZ_WORKFLOWS_MAX_STATES
+    sweep.cron: "0 0 * * * ?"             # OPENFILZ_WORKFLOWS_SWEEP_CRON — overdue reminders
+    mail:
+      from: no-reply@openfilz.com         # OPENFILZ_WORKFLOWS_MAIL_FROM
+      from-name: OpenFilz Workflows       # OPENFILZ_WORKFLOWS_MAIL_FROM_NAME
+```
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `openfilz.workflows.active` | `false` | Master switch (menu, endpoints, sweeper, settings flag). Read at runtime. |
+| `openfilz.workflows.require-designer-role` | `false` | When `true`, creating / editing definitions also requires the `WORKFLOW_DESIGNER` realm role (`/OPENFILZ/WORKFLOW_DESIGNER` group in groups mode). Starting and acting on tasks never need it. |
+| `openfilz.workflows.web-base-url` | *(empty)* | Base of the links in task e-mails (`{base}workflows?task=…`); falls back to `openfilz.common.web-public-base-url`. |
+| `openfilz.workflows.max-states` | `30` | Size guard on a definition. |
+| `openfilz.workflows.sweep.cron` | hourly | Cadence of the overdue-task reminders (one per task). |
+
+> Reads need `READER` or `CONTRIBUTOR`; starting, cancelling, reassigning and designing need
+> `CONTRIBUTOR`; **completing a task only needs to be one of its candidates** (an approver need not be
+> a contributor). Any authenticated deployment works; with `openfilz.security.no-auth=true` there is
+> no caller identity, so the feature stays unusable. See [Workflows](workflows.md) for the design,
+> the JSON spec and the REST API.
+
 ### CORS
 
 | Property / Env Variable | Default | Description |
@@ -1028,6 +1065,7 @@ Summary of all toggleable features:
 | MCP write access | `openfilz.mcp.mode` | `READ_ONLY` | Set `READ_WRITE` to let agents create/modify documents |
 | e-Sign | `openfilz.signature.active` | `false` | Electronic signature envelopes; needs SMTP to email signing links |
 | PDF tools | `openfilz.pdf-tools.active` | `true` | Merge / split / rotate / organise pages of stored PDFs (REST, UI, AI assistant, MCP) |
+| Workflows | `openfilz.workflows.active` | `false` | Statuses / transitions / tasks on documents (Designer, Monitor, My tasks); needs SMTP for task e-mails |
 
 ---
 
