@@ -3,6 +3,8 @@ package org.openfilz.dms.service.ai;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.genai.Client;
+import com.google.genai.types.HttpOptions;
+import com.google.genai.types.HttpRetryOptions;
 import io.micrometer.observation.ObservationRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.entity.UserAiSettings;
@@ -85,6 +87,14 @@ public class UserChatClientResolver {
      * key is the <em>next candidate</em>, not more waiting on the same one — so in-model retries
      * are kept to two quick attempts. Anthropic and OpenAI need no equivalent: their models take
      * no template, and their vendor SDK clients are built below with {@code maxRetries} 1.
+     * <p>
+     * The Google client itself carries {@link #GOOGLE_NO_SDK_RETRY}: beneath this template the
+     * GenAI SDK retries a 429 on its own — five attempts with 1 s, 2 s, 4 s, 8 s backoff plus
+     * jitter, 19 s against a local server that answers at once, 30 to 50 s against the real API
+     * — before {@link AiFallbackChain} even saw the quota error. The SDK's exception is not a
+     * {@link TransientAiException}, so this template never re-ran that cycle; the SDK's own
+     * retry was the whole stall (measured on the demo: every document's insight and filing paid
+     * it on each exhausted model of the chain).
      */
     static final RetryTemplate SHORT_RETRY_TEMPLATE = new RetryTemplate(RetryPolicy.builder()
             .maxRetries(2)
@@ -93,6 +103,12 @@ public class UserChatClientResolver {
             .multiplier(2.0)
             .maxDelay(Duration.ofSeconds(2))
             .build());
+
+    /**
+     * One HTTP attempt per call for the Google GenAI SDK ({@code attempts} is floored at 1 by the
+     * SDK, so this is "no retry", not "no request"). Failover is the fallback chain's job.
+     */
+    static final HttpRetryOptions GOOGLE_NO_SDK_RETRY = HttpRetryOptions.builder().attempts(1).build();
 
     private final ChatModel defaultChatModel;
     private final ToolCallingManager toolCallingManager;
@@ -191,9 +207,7 @@ public class UserChatClientResolver {
                     .toolCallingManager(toolCallingManager)
                     .build();
             case GOOGLE -> GoogleGenAiChatModel.builder()
-                    .genAiClient(Client.builder()
-                            .apiKey(apiKey)
-                            .build())
+                    .genAiClient(googleClient(apiKey, baseUrl))
                     .options(GoogleGenAiChatOptions.builder()
                             .model(model)
                             .build())
@@ -217,6 +231,24 @@ public class UserChatClientResolver {
                     .toolCallingManager(toolCallingManager)
                     .build();
         };
+    }
+
+    /**
+     * The Google GenAI client behind every programmatically built Gemini model: the SDK's own
+     * retry off ({@link #GOOGLE_NO_SDK_RETRY}), the same request timeout as the other providers,
+     * and an optional base URL — the Gemini Developer API by default, a stand-in server in tests.
+     */
+    static Client googleClient(String apiKey, String baseUrl) {
+        HttpOptions.Builder http = HttpOptions.builder()
+                .retryOptions(GOOGLE_NO_SDK_RETRY)
+                .timeout((int) PROVIDER_TIMEOUT.toMillis());
+        if (baseUrl != null && !baseUrl.isBlank()) {
+            http.baseUrl(baseUrl);
+        }
+        return Client.builder()
+                .apiKey(apiKey)
+                .httpOptions(http.build())
+                .build();
     }
 
     private ResolvedChat defaultChat() {

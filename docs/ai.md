@@ -766,6 +766,16 @@ Cooldown state is per-instance and in-memory — a latency optimisation, not a c
 mechanism. A restart (or a second replica) simply costs one failed call per model before it
 re-learns.
 
+**The chain is the only retry.** The vendor SDKs retry on their own before OpenFilz sees a
+failure, and a spent key is the case where waiting on the same model is exactly wrong. The Google
+GenAI SDK retries a 429 five times with 1 s, 2 s, 4 s, 8 s backoff plus jitter — 19 s against a
+server that answers at once, 30 to 50 s against the real API — so every insight and smart-filing
+call used to stall that long on each exhausted model of the chain. `UserChatClientResolver`
+therefore builds the Google client with `HttpRetryOptions.attempts(1)` (no SDK retry), the
+Anthropic and OpenAI clients with `maxRetries` 1, and keeps Spring AI's own template at two quick
+attempts on transient errors only. Pinned by `UserChatClientResolverGoogleRetryTest` (one HTTP
+request, well under the SDK cycle, classified `QUOTA_EXHAUSTED`).
+
 ---
 
 ## 6. Where to look in the code
