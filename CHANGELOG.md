@@ -4,20 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[cc6f42c54327381](https://github.com/openfilz/openfilz-core/commit/cc6f42c54327381) maven-release-bot[bot] *2026-09-06 01:51:13*
+[4771f750034de3a](https://github.com/openfilz/openfilz-core/commit/4771f750034de3a) maven-release-bot[bot] *2026-09-06 05:27:00*
 
 
-## v1.3.12
+## v1.3.13
 ### No issue
 
-**[maven-release-plugin] prepare release v1.3.12**
+**[maven-release-plugin] prepare release v1.3.13**
 
 
-[c481a97f2663c3d](https://github.com/openfilz/openfilz-core/commit/c481a97f2663c3d) maven-release-bot[bot] *2026-09-06 01:51:10*
+[d47d7d50356d02c](https://github.com/openfilz/openfilz-core/commit/d47d7d50356d02c) maven-release-bot[bot] *2026-09-06 05:26:58*
 
-**[maven-release-plugin] prepare for next development iteration**
+**Merge pull request #234 from openfilz/develop**
 
+ * fix(ai): in-process embedding native libraries reach the native image (glob, not regex)
 
-[50237443d837dfd](https://github.com/openfilz/openfilz-core/commit/50237443d837dfd) maven-release-bot[bot] *2026-09-06 01:43:43*
+[3ca10e2b443e3a9](https://github.com/openfilz/openfilz-core/commit/3ca10e2b443e3a9) Yann Demel *2026-09-06 05:23:03*
 
 
