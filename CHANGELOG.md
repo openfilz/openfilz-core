@@ -4,21 +4,20 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[5c7d42e76ee45a6](https://github.com/openfilz/openfilz-core/commit/5c7d42e76ee45a6) maven-release-bot[bot] *2026-09-05 23:10:34*
+[cc6f42c54327381](https://github.com/openfilz/openfilz-core/commit/cc6f42c54327381) maven-release-bot[bot] *2026-09-06 01:51:13*
 
 
-## v1.3.10
+## v1.3.12
 ### No issue
 
-**[maven-release-plugin] prepare release v1.3.10**
+**[maven-release-plugin] prepare release v1.3.12**
 
 
-[6529269bba4ded3](https://github.com/openfilz/openfilz-core/commit/6529269bba4ded3) maven-release-bot[bot] *2026-09-05 23:10:31*
+[c481a97f2663c3d](https://github.com/openfilz/openfilz-core/commit/c481a97f2663c3d) maven-release-bot[bot] *2026-09-06 01:51:10*
 
-**Merge pull request #231 from openfilz/develop**
+**[maven-release-plugin] prepare for next development iteration**
 
- * Implement learned category classifier and enhance filing features
 
-[50c1f58b68af8d0](https://github.com/openfilz/openfilz-core/commit/50c1f58b68af8d0) Yann Demel *2026-09-05 23:07:32*
+[50237443d837dfd](https://github.com/openfilz/openfilz-core/commit/50237443d837dfd) maven-release-bot[bot] *2026-09-06 01:43:43*
 
 
