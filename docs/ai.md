@@ -102,15 +102,62 @@ is the single switch**:
 ```
 openfilz.ai.active=false   →  every selector = none            (nothing is built)
 openfilz.ai.active=true    →  chat      = first enabled of: ollama > anthropic > google-genai > openai
-                              embedding = first enabled of: ollama > openai      (768-dim pin)
+                              embedding = first enabled of: transformers > ollama > openai   (768-dim pin)
                               (no switch set → ollama: its defaults target a stock local install)
 ```
 
 The per-provider switches are `openfilz.ai.<provider>.<kind>.enabled`
 (`OLLAMA_CHAT_ENABLED`, `ANTHROPIC_CHAT_ENABLED`, `GOOGLE_CHAT_ENABLED`, `OPENAI_CHAT_ENABLED`,
-`OLLAMA_EMBEDDING_ENABLED`, `OPENAI_EMBEDDING_ENABLED`). An explicitly set `spring.ai.model.*`
-always wins. Anthropic/Gemini have no embedding switch: Anthropic has no embeddings API, and the
-`vector_store` schema is pinned to `vector(768)`.
+`TRANSFORMERS_EMBEDDING_ENABLED`, `OLLAMA_EMBEDDING_ENABLED`, `OPENAI_EMBEDDING_ENABLED`). An
+explicitly set `spring.ai.model.*` always wins. Anthropic/Gemini have no embedding switch:
+Anthropic has no embeddings API, and the `vector_store` schema is pinned to `vector(768)`.
+
+**Embedding providers.** Three ways to get a 768-dim vector, one seam — `EmbeddingModels`, which
+every consumer (the vector store, `EmbeddingRegistryGuard`, the category classifiers) goes through:
+
+| Provider | Switch | What runs | Scales with |
+|---|---|---|---|
+| **In-process** (`transformers`) | `TRANSFORMERS_EMBEDDING_ENABLED` | nomic-embed-text-v1.5 (or any ONNX model, `TRANSFORMERS_EMBEDDING_MODEL_URI` / `_TOKENIZER_URI`) inside the API through ONNX Runtime, fetched once into `TRANSFORMERS_EMBEDDING_CACHE_DIR` (~140 MB, mount it) | the API replicas — nothing else to deploy |
+| Ollama | `OLLAMA_EMBEDDING_ENABLED` | the Ollama daemon, `nomic-embed-text` | the Ollama container |
+| OpenAI-compatible | `OPENAI_EMBEDDING_ENABLED` + `OPENAI_BASE_URL` | OpenAI, or any server speaking `/v1/embeddings` — Hugging Face TEI, vLLM… | that server (GPU, batching) |
+
+The in-process one is built at runtime by `EmbeddingModels` from the flag alone — never a bean,
+never a condition — so the enterprise native image, whose provider selector is fixed at build
+time, switches to it like the JVM image does; `TransformersRuntimeHints` registers ONNX Runtime
+and the tokenizers (JNI, reflection, their Linux libraries as resources) and the enterprise
+`native-image.properties` initialises `ai.onnxruntime` / `ai.djl` at run time. Only
+`spring-ai-transformers` is on the classpath, never its auto-configuration, which would build the
+model whenever no selector is set. Proven end to end by `TransformersEmbeddingIT` (JVM, core) and
+`EmbeddingOnnxNativeE2EIT` (the enterprise container: the same upload, embedding and
+classification against the image the e2e suite runs — the native one in the release flow).
+
+Measured with `EmbeddingProviderBenchmark` (test sources, `-Dbench.dir=<documents>
+-Dbench.providers=onnx,ollama[,openai]`; latency, batch throughput on one and several threads,
+memory, and the cosine between two providers' vectors of the same text) on 51 real documents, one
+CPU machine, 2026-09-06:
+
+| | in-process (quantised nomic) | Ollama (nomic-embed-text) |
+|---|---|---|
+| one document at a time | 173 ms (p95 205) | 309 ms (p95 423) |
+| batches of 16, one thread | 3.6 documents/s | 3.8 documents/s |
+| batches of 16, four threads | 3.2 documents/s | 3.9 documents/s |
+| ready | 11 s first time (download), 0.6 s from the cache | 3.6 s |
+
+So: per-document latency is 1.8× better in-process and batch throughput is the same — ONNX
+Runtime already uses every core, more threads do not add up, and on one machine Ollama does the
+same. The gain of the in-process provider is architectural: **each API replica embeds for
+itself**, so throughput grows with the replicas and there is no embedding service to size, place
+or keep alive. The point at which a dedicated embedding server wins is a big backfill or a GPU:
+TEI batches hundreds of documents per second on a GPU, which no CPU replica matches — run the
+benchmark with `-Dbench.providers=onnx,openai -Dbench.openai.url=http://<tei>` on your own
+documents to see where your library falls.
+
+**The vector space changes with the provider.** The in-process quantised nomic and Ollama's
+nomic are the same model family but not the same numbers: mean cosine 0.94 between their vectors
+of the same text, minimum 0.91 — close enough that a document still finds its neighbours, not
+close enough to mix in one store. `EmbeddingRegistryGuard` therefore treats the switch as a change
+of embedding model: re-embed the library (or start with `OPENFILZ_AI_EMBEDDING_VALIDATION=warn`
+knowing the two spaces are mixed until then).
 
 ```mermaid
 sequenceDiagram
@@ -718,6 +765,16 @@ server API key configured are skipped with a warning rather than failing the req
 Cooldown state is per-instance and in-memory — a latency optimisation, not a correctness
 mechanism. A restart (or a second replica) simply costs one failed call per model before it
 re-learns.
+
+**The chain is the only retry.** The vendor SDKs retry on their own before OpenFilz sees a
+failure, and a spent key is the case where waiting on the same model is exactly wrong. The Google
+GenAI SDK retries a 429 five times with 1 s, 2 s, 4 s, 8 s backoff plus jitter — 19 s against a
+server that answers at once, 30 to 50 s against the real API — so every insight and smart-filing
+call used to stall that long on each exhausted model of the chain. `UserChatClientResolver`
+therefore builds the Google client with `HttpRetryOptions.attempts(1)` (no SDK retry), the
+Anthropic and OpenAI clients with `maxRetries` 1, and keeps Spring AI's own template at two quick
+attempts on transient errors only. Pinned by `UserChatClientResolverGoogleRetryTest` (one HTTP
+request, well under the SDK cycle, classified `QUOTA_EXHAUSTED`).
 
 ---
 

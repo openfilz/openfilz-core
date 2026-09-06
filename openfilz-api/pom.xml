@@ -291,6 +291,25 @@
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-ollama</artifactId>
         </dependency>
+        <!-- In-process embeddings (ONNX Runtime inside the API): the model class only, never the
+             starter — its auto-configuration would build the model whenever no selector is set,
+             native images included. TransformersEmbeddingConfig creates the bean for the selector. -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-transformers</artifactId>
+            <!-- The tokenizer is JNI on its own; DJL's PyTorch engine would otherwise be detected at
+                 first use and download libtorch (~200 MB) into every container for nothing. -->
+            <exclusions>
+                <exclusion>
+                    <groupId>ai.djl.pytorch</groupId>
+                    <artifactId>pytorch-engine</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>ai.djl</groupId>
+                    <artifactId>model-zoo</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-openai</artifactId>

@@ -93,7 +93,12 @@ public class AiConfig {
 
     @Bean
     @Lazy
-    VectorStore vectorStore(JdbcTemplate aiJdbcTemplate, EmbeddingModel embeddingModel) {
+    VectorStore vectorStore(JdbcTemplate aiJdbcTemplate, EmbeddingModels embeddingModels) {
+        EmbeddingModel embeddingModel = embeddingModels.effective();
+        if (embeddingModel == null) {
+            throw new IllegalStateException("No embedding model is configured: enable one provider "
+                    + "(TRANSFORMERS_EMBEDDING_ENABLED, OLLAMA_EMBEDDING_ENABLED or OPENAI_EMBEDDING_ENABLED)");
+        }
         return PgVectorStore.builder(aiJdbcTemplate, embeddingModel)
                 .dimensions(EMBEDDING_DIMENSIONS)
                 .distanceType(PgDistanceType.COSINE_DISTANCE)

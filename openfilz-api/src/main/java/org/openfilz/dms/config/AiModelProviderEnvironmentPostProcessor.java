@@ -87,6 +87,7 @@ public class AiModelProviderEnvironmentPostProcessor implements EnvironmentPostP
     private static final String NONE = "none";
     private static final String OLLAMA = "ollama";
     private static final String OPENAI = "openai";
+    private static final String TRANSFORMERS = "transformers";
     private static final String ANTHROPIC = "anthropic";
     private static final String GOOGLE_GENAI = "google-genai";
 
@@ -103,10 +104,14 @@ public class AiModelProviderEnvironmentPostProcessor implements EnvironmentPostP
     };
 
     /**
-     * Embedding stays restricted to Ollama/OpenAI: Anthropic has no embeddings API, and the
-     * pgvector schema is pinned to the 768-dim output of the models these two are configured with.
+     * Embedding providers in priority order: the in-process one (ONNX Runtime inside the API,
+     * {@link TransformersEmbeddingConfig}) wins when enabled — a deployment that turns it on means
+     * it — then Ollama, then OpenAI (also the door to any OpenAI-compatible embedding server such
+     * as TEI, through the base URL). Anthropic has no embeddings API, and the pgvector schema is
+     * pinned to the 768-dim output of the models these are configured with.
      */
     private static final String[][] EMBEDDING_PROVIDERS = {
+            {"openfilz.ai.transformers.embedding.enabled", TRANSFORMERS},
             {"openfilz.ai.ollama.embedding.enabled", OLLAMA},
             {"openfilz.ai.openai.embedding.enabled", OPENAI},
     };

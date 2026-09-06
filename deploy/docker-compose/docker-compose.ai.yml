@@ -90,6 +90,14 @@ services:
       OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-llama3}
       OLLAMA_EMBEDDING_ENABLED: ${OLLAMA_EMBEDDING_ENABLED:-true}
       OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+      # In-process embeddings: the model runs inside the API through ONNX Runtime — no Ollama, no
+      # embedding server; wins over Ollama/OpenAI when enabled. Fetched once from Hugging Face into
+      # the cache directory (a volume below). Default nomic-embed-text-v1.5 quantised, 768 dims.
+      TRANSFORMERS_EMBEDDING_ENABLED: ${TRANSFORMERS_EMBEDDING_ENABLED:-false}
+      TRANSFORMERS_EMBEDDING_MODEL: ${TRANSFORMERS_EMBEDDING_MODEL:-nomic-embed-text-v1.5}
+      TRANSFORMERS_EMBEDDING_MODEL_URI: ${TRANSFORMERS_EMBEDDING_MODEL_URI:-https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/onnx/model_quantized.onnx}
+      TRANSFORMERS_EMBEDDING_TOKENIZER_URI: ${TRANSFORMERS_EMBEDDING_TOKENIZER_URI:-https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/tokenizer.json}
+      TRANSFORMERS_EMBEDDING_CACHE_DIR: /app/onnx-cache
 
       # OpenAI configuration (disabled by default — set in .env to use)
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -98,6 +106,7 @@ services:
       OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4o}
       OPENAI_EMBEDDING_ENABLED: ${OPENAI_EMBEDDING_ENABLED:-false}
       OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      OPENAI_EMBEDDING_DIMENSIONS: ${OPENAI_EMBEDDING_DIMENSIONS:-768}
 
       # Anthropic Claude (chat only — embeddings stay on Ollama/OpenAI)
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
@@ -121,6 +130,7 @@ services:
       AI_FALLBACK_KEYS_GOOGLE: ${AI_FALLBACK_KEYS_GOOGLE:-}
       AI_FALLBACK_KEYS_ANTHROPIC: ${AI_FALLBACK_KEYS_ANTHROPIC:-}
       AI_FALLBACK_KEYS_OPENAI: ${AI_FALLBACK_KEYS_OPENAI:-}
+      AI_FALLBACK_KEYS_OPENAI_COMPATIBLE: ${AI_FALLBACK_KEYS_OPENAI_COMPATIBLE:-}
       # FAIL_FAST refuses to start when a chain provider has no key; WARN starts anyway.
       AI_FALLBACK_VALIDATION: ${AI_FALLBACK_VALIDATION:-FAIL_FAST}
       AI_FALLBACK_QUOTA_COOLDOWN: ${AI_FALLBACK_QUOTA_COOLDOWN:-5m}
@@ -135,6 +145,9 @@ services:
       OPENFILZ_AI_INSIGHTS_ACTIVE: ${OPENFILZ_AI_INSIGHTS_ACTIVE:-false}
       OPENFILZ_AI_INSIGHTS_MODEL: ${OPENFILZ_AI_INSIGHTS_MODEL:-}
       OPENFILZ_AI_INSIGHTS_DAILY_LIMIT: ${OPENFILZ_AI_INSIGHTS_DAILY_LIMIT:-2000}
+      # Parallel model calls (insights) and documents filed at once (smart filing) — raise both for bulk uploads
+      OPENFILZ_AI_INSIGHTS_CONCURRENCY: ${OPENFILZ_AI_INSIGHTS_CONCURRENCY:-2}
+      OPENFILZ_AI_AUTO_FILE_CONCURRENCY: ${OPENFILZ_AI_AUTO_FILE_CONCURRENCY:-2}
       OPENFILZ_AI_AUTO_FILE_ACTIVE: ${OPENFILZ_AI_AUTO_FILE_ACTIVE:-false}
       OPENFILZ_AI_AUTO_FILE_DEFAULT: ${OPENFILZ_AI_AUTO_FILE_DEFAULT:-false}
       OPENFILZ_AI_AUTO_FILE_NEW_FOLDERS: ${OPENFILZ_AI_AUTO_FILE_NEW_FOLDERS:-true}
@@ -146,6 +159,15 @@ services:
       OPENFILZ_AI_INSIGHTS_CLASSIFIER: ${OPENFILZ_AI_INSIGHTS_CLASSIFIER:-llm}
       OPENFILZ_AI_INSIGHTS_CLASSIFIER_MIN_CONFIDENCE: ${OPENFILZ_AI_INSIGHTS_CLASSIFIER_MIN_CONFIDENCE:-0.5}
       OPENFILZ_AI_INSIGHTS_CLASSIFIER_LEARN_FROM: ${OPENFILZ_AI_INSIGHTS_CLASSIFIER_LEARN_FROM:-model,user}
+      OPENFILZ_AI_INSIGHTS_CLASSIFIER_PREFIX: ${OPENFILZ_AI_INSIGHTS_CLASSIFIER_PREFIX:-}
+      OPENFILZ_AI_INSIGHTS_MAX_CHARS: ${OPENFILZ_AI_INSIGHTS_MAX_CHARS:-6000}
+      OPENFILZ_AI_INSIGHTS_MAX_FILE_SIZE: ${OPENFILZ_AI_INSIGHTS_MAX_FILE_SIZE:-50MB}
+      # Embedding-model change policy: fail-fast (default) refuses to start when the embedding
+      # provider/model changed while vectors exist; warn starts anyway (mixed vector spaces until
+      # the library is re-embedded) — what a provider switch (Ollama -> in-process) needs.
+      OPENFILZ_AI_EMBEDDING_VALIDATION: ${OPENFILZ_AI_EMBEDDING_VALIDATION:-fail-fast}
+      OPENFILZ_AI_REORG_INVENTORY_CACHE_TTL: ${OPENFILZ_AI_REORG_INVENTORY_CACHE_TTL:-2m}
+      OPENFILZ_AI_REORG_PLAN_RATE_LIMIT: ${OPENFILZ_AI_REORG_PLAN_RATE_LIMIT:-20}
       # Smart filing stage 1: how a winning folder is judged a home (category | similarity | both),
       # how the folder is picked (vote | fit); the rule stage (a known kind with no home goes to the
       # scope's Invoices / Factures / Rechnungen folder, found or created, no model) and its
@@ -155,5 +177,9 @@ services:
       OPENFILZ_AI_AUTO_FILE_RULE_FOLDERS: ${OPENFILZ_AI_AUTO_FILE_RULE_FOLDERS:-true}
       OPENFILZ_AI_AUTO_FILE_DEFAULT_LANGUAGE: ${OPENFILZ_AI_AUTO_FILE_DEFAULT_LANGUAGE:-en}
 
+    volumes:
+      - onnx-cache:/app/onnx-cache   # the downloaded in-process embedding model, kept across restarts
+
 volumes:
   ollama-data:
+  onnx-cache:

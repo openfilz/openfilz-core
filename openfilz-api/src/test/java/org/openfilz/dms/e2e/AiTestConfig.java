@@ -14,6 +14,7 @@ import org.springframework.ai.vectorstore.SimpleVectorStore;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import reactor.core.publisher.Flux;
 
@@ -28,6 +29,7 @@ import static org.mockito.Mockito.*;
  * a real LLM (Ollama/OpenAI) or pgvector extension.
  */
 @TestConfiguration
+@Import(AiChatMockConfig.class)
 public class AiTestConfig {
 
     /**
@@ -90,60 +92,5 @@ public class AiTestConfig {
     @Primary
     public VectorStore testVectorStore(EmbeddingModel embeddingModel) {
         return SimpleVectorStore.builder(embeddingModel).build();
-    }
-
-    @Bean
-    @Primary
-    public ChatModel testChatModel() {
-        ChatModel chatModel = mock(ChatModel.class);
-
-        // Mock the streaming response
-        var assistantMessage = new AssistantMessage("This is a test AI response about your documents.");
-        var generation = new Generation(assistantMessage);
-        var chatResponse = new ChatResponse(List.of(generation));
-
-        // Spring AI 2.0's ChatClient copies the model's default options into every request
-        // (DefaultChatClientUtils calls getOptions().mutate()), so the mock has to expose some.
-        when(chatModel.getOptions()).thenReturn(ChatOptions.builder().build());
-
-        when(chatModel.stream(any(org.springframework.ai.chat.prompt.Prompt.class)))
-                .thenReturn(Flux.just(chatResponse));
-        when(chatModel.call(any(org.springframework.ai.chat.prompt.Prompt.class)))
-                .thenReturn(chatResponse);
-        // Tier-2 document insights: the enrichment prompt carries a marker; answer the JSON
-        // contract — or garbage when the file name asks for it (DocumentInsightsTier2IT).
-        when(chatModel.call(org.mockito.ArgumentMatchers.argThat((org.springframework.ai.chat.prompt.Prompt p) ->
-                p != null && p.getContents() != null && p.getContents().contains("INSIGHTS_V1"))))
-                .thenAnswer(invocation -> {
-                    org.springframework.ai.chat.prompt.Prompt prompt = invocation.getArgument(0);
-                    // The test invoices carry "Invoice F-…" in their text; everything else is a report,
-                    // so the smart-filing suite can tell an invoice's neighbours from a report's.
-                    String category = prompt.getContents().contains("Invoice F-") ? "Invoice"
-                            : prompt.getContents().contains("Miscellaneous") ? "Other" : "Report";
-                    String answer = prompt.getContents().contains("malformed")
-                            ? "Sorry, I cannot produce that."
-                            : """
-                            ```json
-                            {"category": "%s", "summary": "A short test summary of the document.",
-                             "keywords": ["test", "report"], "language": "en", "entities": {"client": "ACME"}}
-                            ```""".formatted(category);
-                    return new ChatResponse(List.of(new Generation(new AssistantMessage(answer))));
-                });
-        // Smart filing (stage 2): the filing prompt carries its own marker; the mock proposes a
-        // new folder with high confidence (AutoFileIT relies on it when no neighbours exist yet).
-        when(chatModel.call(org.mockito.ArgumentMatchers.argThat((org.springframework.ai.chat.prompt.Prompt p) ->
-                p != null && p.getContents() != null && p.getContents().contains("AUTOFILE_V1"))))
-                .thenAnswer(invocation -> new ChatResponse(List.of(new Generation(new AssistantMessage("""
-                        {"target": "Filed-by-model", "createFolders": ["Filed-by-model"], "confidence": 0.95,
-                         "reason": "The mocked model files everything into Filed-by-model"}""")))));
-        return chatModel;
-    }
-
-    @Bean
-    @Primary
-    public ChatClient testChatClient(ChatModel chatModel) {
-        return ChatClient.builder(chatModel)
-                .defaultSystem("You are a test AI assistant.")
-                .build();
     }
 }

@@ -53,7 +53,7 @@ public class EmbeddingRegistryGuard implements ApplicationRunner {
     // AI feature is off at runtime and neither the JdbcTemplate nor the EmbeddingModel can be
     // created (native images bake bean conditions at build time, so the toggle is runtime-only).
     private final ObjectProvider<JdbcTemplate> aiJdbcTemplateProvider;
-    private final ObjectProvider<EmbeddingModel> embeddingModelProvider;
+    private final ObjectProvider<EmbeddingModels> embeddingModelsProvider;
     private final Environment environment;
     private final AiProperties aiProperties;
 
@@ -66,14 +66,17 @@ public class EmbeddingRegistryGuard implements ApplicationRunner {
             log.debug("[AI-EMBED] AI feature is disabled — skipping embedding registry check");
             return;
         }
-        String provider = environment.getProperty(EMBEDDING_SELECTOR);
+        EmbeddingModels models = embeddingModelsProvider.getIfAvailable();
+        String selector = environment.getProperty(EMBEDDING_SELECTOR);
+        // The in-process provider is a runtime flag, not a selector (fixed at build time in a native image)
+        String provider = models == null ? selector : models.provider(selector);
         if (provider == null || NONE.equals(provider)) {
             log.debug("[AI-EMBED] No embedding provider selected ({}={}) — skipping embedding registry check",
                     EMBEDDING_SELECTOR, provider);
             return;
         }
         this.aiJdbcTemplate = aiJdbcTemplateProvider.getIfAvailable();
-        this.embeddingModel = embeddingModelProvider.getIfAvailable();
+        this.embeddingModel = models == null ? null : models.effective();
         if (aiJdbcTemplate == null || embeddingModel == null) {
             log.warn("[AI-EMBED] AI is active but the JdbcTemplate/EmbeddingModel are unavailable — "
                     + "skipping embedding registry check");
@@ -100,7 +103,10 @@ public class EmbeddingRegistryGuard implements ApplicationRunner {
     }
 
     private void checkRegistry(String provider) {
-        String model = environment.getProperty("spring.ai." + provider + ".embedding.model", "unknown");
+        // The in-process provider has no spring.ai.<provider>.embedding.model: its label is ours
+        String model = "transformers".equals(provider)
+                ? environment.getProperty("openfilz.ai.transformers.embedding.model", "unknown")
+                : environment.getProperty("spring.ai." + provider + ".embedding.model", "unknown");
         Integer dimensions = resolveDimensions();
         validateSchemaDimensions(provider, model, dimensions);
 

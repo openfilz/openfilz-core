@@ -189,6 +189,16 @@ spec:
               value: {{ .Values.ai.ollama.embedding.enabled | quote }}
             - name: OLLAMA_EMBEDDING_MODEL
               value: {{ .Values.ai.ollama.embedding.model | quote }}
+            - name: TRANSFORMERS_EMBEDDING_ENABLED
+              value: {{ .Values.ai.transformers.embedding.enabled | quote }}
+            - name: TRANSFORMERS_EMBEDDING_MODEL
+              value: {{ .Values.ai.transformers.embedding.model | quote }}
+            - name: TRANSFORMERS_EMBEDDING_MODEL_URI
+              value: {{ .Values.ai.transformers.embedding.modelUri | quote }}
+            - name: TRANSFORMERS_EMBEDDING_TOKENIZER_URI
+              value: {{ .Values.ai.transformers.embedding.tokenizerUri | quote }}
+            - name: TRANSFORMERS_EMBEDDING_CACHE_DIR
+              value: {{ .Values.ai.transformers.embedding.cacheDir | quote }}
             - name: OPENAI_API_KEY
               value: {{ .Values.ai.openai.apiKey | quote }}
             - name: OPENAI_BASE_URL
@@ -220,6 +230,10 @@ spec:
               value: {{ .Values.ai.insights.model | quote }}
             - name: OPENFILZ_AI_INSIGHTS_DAILY_LIMIT
               value: {{ .Values.ai.insights.dailyLimit | quote }}
+            - name: OPENFILZ_AI_INSIGHTS_CONCURRENCY
+              value: {{ .Values.ai.insights.concurrency | quote }}
+            - name: OPENFILZ_AI_AUTO_FILE_CONCURRENCY
+              value: {{ .Values.ai.autoFile.concurrency | quote }}
             - name: OPENFILZ_AI_AUTO_FILE_ACTIVE
               value: {{ .Values.ai.autoFile.active | quote }}
             - name: OPENFILZ_AI_AUTO_FILE_DEFAULT
@@ -234,6 +248,38 @@ spec:
               value: {{ .Values.ai.insights.classifier.minConfidence | quote }}
             - name: OPENFILZ_AI_INSIGHTS_CLASSIFIER_LEARN_FROM
               value: {{ join "," .Values.ai.insights.classifier.learnFrom | quote }}
+            - name: OPENFILZ_AI_INSIGHTS_CLASSIFIER_PREFIX
+              value: {{ .Values.ai.insights.classifier.prefix | quote }}
+            - name: OPENFILZ_AI_INSIGHTS_MAX_CHARS
+              value: {{ .Values.ai.insights.maxChars | quote }}
+            - name: OPENFILZ_AI_INSIGHTS_MAX_FILE_SIZE
+              value: {{ .Values.ai.insights.maxFileSize | quote }}
+            - name: OPENFILZ_AI_EMBEDDING_VALIDATION
+              value: {{ .Values.ai.embedding.validation | quote }}
+            - name: OPENFILZ_AI_REORG_INVENTORY_CACHE_TTL
+              value: {{ .Values.ai.reorganization.inventoryCacheTtl | quote }}
+            - name: OPENFILZ_AI_REORG_PLAN_RATE_LIMIT
+              value: {{ .Values.ai.reorganization.planRateLimit | quote }}
+            - name: OPENAI_EMBEDDING_DIMENSIONS
+              value: {{ .Values.ai.openai.embedding.dimensions | quote }}
+            - name: AI_FALLBACK_ENABLED
+              value: {{ .Values.ai.fallback.enabled | quote }}
+            - name: AI_FALLBACK_CHAIN
+              value: {{ .Values.ai.fallback.chain | quote }}
+            - name: AI_FALLBACK_VALIDATION
+              value: {{ .Values.ai.fallback.validation | quote }}
+            - name: AI_FALLBACK_QUOTA_COOLDOWN
+              value: {{ .Values.ai.fallback.quotaCooldown | quote }}
+            - name: AI_FALLBACK_UNAVAILABLE_COOLDOWN
+              value: {{ .Values.ai.fallback.unavailableCooldown | quote }}
+            - name: AI_FALLBACK_KEYS_ANTHROPIC
+              value: {{ .Values.ai.fallback.keys.anthropic | quote }}
+            - name: AI_FALLBACK_KEYS_GOOGLE
+              value: {{ .Values.ai.fallback.keys.google | quote }}
+            - name: AI_FALLBACK_KEYS_OPENAI
+              value: {{ .Values.ai.fallback.keys.openai | quote }}
+            - name: AI_FALLBACK_KEYS_OPENAI_COMPATIBLE
+              value: {{ .Values.ai.fallback.keys.openaiCompatible | quote }}
             - name: OPENFILZ_AI_AUTO_FILE_COHERENCE
               value: {{ .Values.ai.autoFile.coherence | quote }}
             - name: OPENFILZ_AI_AUTO_FILE_STAGE1

@@ -38,7 +38,7 @@ class EmbeddingRegistryGuardTest {
     private final AiProperties aiProperties = new AiProperties();
 
     private final EmbeddingRegistryGuard guard =
-            new EmbeddingRegistryGuard(provider(jdbcTemplate), provider(embeddingModel), environment, aiProperties);
+            new EmbeddingRegistryGuard(provider(jdbcTemplate), provider(new org.openfilz.dms.config.EmbeddingModels(provider(embeddingModel), aiProperties)), environment, aiProperties);
 
     private static <T> org.springframework.beans.factory.ObjectProvider<T> provider(T instance) {
         return new org.springframework.beans.factory.ObjectProvider<>() {

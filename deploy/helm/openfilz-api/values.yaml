@@ -149,6 +149,8 @@ ai:
     # provider:model for the enrichment (e.g. anthropic:claude-haiku-4-5); empty = the chat model
     model: ""
     dailyLimit: 2000
+    # Parallel model calls; raise together with autoFile.concurrency for bulk uploads
+    concurrency: 2
     # The closed category list; the details panel's kind editor offers it
     categories: [invoice, quote, contract, report, letter, cv, presentation, spreadsheet, form, id-document, receipt, minutes, specification, manual, other]
     # Who names the category: llm (the chat model), prototype (embedding descriptions, no model),
@@ -159,12 +161,19 @@ ai:
       mode: llm
       minConfidence: 0.5
       learnFrom: [model, user]
+      # task prefix for the prototype descriptions and documents ("classification: " for nomic; measured worse)
+      prefix: ""
+    # characters of text sent per file; files above maxFileSize are not enriched
+    maxChars: 6000
+    maxFileSize: "50MB"
   # -- Smart filing on upload: OpenFilz chooses the destination folder on the user's request.
   # Needs ai.active and embeddings.
   autoFile:
     active: false
     defaultForUsers: false
     allowNewFolders: true
+    # Documents filed at once; each waits for its document's insight, so raise with insights.concurrency
+    concurrency: 2
     # How a winning folder is judged a home for the document: category (default) | similarity | both
     coherence: category
     # How the folder is picked among the neighbours' folders: vote (default) | fit
@@ -174,6 +183,40 @@ ai:
     # language of the existing folders (defaultLanguage when none tells). No model.
     ruleFolders: true
     defaultLanguage: en
+  # -- Embedding-model change policy: fail-fast refuses to start when the embedding provider/model
+  # changed while vectors exist; warn starts anyway (mixed vector spaces until the library is re-embedded)
+  embedding:
+    validation: fail-fast
+  # -- Reorganisation: inventory cache per user + request shape; plans a user may produce per 10 min (0 = no cap)
+  reorganization:
+    inventoryCacheTtl: 2m
+    planRateLimit: 20
+  # -- Chat-model failover: provider:model entries tried in order when the active model refuses
+  # (quota, retired model, outage); each provider needs its key (below, or the provider's own apiKey).
+  # Ignored when the chat provider is Ollama. Docs: docs/ai.md §5b.
+  fallback:
+    enabled: false
+    chain: ""
+    validation: FAIL_FAST
+    quotaCooldown: 5m
+    unavailableCooldown: 6h
+    keys:
+      anthropic: ""
+      google: ""
+      openai: ""
+      openaiCompatible: ""
+  # -- In-process embeddings: the API runs the embedding model itself through ONNX Runtime — no
+  # Ollama, no embedding server, every replica embeds on its own CPUs (JVM image). Wins over
+  # Ollama/OpenAI when enabled. The model (~140 MB) is fetched once from modelUri into cacheDir:
+  # give the pod a volume there, or every replica downloads it at first use. Changing the model or
+  # the provider changes the vector space (EmbeddingRegistryGuard): re-embed the library.
+  transformers:
+    embedding:
+      enabled: false
+      model: "nomic-embed-text-v1.5"
+      modelUri: "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/onnx/model_quantized.onnx"
+      tokenizerUri: "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/tokenizer.json"
+      cacheDir: "/tmp/openfilz-onnx"
   # -- Ollama (local LLM)
   ollama:
     baseUrl: "http://ollama:11434"
@@ -209,6 +252,8 @@ ai:
     embedding:
       enabled: false
       model: "text-embedding-3-small"
+      # native shortening of text-embedding-3-* to the vector(768) column
+      dimensions: 768
   # -- Anthropic Claude (chat only — Anthropic has no embeddings API, keep Ollama/OpenAI embeddings)
   anthropic:
     apiKey: ""

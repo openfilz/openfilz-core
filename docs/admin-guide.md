@@ -772,6 +772,7 @@ searchable (`category` facet).
 
 | Variable | Default | Meaning |
 |---|---|---|
+| `TRANSFORMERS_EMBEDDING_ENABLED` | `false` | Embeddings computed inside the API through ONNX Runtime (nomic-embed-text-v1.5 by default, `TRANSFORMERS_EMBEDDING_MODEL_URI` / `_TOKENIZER_URI` for another ONNX model, `_CACHE_DIR` for where it is kept) — no Ollama, no embedding server; JVM images. Changing provider or model changes the vector space: re-embed the library |
 | `OPENFILZ_AI_INSIGHTS_ACTIVE` | `false` | Turn the model enrichment on |
 | `OPENFILZ_AI_INSIGHTS_MODEL` | *(chat model)* | `provider:model` for the enrichment, e.g. `anthropic:claude-haiku-4-5` — a cheap model is enough |
 | `OPENFILZ_AI_INSIGHTS_MAX_CHARS` | `6000` | Characters of text sent per file |
@@ -810,6 +811,7 @@ an undo, and the details panel shows "Filed by OpenFilz" with the reason.
 | `OPENFILZ_AI_AUTO_FILE_ACTIVE` | `false` | Master switch |
 | `OPENFILZ_AI_AUTO_FILE_DEFAULT` | `false` | Initial value of the per-user switch |
 | `OPENFILZ_AI_AUTO_FILE_NEW_FOLDERS` | `true` | Whether filing may create folders (deployment ceiling) |
+| `OPENFILZ_AI_AUTO_FILE_CONCURRENCY` | `2` | Documents filed at once. Each filing waits for its document's insight (up to 30 s) and may ask the model, so a batch of 8 files takes 4 rounds at the default — raise it together with `OPENFILZ_AI_INSIGHTS_CONCURRENCY` when users drop batches |
 | `OPENFILZ_AI_AUTO_FILE_COHERENCE` | `category` | How the winning folder is judged a home for the document: by its files' categories, by their similarity to the document (`similarity`, no category needed), or `both` |
 | `OPENFILZ_AI_AUTO_FILE_STAGE1` | `vote` | How the folder is picked among the neighbours' folders: the vote, or the `fit` (purity × closeness) |
 | `OPENFILZ_AI_AUTO_FILE_RULE_FOLDERS` | `true` | The rule stage: a document of a known kind with no home goes to the scope's folder for that kind (`Invoices` / `Factures` / `Rechnungen`…), found by name in any language or created — no model |

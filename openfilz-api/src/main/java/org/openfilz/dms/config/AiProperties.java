@@ -265,6 +265,35 @@ public class AiProperties {
      */
     private Provider ollama = new Provider();
 
+    /** The in-process embedding provider (ONNX Runtime inside the API). */
+    private Transformers transformers = new Transformers();
+
+    @Data
+    public static class Transformers {
+
+        private Embedding embedding = new Embedding();
+
+        @Data
+        public static class Embedding {
+            /** Serve embeddings from inside the API ({@code TRANSFORMERS_EMBEDDING_ENABLED}); wins over Ollama/OpenAI when several are enabled. */
+            private boolean enabled = false;
+            /** The label recorded in the embedding registry — change it when the model changes, never otherwise. */
+            private String model = "nomic-embed-text-v1.5";
+            /** The ONNX model file: a URL (fetched once into the cache), a {@code file:} path or a {@code classpath:} resource. */
+            private String modelUri = "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/onnx/model_quantized.onnx";
+            /** The Hugging Face {@code tokenizer.json} of the model. */
+            private String tokenizerUri = "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/tokenizer.json";
+            /** Where the downloaded model and tokenizer are kept between restarts (mount it in a container). */
+            private String cacheDirectory = "";
+            /** Cache the downloaded resources at all. */
+            private boolean cacheEnabled = true;
+            /** The ONNX output holding the token embeddings, mean-pooled into the vector. */
+            private String modelOutputName = "last_hidden_state";
+            /** ONNX Runtime CUDA device; -1 = CPU. */
+            private int gpuDeviceId = -1;
+        }
+    }
+
     /**
      * OpenAI provider switches.
      */

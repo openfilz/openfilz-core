@@ -72,7 +72,7 @@ public class EmbeddingRegistryGuardIT extends TestContainersBaseConfig {
         when(embeddingModel.dimensions()).thenReturn(AiConfig.EMBEDDING_DIMENSIONS);
         AiProperties aiProperties = new AiProperties();
         aiProperties.setActive(true); // the guard self-checks the runtime AI flag now
-        return new EmbeddingRegistryGuard(provider(aiJdbcTemplate), provider(embeddingModel), environment, aiProperties);
+        return new EmbeddingRegistryGuard(provider(aiJdbcTemplate), provider(new org.openfilz.dms.config.EmbeddingModels(provider(embeddingModel), aiProperties)), environment, aiProperties);
     }
 
     private static <T> org.springframework.beans.factory.ObjectProvider<T> provider(T instance) {
