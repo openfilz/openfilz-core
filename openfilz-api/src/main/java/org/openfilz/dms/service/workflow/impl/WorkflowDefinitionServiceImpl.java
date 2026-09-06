@@ -7,6 +7,9 @@ import org.openfilz.dms.dto.workflow.SaveWorkflowDefinitionRequest;
 import org.openfilz.dms.dto.workflow.WorkflowDefinitionDTO;
 import org.openfilz.dms.dto.workflow.WorkflowProblem;
 import org.openfilz.dms.dto.workflow.WorkflowValidationResult;
+import org.openfilz.dms.dto.workflow.WorkflowAction;
+import org.openfilz.dms.dto.workflow.WorkflowState;
+import org.openfilz.dms.enums.WorkflowActionType;
 import org.openfilz.dms.entity.WorkflowDefinition;
 import org.openfilz.dms.enums.AuditAction;
 import org.openfilz.dms.enums.DocumentType;
@@ -15,6 +18,7 @@ import org.openfilz.dms.exception.WorkflowValidationException;
 import org.openfilz.dms.repository.WorkflowDefinitionRepository;
 import org.openfilz.dms.repository.WorkflowInstanceRepository;
 import org.openfilz.dms.service.AuditService;
+import org.openfilz.dms.service.workflow.WorkflowAccessPolicy;
 import org.openfilz.dms.service.workflow.WorkflowDefinitionService;
 import org.openfilz.dms.service.workflow.WorkflowSpecValidator;
 import org.openfilz.dms.utils.WorkflowJson;
@@ -26,7 +30,9 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -38,6 +44,7 @@ public class WorkflowDefinitionServiceImpl implements WorkflowDefinitionService 
     private final WorkflowInstanceRepository instances;
     private final WorkflowProperties props;
     private final AuditService auditService;
+    private final WorkflowAccessPolicy accessPolicy;
     private final TransactionalOperator tx;
 
     @Override
@@ -66,8 +73,11 @@ public class WorkflowDefinitionServiceImpl implements WorkflowDefinitionService 
                 .createdBy(userEmail)
                 .createdAt(now).updatedAt(now)
                 .build();
-        return requireUniqueName(d.getName(), null)
-                .then(repo.save(d))
+        // Mono.defer so nothing downstream is even assembled while the folder check may still
+        // refuse: the guard is what stops the write, not the repository's laziness.
+        return requireUsableFolders(request, userEmail)
+                .then(Mono.defer(() -> requireUniqueName(d.getName(), null)))
+                .then(Mono.defer(() -> repo.save(d)))
                 .flatMap(saved -> auditService.logAction(AuditAction.WORKFLOW_DEFINITION_CREATED, DocumentType.FILE, saved.getId())
                         .thenReturn(saved))
                 .as(tx::transactional)
@@ -77,7 +87,8 @@ public class WorkflowDefinitionServiceImpl implements WorkflowDefinitionService 
     @Override
     public Mono<WorkflowDefinitionDTO> update(UUID id, SaveWorkflowDefinitionRequest request, String userEmail) {
         requireValid(request);
-        return find(id)
+        return requireUsableFolders(request, userEmail)
+                .then(Mono.defer(() -> find(id)))
                 .flatMap(d -> requireUniqueName(request.name().trim(), id).thenReturn(d))
                 .flatMap(d -> {
                     d.setName(request.name().trim());
@@ -117,6 +128,42 @@ public class WorkflowDefinitionServiceImpl implements WorkflowDefinitionService 
 
     private List<WorkflowProblem> problems(SaveWorkflowDefinitionRequest request) {
         return WorkflowSpecValidator.validate(request.spec(), props.getMaxStates(), request.triggers());
+    }
+
+    /**
+     * Hot folders and MOVE_TO_FOLDER destinations are written into when the workflow runs, so the
+     * designer must be allowed to write there — checked here rather than trusted from the folder
+     * picker. Refusals come back as ordinary {@link WorkflowProblem}s, on the path of the offending
+     * folder, so the designer highlights them like any other problem. Core allows every folder
+     * ({@link WorkflowAccessPolicy#canUseFolder} default); the enterprise policy answers on write access.
+     */
+    private Mono<Void> requireUsableFolders(SaveWorkflowDefinitionRequest request, String userEmail) {
+        Map<UUID, String> paths = new LinkedHashMap<>();
+        List<UUID> triggers = request.triggers();
+        for (int i = 0; i < triggers.size(); i++) {
+            paths.putIfAbsent(triggers.get(i), "triggerFolderIds[" + i + "]");
+        }
+        List<WorkflowState> states = request.spec() == null ? List.of() : request.spec().states();
+        for (int i = 0; i < states.size(); i++) {
+            List<WorkflowAction> onEnter = states.get(i).onEnter();
+            for (int j = 0; j < onEnter.size(); j++) {
+                WorkflowAction a = onEnter.get(j);
+                if (a != null && a.type() == WorkflowActionType.MOVE_TO_FOLDER && a.folderId() != null) {
+                    paths.putIfAbsent(a.folderId(), "states[" + i + "].onEnter[" + j + "].folderId");
+                }
+            }
+        }
+        if (paths.isEmpty()) {
+            return Mono.empty();
+        }
+        return Flux.fromIterable(paths.entrySet())
+                .concatMap(e -> accessPolicy.canUseFolder(e.getKey(), userEmail)
+                        .filter(ok -> !ok)
+                        .map(ignored -> WorkflowProblem.of(e.getValue(), "FOLDER_NOT_WRITABLE",
+                                "You cannot write into the folder '" + e.getKey() + "'", e.getKey())))
+                .collectList()
+                .flatMap(problems -> problems.isEmpty() ? Mono.empty()
+                        : Mono.error(new WorkflowValidationException(problems)));
     }
 
     private void requireValid(SaveWorkflowDefinitionRequest request) {

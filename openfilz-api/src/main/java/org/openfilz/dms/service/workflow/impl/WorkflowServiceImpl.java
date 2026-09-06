@@ -16,6 +16,7 @@ import org.openfilz.dms.dto.workflow.WorkflowAssignment;
 import org.openfilz.dms.dto.workflow.WorkflowEventDTO;
 import org.openfilz.dms.dto.workflow.WorkflowInstanceDTO;
 import org.openfilz.dms.dto.workflow.WorkflowInstanceDetailDTO;
+import org.openfilz.dms.dto.workflow.WorkflowInstanceScope;
 import org.openfilz.dms.dto.workflow.WorkflowInstancePage;
 import org.openfilz.dms.dto.workflow.WorkflowSpec;
 import org.openfilz.dms.dto.workflow.WorkflowState;
@@ -490,10 +491,18 @@ public class WorkflowServiceImpl implements WorkflowService {
                                            boolean mine, int page, int size, Actor actor) {
         int safeSize = Math.max(1, Math.min(size, 200));
         int safePage = Math.max(0, page);
+        return accessPolicy.visibleInstances(actor.email())
+                .flatMap(scope -> listScoped(documentId, definitionId, status, stateKey, mine, safePage, safeSize, actor, scope));
+    }
+
+    private Mono<WorkflowInstancePage> listScoped(UUID documentId, UUID definitionId, WorkflowInstanceStatus status, String stateKey,
+                                                  boolean mine, int safePage, int safeSize, Actor actor, WorkflowInstanceScope scope) {
         // Plain SQL rather than entity-mapped Criteria: the mapper turns the status filter back into the
         // enum, which the Postgres driver cannot encode.
         StringBuilder where = new StringBuilder(" FROM workflow_instance WHERE 1 = 1");
         Map<String, Object> binds = new LinkedHashMap<>();
+        where.append(scope.sql("document_id"));
+        binds.putAll(scope.binds());
         if (documentId != null) { where.append(" AND document_id = :documentId"); binds.put("documentId", documentId); }
         if (definitionId != null) { where.append(" AND definition_id = :definitionId"); binds.put("definitionId", definitionId); }
         if (status != null) { where.append(" AND status = :status"); binds.put("status", status.name()); }
@@ -508,8 +517,8 @@ public class WorkflowServiceImpl implements WorkflowService {
         }
         Mono<Long> total = countSpec.map((row, md) -> row.get("n", Long.class)).one().defaultIfEmpty(0L);
         Flux<WorkflowInstance> rows = rowSpec.map((row, md) -> template.getConverter().read(WorkflowInstance.class, row, md)).all();
-        return rows.filterWhen(i -> accessPolicy.canView(i, actor.email()))
-                .concatMap(i -> toDto(i, actor))
+        // No canView() post-filter here: `scope` already restricted both the rows and the total.
+        return rows.concatMap(i -> toDto(i, actor))
                 .collectList()
                 .zipWith(total)
                 .map(t -> new WorkflowInstancePage(t.getT1(), t.getT2(), safePage, safeSize));
@@ -517,9 +526,19 @@ public class WorkflowServiceImpl implements WorkflowService {
 
     @Override
     public Mono<WorkflowSummaryDTO> summary(Actor actor) {
-        Mono<Map<UUID, WorkflowSummaryDTO.PerDefinition>> per = db.sql(
+        return accessPolicy.visibleInstances(actor.email()).flatMap(this::summaryScoped);
+    }
+
+    /** The tiles count exactly the instances {@link #list} would show — same scope, same numbers. */
+    private Mono<WorkflowSummaryDTO> summaryScoped(WorkflowInstanceScope scope) {
+        DatabaseClient.GenericExecuteSpec perSpec = db.sql(
                         "SELECT definition_id, definition_name, status, count(*) AS n FROM workflow_instance "
-                                + "GROUP BY definition_id, definition_name, status ORDER BY definition_name")
+                                + "WHERE 1 = 1" + scope.sql("document_id")
+                                + " GROUP BY definition_id, definition_name, status ORDER BY definition_name");
+        for (Map.Entry<String, Object> b : scope.binds().entrySet()) {
+            perSpec = perSpec.bind(b.getKey(), b.getValue());
+        }
+        Mono<Map<UUID, WorkflowSummaryDTO.PerDefinition>> per = perSpec
                 .map((row, md) -> new Object[]{row.get("definition_id", UUID.class), row.get("definition_name", String.class),
                         row.get("status", String.class), row.get("n", Long.class)})
                 .all()
@@ -533,7 +552,7 @@ public class WorkflowServiceImpl implements WorkflowService {
                             cur.completed() + (st == WorkflowInstanceStatus.COMPLETED ? n : 0),
                             cur.cancelled() + (st == WorkflowInstanceStatus.CANCELLED ? n : 0)));
                 });
-        return Mono.zip(per, tasks.countOverdue(OffsetDateTime.now()).defaultIfEmpty(0L))
+        return Mono.zip(per, countOverdue(scope).defaultIfEmpty(0L))
                 .map(t -> {
                     List<WorkflowSummaryDTO.PerDefinition> list = new ArrayList<>(t.getT1().values());
                     long running = list.stream().mapToLong(WorkflowSummaryDTO.PerDefinition::running).sum();
@@ -541,6 +560,22 @@ public class WorkflowServiceImpl implements WorkflowService {
                     long cancelled = list.stream().mapToLong(WorkflowSummaryDTO.PerDefinition::cancelled).sum();
                     return new WorkflowSummaryDTO(running, completed, cancelled, t.getT2(), list);
                 });
+    }
+
+    /** Overdue tasks of the instances this caller may see (the tile sits next to the scoped counters). */
+    private Mono<Long> countOverdue(WorkflowInstanceScope scope) {
+        if (!scope.restricts()) {
+            return tasks.countOverdue(OffsetDateTime.now());
+        }
+        DatabaseClient.GenericExecuteSpec spec = db.sql(
+                        "SELECT count(*) AS n FROM workflow_task t JOIN workflow_instance i ON i.id = t.instance_id"
+                                + " WHERE t.status = 'OPEN' AND t.due_at IS NOT NULL AND t.due_at < :now"
+                                + scope.sql("i.document_id"))
+                .bind("now", OffsetDateTime.now());
+        for (Map.Entry<String, Object> b : scope.binds().entrySet()) {
+            spec = spec.bind(b.getKey(), b.getValue());
+        }
+        return spec.map((row, md) -> row.get("n", Long.class)).one();
     }
 
     @Override
