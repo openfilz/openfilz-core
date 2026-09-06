@@ -67,8 +67,10 @@ import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -312,7 +314,7 @@ public class SignatureServiceImpl implements SignatureService {
         Flux<SignatureEnvelope> flux = status == null
                 ? envelopeRepo.findByInitiatorEmailOrderByCreatedAtDesc(email)
                 : envelopeRepo.findByInitiatorEmailAndStatusOrderByCreatedAtDesc(email, status);
-        return flux.concatMap(this::loadDto);
+        return flux.collectList().flatMapMany(this::loadDtos);
     }
 
     @Override
@@ -320,10 +322,16 @@ public class SignatureServiceImpl implements SignatureService {
         return recipientRepo.findByRecipientEmailAndStatusInOrderByIdDesc(lower(userEmail),
                         List.of(SignatureRecipientStatus.PENDING, SignatureRecipientStatus.VIEWED))
                 .filter(SignatureRecipient::isSigner)
-                .concatMap(r -> envelopeRepo.findById(r.getEnvelopeId()))
-                .filter(env -> env.getStatus() == SignatureEnvelopeStatus.SENT)
-                .distinct(SignatureEnvelope::getId)
-                .concatMap(this::loadDto);
+                .map(SignatureRecipient::getEnvelopeId)
+                .distinct()
+                .collectList()
+                .flatMapMany(ids -> ids.isEmpty() ? Flux.empty()
+                        // one query for the envelopes, not one per recipient
+                        : envelopeRepo.findAllById(ids)
+                                .filter(env -> env.getStatus() == SignatureEnvelopeStatus.SENT)
+                                .sort(Comparator.comparing(SignatureEnvelope::getCreatedAt).reversed())
+                                .collectList()
+                                .flatMapMany(this::loadDtos));
     }
 
     @Override
@@ -1080,6 +1088,38 @@ public class SignatureServiceImpl implements SignatureService {
                 .flatMap(env -> accessPolicy.canManage(env, userEmail)
                         .flatMap(ok -> Boolean.TRUE.equals(ok) ? Mono.just(env)
                                 : Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your envelope"))));
+    }
+
+    /**
+     * The DTOs of a whole page, in two statements instead of two <em>per envelope</em>.
+     * <p>
+     * {@code loadDto} is right for one envelope and wrong for a list: the signatures page listed
+     * every envelope, then asked for that envelope's fields and recipients one envelope at a time,
+     * so a user with a dozen envelopes cost twenty-five round trips. Here the fields and the
+     * recipients of the whole page are read once each and grouped in memory; the input order —
+     * newest first — is preserved.
+     */
+    private Flux<SignatureEnvelopeDTO> loadDtos(List<SignatureEnvelope> envelopes) {
+        if (envelopes.isEmpty()) {
+            return Flux.empty();
+        }
+        if (envelopes.size() == 1) {
+            return loadDto(envelopes.getFirst()).flux();
+        }
+        List<UUID> ids = envelopes.stream().map(SignatureEnvelope::getId).toList();
+        return Mono.zip(fieldRepo.findByEnvelopeIdInOrderBySortOrderAscIdAsc(ids).collectList(),
+                        recipientRepo.findByEnvelopeIdInOrderByOrderIndexAscSortOrderAscIdAsc(ids).collectList())
+                .flatMapMany(t -> {
+                    Map<UUID, List<SignatureFieldDTO>> fieldsByRecipient = t.getT1().stream()
+                            .collect(Collectors.groupingBy(SignatureField::getRecipientId,
+                                    Collectors.mapping(f -> SignatureFieldDTO.from(f, false), Collectors.toList())));
+                    Map<UUID, List<SignatureRecipientDTO>> recipientsByEnvelope = t.getT2().stream()
+                            .collect(Collectors.groupingBy(SignatureRecipient::getEnvelopeId, LinkedHashMap::new,
+                                    Collectors.mapping(r -> SignatureRecipientDTO.from(r,
+                                            fieldsByRecipient.getOrDefault(r.getId(), List.of())), Collectors.toList())));
+                    return Flux.fromIterable(envelopes)
+                            .map(env -> SignatureEnvelopeDTO.from(env, recipientsByEnvelope.getOrDefault(env.getId(), List.of())));
+                });
     }
 
     private Mono<SignatureEnvelopeDTO> loadDto(SignatureEnvelope env) {

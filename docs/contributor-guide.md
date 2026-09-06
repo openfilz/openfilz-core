@@ -299,6 +299,7 @@ those packages:
 |---------|----------|--------|
 | AI Document Chat | [AI Architecture](ai.md) | Configuration resolution at startup, ingestion → indexing (OpenSearch + pgvector), the chat pipeline (RAG + tool calling), BYOK |
 | Electronic Signature | [e-Sign Guide](esign.md) | Envelope lifecycle, the 12 field types, seal providers, the security model of the signing tokens, and the seven extension seams |
+| Workflows | [Workflows Guide](workflows.md) | Statuses / transitions / tasks engine, the JSON spec and its validator, the instance lifecycle, the REST API, the role model and the five extension seams |
 
 ---
 

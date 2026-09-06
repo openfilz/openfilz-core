@@ -69,6 +69,11 @@ public class DocumentController {
     @org.springframework.context.annotation.Lazy
     private org.openfilz.dms.service.filing.AutoFileService autoFileService;
 
+    /** Workflow hot folders: starts the definitions triggered by the upload folder (docs/workflows.md §4). */
+    @Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    private org.openfilz.dms.service.workflow.WorkflowTriggerService workflowTriggerService;
+
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Upload a single document",
             description = "Uploads a single file, optionally with metadata and a parent folder ID.")
@@ -151,16 +156,19 @@ public class DocumentController {
             + "of the uploaded file(s) after the upload (a job id comes back in autoFile.jobId); false leaves them where "
             + "they are; absent = the user's own switch. Needs openfilz.ai.auto-file.active.";
 
-    /** Hands the successful uploads to smart filing when asked (or when the user's switch is on). */
+    /**
+     * Hands the successful uploads to smart filing when asked (or when the user's switch is on),
+     * then to the workflow hot-folder triggers (docs/workflows.md §4).
+     */
     private Mono<List<UploadResponse>> afterUpload(List<UploadResponse> responses, Boolean autoFile) {
-        if (autoFileService == null || Boolean.FALSE.equals(autoFile)) {
-            return Mono.just(responses);
-        }
-        return autoFileService.afterUpload(responses, autoFile)
-                .onErrorResume(e -> {
-                    log.warn("Smart filing could not be scheduled: {}", e.getMessage());
-                    return Mono.just(responses);
-                });
+        Mono<List<UploadResponse>> filed = autoFileService == null || Boolean.FALSE.equals(autoFile)
+                ? Mono.just(responses)
+                : autoFileService.afterUpload(responses, autoFile)
+                        .onErrorResume(e -> {
+                            log.warn("Smart filing could not be scheduled: {}", e.getMessage());
+                            return Mono.just(responses);
+                        });
+        return workflowTriggerService == null ? filed : filed.flatMap(workflowTriggerService::afterUpload);
     }
 
     /**

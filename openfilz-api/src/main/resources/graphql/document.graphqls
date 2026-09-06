@@ -77,6 +77,8 @@ input ListFolderRequest {
     active : Boolean = true
     "When true and id is set, search recursively in all subfolders of the given folder"
     recursive : Boolean
+    "Keep only the folders the caller may write into (Enterprise: owned, or shared in editor mode). Ignored by the Community Edition, which has no per-document permissions."
+    writableOnly : Boolean
 }
 
 input FavoriteRequest {

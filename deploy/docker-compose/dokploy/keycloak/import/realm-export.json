@@ -545,6 +545,10 @@
       {
         "name": "SIGN_REQUESTER",
         "description": "May initiate e-Sign requests (enforced when OPENFILZ_SIGNATURE_REQUIRE_REQUESTER_ROLE=true)"
+      },
+      {
+        "name": "WORKFLOW_DESIGNER",
+        "description": "May create and edit workflow definitions (enforced when OPENFILZ_WORKFLOWS_REQUIRE_DESIGNER_ROLE=true)"
       }
     ]
   },
@@ -572,6 +576,10 @@
         {
           "name": "SIGN_REQUESTER",
           "path": "/OPENFILZ/SIGN_REQUESTER"
+        },
+        {
+          "name": "WORKFLOW_DESIGNER",
+          "path": "/OPENFILZ/WORKFLOW_DESIGNER"
         }
       ]
     }

@@ -64,6 +64,13 @@ public class SettingsServiceImpl implements SettingsService {
     @Value("${openfilz.signature.seal.provider:self-signed-dev}")
     private String signatureSealProvider;
 
+    // Workflows (statuses / transitions / tasks) — runtime toggle, never a bean condition.
+    @Value("${openfilz.workflows.active:false}")
+    private Boolean workflowsActive;
+
+    @Value("${openfilz.workflows.require-designer-role:false}")
+    private Boolean workflowsRequireDesignerRole;
+
     @Value("${openfilz.signature.seal.cloud.api-key:}")
     private String signatureCloudApiKey;
 
@@ -165,6 +172,8 @@ public class SettingsServiceImpl implements SettingsService {
                        ? List.copyOf(aiProperties.getInsights().getCategories()) : List.of())
                .aiAutoFileActive(Boolean.TRUE.equals(aiActive) && Boolean.TRUE.equals(aiAutoFileActive))
                .signatureActive(Boolean.TRUE.equals(signatureActive))
+               .workflowsActive(Boolean.TRUE.equals(workflowsActive))
+               .workflowDesignerRoleRequired(Boolean.TRUE.equals(workflowsActive) && Boolean.TRUE.equals(workflowsRequireDesignerRole))
                .pdfToolsActive(Boolean.TRUE.equals(pdfToolsActive))
                .signatureRequesterRoleRequired(Boolean.TRUE.equals(signatureActive) && Boolean.TRUE.equals(signatureRequireRequesterRole))
                .signatureAuthMethods(deliverableAuthMethods())

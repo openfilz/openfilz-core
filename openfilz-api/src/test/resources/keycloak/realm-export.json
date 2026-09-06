@@ -570,13 +570,15 @@
         "CONTRIBUTOR",
         "CLEANER",
         "AUDITOR",
-        "SIGN_REQUESTER"
+        "SIGN_REQUESTER",
+        "WORKFLOW_DESIGNER"
       ],
       "groups": [
         "/OPENFILZ/CONTRIBUTOR",
         "/OPENFILZ/CLEANER",
         "/OPENFILZ/AUDITOR",
-        "/OPENFILZ/SIGN_REQUESTER"
+        "/OPENFILZ/SIGN_REQUESTER",
+        "/OPENFILZ/WORKFLOW_DESIGNER"
       ]
     },
     {
@@ -618,6 +620,10 @@
       {
         "name": "SIGN_REQUESTER",
         "description": "SIGN_REQUESTER role"
+      },
+      {
+        "name": "WORKFLOW_DESIGNER",
+        "description": "WORKFLOW_DESIGNER role"
       }
     ]
   },
@@ -645,6 +651,10 @@
         {
           "name": "SIGN_REQUESTER",
           "path": "/OPENFILZ/SIGN_REQUESTER"
+        },
+        {
+          "name": "WORKFLOW_DESIGNER",
+          "path": "/OPENFILZ/WORKFLOW_DESIGNER"
         }
       ]
     }
