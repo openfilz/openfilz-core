@@ -333,7 +333,9 @@ openfilz:
       default-for-users: ${OPENFILZ_AI_AUTO_FILE_DEFAULT:false}
       allow-new-folders: ${OPENFILZ_AI_AUTO_FILE_NEW_FOLDERS:true}
       max-per-batch: 200
-      concurrency: 2
+      # Documents filed at once. Each waits for its tier-2 insight (wait-for-insights) and may
+      # ask the model: raise together with OPENFILZ_AI_INSIGHTS_CONCURRENCY for bulk uploads.
+      concurrency: ${OPENFILZ_AI_AUTO_FILE_CONCURRENCY:2}
       neighbour-top-k: 20
       neighbour-min-share: 0.6
       neighbour-min-similarity: 0.5

@@ -811,6 +811,7 @@ an undo, and the details panel shows "Filed by OpenFilz" with the reason.
 | `OPENFILZ_AI_AUTO_FILE_ACTIVE` | `false` | Master switch |
 | `OPENFILZ_AI_AUTO_FILE_DEFAULT` | `false` | Initial value of the per-user switch |
 | `OPENFILZ_AI_AUTO_FILE_NEW_FOLDERS` | `true` | Whether filing may create folders (deployment ceiling) |
+| `OPENFILZ_AI_AUTO_FILE_CONCURRENCY` | `2` | Documents filed at once. Each filing waits for its document's insight (up to 30 s) and may ask the model, so a batch of 8 files takes 4 rounds at the default — raise it together with `OPENFILZ_AI_INSIGHTS_CONCURRENCY` when users drop batches |
 | `OPENFILZ_AI_AUTO_FILE_COHERENCE` | `category` | How the winning folder is judged a home for the document: by its files' categories, by their similarity to the document (`similarity`, no category needed), or `both` |
 | `OPENFILZ_AI_AUTO_FILE_STAGE1` | `vote` | How the folder is picked among the neighbours' folders: the vote, or the `fit` (purity × closeness) |
 | `OPENFILZ_AI_AUTO_FILE_RULE_FOLDERS` | `true` | The rule stage: a document of a known kind with no home goes to the scope's folder for that kind (`Invoices` / `Factures` / `Rechnungen`…), found by name in any language or created — no model |

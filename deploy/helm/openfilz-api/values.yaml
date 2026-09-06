@@ -149,6 +149,8 @@ ai:
     # provider:model for the enrichment (e.g. anthropic:claude-haiku-4-5); empty = the chat model
     model: ""
     dailyLimit: 2000
+    # Parallel model calls; raise together with autoFile.concurrency for bulk uploads
+    concurrency: 2
     # The closed category list; the details panel's kind editor offers it
     categories: [invoice, quote, contract, report, letter, cv, presentation, spreadsheet, form, id-document, receipt, minutes, specification, manual, other]
     # Who names the category: llm (the chat model), prototype (embedding descriptions, no model),
@@ -165,6 +167,8 @@ ai:
     active: false
     defaultForUsers: false
     allowNewFolders: true
+    # Documents filed at once; each waits for its document's insight, so raise with insights.concurrency
+    concurrency: 2
     # How a winning folder is judged a home for the document: category (default) | similarity | both
     coherence: category
     # How the folder is picked among the neighbours' folders: vote (default) | fit

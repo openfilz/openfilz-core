@@ -230,6 +230,10 @@ spec:
               value: {{ .Values.ai.insights.model | quote }}
             - name: OPENFILZ_AI_INSIGHTS_DAILY_LIMIT
               value: {{ .Values.ai.insights.dailyLimit | quote }}
+            - name: OPENFILZ_AI_INSIGHTS_CONCURRENCY
+              value: {{ .Values.ai.insights.concurrency | quote }}
+            - name: OPENFILZ_AI_AUTO_FILE_CONCURRENCY
+              value: {{ .Values.ai.autoFile.concurrency | quote }}
             - name: OPENFILZ_AI_AUTO_FILE_ACTIVE
               value: {{ .Values.ai.autoFile.active | quote }}
             - name: OPENFILZ_AI_AUTO_FILE_DEFAULT
