@@ -163,10 +163,9 @@ ai:
       learnFrom: [model, user]
       # task prefix for the prototype descriptions and documents ("classification: " for nomic; measured worse)
       prefix: ""
-    # characters of text sent per file, files above maxFileSize are not enriched, parallel model calls
+    # characters of text sent per file; files above maxFileSize are not enriched
     maxChars: 6000
     maxFileSize: "50MB"
-    concurrency: 2
   # -- Smart filing on upload: OpenFilz chooses the destination folder on the user's request.
   # Needs ai.active and embeddings.
   autoFile:
@@ -184,8 +183,6 @@ ai:
     # language of the existing folders (defaultLanguage when none tells). No model.
     ruleFolders: true
     defaultLanguage: en
-    # concurrent filings
-    concurrency: 2
   # -- Embedding-model change policy: fail-fast refuses to start when the embedding provider/model
   # changed while vectors exist; warn starts anyway (mixed vector spaces until the library is re-embedded)
   embedding:
