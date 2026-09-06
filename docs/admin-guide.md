@@ -928,7 +928,7 @@ spring:
 | `openfilz.signature.seal.provider` | `self-signed-dev` | `self-signed-dev`, `pkcs12` or `openfilz-cloud` |
 | `openfilz.signature.seal.keystore-path` | *(empty)* | PKCS#12 keystore holding the seal certificate |
 | `openfilz.signature.mail.from` | `no-reply@openfilz.com` | Sender address of every e-Sign email |
-| `openfilz.signature.sweep.cron` | `0 */5 * * * ?` | Expiry sweeper cadence |
+| `openfilz.signature.sweep.cron` | `0 0 * * * ?` | Expiry sweeper cadence |
 | `openfilz.signature.quota.envelopes-per-month` | `0` | Envelopes one user may create per calendar month; `0` = unlimited. `429` beyond it. |
 
 > **Without SMTP** (`spring.mail.host` empty) nothing is emailed: signing links and one-time

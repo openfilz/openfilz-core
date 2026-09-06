@@ -21,10 +21,10 @@ spring:
         jwt:
           jwk-set-uri: http://localhost:8180/realms/openfilz/protocol/openid-connect/certs
 
-#logging:
-  #level:
+logging:
+  level:
     #org.springframework.security: TRACE
-    # io.r2dbc.postgresql.QUERY: DEBUG # for queries
+    io.r2dbc.postgresql.QUERY: DEBUG # for queries
     # org.springframework: TRACE
     # io.r2dbc.postgresql.PARAM: DEBUG # for parameters
 

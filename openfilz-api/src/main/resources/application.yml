@@ -116,7 +116,7 @@ springdoc:
 logging:
   level:
     org.openfilz: DEBUG
-    io.r2dbc.postgresql.QUERY: DEBUG # for queries
+    # io.r2dbc.postgresql.QUERY: DEBUG # for queries -- dev only (see application-dev.yml): logs every SQL statement, incl. the 5-min e-sign sweeper poll
     org.apache.pdfbox: ERROR
     org.apache.pdfbox.contentstream.PDFStreamEngine: OFF  # Suppress non-critical "Operator rg has too few operands" from Gotenberg-converted PDFs
     org.apache.fontbox: ERROR
