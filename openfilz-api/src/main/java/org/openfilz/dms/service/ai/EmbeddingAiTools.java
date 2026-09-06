@@ -64,7 +64,7 @@ public class EmbeddingAiTools {
         }
         boolean forced = Boolean.TRUE.equals(force);
         try {
-            EmbeddingBackfillStatus started = backfillService.backfill(folderId, forced).block();
+            EmbeddingBackfillStatus started = backfillService.backfill(folderId, forced, userEmail).block();
             if (started == null) {
                 return "The backfill could not be started.";
             }

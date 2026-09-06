@@ -61,7 +61,7 @@ public class AiInsightsController implements UserInfoService {
                         return Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN,
                                 "Backfilling document insights needs the CONTRIBUTOR role"));
                     }
-                    return insightService.backfill(folderId, force);
+                    return getConnectedUserEmail().flatMap(email -> insightService.backfill(folderId, force, email));
                 });
     }
 

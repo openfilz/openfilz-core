@@ -200,12 +200,12 @@ public class AiDocumentInsightService implements DocumentInsightService {
     }
 
     @Override
-    public Mono<InsightBackfillStatus> backfill(UUID folderId, boolean force) {
+    public Mono<InsightBackfillStatus> backfill(UUID folderId, boolean force, String userEmail) {
         Job job = new Job(folderId, force);
         jobs.put(job.id, job);
         // Enqueue on a worker thread so the caller gets the handle at once; the candidate query
         // is bounded and ordered most-recently-updated first
-        store.findBackfillCandidates(folderId, force, PROMPT_VERSION, BACKFILL_LIMIT)
+        store.findBackfillCandidates(folderId, force, PROMPT_VERSION, BACKFILL_LIMIT, userEmail)
                 .doOnNext(id -> {
                     job.total.incrementAndGet();
                     submit(new Task(id, null, job.id));
@@ -215,7 +215,7 @@ public class AiDocumentInsightService implements DocumentInsightService {
                     if (job.total.get() == 0) {
                         job.finishedAt = OffsetDateTime.now();
                     }
-                    log.info("[INSIGHTS] backfill {} queued {} document(s) (folder={}, force={})", job.id, job.total.get(), folderId, force);
+                    log.info("[INSIGHTS] backfill {} queued {} document(s) (folder={}, force={}, by={})", job.id, job.total.get(), folderId, force, userEmail);
                 })
                 .subscribeOn(Schedulers.boundedElastic())
                 .subscribe(id -> { }, e -> {

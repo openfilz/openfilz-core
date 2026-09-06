@@ -89,9 +89,13 @@ public class DocumentInsightStore {
                 error = NULL,
                 updated_at = now()""";
 
-    /** Active files without a current DONE tier-2 row (none, older prompt version, not DONE), or every file when forced; most recently updated first. */
+    /**
+     * Active files without a current DONE tier-2 row (none, older prompt version, not DONE), or every
+     * file when forced; most recently updated first. First placeholder: the extension's joins
+     * ({@link #backfillCandidateJoins}); second: the subtree filter.
+     */
     private static final String BACKFILL_CANDIDATES = """
-            SELECT d.id FROM documents d
+            SELECT d.id FROM documents d%s
               LEFT JOIN ai_document_insights i ON i.document_id = d.id
              WHERE d.type = 'FILE' AND d.active = true
                %s
@@ -159,8 +163,11 @@ public class DocumentInsightStore {
                 .fetch().rowsUpdated().then();
     }
 
-    public Flux<UUID> findBackfillCandidates(UUID folderId, boolean force, int promptVersion, int limit) {
-        String sql = BACKFILL_CANDIDATES.formatted(folderId == null ? "" : SUBTREE_FILTER);
+    /**
+     * @param userEmail the caller, for an extension that scopes the candidates (the core covers the library)
+     */
+    public Flux<UUID> findBackfillCandidates(UUID folderId, boolean force, int promptVersion, int limit, String userEmail) {
+        String sql = BACKFILL_CANDIDATES.formatted(backfillCandidateJoins(userEmail), folderId == null ? "" : SUBTREE_FILTER);
         DatabaseClient.GenericExecuteSpec spec = databaseClient.sql(sql)
                 .bind("force", force)
                 .bind("version", promptVersion)
@@ -168,7 +175,21 @@ public class DocumentInsightStore {
         if (folderId != null) {
             spec = spec.bind("folderId", folderId);
         }
-        return spec.map(row -> row.get("id", UUID.class)).all();
+        return bindBackfillUserContext(spec, userEmail)
+                .flatMapMany(bound -> bound.map(row -> row.get("id", UUID.class)).all());
+    }
+
+    /**
+     * Joins appended right after {@code FROM documents d} in the backfill candidate query — the core
+     * has no ownership and appends nothing; the enterprise layer joins its ownership table here.
+     */
+    protected String backfillCandidateJoins(String userEmail) {
+        return "";
+    }
+
+    /** Binds what {@link #backfillCandidateJoins} references; the core binds nothing. Reactive: never block here. */
+    protected Mono<DatabaseClient.GenericExecuteSpec> bindBackfillUserContext(DatabaseClient.GenericExecuteSpec spec, String userEmail) {
+        return Mono.just(spec);
     }
 
     // ── tier 1 ──────────────────────────────────────────────────────────────

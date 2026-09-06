@@ -31,7 +31,8 @@ public interface DocumentInsightService {
      * Enrich every FILE document that has no tier-2 insight yet (or an older prompt version
      * when {@code force}), optionally under one folder. Returns the job handle at once.
      */
-    Mono<InsightBackfillStatus> backfill(UUID folderId, boolean force);
+    /** @param userEmail the caller — an extension with document ownership scopes the job to their documents */
+    Mono<InsightBackfillStatus> backfill(UUID folderId, boolean force, String userEmail);
 
     Optional<InsightBackfillStatus> backfillStatus(UUID jobId);
 }

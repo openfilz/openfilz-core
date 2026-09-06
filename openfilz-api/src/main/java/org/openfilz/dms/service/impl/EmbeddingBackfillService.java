@@ -34,6 +34,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p>
  * Same shape as the insights backfill: an in-memory job followed through its id, bounded
  * concurrency ({@code openfilz.ai.embedding.backfill-concurrency}), a capped candidate list.
+ * <p>
+ * The core has no document ownership, so a contributor's backfill covers the whole library.
+ * The candidate query carries two seams for an extension that has one — {@link #candidateJoins}
+ * and {@link #bindUserContext}, the shape of {@code AiDocumentQueryService} — so the enterprise
+ * layer restricts a job to the documents the caller owns without the core knowing about owners.
  */
 @Slf4j
 @Service
@@ -42,9 +47,12 @@ public class EmbeddingBackfillService {
 
     static final int CANDIDATE_LIMIT = 10_000;
 
-    /** Active files whose id tags no chunk (or every file when forced), most recently updated first. */
+    /**
+     * Active files whose id tags no chunk (or every file when forced), most recently updated first.
+     * First placeholder: the extension's joins; second: the subtree filter.
+     */
     private static final String CANDIDATES = """
-            SELECT d.id FROM documents d
+            SELECT d.id FROM documents d%s
               LEFT JOIN (SELECT DISTINCT metadata->>'document_id' AS document_id FROM vector_store) v
                      ON v.document_id = d.id::text
              WHERE d.type = 'FILE' AND d.active = true
@@ -111,19 +119,23 @@ public class EmbeddingBackfillService {
         }
     }
 
-    /** Starts a job and returns its handle at once; the work runs on the bounded-elastic scheduler. */
-    public Mono<EmbeddingBackfillStatus> backfill(UUID folderId, boolean force) {
+    /**
+     * Starts a job and returns its handle at once; the work runs on the bounded-elastic scheduler.
+     *
+     * @param userEmail the caller, for an extension that scopes the candidates (unused by the core)
+     */
+    public Mono<EmbeddingBackfillStatus> backfill(UUID folderId, boolean force, String userEmail) {
         Job job = new Job(folderId, force);
         jobs.put(job.id, job);
         int concurrency = Math.max(1, aiProperties.getEmbedding().getBackfillConcurrency());
-        candidates(folderId, force)
+        candidates(folderId, force, userEmail)
                 .collectList()
                 .doOnNext(ids -> {
                     job.total.set(ids.size());
                     job.enumerated = true;
                     job.settle();
-                    log.info("[AI-EMBED] backfill {} queued {} document(s) (folder={}, force={}, concurrency={})",
-                            job.id, ids.size(), folderId, force, concurrency);
+                    log.info("[AI-EMBED] backfill {} queued {} document(s) (folder={}, force={}, concurrency={}, by={})",
+                            job.id, ids.size(), folderId, force, concurrency, userEmail);
                 })
                 .flatMapMany(Flux::fromIterable)
                 .flatMap(id -> process(job, id), concurrency)
@@ -141,15 +153,30 @@ public class EmbeddingBackfillService {
         return Optional.ofNullable(jobs.get(jobId)).map(Job::snapshot);
     }
 
-    Flux<UUID> candidates(UUID folderId, boolean force) {
-        String sql = CANDIDATES.formatted(folderId == null ? "" : SUBTREE_FILTER);
+    Flux<UUID> candidates(UUID folderId, boolean force, String userEmail) {
+        String sql = CANDIDATES.formatted(candidateJoins(userEmail), folderId == null ? "" : SUBTREE_FILTER);
         DatabaseClient.GenericExecuteSpec spec = databaseClient.sql(sql)
                 .bind("force", force)
                 .bind("limit", CANDIDATE_LIMIT);
         if (folderId != null) {
             spec = spec.bind("folderId", folderId);
         }
-        return spec.map(row -> row.get("id", UUID.class)).all();
+        return bindUserContext(spec, userEmail)
+                .flatMapMany(bound -> bound.map(row -> row.get("id", UUID.class)).all());
+    }
+
+    /**
+     * Joins appended right after {@code FROM documents d} in the candidate query. The core has no
+     * ownership and appends nothing; an extension joins its ownership table here (with a
+     * {@code :usrId}-style parameter it binds in {@link #bindUserContext}).
+     */
+    protected String candidateJoins(String userEmail) {
+        return "";
+    }
+
+    /** Binds what {@link #candidateJoins} references; the core binds nothing. Reactive: never block here. */
+    protected Mono<DatabaseClient.GenericExecuteSpec> bindUserContext(DatabaseClient.GenericExecuteSpec spec, String userEmail) {
+        return Mono.just(spec);
     }
 
     private Mono<Void> process(Job job, UUID documentId) {

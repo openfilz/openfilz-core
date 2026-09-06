@@ -174,6 +174,10 @@ The same job is a tool of the assistant and of MCP agents (`backfillEmbeddings` 
 `getEmbeddingBackfillStatus`, `EmbeddingAiToolsContributor`, CONTRIBUTOR), see `mcp.md`, and a
 button of the web app's settings page ("AI maintenance", shown to contributors when AI is on,
 next to "Re-enrich the documents" for the insights backfill), which follows the job's counters.
+In CE a contributor's job covers the whole library (the core has no owners); the candidate
+queries carry two seams (`candidateJoins` / `bindUserContext`, and the store's
+`backfillCandidateJoins` / `bindBackfillUserContext`) through which the enterprise edition
+restricts both jobs to the documents the caller owns.
 
 ```mermaid
 sequenceDiagram

@@ -27,7 +27,7 @@ public class NoOpDocumentInsightService implements DocumentInsightService {
     }
 
     @Override
-    public Mono<InsightBackfillStatus> backfill(UUID folderId, boolean force) {
+    public Mono<InsightBackfillStatus> backfill(UUID folderId, boolean force, String userEmail) {
         return Mono.error(new IllegalStateException("Document insights are not active on this deployment"));
     }
 
