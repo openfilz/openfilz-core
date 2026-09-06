@@ -21,7 +21,7 @@ public class SignatureExpirySweeper {
     private final SignatureService service;
     private final SignatureProperties props;
 
-    @Scheduled(cron = "${openfilz.signature.sweep.cron:0 */5 * * * ?}")
+    @Scheduled(cron = "${openfilz.signature.sweep.cron:0 0 * * * ?}")
     public void sweep() {
         if (!props.isActive()) return;
         service.sweepExpired()

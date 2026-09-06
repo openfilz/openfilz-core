@@ -96,7 +96,7 @@ Boot relaxed binding, using the canonical uppercase form of the property name.
 | `openfilz.signature.web-base-url` | `OPENFILZ_SIGNATURE_WEB_BASE_URL` | *(empty)* | Overrides `openfilz.common.web-public-base-url` for signing links only. |
 | `openfilz.common.web-public-base-url` | `OPENFILZ_WEB_PUBLIC_BASE_URL` | `http://localhost:4200/` | Public URL of the web app; base of every signing link. |
 | `openfilz.signature.max-image-bytes` † | `OPENFILZ_SIGNATURE_MAX_IMAGE_BYTES` | `524288` (512 KiB) | Cap on a submitted base64 field image. Enforced on the *encoded* string as `max-image-bytes × 4/3 + 64`, so it is a decoded-size budget. |
-| `openfilz.signature.sweep.cron` | `OPENFILZ_SIGNATURE_SWEEP_CRON` | `0 */5 * * * ?` | Expiry sweeper cadence (Spring 6-field cron). Bound through the `@Scheduled` placeholder, not `SignatureProperties`. |
+| `openfilz.signature.sweep.cron` | `OPENFILZ_SIGNATURE_SWEEP_CRON` | `0 0 * * * ?` (hourly) | Expiry sweeper cadence (Spring 6-field cron). Bound through the `@Scheduled` placeholder, not `SignatureProperties`. |
 | `openfilz.signature.quota.envelopes-per-month` | `OPENFILZ_SIGNATURE_QUOTA_ENVELOPES_PER_MONTH` | `0` (unlimited) | Fair-use ceiling: envelopes **one initiator** may create per calendar month. Beyond it, `POST /signatures` answers `429`. Drafts count — they can be sent later, so excluding them would make the limit meaningless. Intended for deployments that expose e-Sign to people who have not paid for it (a public demo, a trial tenant); leave it at `0` on a normal self-hosted instance, where the query is then never run. |
 
 ### 3.2 Recipient OTP
@@ -314,7 +314,7 @@ persisted in CE but nothing acts on it there).
 
 ## 7. Operations
 
-* **Sweeper.** `openfilz.signature.sweep.cron`, every 5 minutes by default. It self-guards on
+* **Sweeper.** `openfilz.signature.sweep.cron`, hourly by default. It self-guards on
   `openfilz.signature.active`, logs `[e-sign] sweeper expired N envelope(s)` when it does
   something, and writes an `ENVELOPE_EXPIRED` event plus a `SIGNATURE_ENVELOPE_EXPIRED` audit
   row per envelope.

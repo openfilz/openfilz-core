@@ -71,7 +71,7 @@ public class AiEmbeddingsController implements UserInfoService {
                         return Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN,
                                 "Backfilling document embeddings needs the CONTRIBUTOR role"));
                     }
-                    return service.backfill(folderId, force);
+                    return getConnectedUserEmail().flatMap(email -> service.backfill(folderId, force, email));
                 });
     }
 
