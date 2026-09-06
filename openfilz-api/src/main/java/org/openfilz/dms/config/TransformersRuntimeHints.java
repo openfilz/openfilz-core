@@ -34,13 +34,20 @@ public class TransformersRuntimeHints implements RuntimeHintsRegistrar {
             {"ai/djl/util/Platform.class", "ai/djl/util/", "ai/djl/engine/", "ai/djl/ndarray/"},
     };
 
+    /**
+     * Glob patterns, not regexes: {@code registerPattern} is written straight into the
+     * {@code "glob"} entries of reachability-metadata.json, where {@code *} matches a path
+     * segment and {@code .} is a literal dot. A regex {@code .*} therefore matches only names
+     * that start with a dot — it silently embedded none of the {@code .so} files, and the image
+     * died at first use with "Can't load library: onnxruntime".
+     */
     private static final List<String> RESOURCE_PATTERNS = List.of(
-            "ai/onnxruntime/native/linux-x64/.*",
-            "ai/onnxruntime/native/linux-aarch64/.*",
-            "native/lib/tokenizers\\.properties",
-            "native/lib/linux-x86_64/cpu/.*",
-            "native/lib/linux-aarch64/cpu/.*",
-            "native/lib/.*\\.properties");
+            "ai/onnxruntime/native/linux-x64/*",
+            "ai/onnxruntime/native/linux-aarch64/*",
+            "native/lib/tokenizers.properties",
+            "native/lib/linux-x86_64/cpu/*",
+            "native/lib/linux-aarch64/cpu/*",
+            "native/lib/*.properties");
 
     @Override
     public void registerHints(RuntimeHints hints, ClassLoader classLoader) {
