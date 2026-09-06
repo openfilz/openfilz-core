@@ -630,23 +630,41 @@ public class WorkflowServiceImpl implements WorkflowService {
 
     @Override
     public Mono<MyTasksCountDTO> myTasksCount(Actor actor) {
-        OffsetDateTime now = OffsetDateTime.now();
-        return myOpenTasks(actor).collectList()
-                .map(list -> new MyTasksCountDTO(list.size(),
-                        list.stream().filter(t -> t.getDueAt() != null && t.getDueAt().isBefore(now)).count()));
+        // The sidebar badge polls this every minute, per user, forever — so it counts in SQL
+        // instead of reading the rows back to size a list.
+        return bindCandidate(db.sql("SELECT count(*) AS n,"
+                        + " count(*) FILTER (WHERE t.due_at IS NOT NULL AND t.due_at < :now) AS overdue"
+                        + " FROM workflow_task t WHERE " + CANDIDATE_PREDICATE), actor)
+                .bind("now", OffsetDateTime.now())
+                .map((row, md) -> new MyTasksCountDTO(
+                        row.get("n", Long.class) == null ? 0 : row.get("n", Long.class).intValue(),
+                        row.get("overdue", Long.class) == null ? 0L : row.get("overdue", Long.class)))
+                .one()
+                .defaultIfEmpty(new MyTasksCountDTO(0, 0L));
     }
 
-    /** Open tasks where the caller is a candidate by e-mail or by role, de-duplicated. */
+    /**
+     * "This task is waiting for me": named by e-mail, or open to a role I hold.
+     * <p>
+     * One statement, and no join — an EXISTS for the e-mail side keeps a task with several
+     * candidates from multiplying rows, and {@code = ANY} takes the whole role list as a single
+     * array parameter. It used to be one query <em>per role</em> the caller held (ten, for a
+     * standard user) on top of the e-mail one, run again on every badge poll.
+     */
+    private static final String CANDIDATE_PREDICATE =
+            "t.status = 'OPEN' AND (EXISTS (SELECT 1 FROM workflow_task_candidate c"
+                    + " WHERE c.task_id = t.id AND c.email = :email) OR t.candidate_role = ANY(:roles))";
+
+    private DatabaseClient.GenericExecuteSpec bindCandidate(DatabaseClient.GenericExecuteSpec spec, Actor actor) {
+        return spec.bind("email", actor.email().toLowerCase())
+                .bind("roles", actor.roles().toArray(new String[0]));
+    }
+
+    /** Open tasks where the caller is a candidate by e-mail or by role. */
     private Flux<WorkflowTask> myOpenTasks(Actor actor) {
-        String email = actor.email().toLowerCase();
-        Flux<WorkflowTask> byEmail = db.sql("SELECT t.* FROM workflow_task t JOIN workflow_task_candidate c ON c.task_id = t.id "
-                        + "WHERE t.status = 'OPEN' AND c.email = :e")
-                .bind("e", email).map((row, md) -> template.getConverter().read(WorkflowTask.class, row, md)).all();
-        Flux<WorkflowTask> byRole = actor.roles().isEmpty() ? Flux.empty()
-                : Flux.fromIterable(actor.roles()).concatMap(role ->
-                db.sql("SELECT t.* FROM workflow_task t WHERE t.status = 'OPEN' AND t.candidate_role = :r")
-                        .bind("r", role).map((row, md) -> template.getConverter().read(WorkflowTask.class, row, md)).all());
-        return Flux.concat(byEmail, byRole).distinct(WorkflowTask::getId);
+        return bindCandidate(db.sql("SELECT t.* FROM workflow_task t WHERE " + CANDIDATE_PREDICATE), actor)
+                .map((row, md) -> template.getConverter().read(WorkflowTask.class, row, md))
+                .all();
     }
 
     // ── sweeper ───────────────────────────────────────────────────────────

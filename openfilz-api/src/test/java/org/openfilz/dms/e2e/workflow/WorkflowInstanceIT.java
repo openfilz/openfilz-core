@@ -98,6 +98,8 @@ class WorkflowInstanceIT extends AbstractWorkflowIT {
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + admin)
                 .exchange().expectStatus().isOk().expectBody(MyTasksCountDTO.class).returnResult().getResponseBody();
         assertThat(count.count()).isGreaterThanOrEqualTo(1);
+        // The badge counts in SQL while the list reads rows — same predicate, so they must agree.
+        assertThat(count.count()).isEqualTo(myTasks(admin).size());
 
         // Reject needs a comment; approve does not.
         completeRaw(admin, task.id(), "reject", null).expectStatus().isBadRequest();
