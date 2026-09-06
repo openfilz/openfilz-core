@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[6e52ec34c9d2a5b](https://github.com/openfilz/openfilz-core/commit/6e52ec34c9d2a5b) maven-release-bot[bot] *2026-09-06 17:57:31*
+[3c81bff4ac79972](https://github.com/openfilz/openfilz-core/commit/3c81bff4ac79972) maven-release-bot[bot] *2026-09-06 19:10:42*
 
 
-## v1.3.15
+## v1.3.16
 ### No issue
 
-**[maven-release-plugin] prepare release v1.3.15**
+**[maven-release-plugin] prepare release v1.3.16**
 
 
-[019bfecdafca69b](https://github.com/openfilz/openfilz-core/commit/019bfecdafca69b) maven-release-bot[bot] *2026-09-06 17:57:29*
+[d2f6181b5171207](https://github.com/openfilz/openfilz-core/commit/d2f6181b5171207) maven-release-bot[bot] *2026-09-06 19:10:39*
 
-**Merge pull request #236 from openfilz/develop**
+**Merge pull request #237 from openfilz/develop**
 
- * Enhance backfills with user context and optimize SQL logging
+ * Add chat-only kill switch and AI overview documentation
 
-[f3109fb04e91eb3](https://github.com/openfilz/openfilz-core/commit/f3109fb04e91eb3) Yann Demel *2026-09-06 17:54:30*
+[ddbfd287bf61d00](https://github.com/openfilz/openfilz-core/commit/ddbfd287bf61d00) Yann Demel *2026-09-06 19:06:59*
 
 
