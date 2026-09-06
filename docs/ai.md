@@ -170,6 +170,8 @@ replacing the previous chunks. The text comes from the search index when full-te
 (no file is parsed again), else from a Tika pass on the stored file; the insights are not re-run.
 `OPENFILZ_AI_EMBEDDING_BACKFILL_CONCURRENCY` (2) bounds the parallel documents. On a CPU with the
 in-process model that is about 170 ms per document plus extraction; through Ollama, about twice.
+The same job is a tool of the assistant and of MCP agents (`backfillEmbeddings` /
+`getEmbeddingBackfillStatus`, `EmbeddingAiToolsContributor`, CONTRIBUTOR), see `mcp.md`.
 
 ```mermaid
 sequenceDiagram
