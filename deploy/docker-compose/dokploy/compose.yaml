@@ -340,6 +340,8 @@ services:
       # MCP server — external AI agents over POST /mcp (see docs/mcp.md).
       OPENFILZ_MCP_ACTIVE: ${OPENFILZ_MCP_ACTIVE:-false}
       OPENFILZ_MCP_MODE: ${OPENFILZ_MCP_MODE:-READ_ONLY}
+      # OAuth scopes advertised to MCP hosts in the protected-resource metadata
+      OPENFILZ_MCP_SCOPES_SUPPORTED: ${OPENFILZ_MCP_SCOPES_SUPPORTED:-openid,profile,email,offline_access}
       # Advertised in the RFC 9728 protected-resource metadata and the settings page.
       # KEYCLOAK_REALM_URL above is the internal hostname, unreachable by MCP hosts —
       # this must be the public realm URL.
