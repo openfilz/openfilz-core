@@ -12,6 +12,7 @@ import org.openfilz.dms.dto.signature.SignatureEventDTO;
 import org.openfilz.dms.dto.signature.SignatureFieldInput;
 import org.openfilz.dms.dto.signature.SignatureFieldPlacement;
 import org.openfilz.dms.dto.signature.SignatureFieldValue;
+import org.openfilz.dms.dto.signature.SignatureRecipientDTO;
 import org.openfilz.dms.dto.signature.SignatureRecipientInput;
 import org.openfilz.dms.enums.SignatureEnvelopeStatus;
 import org.openfilz.dms.enums.SignatureEventType;
@@ -88,6 +89,31 @@ class SignatureEnvelopeIT extends AbstractSignatureIT {
                 .exchange().expectStatus().isOk()
                 .expectBodyList(SignatureEnvelopeDTO.class).returnResult().getResponseBody();
         assertThat(sent).extracting(SignatureEnvelopeDTO::id).contains(env.id());
+        // The list is assembled from batched queries, so it must carry each envelope's OWN
+        // recipients and their own fields — not another envelope's, and not none at all.
+        SignatureEnvelopeDTO listed = sent.stream().filter(e -> e.id().equals(env.id())).findFirst().orElseThrow();
+        assertThat(listed.recipients()).extracting(SignatureRecipientDTO::email)
+                .containsExactlyElementsOf(env.recipients().stream().map(SignatureRecipientDTO::email).toList());
+        assertThat(listed.recipients().get(0).fields()).hasSize(env.recipients().get(0).fields().size());
+
+        // A second envelope forces the batch path (one query for both, not two per envelope) and
+        // would expose any cross-envelope mix-up in the grouping.
+        // dave, not carol — carol is already a CC on the first envelope, which would make the
+        // cross-envelope check below pass or fail for the wrong reason.
+        SignatureEnvelopeDTO other = createEnvelope(contributor, request(uploadPdf(contributor), "Second envelope",
+                List.of(signer("Dave", "dave@example.com", List.of(signatureField(0, 0.2, 0.2))))));
+        List<SignatureEnvelopeDTO> both = getWebTestClient().get().uri(SIG)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + contributor)
+                .exchange().expectStatus().isOk()
+                .expectBodyList(SignatureEnvelopeDTO.class).returnResult().getResponseBody();
+        SignatureEnvelopeDTO listedOther = both.stream().filter(e -> e.id().equals(other.id())).findFirst().orElseThrow();
+        assertThat(listedOther.recipients()).extracting(SignatureRecipientDTO::email)
+                .containsExactly("dave@example.com");
+        assertThat(listedOther.recipients().getFirst().fields()).hasSize(1);
+        assertThat(both.stream().filter(e -> e.id().equals(env.id())).findFirst().orElseThrow().recipients())
+                .as("recipients of the first envelope, listed alongside the second")
+                .extracting(SignatureRecipientDTO::email)
+                .containsExactly("alice@example.com", "bob@example.com", "carol@example.com");
 
         // Alice opens the link: public view carries her fields (not Bob's) and no OTP.
         String aliceToken = mails().tokenFor(env.id(), "alice@example.com");
@@ -396,6 +422,10 @@ class SignatureEnvelopeIT extends AbstractSignatureIT {
                 .exchange().expectStatus().isOk()
                 .expectBodyList(SignatureEnvelopeDTO.class).returnResult().getResponseBody();
         assertThat(toSign).extracting(SignatureEnvelopeDTO::id).contains(env.id());
+        SignatureEnvelopeDTO listedToSign = toSign.stream().filter(e -> e.id().equals(env.id())).findFirst().orElseThrow();
+        assertThat(listedToSign.recipients()).extracting(SignatureRecipientDTO::email)
+                .containsExactly("contributor-user@test.com");
+        assertThat(listedToSign.recipients().getFirst().fields()).hasSize(1);
         // but the recipient cannot manage the initiator's envelope
         getWebTestClient().get().uri(SIG + "/" + env.id())
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + other)
