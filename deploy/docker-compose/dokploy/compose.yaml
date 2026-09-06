@@ -324,6 +324,8 @@ services:
       # provider/model changed while vectors exist; warn starts anyway (mixed vector spaces until
       # the library is re-embedded) — what a provider switch (Ollama -> in-process) needs.
       OPENFILZ_AI_EMBEDDING_VALIDATION: ${OPENFILZ_AI_EMBEDDING_VALIDATION:-fail-fast}
+      # Documents embedded in parallel by POST /api/v1/ai/embeddings/backfill (after a provider switch)
+      OPENFILZ_AI_EMBEDDING_BACKFILL_CONCURRENCY: ${OPENFILZ_AI_EMBEDDING_BACKFILL_CONCURRENCY:-2}
       OPENFILZ_AI_REORG_INVENTORY_CACHE_TTL: ${OPENFILZ_AI_REORG_INVENTORY_CACHE_TTL:-2m}
       OPENFILZ_AI_REORG_PLAN_RATE_LIMIT: ${OPENFILZ_AI_REORG_PLAN_RATE_LIMIT:-20}
       # Smart filing stage 1: how a winning folder is judged a home (category | similarity | both),

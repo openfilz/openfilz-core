@@ -435,6 +435,12 @@ public class AiProperties {
         private int topK = 5;
 
         /**
+         * Documents embedded in parallel by the backfill ({@code POST /api/v1/ai/embeddings/backfill}):
+         * what re-embeds a library after a provider switch, or repairs a failed upload embedding.
+         */
+        private int backfillConcurrency = 2;
+
+        /**
          * Minimum similarity threshold (0.0 - 1.0) for vector search results.
          */
         private double similarityThreshold = 0.7;

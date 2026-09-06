@@ -327,4 +327,31 @@ public class AiSecurityIT extends TestContainersKeyCloakConfig {
         assertTrue(history.size() >= 4,
                 "Should have at least 4 messages (2 user + 2 assistant), got " + history.size());
     }
+    // ========================= POST /ai/embeddings/backfill =========================
+
+    @Test
+    void embeddingBackfill_withReaderToken_thenForbidden() {
+        getWebTestClient().post()
+                .uri(AI_PREFIX + "/embeddings/backfill")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + readerAccessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(BodyInserters.fromValue("{\"force\":true}"))
+                .exchange()
+                .expectStatus().isForbidden();
+    }
+
+    @Test
+    void embeddingBackfill_withContributorToken_thenStarted() {
+        // A folder that does not exist: the job starts, enumerates nothing and finishes at once
+        getWebTestClient().post()
+                .uri(AI_PREFIX + "/embeddings/backfill")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + contributorAccessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(BodyInserters.fromValue("{\"folderId\":\"" + java.util.UUID.randomUUID() + "\"}"))
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.jobId").isNotEmpty()
+                .jsonPath("$.force").isEqualTo(false);
+    }
 }

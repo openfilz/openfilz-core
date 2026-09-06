@@ -390,6 +390,9 @@ openfilz:
       # already stored in vector_store (see EmbeddingRegistryGuard). fail-fast (default) refuses to
       # start on a mismatch while indexed vectors exist; warn starts anyway with degraded RAG results.
       validation: ${OPENFILZ_AI_EMBEDDING_VALIDATION:fail-fast}
+      # Documents embedded in parallel by POST /api/v1/ai/embeddings/backfill (the re-embedding a
+      # provider switch needs after the wipe, or the repair of an upload whose embedding failed)
+      backfill-concurrency: ${OPENFILZ_AI_EMBEDDING_BACKFILL_CONCURRENCY:2}
 
   calculate-checksum: false
   #  calculate-checksum: default false - if true : calculate checksum of each new or modified file

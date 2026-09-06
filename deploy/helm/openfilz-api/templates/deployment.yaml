@@ -258,6 +258,8 @@ spec:
               value: {{ .Values.ai.maxAnswerTokens | quote }}
             - name: OPENFILZ_AI_EMBEDDING_VALIDATION
               value: {{ .Values.ai.embedding.validation | quote }}
+            - name: OPENFILZ_AI_EMBEDDING_BACKFILL_CONCURRENCY
+              value: {{ .Values.ai.embedding.backfillConcurrency | quote }}
             - name: OPENFILZ_AI_REORG_INVENTORY_CACHE_TTL
               value: {{ .Values.ai.reorganization.inventoryCacheTtl | quote }}
             - name: OPENFILZ_AI_REORG_PLAN_RATE_LIMIT

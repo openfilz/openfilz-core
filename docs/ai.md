@@ -159,6 +159,18 @@ close enough to mix in one store. `EmbeddingRegistryGuard` therefore treats the 
 of embedding model: re-embed the library (or start with `OPENFILZ_AI_EMBEDDING_VALIDATION=warn`
 knowing the two spaces are mixed until then).
 
+**Re-embedding a library** is one job, not a re-upload of every file. Stop the API, wipe the
+store (`TRUNCATE TABLE vector_store; DELETE FROM ai_embedding_registry;`), start it on the new
+provider (the guard records the model on an empty store), then call
+`POST /api/v1/ai/embeddings/backfill` as a CONTRIBUTOR — `{"folderId": …, "force": …}` optional
+— and follow `GET /api/v1/ai/embeddings/backfill/{jobId}` (`total` / `done` / `failed` /
+`skipped`). Without `force` the job takes every active file that tags no chunk in the store, so
+it also repairs an upload whose embedding failed; with `force` it re-embeds everything in scope,
+replacing the previous chunks. The text comes from the search index when full-text keeps it
+(no file is parsed again), else from a Tika pass on the stored file; the insights are not re-run.
+`OPENFILZ_AI_EMBEDDING_BACKFILL_CONCURRENCY` (2) bounds the parallel documents. On a CPU with the
+in-process model that is about 170 ms per document plus extraction; through Ollama, about twice.
+
 ```mermaid
 sequenceDiagram
     autonumber

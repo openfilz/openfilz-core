@@ -6,7 +6,9 @@ import org.openfilz.dms.config.AiProperties;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.service.DocumentEmbeddingService;
+import org.openfilz.dms.service.IndexService;
 import org.openfilz.dms.service.StorageService;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.filter.Filter;
@@ -44,6 +46,8 @@ public class DocumentEmbeddingServiceImpl implements DocumentEmbeddingService {
     private final StorageService storageService;
     private final AiProperties aiProperties;
     private final TikaService tikaService;
+    /** The search index, when full-text keeps the extracted text: what a re-embedding reads first. */
+    private final ObjectProvider<IndexService> indexServiceProvider;
 
     /** Tier-1 document insights (the file's own metadata), captured from the same Tika pass. */
     // ObjectProvider, not @Lazy: DocumentInsightStore is a concrete class with no interface, so a
@@ -67,38 +71,58 @@ public class DocumentEmbeddingServiceImpl implements DocumentEmbeddingService {
         log.info("[AI-EMBED] Starting standalone embedding for: '{}' (id={}, type={})",
                 document.getName(), document.getId(), document.getContentType());
 
-        // Use TikaService for memory-safe extraction (spools to temp file, streams text)
-        // then collect the streamed text and pass to embedFromText()
+        // Tika extraction (memory-safe: spools to a temp file, streams the text), then the shared chunk / store path
+        return extractText(document)
+                .flatMap(text -> {
+                    if (text.isBlank()) {
+                        log.warn("[AI-EMBED] No text extracted for '{}' — file may be binary", document.getName());
+                        return Mono.empty();
+                    }
+                    log.debug("[AI-EMBED] Tika extracted {} chars for '{}'", text.length(), document.getName());
+                    enqueueInsights(document, text);
+                    return embedFromText(document, text);
+                })
+                .doOnError(e -> log.error("[AI-EMBED] Embedding FAILED for '{}': {}", document.getName(), e.getMessage()))
+                .onErrorResume(e -> Mono.empty())
+                .then();
+    }
+
+    @Override
+    public Mono<Integer> reembed(Document document) {
+        if (document.getType() != DocumentType.FILE) {
+            return Mono.just(0);
+        }
+        IndexService indexService = indexServiceProvider.getIfAvailable();
+        Mono<String> fromIndex = indexService == null ? Mono.empty()
+                : indexService.getContent(document.getId()).filter(text -> !text.isBlank()).onErrorResume(e -> Mono.empty());
+        return fromIndex
+                .switchIfEmpty(Mono.defer(() -> extractText(document)))
+                .defaultIfEmpty("")
+                .flatMap(text -> {
+                    if (text.isBlank()) {
+                        log.info("[AI-EMBED] No text to embed for '{}' ({})", document.getName(), document.getId());
+                        return Mono.just(0);
+                    }
+                    return storeChunks(document, text);
+                });
+    }
+
+    /** The whole text of the stored file through Tika, the tier-1 insight saved on the way; the temp file always removed. */
+    private Mono<String> extractText(Document document) {
+        Path tempFile;
         try {
-            Path tempFile = Files.createTempFile("ai-embed-", ".tmp");
-
-            return tikaService.processResource(tempFile, storageService.loadFile(document.getStoragePath()),
-                            metadata -> saveFileMetadata(document, metadata))
-                    .reduce(new StringBuilder(), StringBuilder::append)
-                    .flatMap(collectedText -> {
-                        // Clean up temp file
-                        try { Files.deleteIfExists(tempFile); } catch (IOException ignored) {}
-
-                        String text = collectedText.toString();
-                        if (text.isBlank()) {
-                            log.warn("[AI-EMBED] No text extracted for '{}' — file may be binary", document.getName());
-                            return Mono.empty();
-                        }
-
-                        log.debug("[AI-EMBED] Tika extracted {} chars for '{}'", text.length(), document.getName());
-                        enqueueInsights(document, text);
-                        return embedFromText(document, text);
-                    })
-                    .doOnError(e -> {
-                        log.error("[AI-EMBED] Embedding FAILED for '{}': {}", document.getName(), e.getMessage());
-                        try { Files.deleteIfExists(tempFile); } catch (IOException ignored) {}
-                    })
-                    .onErrorResume(e -> Mono.empty())
-                    .then();
+            tempFile = Files.createTempFile("ai-embed-", ".tmp");
         } catch (IOException e) {
             log.error("[AI-EMBED] Failed to create temp file for '{}': {}", document.getName(), e.getMessage());
-            return Mono.empty();
+            return Mono.error(e);
         }
+        return tikaService.processResource(tempFile, storageService.loadFile(document.getStoragePath()),
+                        metadata -> saveFileMetadata(document, metadata))
+                .reduce(new StringBuilder(), StringBuilder::append)
+                .map(StringBuilder::toString)
+                .doFinally(signal -> {
+                    try { Files.deleteIfExists(tempFile); } catch (IOException ignored) { }
+                });
     }
 
     /** Tier-2 insight: hand the text head to the enrichment queue (returns at once; off = no-op). */
@@ -132,7 +156,14 @@ public class DocumentEmbeddingServiceImpl implements DocumentEmbeddingService {
         if (document.getType() != DocumentType.FILE || extractedText == null || extractedText.isBlank()) {
             return Mono.empty();
         }
+        return storeChunks(document, extractedText)
+                .doOnError(e -> log.error("[AI-EMBED] Failed to embed '{}': {}", document.getName(), e.getMessage()))
+                .onErrorResume(e -> Mono.empty())
+                .then();
+    }
 
+    /** Chunks the text, embeds the chunks and stores them in place of the document's previous ones; errors propagate. */
+    private Mono<Integer> storeChunks(Document document, String extractedText) {
         log.info("[AI-EMBED] Embedding text for '{}' ({} chars)", document.getName(), extractedText.length());
 
         return Mono.fromCallable(() -> {
@@ -167,10 +198,7 @@ public class DocumentEmbeddingServiceImpl implements DocumentEmbeddingService {
             }
 
             return chunks.size();
-        }).subscribeOn(Schedulers.boundedElastic())
-                .doOnError(e -> log.error("[AI-EMBED] Failed to embed '{}': {}", document.getName(), e.getMessage()))
-                .onErrorResume(e -> Mono.empty())
-                .then();
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     @Override
