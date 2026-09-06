@@ -39,7 +39,8 @@ on Enterprise for anything multi-user:
 > agent there can read across all documents. For any multi-user or production deployment, Enterprise
 > is what makes an agent see exactly what its user may — see the security model below.
 
-> **Related:** [AI Architecture](ai.md) for how the shared tool layer works internally ·
+> **Related:** [AI Overview](ai-overview.md) for what the AI features do and how MCP compares to the
+> in-app chat (including the no-LLM deployment profiles) · [AI Architecture](ai.md) for how the shared tool layer works internally ·
 > [Admin guide → MCP Server](admin-guide.md#mcp-server-external-ai-agents) for the property tables ·
 > [Developer guide → MCP Server](developer-guide.md#mcp-server) for the raw JSON-RPC calls.
 

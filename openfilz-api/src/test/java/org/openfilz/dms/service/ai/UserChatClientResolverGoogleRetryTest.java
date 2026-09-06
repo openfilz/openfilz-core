@@ -60,7 +60,7 @@ class UserChatClientResolverGoogleRetryTest {
     }
 
     private ChatModel geminiModelAgainstMock() {
-        UserChatClientResolver resolver = new UserChatClientResolver(mock(ChatModel.class),
+        UserChatClientResolver resolver = new UserChatClientResolver(TestChatModelProvider.of(mock(ChatModel.class)),
                 mock(ToolCallingManager.class), mock(UserAiSettingsRepository.class),
                 mock(AiSettingsCipher.class), new MockEnvironment(), false);
         return resolver.buildChatModel(AiProvider.GOOGLE, "spent-key", gemini.url("/").toString(), "gemini-test");

@@ -251,6 +251,10 @@ services:
 
       # AI Document Chat (optional — set OPENFILZ_AI_ACTIVE=true to enable)
       OPENFILZ_AI_ACTIVE: ${OPENFILZ_AI_ACTIVE:-false}
+      # Kill switch for the in-app chat assistant alone: off hides the chat button and
+      # "Organise with AI" and answers 404 on /ai/chat**, while insights, smart filing, the
+      # by-kind reorganisation and MCP keep working (docs/ai-overview.md §6).
+      OPENFILZ_AI_CHAT_ACTIVE: ${OPENFILZ_AI_CHAT_ACTIVE:-true}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
       OLLAMA_CHAT_ENABLED: ${OLLAMA_CHAT_ENABLED:-false}
       OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-llama3}

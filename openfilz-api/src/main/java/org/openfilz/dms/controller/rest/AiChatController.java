@@ -47,10 +47,20 @@ public class AiChatController implements UserInfoService {
         this.aiProperties = aiProperties;
     }
 
-    /** 404 when the AI feature is disabled at runtime — same shape as when it wasn't deployed. */
+    /**
+     * 404 when the AI feature is disabled at runtime — same shape as when it wasn't deployed.
+     * <p>
+     * The chat assistant additionally has its own switch ({@code openfilz.ai.chat.active}): a
+     * deployment can run the automatic AI features (embeddings, insights, smart filing, the by-kind
+     * reorganisation) and the MCP server with no chat model at all, and those must stay reachable
+     * while these endpoints do not.
+     */
     private void requireAiActive() {
         if (!aiProperties.isActive()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "AI feature is disabled");
+        }
+        if (!aiProperties.getChat().isActive()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "AI chat assistant is disabled");
         }
     }
 

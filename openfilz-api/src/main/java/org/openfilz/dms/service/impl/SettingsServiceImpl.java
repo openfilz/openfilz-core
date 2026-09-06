@@ -154,7 +154,12 @@ public class SettingsServiceImpl implements SettingsService {
                .userQuotaMB(quotaProperties.getUser())
                .thumbnailsActive(thumbnailActive)
                .aiActive(aiActive)
-               .aiUserSettingsEnabled(aiActive && aiUserSettingsEnabled)
+               // The chat assistant has its own kill switch: a deployment can run the automatic AI
+               // features (insights, filing, semantic retrieval) with no chat model at all.
+               .aiChatActive(Boolean.TRUE.equals(aiActive) && aiProperties.getChat().isActive())
+               // BYOK only ever overrides the *chat* model, so it follows the chat switch too.
+               .aiUserSettingsEnabled(Boolean.TRUE.equals(aiActive) && aiProperties.getChat().isActive()
+                       && Boolean.TRUE.equals(aiUserSettingsEnabled))
                .aiInsightsActive(Boolean.TRUE.equals(aiActive) && Boolean.TRUE.equals(aiInsightsActive))
                .aiInsightsCategories(Boolean.TRUE.equals(aiActive) && Boolean.TRUE.equals(aiInsightsActive)
                        ? List.copyOf(aiProperties.getInsights().getCategories()) : List.of())

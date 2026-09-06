@@ -199,6 +199,14 @@ openfilz:
   # AI Document Chat Configuration
   ai:
     active: false  # Set to true to enable AI chat features
+    # Kill switch for the in-app chat assistant ALONE. Off means /api/v1/ai/chat** and the per-user
+    # BYOK settings answer 404 and the frontend hides the chat button and "Organise with AI"
+    # (Settings.aiChatActive); embeddings, document insights, smart filing, the by-kind
+    # reorganisation and the MCP server keep working. With the prototype/learned classifier nothing
+    # then calls a chat model, so a deployment can add SPRING_AI_MODEL_CHAT=none and run the
+    # automatic AI features with no LLM at all. See docs/ai-overview.md §6.
+    chat:
+      active: ${OPENFILZ_AI_CHAT_ACTIVE:true}
     # Provider switches — translated into spring.ai.model.chat / spring.ai.model.embedding
     # (see AiModelProviderEnvironmentPostProcessor). Ollama wins when both are enabled.
     ollama:

@@ -26,6 +26,7 @@ Pick the guide that matches your role:
 | **Use** OpenFilz (browse folders, upload files, search, favorites, etc.) | [User Guide](docs/user-guide.md) |
 | **Install & configure** OpenFilz (Docker, Helm, Keycloak, storage, feature toggles) | [Installation & Administration Guide](docs/admin-guide.md) |
 | **Integrate** with the REST / GraphQL API or use an SDK | [Developer Guide](docs/developer-guide.md) |
+| **Decide** what AI to switch on — what chat, reorganisation and auto-filing do, and how to run OpenFilz **without an LLM** | [AI Overview](docs/ai-overview.md) |
 | **Understand** the AI feature (config resolution, ingestion & indexing, chat pipeline, BYOK) | [AI Architecture](docs/ai.md) |
 | **Connect an AI agent** (Claude Code/Desktop, n8n, custom agents) over MCP | [MCP Server](docs/mcp.md) |
 | **Send documents for electronic signature** (envelopes, fields, templates, seals, configuration) | [e-Sign Guide](docs/esign.md) |

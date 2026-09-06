@@ -24,6 +24,7 @@ import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.setup.OpenAiSetup;
 import org.springframework.ai.retry.TransientAiException;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.core.env.Environment;
@@ -110,7 +111,18 @@ public class UserChatClientResolver {
      */
     static final HttpRetryOptions GOOGLE_NO_SDK_RETRY = HttpRetryOptions.builder().attempts(1).build();
 
-    private final ChatModel defaultChatModel;
+    /**
+     * The auto-configured server-default chat model — <b>optional</b>, resolved through a provider.
+     * <p>
+     * A deployment may legitimately have none: {@code spring.ai.model.chat=none} builds no bean, and
+     * that is exactly the configuration of an MCP-only deployment and of a "light" one that runs the
+     * automatic AI features (embeddings, {@code prototype}/{@code learned} classification, the
+     * neighbour vote, by-kind reorganisation) with no LLM. A required injection would make this bean
+     * — and with it {@code AiDocumentInsightService} and {@code DefaultAutoFileService}, which need
+     * it only for the model stages they may never reach — impossible to create there.
+     * Asking for a model when there is none fails per call, with a message that says so.
+     */
+    private final ObjectProvider<ChatModel> defaultChatModelProvider;
     private final ToolCallingManager toolCallingManager;
     private final UserAiSettingsRepository repository;
     private final AiSettingsCipher cipher;
@@ -130,13 +142,13 @@ public class UserChatClientResolver {
      */
     private final AtomicReference<Optional<ResolvedChat>> runtimeSwitchedDefault = new AtomicReference<>();
 
-    public UserChatClientResolver(ChatModel defaultChatModel,
+    public UserChatClientResolver(ObjectProvider<ChatModel> defaultChatModelProvider,
                                   ToolCallingManager toolCallingManager,
                                   UserAiSettingsRepository repository,
                                   AiSettingsCipher cipher,
                                   Environment environment,
                                   @Value("${openfilz.ai.user-settings.enabled:false}") boolean userSettingsEnabled) {
-        this.defaultChatModel = defaultChatModel;
+        this.defaultChatModelProvider = defaultChatModelProvider;
         this.toolCallingManager = toolCallingManager;
         this.repository = repository;
         this.cipher = cipher;
@@ -251,6 +263,11 @@ public class UserChatClientResolver {
                 .build();
     }
 
+    /** The auto-configured chat model, or null when the deployment builds none. */
+    private ChatModel defaultChatModel() {
+        return defaultChatModelProvider.getIfAvailable();
+    }
+
     private ResolvedChat defaultChat() {
         String provider = environment.getProperty("spring.ai.model.chat", "none");
         Optional<ResolvedChat> switched = runtimeSwitchedDefault.get();
@@ -259,8 +276,19 @@ public class UserChatClientResolver {
             switched = Optional.ofNullable(runtimeSwitchedDefault(provider));
             runtimeSwitchedDefault.set(switched);
         }
-        return switched.orElseGet(() -> new ResolvedChat(
-                defaultChatModel, provider, defaultModelFor(provider), defaultKeyRefFor(provider)));
+        return switched.orElseGet(() -> {
+            ChatModel bean = defaultChatModel();
+            if (bean == null) {
+                // Deliberate configuration, not a bug: say which features need a model and which
+                // do not, so an operator running a light deployment knows whether to care.
+                throw new IllegalStateException("No chat model is configured on this deployment"
+                        + " (spring.ai.model.chat=" + provider + ")."
+                        + " The chat assistant, the 'llm' insight classifier and smart-filing stage 2"
+                        + " need one; classification with the prototype/learned classifier, the"
+                        + " neighbour vote, the by-kind reorganisation and the MCP server do not.");
+            }
+            return new ResolvedChat(bean, provider, defaultModelFor(provider), defaultKeyRefFor(provider));
+        });
     }
 
     /**
@@ -288,28 +316,38 @@ public class UserChatClientResolver {
      */
     private ResolvedChat runtimeSwitchedDefault(String selector) {
         AiProvider wanted = buildableProvider(selector);
-        String actual = beanProvider(defaultChatModel);
-        if (wanted == null || actual == null || actual.equals(selector)) {
+        if (wanted == null) {
             return null;
         }
+        ChatModel bean = defaultChatModel();
+        if (bean != null) {
+            String actual = beanProvider(bean);
+            // Unrecognised bean (a test mock) is trusted as-is; a matching one needs no rebuild.
+            if (actual == null || actual.equals(selector)) {
+                return null;
+            }
+        }
+        // bean == null is the third case: the selector names a provider we can build and the
+        // deployment auto-configured none (native image with the selector switched at runtime, or
+        // a JVM deployment whose starter is absent). Building it here is the only way to have one.
         String apiKey = AiFallbackChain.serverApiKey(wanted, environment);
         String model = defaultModelFor(selector);
         if (apiKey == null || model.isBlank()) {
             log.warn("[AI] Chat provider selector '{}' does not match the {} compiled into this image, "
                             + "and there is no server API key + model to rebuild it from — keeping the "
                             + "compiled bean; the fallback chain (if configured) still applies",
-                    selector, defaultChatModel.getClass().getSimpleName());
+                    selector, beanName(bean));
             return null;
         }
         try {
             ChatModel built = buildChatModel(wanted, apiKey, null, model);
             log.info("[AI] Runtime chat provider '{}' differs from the {} compiled into this image — "
                             + "built the {} ({}) primary programmatically (native-image runtime switch)",
-                    selector, defaultChatModel.getClass().getSimpleName(), wanted, model);
+                    selector, beanName(bean), wanted, model);
             return new ResolvedChat(built, selector, model, AiKeyRef.of(apiKey));
         } catch (Exception e) {
             log.warn("[AI] Could not build the '{}' primary programmatically — keeping the compiled {}: {}",
-                    selector, defaultChatModel.getClass().getSimpleName(), e.toString());
+                    selector, beanName(bean), e.toString());
             return null;
         }
     }
@@ -328,6 +366,11 @@ public class UserChatClientResolver {
      * Selector name of the provider a {@code ChatModel} bean belongs to, or null for a class we
      * don't map — an unrecognised model (or a test mock) is trusted as-is rather than replaced.
      */
+    /** Log label for the auto-configured bean, or "absent" when the deployment builds none. */
+    private static String beanName(ChatModel model) {
+        return model == null ? "absent chat model" : model.getClass().getSimpleName();
+    }
+
     private static String beanProvider(ChatModel model) {
         if (model instanceof OllamaChatModel) return "ollama";
         if (model instanceof GoogleGenAiChatModel) return "google-genai";
