@@ -43,10 +43,19 @@ public class AiSettingsController implements UserInfoService {
         this.aiProperties = aiProperties;
     }
 
-    /** 404 when the AI feature is disabled at runtime — same shape as when it wasn't deployed. */
+    /**
+     * 404 when the AI feature is disabled at runtime — same shape as when it wasn't deployed.
+     * <p>
+     * BYOK only ever overrides the <em>chat</em> model, so it follows the chat kill switch
+     * ({@code openfilz.ai.chat.active}) as well: on a deployment that runs the automatic AI
+     * features without a chat model there is nothing here for a user to configure.
+     */
     private void requireAiActive() {
         if (!aiProperties.isActive()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "AI feature is disabled");
+        }
+        if (!aiProperties.getChat().isActive()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "AI chat assistant is disabled");
         }
     }
 

@@ -5,6 +5,13 @@ import lombok.Builder;
 @Builder(toBuilder = true)
 public record Settings(Integer emptyBinInterval, Integer fileQuotaMB, Integer userQuotaMB,
                        String language, String theme, boolean thumbnailsActive, boolean aiActive,
+                       /**
+                        * True when the in-app chat assistant is available (AI on <em>and</em>
+                        * {@code openfilz.ai.chat.active}): the frontend shows the chat button and the
+                        * "Organise with AI" action. A deployment running the automatic AI features
+                        * without a chat model turns this off while {@code aiActive} stays true.
+                        */
+                       boolean aiChatActive,
                        boolean aiUserSettingsEnabled,
                        /** True when tier-2 document insights (AI category / summary at upload) are on: the frontend shows the Insights section and category facets. */
                        boolean aiInsightsActive,

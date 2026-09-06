@@ -74,6 +74,20 @@ public class AiProperties {
     @Data
     public static class Chat {
         /**
+         * Kill switch for the <em>in-app chat assistant only</em>. When false, {@code /api/v1/ai/chat**}
+         * and the per-user BYOK settings answer 404 and the frontend hides the chat button and the
+         * "Organise with AI" action ({@code Settings.aiChatActive}); everything else the AI feature
+         * does — embeddings, semantic retrieval, document insights, smart filing, the by-kind
+         * reorganisation and the MCP server — keeps working.
+         * <p>
+         * This is what makes a <em>light</em> deployment expressible: with the {@code prototype} or
+         * {@code learned} category classifier nothing calls a chat model, so a deployment can turn
+         * the chat off, set {@code spring.ai.model.chat=none} and run classification and filing with
+         * no LLM at all (see {@code docs/ai-overview.md} §6). Read at runtime, never a bean condition.
+         */
+        private boolean active = true;
+
+        /**
          * Simple class names of {@code McpToolContributor}s whose tools the chat assistant must
          * NOT bind even though they opt in (e.g. {@code OrganizeAiToolsContributor},
          * {@code SignatureAiToolsContributor}, {@code PdfAiToolsContributor}). Small local models

@@ -179,6 +179,10 @@ spec:
             # --- AI Document Chat ---
             - name: OPENFILZ_AI_ACTIVE
               value: "true"
+            # Chat assistant kill switch: false keeps insights / smart filing / by-kind
+            # reorganisation / MCP and drops only the chat (docs/ai-overview.md §6).
+            - name: OPENFILZ_AI_CHAT_ACTIVE
+              value: {{ .Values.ai.chat.active | quote }}
             - name: OLLAMA_BASE_URL
               value: {{ .Values.ai.ollama.baseUrl | quote }}
             - name: OLLAMA_CHAT_ENABLED

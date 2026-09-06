@@ -83,6 +83,10 @@ services:
     environment:
       # Enable AI feature
       OPENFILZ_AI_ACTIVE: "true"
+      # Kill switch for the in-app chat assistant alone: off hides the chat button and
+      # "Organise with AI" and answers 404 on /ai/chat**, while insights, smart filing, the
+      # by-kind reorganisation and MCP keep working (docs/ai-overview.md §6).
+      OPENFILZ_AI_CHAT_ACTIVE: ${OPENFILZ_AI_CHAT_ACTIVE:-true}
 
       # Ollama configuration
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}

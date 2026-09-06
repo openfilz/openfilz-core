@@ -31,7 +31,18 @@ class SettingsServiceImplTest {
 
     private Settings getSettings(boolean aiActive, boolean aiUserSettingsEnabled,
                                  McpProperties mcpProperties, CommonProperties commonProperties) {
-        SettingsServiceImpl service = new SettingsServiceImpl(new RecycleBinProperties(), new QuotaProperties(), new org.openfilz.dms.config.AiProperties(),
+        return getSettings(aiActive, aiUserSettingsEnabled, true, mcpProperties, commonProperties);
+    }
+
+    private Settings getSettings(boolean aiActive, boolean aiUserSettingsEnabled, boolean chatActive) {
+        return getSettings(aiActive, aiUserSettingsEnabled, chatActive, new McpProperties(), new CommonProperties());
+    }
+
+    private Settings getSettings(boolean aiActive, boolean aiUserSettingsEnabled, boolean chatActive,
+                                 McpProperties mcpProperties, CommonProperties commonProperties) {
+        org.openfilz.dms.config.AiProperties aiProperties = new org.openfilz.dms.config.AiProperties();
+        aiProperties.getChat().setActive(chatActive);
+        SettingsServiceImpl service = new SettingsServiceImpl(new RecycleBinProperties(), new QuotaProperties(), aiProperties,
                 mcpProperties, commonProperties, java.util.List.of(), java.util.List.of());
         ReflectionTestUtils.setField(service, "softDelete", false);
         ReflectionTestUtils.setField(service, "thumbnailActive", false);
@@ -63,6 +74,31 @@ class SettingsServiceImplTest {
     @Test
     void aiUserSettings_isFalseWhenAiIsInactive() {
         assertFalse(getSettings(false, true).aiUserSettingsEnabled());
+    }
+
+    /** The chat assistant is on by default whenever the AI feature is: no deployment has to opt in. */
+    @Test
+    void aiChatActive_defaultsToOnWithTheAiFeature() {
+        assertTrue(getSettings(true).aiChatActive());
+        assertFalse(getSettings(false).aiChatActive());
+    }
+
+    /**
+     * The point of the switch: a deployment runs the automatic AI features (embeddings, insights,
+     * smart filing) with no chat model, so {@code aiActive} stays true and only the chat goes.
+     */
+    @Test
+    void aiChatActive_isFalseWhenOnlyTheChatIsSwitchedOff() {
+        Settings settings = getSettings(true, false, false);
+        assertTrue(settings.aiActive());
+        assertFalse(settings.aiChatActive());
+    }
+
+    /** BYOK only ever overrides the chat model — with no chat there is nothing to override. */
+    @Test
+    void aiUserSettings_isFalseWhenTheChatIsSwitchedOff() {
+        assertFalse(getSettings(true, true, false).aiUserSettingsEnabled());
+        assertTrue(getSettings(true, true, true).aiUserSettingsEnabled());
     }
 
     /**

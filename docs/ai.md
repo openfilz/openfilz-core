@@ -1,5 +1,12 @@
 # AI Architecture — Developer Guide
 
+> **Looking for the plain-language version?** [AI Overview](ai-overview.md) explains what the four
+> AI capabilities do (chat in-app and over MCP, folder reorganisation, auto-filing, insights), which
+> of them need an LLM at all, and how to run OpenFilz with a light setup — including **entirely
+> without a language model** (`openfilz.ai.chat.active=false` + `spring.ai.model.chat=none`, see
+> [§6.3 there](ai-overview.md#63-the-chat-kill-switch)). Read that first if you are choosing a
+> configuration; this page is the implementation.
+
 How the OpenFilz AI feature works end to end: configuration resolution, document ingestion &
 indexing (full-text + vectors), the chat pipeline, and per-user model overrides (BYOK).
 For the full property tables and API-key creation walkthroughs, see the
@@ -569,6 +576,15 @@ sequenceDiagram
   tool objects report their side effects (modified folders, actions, proposed plans) through
   `AiToolTurnEffects`, which is also how the file explorer learns to refresh and how the
   failover logic knows a mutation already committed.
+- **Switching the assistant off**: `openfilz.ai.chat.active` (default true, read per request) makes
+  `AiChatController` and `AiSettingsController` answer 404 and drops `Settings.aiChatActive`, so the
+  frontend hides the chat button, the panel and "Organise with AI". Nothing else moves: ingestion,
+  embeddings, insights, smart filing, the by-kind reorganisation and the MCP server are untouched.
+  It exists so a deployment whose classifier is `prototype`/`learned` can also set
+  `spring.ai.model.chat=none` and run with no LLM — `UserChatClientResolver` holds the default model
+  through an `ObjectProvider`, so the insight and filing services (which depend on it only for the
+  model stages they may never reach) still build, and only an actual model request fails, naming
+  what needs one. Pinned by `AiChatDisabledIT`.
 - **Trimming the tool surface for small models**: the schema of every bound tool travels with
   each request, and small local models (1–3B) stop calling tools once it grows too large — they
   refuse, or emit the call as text. The e-Sign tools are bound only while

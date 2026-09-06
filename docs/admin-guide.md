@@ -471,6 +471,11 @@ openfilz:
 
 OpenFilz includes an optional AI assistant that can answer questions about your documents, search and organize files, and summarize content using Retrieval-Augmented Generation (RAG). When enabled, uploaded documents are automatically chunked, embedded, and stored in a pgvector table for semantic similarity search.
 
+> **Choosing what to enable:** [AI Overview](ai-overview.md) is the decision page — what each AI
+> capability does, which ones need an LLM (fewer than you would think), five deployment profiles
+> from "no AI at all" to "full cloud model" including a **no-LLM setup that still classifies and
+> files documents**, and what the web app shows or hides in each.
+>
 > **Developer deep-dive:** [AI Architecture](ai.md) explains how the configuration is resolved at
 > startup, the ingestion → indexing pipeline (full-text + vectors), the chat workflow, and BYOK —
 > with architecture and sequence diagrams.
@@ -698,6 +703,7 @@ Notes:
 
 | Property / Env Variable | Default | Description |
 |--------------------------|---------|-------------|
+| `openfilz.ai.chat.active` / `OPENFILZ_AI_CHAT_ACTIVE` | `true` | Kill switch for the **in-app chat assistant alone**: `false` answers 404 on `/api/v1/ai/chat**` and on the per-user BYOK settings, and hides the chat button and "Organise with AI" (`Settings.aiChatActive`) — embeddings, insights, smart filing, the by-kind reorganisation and the MCP server keep working. With `OPENFILZ_AI_INSIGHTS_CLASSIFIER=prototype\|learned` nothing calls a chat model any more, so you can add `SPRING_AI_MODEL_CHAT=none` and run the automatic AI features with no LLM at all — see [AI Overview §6](ai-overview.md#63-the-chat-kill-switch) |
 | `openfilz.ai.system-prompt` | *(built-in)* | System prompt defining the AI assistant's behavior |
 | `openfilz.ai.embedding.chunk-size` | `1000` | Characters per text chunk when splitting documents |
 | `openfilz.ai.embedding.chunk-overlap` | `200` | Overlapping characters between adjacent chunks |

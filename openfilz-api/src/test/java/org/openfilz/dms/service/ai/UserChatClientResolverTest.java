@@ -13,6 +13,7 @@ import org.springframework.mock.env.MockEnvironment;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doReturn;
@@ -41,7 +42,12 @@ class UserChatClientResolverTest {
 
     /** Resolver on top of the given compiled-in default bean, BYOK off — the primary path. */
     private UserChatClientResolver resolver(ChatModel defaultBean) {
-        return spy(new UserChatClientResolver(defaultBean, mock(ToolCallingManager.class),
+        return resolver(TestChatModelProvider.of(defaultBean));
+    }
+
+    /** Resolver over a possibly-absent bean — {@link TestChatModelProvider#none()} for no model at all. */
+    private UserChatClientResolver resolver(org.springframework.beans.factory.ObjectProvider<ChatModel> provider) {
+        return spy(new UserChatClientResolver(provider, mock(ToolCallingManager.class),
                 mock(UserAiSettingsRepository.class), mock(AiSettingsCipher.class), environment, false));
     }
 
@@ -148,6 +154,43 @@ class UserChatClientResolverTest {
 
         assertThat(resolved.chatModel()).isSameAs(ollamaBean);
         assertThat(resolved.provider()).isEqualTo("google-genai");
+    }
+
+    /**
+     * The "light" profile: {@code spring.ai.model.chat=none} builds no {@code ChatModel} bean, and
+     * the resolver must still be constructible — the insight and smart-filing services depend on it
+     * even when their classifier never calls a model. Asking for one then fails per call, with a
+     * message that names what needs a model and what does not.
+     */
+    @Test
+    @DisplayName("no chat model bean at all -> the resolver builds, and only asking for a model fails")
+    void absentBeanFailsOnlyWhenAModelIsActuallyAskedFor() {
+        environment.setProperty("spring.ai.model.chat", "none");
+        UserChatClientResolver resolver = resolver(TestChatModelProvider.none());
+
+        assertThatThrownBy(() -> resolver.resolve("user@example.com").block())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("No chat model is configured")
+                .hasMessageContaining("prototype/learned");
+    }
+
+    /**
+     * The same absent bean, but the selector names a provider we can build and the server has its
+     * key: that is a working chat configuration and must be built rather than refused.
+     */
+    @Test
+    @DisplayName("no bean but a buildable selector + server key -> the primary is built programmatically")
+    void absentBeanWithBuildableSelectorIsBuilt() {
+        googleSelectedAtRuntime();
+        UserChatClientResolver resolver = resolver(TestChatModelProvider.none());
+        doReturn(builtModel).when(resolver).buildChatModel(any(), any(), any(), any());
+
+        ResolvedChat resolved = resolver.resolve("user@example.com").block();
+
+        assertThat(resolved).isNotNull();
+        assertThat(resolved.chatModel()).isSameAs(builtModel);
+        assertThat(resolved.provider()).isEqualTo("google-genai");
+        verify(resolver).buildChatModel(eq(AiProvider.GOOGLE), eq(GOOGLE_KEY), isNull(), eq("gemini-3.6-flash"));
     }
 
     /**

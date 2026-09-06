@@ -140,8 +140,14 @@ mcp:
 # Set ai.active to true and configure an LLM provider to enable AI features.
 # Requires PostgreSQL with pgvector extension.
 ai:
-  # @param ai.active Enable AI document chat (RAG, function calling, SSE streaming)
+  # @param ai.active Enable the AI feature (embeddings, insights, smart filing, chat)
   active: false
+  # -- The in-app chat assistant alone. false answers 404 on /ai/chat** and hides the chat
+  # button and "Organise with AI"; embeddings, insights, smart filing, the by-kind
+  # reorganisation and MCP are unaffected — that is the "light" profile, which with
+  # insights.classifier.mode prototype/learned needs no LLM at all. See docs/ai-overview.md §6.
+  chat:
+    active: true
   # -- Document insights: a model labels each uploaded file (category from a closed list,
   # summary, keywords, language, entities). Needs ai.active. See docs/ai.md §3b.
   insights:
