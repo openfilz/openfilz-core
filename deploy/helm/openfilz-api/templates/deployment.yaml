@@ -189,6 +189,16 @@ spec:
               value: {{ .Values.ai.ollama.embedding.enabled | quote }}
             - name: OLLAMA_EMBEDDING_MODEL
               value: {{ .Values.ai.ollama.embedding.model | quote }}
+            - name: TRANSFORMERS_EMBEDDING_ENABLED
+              value: {{ .Values.ai.transformers.embedding.enabled | quote }}
+            - name: TRANSFORMERS_EMBEDDING_MODEL
+              value: {{ .Values.ai.transformers.embedding.model | quote }}
+            - name: TRANSFORMERS_EMBEDDING_MODEL_URI
+              value: {{ .Values.ai.transformers.embedding.modelUri | quote }}
+            - name: TRANSFORMERS_EMBEDDING_TOKENIZER_URI
+              value: {{ .Values.ai.transformers.embedding.tokenizerUri | quote }}
+            - name: TRANSFORMERS_EMBEDDING_CACHE_DIR
+              value: {{ .Values.ai.transformers.embedding.cacheDir | quote }}
             - name: OPENAI_API_KEY
               value: {{ .Values.ai.openai.apiKey | quote }}
             - name: OPENAI_BASE_URL

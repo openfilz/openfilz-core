@@ -772,6 +772,7 @@ searchable (`category` facet).
 
 | Variable | Default | Meaning |
 |---|---|---|
+| `TRANSFORMERS_EMBEDDING_ENABLED` | `false` | Embeddings computed inside the API through ONNX Runtime (nomic-embed-text-v1.5 by default, `TRANSFORMERS_EMBEDDING_MODEL_URI` / `_TOKENIZER_URI` for another ONNX model, `_CACHE_DIR` for where it is kept) — no Ollama, no embedding server; JVM images. Changing provider or model changes the vector space: re-embed the library |
 | `OPENFILZ_AI_INSIGHTS_ACTIVE` | `false` | Turn the model enrichment on |
 | `OPENFILZ_AI_INSIGHTS_MODEL` | *(chat model)* | `provider:model` for the enrichment, e.g. `anthropic:claude-haiku-4-5` — a cheap model is enough |
 | `OPENFILZ_AI_INSIGHTS_MAX_CHARS` | `6000` | Characters of text sent per file |

@@ -70,6 +70,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
+      # TransformersEmbeddingIT loads the in-process embedding model (nomic-embed-text-v1.5, ~140 MB
+      # from Hugging Face) into ~/.openfilz/onnx-cache: keep it between runs
+      - name: Cache the in-process embedding model
+        uses: actions/cache@v5
+        with:
+          path: ~/.openfilz/onnx-cache
+          key: onnx-nomic-embed-text-v1.5-quantized
+
       - name: Build with Maven
         run: mvn -Dmaven.wagon.http.retryHandler.count=3 -B clean install --file pom.xml
 

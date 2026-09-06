@@ -174,6 +174,18 @@ ai:
     # language of the existing folders (defaultLanguage when none tells). No model.
     ruleFolders: true
     defaultLanguage: en
+  # -- In-process embeddings: the API runs the embedding model itself through ONNX Runtime — no
+  # Ollama, no embedding server, every replica embeds on its own CPUs (JVM image). Wins over
+  # Ollama/OpenAI when enabled. The model (~140 MB) is fetched once from modelUri into cacheDir:
+  # give the pod a volume there, or every replica downloads it at first use. Changing the model or
+  # the provider changes the vector space (EmbeddingRegistryGuard): re-embed the library.
+  transformers:
+    embedding:
+      enabled: false
+      model: "nomic-embed-text-v1.5"
+      modelUri: "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/onnx/model_quantized.onnx"
+      tokenizerUri: "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/tokenizer.json"
+      cacheDir: "/tmp/openfilz-onnx"
   # -- Ollama (local LLM)
   ollama:
     baseUrl: "http://ollama:11434"

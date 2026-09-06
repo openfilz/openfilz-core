@@ -90,6 +90,16 @@ services:
       OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-llama3}
       OLLAMA_EMBEDDING_ENABLED: ${OLLAMA_EMBEDDING_ENABLED:-true}
       OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+      # In-process embeddings: the model runs inside the API through ONNX Runtime — no Ollama, no
+      # embedding server; wins over Ollama/OpenAI when enabled. Fetched once from Hugging Face into
+      # the cache directory (a volume below). Default nomic-embed-text-v1.5 quantised, 768 dims.
+      TRANSFORMERS_EMBEDDING_ENABLED: ${TRANSFORMERS_EMBEDDING_ENABLED:-false}
+      TRANSFORMERS_EMBEDDING_MODEL: ${TRANSFORMERS_EMBEDDING_MODEL:-nomic-embed-text-v1.5}
+      TRANSFORMERS_EMBEDDING_MODEL_URI: ${TRANSFORMERS_EMBEDDING_MODEL_URI:-https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/onnx/model_quantized.onnx}
+      TRANSFORMERS_EMBEDDING_TOKENIZER_URI: ${TRANSFORMERS_EMBEDDING_TOKENIZER_URI:-https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/tokenizer.json}
+      TRANSFORMERS_EMBEDDING_CACHE_DIR: /app/onnx-cache
+    volumes:
+      - onnx-cache:/app/onnx-cache   # the downloaded in-process embedding model, kept across restarts
 
       # OpenAI configuration (disabled by default — set in .env to use)
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -157,3 +167,4 @@ services:
 
 volumes:
   ollama-data:
+  onnx-cache:
