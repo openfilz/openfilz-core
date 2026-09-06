@@ -44,7 +44,7 @@ public final class WorkflowSpecValidator {
         }
         List<WorkflowState> states = spec.states();
         if (states.size() > maxStates) {
-            problems.add(new WorkflowProblem("states", "TOO_MANY", "At most " + maxStates + " statuses"));
+            problems.add(WorkflowProblem.of("states", "TOO_MANY", "At most " + maxStates + " statuses", maxStates));
         }
         Map<String, WorkflowState> byKey = new HashMap<>();
         int starts = 0, ends = 0;
@@ -59,7 +59,7 @@ public final class WorkflowSpecValidator {
             if (s.key() == null || !KEY.matcher(s.key()).matches()) {
                 problems.add(new WorkflowProblem(p + ".key", "BAD_KEY", "Status key must match " + KEY.pattern()));
             } else if (byKey.put(s.key(), s) != null) {
-                problems.add(new WorkflowProblem(p + ".key", "DUPLICATE_KEY", "Duplicate status key '" + s.key() + "'"));
+                problems.add(WorkflowProblem.of(p + ".key", "DUPLICATE_KEY", "Duplicate status key '" + s.key() + "'", s.key()));
             }
             if (s.label() == null || s.label().isBlank() || s.label().length() > MAX_LABEL) {
                 problems.add(new WorkflowProblem(p + ".label", "BAD_LABEL", "Status label is required (max " + MAX_LABEL + " chars)"));
@@ -85,12 +85,12 @@ public final class WorkflowSpecValidator {
                 }
             } else {
                 if (s.transitions().isEmpty()) {
-                    problems.add(new WorkflowProblem(p + ".transitions", "NO_TRANSITION", "Status '" + s.label() + "' needs at least one transition"));
+                    problems.add(WorkflowProblem.of(p + ".transitions", "NO_TRANSITION", "Status '" + s.label() + "' needs at least one transition", s.label()));
                 }
                 WorkflowAssignment a = s.effectiveAssignees();
                 chosenAtStart |= validateAssignment(a, p + ".assignees", problems);
                 if (s.dueInDays() != null && (s.dueInDays() < 1 || s.dueInDays() > MAX_DUE_DAYS)) {
-                    problems.add(new WorkflowProblem(p + ".dueInDays", "BAD_DUE", "Due delay must be between 1 and " + MAX_DUE_DAYS + " days"));
+                    problems.add(WorkflowProblem.of(p + ".dueInDays", "BAD_DUE", "Due delay must be between 1 and " + MAX_DUE_DAYS + " days", MAX_DUE_DAYS));
                 }
             }
             Set<String> tKeys = new HashSet<>();
@@ -104,7 +104,7 @@ public final class WorkflowSpecValidator {
                 if (t.key() == null || !KEY.matcher(t.key()).matches()) {
                     problems.add(new WorkflowProblem(tp + ".key", "BAD_KEY", "Transition key must match " + KEY.pattern()));
                 } else if (!tKeys.add(t.key())) {
-                    problems.add(new WorkflowProblem(tp + ".key", "DUPLICATE_KEY", "Duplicate transition key '" + t.key() + "'"));
+                    problems.add(WorkflowProblem.of(tp + ".key", "DUPLICATE_KEY", "Duplicate transition key '" + t.key() + "'", t.key()));
                 }
                 if (t.label() == null || t.label().isBlank() || t.label().length() > MAX_TRANSITION_LABEL) {
                     problems.add(new WorkflowProblem(tp + ".label", "BAD_LABEL", "Transition label is required (max " + MAX_TRANSITION_LABEL + " chars)"));
@@ -130,8 +130,8 @@ public final class WorkflowSpecValidator {
             for (int j = 0; j < s.transitions().size(); j++) {
                 WorkflowTransition t = s.transitions().get(j);
                 if (t != null && t.to() != null && !t.to().isBlank() && !byKey.containsKey(t.to())) {
-                    problems.add(new WorkflowProblem("states[" + i + "].transitions[" + j + "].to", "UNKNOWN_TARGET",
-                            "Unknown target status '" + t.to() + "'"));
+                    problems.add(WorkflowProblem.of("states[" + i + "].transitions[" + j + "].to", "UNKNOWN_TARGET",
+                            "Unknown target status '" + t.to() + "'", t.to()));
                 }
             }
         }
@@ -158,7 +158,7 @@ public final class WorkflowSpecValidator {
                 }
                 for (String e : a.emails()) {
                     if (!EMAIL.matcher(e).matches()) {
-                        problems.add(new WorkflowProblem(p + ".emails", "BAD_EMAIL", "Invalid e-mail address '" + e + "'"));
+                        problems.add(WorkflowProblem.of(p + ".emails", "BAD_EMAIL", "Invalid e-mail address '" + e + "'", e));
                     }
                 }
             }
@@ -191,7 +191,7 @@ public final class WorkflowSpecValidator {
                     problems.add(new WorkflowProblem(p + ".entries", "NO_ENTRIES", "Name at least one metadata key"));
                 }
                 if (a.entries().size() > MAX_METADATA_ENTRIES) {
-                    problems.add(new WorkflowProblem(p + ".entries", "TOO_MANY_ENTRIES", "At most " + MAX_METADATA_ENTRIES + " metadata keys"));
+                    problems.add(WorkflowProblem.of(p + ".entries", "TOO_MANY_ENTRIES", "At most " + MAX_METADATA_ENTRIES + " metadata keys", MAX_METADATA_ENTRIES));
                 }
                 for (String k : a.entries().keySet()) {
                     if (k == null || k.isBlank() || k.startsWith("_") || k.length() > 100) {
@@ -206,7 +206,7 @@ public final class WorkflowSpecValidator {
                 }
                 for (String e : a.emails()) {
                     if (!EMAIL.matcher(e).matches()) {
-                        problems.add(new WorkflowProblem(p + ".emails", "BAD_EMAIL", "Invalid e-mail address '" + e + "'"));
+                        problems.add(WorkflowProblem.of(p + ".emails", "BAD_EMAIL", "Invalid e-mail address '" + e + "'", e));
                     }
                 }
             }
@@ -229,7 +229,7 @@ public final class WorkflowSpecValidator {
         for (int i = 0; i < spec.states().size(); i++) {
             WorkflowState s = spec.states().get(i);
             if (!seen.contains(s.key())) {
-                problems.add(new WorkflowProblem("states[" + i + "]", "UNREACHABLE", "Status '" + s.label() + "' can never be reached"));
+                problems.add(WorkflowProblem.of("states[" + i + "]", "UNREACHABLE", "Status '" + s.label() + "' can never be reached", s.label()));
             }
         }
         // Reverse reachability from the END states.
@@ -249,7 +249,7 @@ public final class WorkflowSpecValidator {
         for (int i = 0; i < spec.states().size(); i++) {
             WorkflowState s = spec.states().get(i);
             if (!s.isEnd() && seen.contains(s.key()) && !canFinish.contains(s.key())) {
-                problems.add(new WorkflowProblem("states[" + i + "]", "DEAD_END", "Status '" + s.label() + "' can never reach a final status"));
+                problems.add(WorkflowProblem.of("states[" + i + "]", "DEAD_END", "Status '" + s.label() + "' can never reach a final status", s.label()));
             }
         }
     }
