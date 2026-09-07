@@ -8,6 +8,7 @@ import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.service.DocumentEmbeddingService;
 import org.openfilz.dms.service.IndexService;
 import org.openfilz.dms.service.StorageService;
+import org.openfilz.dms.service.ai.DocumentTextHandoff;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -48,6 +49,8 @@ public class DocumentEmbeddingServiceImpl implements DocumentEmbeddingService {
     private final TikaService tikaService;
     /** The search index, when full-text keeps the extracted text: what a re-embedding reads first. */
     private final ObjectProvider<IndexService> indexServiceProvider;
+    /** The upload → smart-filing text hand-off; only the standalone path below feeds it. */
+    private final DocumentTextHandoff textHandoff;
 
     /** Tier-1 document insights (the file's own metadata), captured from the same Tika pass. */
     // ObjectProvider, not @Lazy: DocumentInsightStore is a concrete class with no interface, so a
@@ -80,6 +83,12 @@ public class DocumentEmbeddingServiceImpl implements DocumentEmbeddingService {
                     }
                     log.debug("[AI-EMBED] Tika extracted {} chars for '{}'", text.length(), document.getName());
                     enqueueInsights(document, text);
+                    // This is the path taken when full-text indexing is off — nothing else will
+                    // keep these characters, and the smart filing that follows the upload would
+                    // re-read the file and re-run Tika for them. Hand them over instead; when
+                    // full-text is on this method is not the one that runs, so the buffer stays
+                    // empty and the filing reads the indexed content as before.
+                    offerToFiling(document, text);
                     return embedFromText(document, text);
                 })
                 .doOnError(e -> log.error("[AI-EMBED] Embedding FAILED for '{}': {}", document.getName(), e.getMessage()))
@@ -133,6 +142,16 @@ public class DocumentEmbeddingServiceImpl implements DocumentEmbeddingService {
             }
         } catch (Exception e) {
             log.warn("[INSIGHTS] could not queue enrichment of {}: {}", document.getId(), e.getMessage());
+        }
+    }
+
+    /** The head of the text for the filing queued by the same upload; a no-op when filing is off. */
+    private void offerToFiling(Document document, String text) {
+        try {
+            int max = Math.max(2000, aiProperties.getInsights().getMaxChars());
+            textHandoff.offer(document.getId(), text.length() > max ? text.substring(0, max) : text);
+        } catch (Exception e) {
+            log.debug("[AI-EMBED] text hand-off failed for {}: {}", document.getId(), e.getMessage());
         }
     }
 
@@ -204,6 +223,7 @@ public class DocumentEmbeddingServiceImpl implements DocumentEmbeddingService {
     @Override
     public Mono<Void> removeEmbeddings(UUID documentId) {
         log.debug("[AI-EMBED] Removing embeddings for document: {}", documentId);
+        textHandoff.forget(documentId);
         return Mono.fromRunnable(() -> {
             try {
                 // A filter on the chunk metadata: chunk ids are random UUIDs, only the document_id tag

@@ -126,8 +126,20 @@ public class AiProperties {
         private boolean allowNewFolders = true;
         /** Documents one upload batch may file; the rest stay put. */
         private int maxPerBatch = 200;
-        /** Concurrent filings. */
-        private int concurrency = 2;
+        /**
+         * Concurrent filings. A filing worker spends most of its time waiting — for the
+         * document's tier-2 insight, for a vector query, for the move — so a batch of uploads
+         * needs a good many of them to drain before the uploader's session ages out; raise it
+         * further when a deployment files hundreds of documents at a time.
+         */
+        private int concurrency = 8;
+        /**
+         * How long after the uploader's access token expires a filing queued while it was still
+         * valid may still run. A long batch outlives a short-lived token: without the grace the
+         * tail of the batch is skipped with "the session expired". Zero = no grace (skip as soon
+         * as the token expires).
+         */
+        private Duration sessionGrace = Duration.ofMinutes(30);
         /** Nearest documents consulted by the neighbour vote. */
         private int neighbourTopK = 20;
         /** The leading folder must hold this share of the neighbours' similarity weight. */
@@ -187,6 +199,27 @@ public class AiProperties {
         private int newFolderMaxDepth = 2;
         /** How long a filing waits for the document's tier-2 insight before deciding without it. */
         private Duration waitForInsights = Duration.ofSeconds(30);
+        /** The upload → filing text hand-off, so one upload is parsed by Tika once instead of twice. */
+        private TextHandoff textHandoff = new TextHandoff();
+
+        /**
+         * The buffer that carries the text of a freshly uploaded file from the pass that extracted
+         * it to the filing that follows. Only ever written when nothing else keeps that text
+         * (full-text indexing off), so it is never an overhead on top of the search index.
+         */
+        @Data
+        public static class TextHandoff {
+            /** Off = the filing re-parses the file with Tika, as it did before. */
+            private boolean enabled = true;
+            /**
+             * Hard ceiling on everything held at once, counted in characters (a Java char is two
+             * bytes): entries are evicted by total size, so this is the worst case whatever the
+             * number of uploads in flight. The default is ~4 MB of heap.
+             */
+            private long maxCharacters = 2_000_000;
+            /** How long an entry nobody took survives; the normal life of an entry is seconds. */
+            private Duration ttl = Duration.ofMinutes(10);
+        }
 
         public enum Coherence { CATEGORY, SIMILARITY, BOTH }
 
@@ -205,6 +238,13 @@ public class AiProperties {
         private DataSize maxFileSize = DataSize.ofMegabytes(50);
         /** Concurrent model calls. */
         private int concurrency = 2;
+        /**
+         * Concurrent enrichments when the category comes from a local classifier instead of a
+         * model ({@code prototype} and {@code learned} modes): no model call, no quota, so the
+         * only cost is CPU — an upload batch classifies far faster than the model concurrency
+         * above would allow.
+         */
+        private int localConcurrency = 8;
         /** Files enriched per day; beyond it rows are SKIPPED and a later backfill picks them up. Zero disables the cap. */
         private int dailyLimit = 2000;
         /** The closed category list the model must pick from ({@code other} is always accepted). */

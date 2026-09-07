@@ -23,6 +23,7 @@ import org.openfilz.dms.service.ai.AiAccessPolicy;
 import org.openfilz.dms.service.ai.AiFailoverPolicy;
 import org.openfilz.dms.service.ai.AiFallbackChain;
 import org.openfilz.dms.service.ai.AiToolRolePolicy;
+import org.openfilz.dms.service.ai.DocumentTextHandoff;
 import org.openfilz.dms.service.ai.ReorganizationInventoryCache;
 import org.openfilz.dms.service.ai.ReorganizationPlanService;
 import org.openfilz.dms.service.ai.ReorganizationPlanService.Caller;
@@ -57,6 +58,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
+import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
@@ -110,6 +112,7 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
     private static final int QUERY_CHARS = 2000;
     private static final int MODEL_TEXT_CHARS = 1500;
     private static final int MAX_JOBS = 5_000;
+    private static final int FOLDER_LOCK_STRIPES = 64;
 
     private final AiProperties aiProperties;
     private final DocumentRepository documentRepository;
@@ -129,13 +132,27 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
     private final TikaService tikaService;
     private final StorageService storageService;
     private final ApplicationEventPublisher events;
+    /** The text the upload's own Tika pass produced, when nothing else kept it. */
+    private final DocumentTextHandoff textHandoff;
 
     private final Sinks.Many<Task> queue = Sinks.many().unicast().onBackpressureBuffer();
     private final Map<UUID, Job> jobs = new ConcurrentHashMap<>();
     private volatile Disposable worker;
+    /**
+     * The filings' own threads. They block — on the tier-2 insight, on a vector query, on the
+     * move — so they must not sit on the shared {@code boundedElastic}, where the uploads that
+     * feed them also run: raising the concurrency there would starve the pipeline it is meant to
+     * drain. Sized to the concurrency, so a filing worker is never queued behind an upload.
+     */
+    private volatile Scheduler scheduler;
     private volatile ResolvedChat model;
-    /** Serialises the stage-2 applies that create a folder — see the model stage below. */
-    private final Object createFolderLock = new Object();
+    /**
+     * Serialises the applies that create a folder, striped by the folder they create: two
+     * documents of a batch heading for the same new folder wait for each other (the second one
+     * then finds the folder the first created), two heading for different folders do not — a
+     * batch of mixed kinds files its invoices and its receipts at the same time.
+     */
+    private final Object[] createFolderLocks = createFolderLocks();
     private final CategoryFolderNames folderNames;
 
     public DefaultAutoFileService(AiProperties aiProperties, DocumentRepository documentRepository,
@@ -145,7 +162,7 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
                                   InsightCompletionSignal insightSignal, AiPreferencesService preferences, ObjectProvider<VectorStore> vectorStoreProvider,
                                   ObjectProvider<IndexService> indexServiceProvider, UserChatClientResolver resolver,
                                   AiFallbackChain fallbackChain, TikaService tikaService, StorageService storageService,
-                                  ApplicationEventPublisher events) {
+                                  ApplicationEventPublisher events, DocumentTextHandoff textHandoff) {
         this.aiProperties = aiProperties;
         this.documentRepository = documentRepository;
         this.documentService = documentService;
@@ -164,6 +181,7 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
         this.tikaService = tikaService;
         this.storageService = storageService;
         this.events = events;
+        this.textHandoff = textHandoff;
         this.folderNames = new CategoryFolderNames(aiProperties.getAutoFile().getFolderNames());
     }
 
@@ -215,9 +233,10 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
     @PostConstruct
     void start() {
         int concurrency = Math.max(1, aiProperties.getAutoFile().getConcurrency());
+        scheduler = Schedulers.newBoundedElastic(concurrency, Integer.MAX_VALUE, "openfilz-autofile", 60, true);
         worker = queue.asFlux()
                 .flatMap(task -> Mono.fromCallable(() -> runTask(task))
-                        .subscribeOn(Schedulers.boundedElastic())
+                        .subscribeOn(scheduler)
                         .onErrorResume(e -> {
                             log.warn("[AUTOFILE] task for {} failed unexpectedly: {}", task.documentId(), e.toString());
                             record(task, new FilingOutcome(task.documentId(), null, FilingOutcome.FAILED, null, null, null, null,
@@ -233,6 +252,7 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
     void stop() {
         queue.tryEmitComplete();
         if (worker != null) worker.dispose();
+        if (scheduler != null) scheduler.dispose();
     }
 
     @Override
@@ -377,6 +397,24 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
         }
     }
 
+    /**
+     * True when the caller's access token is so old the filing must not act on it any more.
+     * A filing is queued by a request that was authenticated — the token was valid then — but it
+     * runs later, and a batch of hundreds of uploads easily outlives a five-minute access token:
+     * the expiry alone would skip the whole tail of the batch. The token is never sent anywhere;
+     * it only carries the identity the moves are audited and authorised under, so it is honoured
+     * for {@code auto-file.session-grace} past its expiry and no longer.
+     */
+    boolean sessionOver(Caller caller) {
+        if (!(caller.authentication() instanceof JwtAuthenticationToken jwt) || jwt.getToken().getExpiresAt() == null) {
+            return false;
+        }
+        Duration grace = aiProperties.getAutoFile().getSessionGrace();
+        Instant deadline = grace == null || grace.isNegative()
+                ? jwt.getToken().getExpiresAt() : jwt.getToken().getExpiresAt().plus(grace);
+        return Instant.now().isAfter(deadline);
+    }
+
     /** The whole pipeline for one document; blocking, on a worker or tool thread. */
     FilingOutcome file(UUID documentId, Caller caller, boolean allowNewFolders) {
         Document document = blockWithAuth(documentRepository.findByIdAndActive(documentId, true), caller);
@@ -389,8 +427,7 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
             return outcome(documentId, document.getName(), FilingOutcome.SKIPPED, document.getParentId(), from,
                     FilingOutcome.STAGE_NONE, null, "only files are filed", null);
         }
-        if (caller.authentication() instanceof JwtAuthenticationToken jwt && jwt.getToken().getExpiresAt() != null
-                && Instant.now().isAfter(jwt.getToken().getExpiresAt())) {
+        if (sessionOver(caller)) {
             return outcome(documentId, document.getName(), FilingOutcome.SKIPPED, document.getParentId(), from,
                     FilingOutcome.STAGE_NONE, null, "the session expired before the document could be filed", null);
         }
@@ -538,7 +575,7 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
         // Two documents of one batch, filed in parallel, may both propose the same new folder:
         // serialise the creating applies so the second one finds the folder the first created
         // (the plan resolves existing folders by name before creating) instead of clashing on it.
-        synchronized (createFolderLock) {
+        synchronized (createFolderLock(scopeRoot, target)) {
             return applyMove(document, from, scopeRoot, target, FilingOutcome.STAGE_MODEL, answer.confidence(), reason, caller);
         }
     }
@@ -768,7 +805,7 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
             return null;
         }
         String reason = "A " + category + " belongs in a folder of its kind: " + name.get() + " (new, named in " + language + ")";
-        synchronized (createFolderLock) {
+        synchronized (createFolderLock(scopeRoot, name.get())) {
             return applyMove(document, from, scopeRoot, name.get(), FilingOutcome.STAGE_RULE, 1.0, reason, caller);
         }
     }
@@ -971,6 +1008,15 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
     /** The text head: the index when full-text is on, else a Tika pass on the file. */
     private String textHead(Document document) {
         int max = Math.max(QUERY_CHARS, aiProperties.getInsights().getMaxChars());
+        // The upload that queued this filing has just parsed the file: take those characters
+        // rather than reading the file back and running Tika over it a second time. Empty
+        // whenever something else already keeps the text (full-text on) or on an on-demand
+        // filing, and the two fallbacks below answer as they always did.
+        Optional<String> handed = textHandoff.take(document.getId());
+        if (handed.isPresent()) {
+            String text = handed.get();
+            return text.length() > max ? text.substring(0, max) : text;
+        }
         IndexService indexService = indexServiceProvider.getIfAvailable();
         if (indexService != null) {
             try {
@@ -1024,6 +1070,20 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
 
     private static String createdBy(Caller caller) {
         return caller.email() == null || caller.email().isBlank() ? UserInfoService.ANONYMOUS_USER : caller.email();
+    }
+
+    private static Object[] createFolderLocks() {
+        Object[] locks = new Object[FOLDER_LOCK_STRIPES];
+        for (int i = 0; i < locks.length; i++) {
+            locks[i] = new Object();
+        }
+        return locks;
+    }
+
+    /** The stripe guarding one target folder of one scope; collisions only cost a needless wait. */
+    private Object createFolderLock(UUID scopeRoot, String target) {
+        int hash = Objects.hash(scopeRoot, target == null ? "" : target.toLowerCase(Locale.ROOT));
+        return createFolderLocks[Math.floorMod(hash, createFolderLocks.length)];
     }
 
     private static <T> T blockWithAuth(Mono<T> mono, Caller caller) {
