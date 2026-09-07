@@ -13,6 +13,9 @@ public interface SignatureRecipientRepository extends ReactiveCrudRepository<Sig
 
     Flux<SignatureRecipient> findByEnvelopeIdOrderByOrderIndexAscSortOrderAscIdAsc(UUID envelopeId);
 
+    /** Every recipient of a page of envelopes, in one statement — see {@code SignatureServiceImpl.loadDtos}. */
+    Flux<SignatureRecipient> findByEnvelopeIdInOrderByOrderIndexAscSortOrderAscIdAsc(Collection<UUID> envelopeIds);
+
     /** Token lookup: the only authenticator for tokenized links (revoked tokens are rejected by the service). */
     Mono<SignatureRecipient> findByTokenHash(String tokenHash);
 

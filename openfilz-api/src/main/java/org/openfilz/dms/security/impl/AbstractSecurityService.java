@@ -46,6 +46,13 @@ public abstract class AbstractSecurityService implements SecurityService {
     @Value("${openfilz.signature.require-requester-role:false}")
     protected boolean requireSignatureRequesterRole;
 
+    /**
+     * Runtime toggle ({@code openfilz.workflows.require-designer-role}): when on, workflow
+     * definition writes additionally require {@link Role#WORKFLOW_DESIGNER}.
+     */
+    @Value("${openfilz.workflows.require-designer-role:false}")
+    protected boolean requireWorkflowDesignerRole;
+
     protected final AutorizationMode autorizationMode;
     protected final OnlyOfficeProperties onlyOfficeProperties;
     protected final ThumbnailProperties thumbnailProperties;
@@ -73,6 +80,12 @@ public abstract class AbstractSecurityService implements SecurityService {
         // /public/signatures/** path never reaches here (dedicated permit-all chain).
         if (idx >= 0 && isSignature(getContextPath(fullPath, idx))) {
             return isSignatureAuthorized(auth, method, getContextPath(fullPath, idx));
+        }
+        // Workflows: reads for READER/CONTRIBUTOR; completing a task only needs to be a candidate (the
+        // service checks); definition writes, start, cancel and reassign need CONTRIBUTOR. Sits above the
+        // DELETE check so a CONTRIBUTOR may delete their own definitions.
+        if (idx >= 0 && isWorkflow(getContextPath(fullPath, idx))) {
+            return isWorkflowAuthorized(auth, method, getContextPath(fullPath, idx));
         }
         if(isDeleteAccess(request)) {
             return isAuthorized((JwtAuthenticationToken) auth, Role.CLEANER.toString());
@@ -265,6 +278,34 @@ public abstract class AbstractSecurityService implements SecurityService {
 
     protected final boolean isSignature(String path) {
         return pathStartsWith(path, RestApiVersion.ENDPOINT_SIGNATURES, RestApiVersion.ENDPOINT_SIGNATURE_TEMPLATES);
+    }
+
+    /**
+     * Workflows authorisation hook (docs/workflows.md §7). GET → READER/CONTRIBUTOR; completing a
+     * task (POST /tasks/{id}/complete) → READER/CONTRIBUTOR too, the engine binds it to the
+     * candidate list; definition writes → CONTRIBUTOR (+ {@link Role#WORKFLOW_DESIGNER} when
+     * {@link #requireWorkflowDesignerRole}); everything else (start, cancel, reassign, validate) → CONTRIBUTOR.
+     */
+    protected boolean isWorkflowAuthorized(Authentication auth, HttpMethod method, String path) {
+        if (method.equals(HttpMethod.GET) || isWorkflowTaskCompletion(path)) {
+            return isAuthorized((JwtAuthenticationToken) auth, of(Role.READER.toString(), Role.CONTRIBUTOR.toString()));
+        }
+        if (requireWorkflowDesignerRole && isWorkflowDefinitionWrite(path)) {
+            return hasAllRoles((JwtAuthenticationToken) auth, of(Role.CONTRIBUTOR.toString(), Role.WORKFLOW_DESIGNER.toString()));
+        }
+        return isAuthorized((JwtAuthenticationToken) auth, Role.CONTRIBUTOR.toString());
+    }
+
+    protected final boolean isWorkflow(String path) {
+        return pathStartsWith(path, RestApiVersion.ENDPOINT_WORKFLOWS);
+    }
+
+    protected final boolean isWorkflowTaskCompletion(String path) {
+        return path.startsWith(RestApiVersion.ENDPOINT_WORKFLOWS + "/tasks/") && path.endsWith("/complete");
+    }
+
+    protected final boolean isWorkflowDefinitionWrite(String path) {
+        return path.startsWith(RestApiVersion.ENDPOINT_WORKFLOWS + "/definitions") && !path.endsWith("/validate");
     }
 
     protected final boolean isAudit(String path) {

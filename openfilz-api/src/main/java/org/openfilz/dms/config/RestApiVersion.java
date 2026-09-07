@@ -24,4 +24,5 @@ public interface RestApiVersion {
     String ENDPOINT_SIGNATURE_TEMPLATES = "/signature-templates";
     String ENDPOINT_PUBLIC_SIGNATURES = "/public/signatures";
     String ENDPOINT_PDF = "/pdf";
+    String ENDPOINT_WORKFLOWS = "/workflows";
 }

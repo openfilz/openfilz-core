@@ -30,6 +30,7 @@ Pick the guide that matches your role:
 | **Understand** the AI feature (config resolution, ingestion & indexing, chat pipeline, BYOK) | [AI Architecture](docs/ai.md) |
 | **Connect an AI agent** (Claude Code/Desktop, n8n, custom agents) over MCP | [MCP Server](docs/mcp.md) |
 | **Send documents for electronic signature** (envelopes, fields, templates, seals, configuration) | [e-Sign Guide](docs/esign.md) |
+| **Run document workflows** (statuses, transitions, tasks, hot folders, reminders — no external engine) | [Workflows Guide](docs/workflows.md) |
 | **Contribute** to the open-source codebase | [Contributor Guide](docs/contributor-guide.md) |
 
 ---
