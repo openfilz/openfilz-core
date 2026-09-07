@@ -236,8 +236,18 @@ spec:
               value: {{ .Values.ai.insights.dailyLimit | quote }}
             - name: OPENFILZ_AI_INSIGHTS_CONCURRENCY
               value: {{ .Values.ai.insights.concurrency | quote }}
+            - name: OPENFILZ_AI_INSIGHTS_LOCAL_CONCURRENCY
+              value: {{ .Values.ai.insights.localConcurrency | quote }}
             - name: OPENFILZ_AI_AUTO_FILE_CONCURRENCY
               value: {{ .Values.ai.autoFile.concurrency | quote }}
+            - name: OPENFILZ_AI_AUTO_FILE_SESSION_GRACE
+              value: {{ .Values.ai.autoFile.sessionGrace | quote }}
+            - name: OPENFILZ_AI_AUTO_FILE_TEXT_HANDOFF
+              value: {{ .Values.ai.autoFile.textHandoff.enabled | quote }}
+            - name: OPENFILZ_AI_AUTO_FILE_TEXT_HANDOFF_MAX_CHARS
+              value: {{ .Values.ai.autoFile.textHandoff.maxCharacters | quote }}
+            - name: OPENFILZ_AI_AUTO_FILE_TEXT_HANDOFF_TTL
+              value: {{ .Values.ai.autoFile.textHandoff.ttl | quote }}
             - name: OPENFILZ_AI_AUTO_FILE_ACTIVE
               value: {{ .Values.ai.autoFile.active | quote }}
             - name: OPENFILZ_AI_AUTO_FILE_DEFAULT

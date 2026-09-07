@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.openfilz.dms.config.RestApiVersion;
+import org.openfilz.dms.dto.request.AutoFileJobsRequest;
 import org.openfilz.dms.dto.request.AutoFileRequest;
 import org.openfilz.dms.dto.response.AutoFileJobView;
 import org.openfilz.dms.dto.response.FilingOutcome;
@@ -25,6 +26,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -38,6 +40,9 @@ import java.util.concurrent.Callable;
 @SecurityRequirement(name = "keycloak_auth")
 @Tag(name = "Smart filing", description = "OpenFilz chooses the destination folder of uploaded documents on request")
 public class AutoFileController implements UserInfoService {
+
+    /** Jobs one poll may follow — a batch is capped at auto-file.max-per-batch documents anyway. */
+    private static final int MAX_JOBS_PER_POLL = 500;
 
     private final AutoFileService autoFileService;
 
@@ -55,6 +60,25 @@ public class AutoFileController implements UserInfoService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "documentIds is required");
         }
         return withCaller(caller -> autoFileService.schedule(ids, caller, request.allowNewFolders()));
+    }
+
+    @PostMapping(value = "/jobs", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Progress and outcome of several filing jobs",
+            description = "Follows a whole upload batch in one call: the browser sends one upload request per file, "
+                    + "so a batch leaves as many jobs to poll. Jobs that do not exist, or belong to somebody else, "
+                    + "are left out of the answer rather than failing it. A POST because a batch of ids does not fit "
+                    + "in a query string.")
+    public Mono<List<AutoFileJobView>> jobs(@RequestBody AutoFileJobsRequest request) {
+        requireActive();
+        List<UUID> ids = request == null || request.jobIds() == null ? List.of()
+                : request.jobIds().stream().filter(Objects::nonNull).distinct().limit(MAX_JOBS_PER_POLL).toList();
+        if (ids.isEmpty()) {
+            return Mono.just(List.of());
+        }
+        return withCaller(caller -> ids.stream()
+                .map(id -> autoFileService.job(id, caller))
+                .flatMap(Optional::stream)
+                .toList());
     }
 
     @GetMapping(value = "/{jobId}", produces = MediaType.APPLICATION_JSON_VALUE)

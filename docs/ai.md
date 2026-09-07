@@ -296,7 +296,8 @@ no metadata audit):
   `DocumentInsightStore.saveFileMetadata` upserts). Free, deterministic, on whenever Tika runs.
 - **Tier 2 — AI enrichment** (`openfilz.ai.insights.active`): `AiDocumentInsightService` sends the
   head of the text (`max-chars`) to a model on a bounded queue (`concurrency`, never on the upload
-  path) and stores a category from the closed list (`categories`, unknown → `other`), a summary,
+  path — `local-concurrency`, higher by default, when `classifier.mode` is `prototype` or `learned`,
+  since those never call a model and only CPU limits them) and stores a category from the closed list (`categories`, unknown → `other`), a summary,
   keywords, the language and a few entities; FAILED on a non-contract answer, SKIPPED above
   `max-file-size` / without text / past `daily-limit`. The model is the chat model or
   `openfilz.ai.insights.model` (`provider:model`, server key). Results are mirrored to OpenSearch
@@ -373,7 +374,36 @@ uploaded document seconds after the upload response (which carries `autoFile.job
    permission / name-clash / no-op checks as a chat proposal, same audited move. Below the
    thresholds the document stays (SKIPPED with the reason).
 
-`GET /api/v1/ai/auto-file/{jobId}` follows a batch, `POST …/{jobId}/undo` moves it back,
+**One parse per upload.** The filing needs the head of the document's text (the vector query, and
+the model when it is reached). It reads it from the search index when full-text is on; when it is
+off it used to read the file back from storage and run Tika over it a second time, for the very
+characters the upload's own pass had just produced. `DocumentTextHandoff`
+(`auto-file.text-handoff`) carries them across instead: the *standalone* embedding path — the one
+that runs exactly when full-text is off — offers the head, the filing takes it, and the entry is
+gone. With OpenSearch on, the producer is not the code path that runs, so the buffer stays empty
+and the index is still what answers: the optimisation cannot become an overhead on top of it.
+Memory is bounded three ways, in that order: nothing is written when smart filing is off, `take`
+removes what it returns, and what nobody took is evicted by *total characters*
+(`max-characters`, 2 000 000 ≈ 4 MB — the worst case whatever the batch size) and expires after
+`ttl`. An on-demand filing (`POST /ai/auto-file`) has no upload behind it and re-parses as before.
+
+**Throughput of a batch.** Every upload request schedules its own filing job, and the filings run
+on a bounded queue (`auto-file.concurrency`, 8). A worker is idle for most of its life — it waits
+for the document's tier-2 row, for a vector query, for the move — so the number to raise when users
+drop hundreds of files at once is that one, together with the insight worker's
+(`insights.concurrency`, or `insights.local-concurrency` for the no-model classifiers) that feeds
+it. Two documents of a batch heading for the *same* new folder still serialise, so the second finds
+the folder the first created; two heading for different folders no longer do (the lock is striped by
+scope + folder name). A long batch also outlives a short-lived access token — Keycloak's default is
+five minutes — so a filing queued while the token was valid may still run for
+`auto-file.session-grace` (30 min) past its expiry; without that grace the tail of the batch was
+skipped with *"the session expired before the document could be filed"*. The token is never sent
+anywhere: it only carries the identity the move is audited and authorised under.
+
+`GET /api/v1/ai/auto-file/{jobId}` follows one job and `POST …/jobs {jobIds}` follows a whole
+upload batch in a single call (the browser sends one upload request per file, so a batch leaves as
+many jobs; ids that do not exist or belong to somebody else are left out of the answer rather than
+failing it), `POST …/{jobId}/undo` moves a job back,
 `GET …/document/{id}` is the "Filed by OpenFilz" record, `POST …/filing/{planId}/undo` reverts one,
 `POST /api/v1/ai/auto-file {documentIds}` files existing documents; the `fileDocuments` tool does
 the same inline for agents. `AutoFileConfig` selects the real / no-op service at runtime;

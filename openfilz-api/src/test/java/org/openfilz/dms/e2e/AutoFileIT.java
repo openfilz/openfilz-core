@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.openfilz.dms.config.RestApiVersion;
+import org.openfilz.dms.dto.request.AutoFileJobsRequest;
 import org.openfilz.dms.dto.request.CreateFolderRequest;
 import org.openfilz.dms.dto.response.AiPreferencesView;
 import org.openfilz.dms.dto.response.AutoFileJobView;
@@ -290,6 +291,37 @@ class AutoFileIT extends TestContainersBaseConfig {
         assertThat(job).isNotNull();
         FilingOutcome byModel = awaitJob(job.jobId(), j -> "DONE".equals(j.status())).items().getFirst();
         assertThat(byModel.stage()).as(byModel.toString()).isEqualTo("MODEL");
+    }
+
+    @Test
+    @Order(7)
+    @DisplayName("a whole upload batch is followed in one call; unknown job ids are left out, not an error")
+    void aBatchOfJobsIsPolledInOneCall() {
+        // The browser sends one upload request per file, so a batch leaves one job per file
+        UploadResponse first = upload("batch-a-" + UUID.randomUUID() + ".txt", "Invoice F-2026-0201 from ACME, amount due.", null, true);
+        UploadResponse second = upload("batch-b-" + UUID.randomUUID() + ".txt", "Invoice F-2026-0202 from ACME, amount due.", null, true);
+        assertThat(first.autoFile()).isNotNull();
+        assertThat(second.autoFile()).isNotNull();
+        awaitJob(first.autoFile().jobId(), j -> "DONE".equals(j.status()));
+        awaitJob(second.autoFile().jobId(), j -> "DONE".equals(j.status()));
+
+        List<AutoFileJobView> jobs = getWebTestClient().post().uri(AUTO_FILE + "/jobs")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(BodyInserters.fromValue(new AutoFileJobsRequest(
+                        List.of(first.autoFile().jobId(), second.autoFile().jobId(), UUID.randomUUID()))))
+                .exchange().expectStatus().isOk()
+                .expectBodyList(AutoFileJobView.class).returnResult().getResponseBody();
+
+        assertThat(jobs).as("the job nobody owns is dropped, the two real ones come back").hasSize(2);
+        assertThat(jobs.stream().map(AutoFileJobView::jobId))
+                .containsExactlyInAnyOrder(first.autoFile().jobId(), second.autoFile().jobId());
+        assertThat(jobs).allSatisfy(job -> assertThat(job.items()).hasSize(1));
+
+        // An empty request is an empty answer, not a 400: the browser sends whatever it collected
+        getWebTestClient().post().uri(AUTO_FILE + "/jobs")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(BodyInserters.fromValue(new AutoFileJobsRequest(List.of())))
+                .exchange().expectStatus().isOk().expectBodyList(AutoFileJobView.class).hasSize(0);
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────

@@ -341,9 +341,11 @@ folder or — above a confidence threshold, within a depth limit, if the user al
 same validation and audit as a chat proposal. Below the thresholds nothing moves, and the reason is
 recorded.
 
-What the user sees: the switch in the upload area, a *"Filed by OpenFilz"* chip on the document with
-the reason, per-document and per-batch **Undo**, and the ability to file existing documents from a
-selection (`POST /api/v1/ai/auto-file`).
+What the user sees: the switch in the upload area, a toast once the batch is done — *"X filed · Y
+left in place"* — whose action opens **where your documents went**: the files grouped by the folder
+they landed in, the ones that stayed put with the reason they did, and an undo per row as well as
+one for the whole batch. Plus a *"Filed by OpenFilz"* chip on the document with the reason, and the
+ability to file existing documents from a selection (`POST /api/v1/ai/auto-file`).
 
 > **Read that flow again with the "no model" question in mind:** on a well-embedded library, the
 > vote and the rule between them decide the large majority of uploads. The model is the *fallback*,

@@ -324,6 +324,10 @@ openfilz:
       max-chars: ${OPENFILZ_AI_INSIGHTS_MAX_CHARS:6000}
       max-file-size: ${OPENFILZ_AI_INSIGHTS_MAX_FILE_SIZE:50MB}
       concurrency: ${OPENFILZ_AI_INSIGHTS_CONCURRENCY:2}
+      # Documents enriched at once when the category comes from a local classifier (prototype /
+      # learned modes below): no model call, no quota — only CPU — so a batch of uploads is
+      # classified far faster than the model concurrency above would allow.
+      local-concurrency: ${OPENFILZ_AI_INSIGHTS_LOCAL_CONCURRENCY:8}
       daily-limit: ${OPENFILZ_AI_INSIGHTS_DAILY_LIMIT:2000}
       categories: ${OPENFILZ_AI_INSIGHTS_CATEGORIES:invoice,quote,contract,report,letter,cv,presentation,spreadsheet,form,id-document,receipt,minutes,specification,manual,other}
       # Who names the category. llm: the chat model answers the whole insight (default). prototype:
@@ -360,8 +364,22 @@ openfilz:
       allow-new-folders: ${OPENFILZ_AI_AUTO_FILE_NEW_FOLDERS:true}
       max-per-batch: 200
       # Documents filed at once. Each waits for its tier-2 insight (wait-for-insights) and may
-      # ask the model: raise together with OPENFILZ_AI_INSIGHTS_CONCURRENCY for bulk uploads.
-      concurrency: ${OPENFILZ_AI_AUTO_FILE_CONCURRENCY:2}
+      # ask the model, so a filing worker is idle most of its life: raise it together with
+      # OPENFILZ_AI_INSIGHTS_CONCURRENCY (or its local-concurrency) for bulk uploads.
+      concurrency: ${OPENFILZ_AI_AUTO_FILE_CONCURRENCY:8}
+      # How long after the uploader's access token expires a filing queued while it was still
+      # valid may still run. A batch of hundreds of files outlives a short-lived access token:
+      # without this grace its tail is skipped with "the session expired". 0 = no grace.
+      session-grace: ${OPENFILZ_AI_AUTO_FILE_SESSION_GRACE:30m}
+      # The upload hands the text its own Tika pass produced to the filing that follows, so one
+      # upload is parsed once instead of twice. Only ever written when nothing else keeps that
+      # text (full-text indexing off) — with OpenSearch on it stays empty and costs nothing. An
+      # entry is removed when the filing takes it; whatever is left expires, and the total held
+      # is capped in characters (2 000 000 ~ 4 MB of heap), so it cannot grow with the batch.
+      text-handoff:
+        enabled: ${OPENFILZ_AI_AUTO_FILE_TEXT_HANDOFF:true}
+        max-characters: ${OPENFILZ_AI_AUTO_FILE_TEXT_HANDOFF_MAX_CHARS:2000000}
+        ttl: ${OPENFILZ_AI_AUTO_FILE_TEXT_HANDOFF_TTL:10m}
       neighbour-top-k: 20
       neighbour-min-share: 0.6
       neighbour-min-similarity: 0.5

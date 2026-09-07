@@ -28,6 +28,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
+import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
@@ -89,6 +90,12 @@ public class AiDocumentInsightService implements DocumentInsightService {
     private final AtomicInteger enrichedToday = new AtomicInteger();
     private volatile LocalDate today = LocalDate.now();
     private volatile Disposable worker;
+    /**
+     * The enrichments' own threads: a classification blocks (a model call, or an in-process
+     * embedding), and it must not compete for the shared {@code boundedElastic} with the uploads
+     * whose text it is enriching — a batch would otherwise slow down the very pipeline feeding it.
+     */
+    private volatile Scheduler scheduler;
     private volatile ResolvedChat model;
 
     public AiDocumentInsightService(AiProperties aiProperties, DocumentInsightStore store,
@@ -154,19 +161,35 @@ public class AiDocumentInsightService implements DocumentInsightService {
 
     @PostConstruct
     void start() {
-        int concurrency = Math.max(1, aiProperties.getInsights().getConcurrency());
+        int concurrency = workerConcurrency();
+        scheduler = Schedulers.newBoundedElastic(concurrency, Integer.MAX_VALUE, "openfilz-insights", 60, true);
         worker = queue.asFlux()
                 .flatMap(task -> process(task)
                         .onErrorResume(e -> {
                             log.warn("[INSIGHTS] enrichment of {} failed unexpectedly: {}", task.documentId(), e.toString());
                             return Mono.empty();
                         }), concurrency)
-                .subscribeOn(Schedulers.boundedElastic())
+                .subscribeOn(scheduler)
                 .subscribe();
-        log.info("[INSIGHTS] tier-2 enrichment worker started (concurrency={}, daily-limit={}, model={})",
-                concurrency, aiProperties.getInsights().getDailyLimit(),
+        log.info("[INSIGHTS] tier-2 enrichment worker started (concurrency={}, classifier={}, daily-limit={}, model={})",
+                concurrency, classifierMode(), aiProperties.getInsights().getDailyLimit(),
                 aiProperties.getInsights().getModel() == null || aiProperties.getInsights().getModel().isBlank()
                         ? "chat model" : aiProperties.getInsights().getModel());
+    }
+
+    /**
+     * How many documents are enriched at once. A mode that never calls a model
+     * ({@code prototype}, {@code learned}) is bound by CPU alone, not by a provider's quota, so
+     * it gets {@code local-concurrency} — an upload batch of hundreds of files would otherwise
+     * trickle through two at a time. Every other mode keeps {@code concurrency}, the number of
+     * concurrent model calls the deployment is willing to pay for.
+     */
+    private int workerConcurrency() {
+        AiProperties.Insights insights = aiProperties.getInsights();
+        Mode mode = classifierMode();
+        int configured = mode == Mode.PROTOTYPE || mode == Mode.LEARNED
+                ? insights.getLocalConcurrency() : insights.getConcurrency();
+        return Math.max(1, configured);
     }
 
     @PreDestroy
@@ -174,6 +197,9 @@ public class AiDocumentInsightService implements DocumentInsightService {
         queue.tryEmitComplete();
         if (worker != null) {
             worker.dispose();
+        }
+        if (scheduler != null) {
+            scheduler.dispose();
         }
     }
 
@@ -291,7 +317,7 @@ public class AiDocumentInsightService implements DocumentInsightService {
                     enrichedToday.incrementAndGet();
                     return Map.entry(used.get().provider().toLowerCase(Locale.ROOT) + ":" + used.get().model(), result);
                 })
-                .subscribeOn(Schedulers.boundedElastic())
+                .subscribeOn(scheduler)
                 .flatMap(entry -> {
                     String modelName = entry.getKey();
                     return store.saveEnrichment(document.getId(), entry.getValue(), modelName, PROMPT_VERSION)
