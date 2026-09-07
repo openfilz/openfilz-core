@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[3c81bff4ac79972](https://github.com/openfilz/openfilz-core/commit/3c81bff4ac79972) maven-release-bot[bot] *2026-09-06 19:10:42*
+[f59550fb2c1495c](https://github.com/openfilz/openfilz-core/commit/f59550fb2c1495c) maven-release-bot[bot] *2026-09-07 00:42:10*
 
 
-## v1.3.16
+## v1.3.17
 ### No issue
 
-**[maven-release-plugin] prepare release v1.3.16**
+**[maven-release-plugin] prepare release v1.3.17**
 
 
-[d2f6181b5171207](https://github.com/openfilz/openfilz-core/commit/d2f6181b5171207) maven-release-bot[bot] *2026-09-06 19:10:39*
+[a8ead34b8c4d199](https://github.com/openfilz/openfilz-core/commit/a8ead34b8c4d199) maven-release-bot[bot] *2026-09-07 00:42:08*
 
-**Merge pull request #237 from openfilz/develop**
+**Merge pull request #239 from openfilz/develop**
 
- * Add chat-only kill switch and AI overview documentation
+ * release: DMS workflows — engine, designer, access model and audit trail
 
-[ddbfd287bf61d00](https://github.com/openfilz/openfilz-core/commit/ddbfd287bf61d00) Yann Demel *2026-09-06 19:06:59*
+[a0f27e2db697394](https://github.com/openfilz/openfilz-core/commit/a0f27e2db697394) Yann Demel *2026-09-07 00:38:24*
 
 
