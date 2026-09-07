@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[f59550fb2c1495c](https://github.com/openfilz/openfilz-core/commit/f59550fb2c1495c) maven-release-bot[bot] *2026-09-07 00:42:10*
+[f48db54e579c234](https://github.com/openfilz/openfilz-core/commit/f48db54e579c234) maven-release-bot[bot] *2026-09-07 22:37:45*
 
 
-## v1.3.17
+## v1.3.18
 ### No issue
 
-**[maven-release-plugin] prepare release v1.3.17**
+**[maven-release-plugin] prepare release v1.3.18**
 
 
-[a8ead34b8c4d199](https://github.com/openfilz/openfilz-core/commit/a8ead34b8c4d199) maven-release-bot[bot] *2026-09-07 00:42:08*
+[3aef5108fcdfddd](https://github.com/openfilz/openfilz-core/commit/3aef5108fcdfddd) maven-release-bot[bot] *2026-09-07 22:37:43*
 
-**Merge pull request #239 from openfilz/develop**
+**Merge pull request #240 from openfilz/develop**
 
- * release: DMS workflows — engine, designer, access model and audit trail
+ * Enhance upload batch processing and session handling
 
-[a0f27e2db697394](https://github.com/openfilz/openfilz-core/commit/a0f27e2db697394) Yann Demel *2026-09-07 00:38:24*
+[d741f478987013f](https://github.com/openfilz/openfilz-core/commit/d741f478987013f) Yann Demel *2026-09-07 22:33:42*
 
 
