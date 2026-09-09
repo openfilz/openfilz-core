@@ -7,10 +7,12 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.RestApiVersion;
+import org.openfilz.dms.dto.audit.AuditIntegrityStatusResponse;
 import org.openfilz.dms.dto.audit.AuditLog;
 import org.openfilz.dms.dto.audit.AuditVerificationResult;
 import org.openfilz.dms.dto.request.SearchByAuditLogRequest;
 import org.openfilz.dms.enums.SortOrder;
+import org.openfilz.dms.service.AuditIntegrityStatus;
 import org.openfilz.dms.service.AuditService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.*;
@@ -29,6 +31,7 @@ import static org.openfilz.dms.config.RestApiVersion.ENDPOINT_AUDIT;
 @ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
 public class AuditController {
     private final AuditService auditService;
+    private final AuditIntegrityStatus integrityStatus;
 
     @GetMapping("/{id}")
     @Operation(summary = "Get audit trail for a resource", description = "Retrieves the audit trail for a given resource.")
@@ -49,5 +52,20 @@ public class AuditController {
     @Operation(summary = "Verify audit chain integrity", description = "Verifies the cryptographic hash chain of the audit log to detect any tampering.")
     public Mono<AuditVerificationResult> verifyChain() {
         return auditService.verifyChain();
+    }
+
+    @GetMapping("/verify/status")
+    @Operation(summary = "Last scheduled audit chain verification",
+            description = "Returns the cached verdict of the last scheduled verification on this instance, "
+                    + "without re-walking the chain. Poll this for monitoring; call /verify for an "
+                    + "authoritative, on-demand answer. `verified=false` means the chain has not been "
+                    + "checked yet on this instance — it does not mean the chain is valid.")
+    public Mono<AuditIntegrityStatusResponse> auditIntegrityStatus() {
+        return Mono.fromSupplier(() -> new AuditIntegrityStatusResponse(
+                integrityStatus.isChainBroken(),
+                integrityStatus.lastResult().isPresent(),
+                integrityStatus.lastResult().orElse(null),
+                integrityStatus.lastFailureMessage().orElse(null),
+                integrityStatus.lastFailureAt().orElse(null)));
     }
 }
