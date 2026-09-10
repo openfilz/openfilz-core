@@ -145,7 +145,21 @@ Bearer token → ReactiveJwtDecoder → SecurityService.authorize()
   - e-Sign writes → CONTRIBUTOR (+ SIGN_REQUESTER when `openfilz.signature.require-requester-role=true`)
 
 **SecurityServiceImpl:** Default (full CRUD)
-**WormSecurityServiceImpl:** WORM mode (read-only)
+
+**WORM is a rule, not an implementation.** `WormPolicy` (default `DefaultWormPolicy`, driven by
+`openfilz.security.worm-mode`) says whether a request falls inside a write-once perimeter;
+`AbstractSecurityService` owns what that forbids (`isWormForbidden` / `isWormCreation`) and applies
+it **before** any role or edition-specific rule, so every implementation inherits it — including
+the enterprise one, whose `isCustomAccessAuthorized` would otherwise authorise its own writes
+straight past it. Reads, the POST-shaped searches and the creation whitelist (upload, new folder,
+copies, `/pdf`) pass; everything else is refused.
+
+The mode used to be a rival bean (`WormSecurityServiceImpl`) that refused to start under
+`openfilz.features.custom-access=true` — i.e. on every Enterprise deployment — while the product
+advertised it. That bean and `DefaultRolesNoWormCondition` are gone. `DefaultWormPolicy` keeps the
+start-up guards (`no-auth` and `calculate-checksum` must be compatible); `custom-access` is no
+longer among them. The same perimeter is re-applied in `DefaultAiToolRolePolicy`, because AI-chat
+and MCP tool calls never reach the HTTP security chain.
 
 ### Configuration
 ```yaml

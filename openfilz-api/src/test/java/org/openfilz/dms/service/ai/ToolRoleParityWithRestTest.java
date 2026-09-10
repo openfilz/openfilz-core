@@ -86,7 +86,7 @@ class ToolRoleParityWithRestTest {
         mode.init();
 
         SecurityServiceImpl service = new SecurityServiceImpl(
-                mode, new OnlyOfficeProperties(), new ThumbnailProperties());
+                mode, new OnlyOfficeProperties(), new ThumbnailProperties(), () -> false);
         // @Value-injected in production.
         ReflectionTestUtils.setField(service, "requireSignatureRequesterRole", requireRequesterRole);
         ReflectionTestUtils.setField(service, "graphQlBaseUrl", "/graphql/v1");
@@ -103,7 +103,7 @@ class ToolRoleParityWithRestTest {
         SignatureProperties signatureProperties = new SignatureProperties();
         signatureProperties.setRequireRequesterRole(requireRequesterRole);
         AiToolRolePolicy tools = new DefaultAiToolRolePolicy(
-                java.util.Optional.of(rest), signatureProperties);
+                java.util.Optional.of(rest), signatureProperties, () -> false);
 
         for (ToolCapability capability : REST_EQUIVALENT.keySet()) {
             for (Set<String> roles : ROLE_SETS) {

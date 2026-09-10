@@ -2,6 +2,7 @@ package org.openfilz.dms.e2e;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.response.FolderResponse;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -14,6 +15,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.Map;
+import java.util.UUID;
 
 import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 
@@ -21,6 +23,14 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestConstructor(autowireMode = ALL)
 public class WormSecurityIT extends SecurityIT {
+
+    /*
+     * D1 — WORM used to be a SecurityService of its own, refusing to start alongside any other
+     * edition. It is now a rule inherited by every implementation (AbstractSecurityService), so
+     * the cases below split in two: the refusals this suite always asserted, and — added with D1 —
+     * what the perimeter must NOT break. A rule that refuses everything would pass the first half
+     * and make the mode useless.
+     */
 
 
     public WormSecurityIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
@@ -165,4 +175,89 @@ public class WormSecurityIT extends SecurityIT {
         addAuthorization(getMoveFolderRequest(folder1, createFolder()), adminAccessToken).exchange().expectStatus().isForbidden();
     }
 
+
+    // ------------------------------------------------------------------ what WORM still refuses
+
+    /**
+     * Restoring an old version rewrites the current content, so it is a write however it is
+     * spelled. It is whitelisted in the ordinary rule set ({@code isVersionRestore}) and must not
+     * be in the WORM one.
+     */
+    @Test
+    void testRestoreVersionIsRefused() {
+        UploadResponse uploadResponse = uploadNewFile();
+
+        addAuthorization(getRestoreVersionRequest(uploadResponse), contributorAccessToken)
+                .exchange().expectStatus().isForbidden();
+        addAuthorization(getRestoreVersionRequest(uploadResponse), adminAccessToken)
+                .exchange().expectStatus().isForbidden();
+        addAuthorization(getRestoreVersionRequest(uploadResponse), cleanerAccessToken)
+                .exchange().expectStatus().isForbidden();
+    }
+
+    // ------------------------------------------------------------ what WORM must NOT break
+
+    /**
+     * Write-once, not write-never. Ingestion is the entire point of an archive, so uploads, new
+     * folders and copies (which write a new object and leave the source untouched) stay open to a
+     * CONTRIBUTOR.
+     */
+    @Test
+    void testIngestionStillWorks() {
+        FolderResponse folder = createFolder();
+        Assertions.assertNotNull(folder);
+
+        UploadResponse uploaded = uploadNewFile();
+        Assertions.assertNotNull(uploaded);
+
+        addAuthorization(getCopyRequest(uploaded, folder), contributorAccessToken)
+                .exchange().expectStatus().isOk();
+        addAuthorization(getCopyFolderRequest(createFolder(), createFolder()), contributorAccessToken)
+                .exchange().expectStatus().isOk();
+    }
+
+    /**
+     * Reads are untouched — including the ones spelled as POST, which the perimeter has to
+     * recognise as reads rather than refuse on the method alone.
+     */
+    @Test
+    void testReadsAreUnaffected() {
+        UploadResponse first = uploadNewFile();
+        UploadResponse second = uploadNewFile();
+
+        addAuthorization(getDocumentInfoRequest(first), readerAccessToken)
+                .exchange().expectStatus().isOk();
+        addAuthorization(getDownloadRequest(first), readerAccessToken)
+                .exchange().expectStatus().isOk();
+        addAuthorization(getListFolderRequest(null), readerAccessToken)
+                .exchange().expectStatus().isOk();
+        // POST used for reading, not writing.
+        addAuthorization(getDownloadMultipleRequest(first, second), readerAccessToken)
+                .exchange().expectStatus().isOk();
+        addAuthorization(getSearchMetadataRequest(first), readerAccessToken)
+                .exchange().expectStatus().isOk();
+    }
+
+    /**
+     * A favourite is a per-user bookmark, not document content — and it is spelled PUT. It was
+     * reachable under the old WORM service (the query/search branch ran before the write check)
+     * and must stay so, or the archive becomes unusable to browse.
+     */
+    @Test
+    void testFavouritesStillWork() {
+        UploadResponse uploadResponse = uploadNewFile();
+
+        addAuthorization(getToggleFavouriteRequest(uploadResponse), contributorAccessToken)
+                .exchange().expectStatus().isOk();
+    }
+
+    private WebTestClient.RequestHeadersSpec<?> getRestoreVersionRequest(UploadResponse uploadResponse) {
+        return webTestClient.post().uri(RestApiVersion.API_PREFIX + "/documents/{id}/versions/{versionId}/restore",
+                uploadResponse.id(), UUID.randomUUID());
+    }
+
+    private WebTestClient.RequestHeadersSpec<?> getToggleFavouriteRequest(UploadResponse uploadResponse) {
+        return webTestClient.put().uri(RestApiVersion.API_PREFIX + "/favorites/{documentId}/toggle",
+                uploadResponse.id());
+    }
 }

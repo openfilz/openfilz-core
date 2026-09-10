@@ -247,7 +247,10 @@ Selected via `@Lazy @Qualifier` + a `@Configuration` factory with `@Primary @Bea
 | Class | Mode | Behavior |
 |-------|------|----------|
 | `SecurityServiceImpl` | Default | Full CRUD authorization |
-| `WormSecurityServiceImpl` | WORM | Read-only (no write/delete) |
+
+WORM is **not** an implementation of its own: `WormPolicy` marks the write-once perimeter and
+`AbstractSecurityService.isWormForbidden` applies it ahead of every other rule, so all
+implementations inherit it. See `security/WormPolicy.java`.
 
 Roles are extracted from the JWT token by `DefaultJwtTokenParser`, reading either `realm_access.roles` or `groups` claims.
 

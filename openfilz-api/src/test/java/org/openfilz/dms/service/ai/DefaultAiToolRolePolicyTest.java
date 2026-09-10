@@ -57,7 +57,7 @@ class DefaultAiToolRolePolicyTest {
         SignatureProperties signatureProperties = new SignatureProperties();
         signatureProperties.setRequireRequesterRole(requireRequesterRole);
         return new DefaultAiToolRolePolicy(
-                Optional.of(securityServiceGranting(grantedRoles)), signatureProperties);
+                Optional.of(securityServiceGranting(grantedRoles)), signatureProperties, () -> false);
     }
 
     private static JwtAuthenticationToken jwt() {
@@ -163,7 +163,7 @@ class DefaultAiToolRolePolicyTest {
         // openfilz.security.no-auth=true leaves no SecurityService bean and no JWT. Refusing there
         // would break the tools on every no-auth deployment; permitting matches the security chain,
         // which permits every request in that mode.
-        AiToolRolePolicy noAuth = new DefaultAiToolRolePolicy(Optional.empty(), new SignatureProperties());
+        AiToolRolePolicy noAuth = new DefaultAiToolRolePolicy(Optional.empty(), new SignatureProperties(), () -> false);
 
         assertThat(noAuth.isAllowed(new TestingAuthenticationToken("anonymous", "n/a"),
                 ToolCapability.DOCUMENT_WRITE)).isTrue();

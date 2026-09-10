@@ -348,7 +348,7 @@ Leave empty to disable a provider:
 | `openfilz.security.role-token-lookup` | `REALM_ACCESS` | Where to find roles in JWT: `REALM_ACCESS` (realm roles) or `GROUPS` (Keycloak groups) |
 | `openfilz.security.root-group` | `OPENFILZ` | Root group name when using `GROUPS` lookup (e.g., `/OPENFILZ/READER`) |
 | `openfilz.security.custom-roles` | `false` | Enable custom security implementation |
-| `openfilz.security.worm-mode` | `false` | Enable WORM (read-only) mode |
+| `openfilz.security.worm-mode` | `false` | Enable WORM (write-once) mode. Ingestion (upload, new folder, copy) and reads stay open; deletes and in-place updates are refused. Requires `openfilz.calculate-checksum=true` and `openfilz.security.no-auth=false`; compatible with `openfilz.features.custom-access` since 1.3.19. |
 
 #### Built-in Roles
 
@@ -1057,7 +1057,7 @@ Summary of all toggleable features:
 | Feature | Property | Default | Notes |
 |---------|----------|---------|-------|
 | Authentication | `openfilz.security.no-auth` | `true` | Set to `false` for production |
-| WORM mode | `openfilz.security.worm-mode` | `false` | Makes all documents read-only |
+| WORM mode | `openfilz.security.worm-mode` | `false` | Write-once: documents can be added but never modified or deleted |
 | Soft delete | `openfilz.soft-delete.active` | `false` | Enables recycle bin |
 | Thumbnails | `openfilz.thumbnail.active` | `false` | Requires Gotenberg |
 | Full-text search | `openfilz.full-text.active` | `false` | Requires OpenSearch |

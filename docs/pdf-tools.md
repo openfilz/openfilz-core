@@ -71,7 +71,7 @@ point for a lazy thumbnail grid.
 | Risk | Decision |
 |---|---|
 | Memory / CPU on the API process (native image, shared with uploads) | PDFBox in-process, temp-file backed (`RandomAccessReadBufferedFile` + `IOUtils.createTempFileOnlyStreamCache()`), on `boundedElastic`, bounded by `openfilz.pdf-tools.max-*` limits and a small concurrency semaphore. No external service: works with `thumbnail.active=false`, no Gotenberg. |
-| New POST paths are 403 by default | `AbstractSecurityService.isInsertOrUpdateAccess` must allow-list `/api/v1/pdf/**` (CONTRIBUTOR). `WormSecurityServiceImpl` mirrors the existing rule: new documents allowed, in-place replace refused. |
+| New POST paths are 403 by default | `AbstractSecurityService.isInsertOrUpdateAccess` must allow-list `/api/v1/pdf/**` (CONTRIBUTOR). WORM mirrors the existing rule via `AbstractSecurityService.isWormCreation`: new documents allowed, in-place replace refused. |
 | Digitally signed PDFs (e-Sign output, AATL seal) become invalid after any change | `/info` reports `signed`; the UI warns and defaults to *new document*; the backend refuses `NEW_VERSION` on a signed PDF unless `acknowledgeSignatureLoss=true` (409). Documents attached to an **active e-Sign envelope** are refused for in-place edits — `/info` reports `activeSignatureEnvelope` so the UI disables *new version* up front instead of surfacing the 409. |
 | Encrypted PDFs | v1 refuses with a 422 `PDF_ENCRYPTED`; v2 adds unlock/protect. |
 | Generated SDKs break on anonymous schemas / enum quirks | Every DTO is a named top-level record; enum fields verified against the springdoc `swagger-annotations` clash (see core `CLAUDE.md` §17); SDK generation is a phase-1 exit criterion. |

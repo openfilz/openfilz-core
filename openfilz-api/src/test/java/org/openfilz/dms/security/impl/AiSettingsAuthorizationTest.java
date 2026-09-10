@@ -39,7 +39,8 @@ class AiSettingsAuthorizationTest {
         service = new SecurityServiceImpl(
                 new AutorizationMode(),
                 mock(OnlyOfficeProperties.class),
-                mock(ThumbnailProperties.class));
+                mock(ThumbnailProperties.class),
+                () -> false);
     }
 
     private JwtAuthenticationToken user(String... realmRoles) {
