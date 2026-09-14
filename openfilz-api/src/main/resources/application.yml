@@ -455,7 +455,8 @@ openfilz:
 
   security:
     no-auth: true # No authentication required
-    worm-mode: false # if true : only read-only endPoints (for list, query and download) and upload (and upload-multiple) endPoints are accessible
+    worm-mode: ${OPENFILZ_SECURITY_WORM_MODE:false} # if true : only read-only endPoints (for list, query and download) and upload (and upload-multiple) endPoints are accessible
+    worm-retention: ${OPENFILZ_SECURITY_WORM_RETENTION:} # MANDATORY when worm-mode is true and storage.type is minio : ISO-8601 period (e.g. P10Y) each object stays locked, written as S3 Object Lock COMPLIANCE retention
     custom-roles: false # if true : you can provide a custom implementation of org.openfilz.dms.config.DefaultAuthSecurityConfig and org.openfilz.dms.security.impl.SecurityServiceImpl
     cors-allowed-origins: http://localhost:4200/ # Comma-separated list of authorized origins
     role-token-lookup: REALM_ACCESS # GROUPS or REALM_ACCESS (default value) : optional value used in org.openfilz.dms.security.impl.AbstractSecurityService to retrieve Role information from Groups or from the Realm_access

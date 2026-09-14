@@ -101,6 +101,12 @@ features:
   thumbnails: false          # needs gotenberg.url
   softDelete: true
   checksum: false
+  # WORM (write-once) mode: no delete, no in-place update. Ingestion and reads stay open.
+  # Requires checksum: true. With storage.type=minio, wormRetention is MANDATORY — the API
+  # refuses to start without it, because the objects would then carry no S3 object-lock at all.
+  wormMode: false
+  # ISO-8601 period each object stays locked (S3 Object Lock, COMPLIANCE mode). e.g. P10Y
+  wormRetention: ""
   fulltext: false            # needs opensearch.*
 
 gotenberg:

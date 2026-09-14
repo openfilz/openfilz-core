@@ -178,6 +178,8 @@ services:
 
       # Security / Keycloak
       OPENFILZ_SECURITY_NO_AUTH: "false"
+      OPENFILZ_SECURITY_WORM_MODE: ${OPENFILZ_SECURITY_WORM_MODE:-false}
+      OPENFILZ_SECURITY_WORM_RETENTION: ${OPENFILZ_SECURITY_WORM_RETENTION:-}
       KEYCLOAK_REALM_URL: http://keycloak:8080/realms/openfilz
       OPENFILZ_SECURITY_CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://app.openfilz.com,https://docs.openfilz.com}
 
