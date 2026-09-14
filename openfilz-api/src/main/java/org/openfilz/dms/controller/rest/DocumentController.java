@@ -16,6 +16,8 @@ import org.openfilz.dms.converter.CustomJsonPart;
 import org.openfilz.dms.dto.request.*;
 import org.openfilz.dms.dto.response.*;
 import org.openfilz.dms.entity.Document;
+import org.openfilz.dms.dto.response.DocumentIntegrityRecord;
+import org.openfilz.dms.service.DocumentIntegrityService;
 import org.openfilz.dms.service.DocumentService;
 import org.openfilz.dms.service.DocumentVersionService;
 import org.openfilz.dms.service.OnlyOfficeJwtService;
@@ -54,6 +56,9 @@ public class DocumentController {
     private final DocumentService documentService;
 
     private final ObjectMapper objectMapper; // For parsing metadata string
+
+    /** C2 — the append-only fingerprint ledger behind GET /{documentId}/integrity. */
+    private final DocumentIntegrityService documentIntegrityService;
 
     // Optional: Only available when OnlyOffice is enabled
     @Autowired(required = false)
@@ -393,6 +398,17 @@ public class DocumentController {
             @Parameter(description = "if false : only name, type and parentId are sent (when not null) - if true : metadata and size are added in the response") @RequestParam(required = false) Boolean withMetadata) {
         return documentService.getDocumentInfo(documentId, withMetadata)
                 .map(ResponseEntity::ok);
+    }
+
+    @GetMapping("/{documentId}/integrity")
+    @Operation(summary = "Get a document's integrity ledger",
+            description = "Append-only history of what this document's content hashed to, newest first. "
+                    + "Unlike the sha256 in metadata, these entries cannot be modified or deleted — a database "
+                    + "trigger refuses UPDATE and DELETE on the table. Empty for documents uploaded before the "
+                    + "ledger existed, or when openfilz.calculate-checksum is off.")
+    public Flux<DocumentIntegrityRecord> getDocumentIntegrity(@PathVariable UUID documentId) {
+        return documentService.getDocumentInfo(documentId, false)
+                .thenMany(documentIntegrityService.history(documentId));
     }
 
     @GetMapping("/{documentId}/ancestors")

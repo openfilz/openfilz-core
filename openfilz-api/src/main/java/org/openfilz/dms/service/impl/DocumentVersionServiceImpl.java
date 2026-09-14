@@ -14,6 +14,7 @@ import org.openfilz.dms.exception.OperationForbiddenException;
 import org.openfilz.dms.repository.DocumentDAO;
 import org.openfilz.dms.service.AuditService;
 import org.openfilz.dms.service.ChecksumService;
+import org.openfilz.dms.service.DocumentIntegrityService;
 import org.openfilz.dms.service.DocumentVersionService;
 import org.openfilz.dms.service.MetadataPostProcessor;
 import org.openfilz.dms.service.StorageService;
@@ -52,6 +53,8 @@ public class DocumentVersionServiceImpl implements DocumentVersionService, UserI
     private final TransactionalOperator tx;
     private final JsonUtils jsonUtils;
     private final ObjectProvider<ChecksumService> checksumServiceProvider;
+    /** C2 — a restored version is new current content, so it earns its own ledger entry. */
+    private final DocumentIntegrityService documentIntegrityService;
 
     @Value("${openfilz.calculate-checksum:false}")
     private Boolean calculateChecksum;
@@ -59,7 +62,8 @@ public class DocumentVersionServiceImpl implements DocumentVersionService, UserI
     public DocumentVersionServiceImpl(DocumentDAO documentDAO, StorageService storageService,
                                       AuditService auditService, MetadataPostProcessor metadataPostProcessor,
                                       TransactionalOperator tx, JsonUtils jsonUtils,
-                                      ObjectProvider<ChecksumService> checksumServiceProvider) {
+                                      ObjectProvider<ChecksumService> checksumServiceProvider,
+                                      DocumentIntegrityService documentIntegrityService) {
         this.documentDAO = documentDAO;
         this.storageService = storageService;
         this.auditService = auditService;
@@ -67,6 +71,7 @@ public class DocumentVersionServiceImpl implements DocumentVersionService, UserI
         this.tx = tx;
         this.jsonUtils = jsonUtils;
         this.checksumServiceProvider = checksumServiceProvider;
+        this.documentIntegrityService = documentIntegrityService;
     }
 
     @Override
@@ -106,6 +111,12 @@ public class DocumentVersionServiceImpl implements DocumentVersionService, UserI
                     doc.setUpdatedBy(username);
                     return documentDAO.update(doc);
                 }))
+                // Restoring makes an older version the current content: a new fingerprint for the
+                // document, and one the ledger has to carry or the chain has a hole exactly where
+                // someone reverted something.
+                .flatMap(updated -> documentIntegrityService
+                        .record(updated.getId(), updated.getStoragePath(), newVersionId, currentChecksum(updated))
+                        .thenReturn(updated))
                 .flatMap(updatedDoc -> auditService.logAction(AuditAction.RESTORE_DOCUMENT_VERSION, FILE, updatedDoc.getId(),
                                 new RestoreVersionAudit(updatedDoc.getName(), restored.versionId(), restored.lastModified(), newVersionId))
                         .thenReturn(updatedDoc))
@@ -113,6 +124,15 @@ public class DocumentVersionServiceImpl implements DocumentVersionService, UserI
                 // content changed: refresh full-text index / thumbnails like a replace does
                 .doOnSuccess(metadataPostProcessor::processDocument)
                 .map(updatedDoc -> new RestoreVersionResponse(updatedDoc.getId(), restored.versionId(), restored.lastModified(), newVersionId));
+    }
+
+    /** The sha256 currently stored in the document's metadata, or {@code null} when absent. */
+    private String currentChecksum(Document document) {
+        if (document.getMetadata() == null) {
+            return null;
+        }
+        Object sha = jsonUtils.toMap(document.getMetadata()).get(ChecksumService.HASH_SHA256_KEY);
+        return sha != null ? sha.toString() : null;
     }
 
     /**

@@ -45,7 +45,8 @@ class DocumentControllerOnlyOfficeDownloadTest {
 
     @BeforeEach
     void setUp() {
-        controller = new DocumentController(documentService, mock(ObjectMapper.class));
+        controller = new DocumentController(documentService, mock(ObjectMapper.class),
+                mock(org.openfilz.dms.service.DocumentIntegrityService.class));
         ReflectionTestUtils.setField(controller, "onlyOfficeJwtService", onlyOfficeJwtService);
         ReflectionTestUtils.setField(controller, "documentVersionService", documentVersionService);
     }
