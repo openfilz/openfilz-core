@@ -360,6 +360,17 @@ from the `CategoryFolderNames` table in the language of the existing folder name
 `INSIGHTS_V1` / `AUTOFILE_V1` prompts), `AutoFileIT`, `AutoFileDecisionTest`, `InsightResultTest`, `TikaFileMetadataTest`.
 Any contributor that opts into the chat must also be excluded in `AiRealLlmE2EIT` (small model).
 
+**Seams + extras (2026-09-15, `feat/smart-reorg-end`).** Four seams let an extension shape the pipeline without core
+changes: `service/filing/DestinationRule` (a rule stage before the neighbour vote — scope override, target path, dry run,
+excluded folders; stage `POLICY`), `service/filing/FilingFeedback` (per-folder weights in the vote + undo notifications),
+`service/insight/InsightsPolicy` (may this document be enriched, may a model read it, which kinds never leave — consulted by
+the tier-2 worker and at every filing entry point; permit-all in core) and `service/insight/CategoryTaxonomy` (the kind
+list with descriptions that the prompt, the prototype classifier, `Settings.aiInsightsCategories` and the category
+correction read; `PropertiesCategoryTaxonomy` in core). Also: the per-user Inbox (`V1_12`, `openfilz.ai.auto-file.inbox.*`,
+`InboxScopeRule`, `POST /api/v1/ai/auto-file/inbox`), `category` / `language` search filters on both search paths +
+`GET /api/v1/ai/insights/facets`, and the `openfilz-cloud` provider for `openfilz.ai.insights.model`
+(`openfilz.ai.cloud.url` / `.api-key`, an OpenAI-compatible gateway).
+
 ### Settings API
 - **SettingsController** (`/api/v1/settings`) — exposes app config and user preferences to frontend
 
