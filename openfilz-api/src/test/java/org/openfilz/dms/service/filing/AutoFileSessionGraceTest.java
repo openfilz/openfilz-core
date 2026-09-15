@@ -55,7 +55,7 @@ class AutoFileSessionGraceTest {
         AiProperties properties = new AiProperties();
         properties.getAutoFile().setSessionGrace(grace);
         return new DefaultAutoFileService(properties, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, new DocumentTextHandoff(properties));
+                null, null, null, null, null, null, null, null, null, new DocumentTextHandoff(properties), null, null);
     }
 
     private static Caller callerWithTokenExpiring(Instant expiresAt) {

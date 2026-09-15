@@ -7,6 +7,7 @@ import org.openfilz.dms.dto.request.FilterInput;
 import org.openfilz.dms.dto.request.SortInput;
 import org.openfilz.dms.dto.response.DocumentSearchInfo;
 import org.openfilz.dms.dto.response.DocumentSearchResult;
+import org.openfilz.dms.enums.OpenSearchDocumentKey;
 import org.openfilz.dms.exception.OpenSearchException;
 import org.openfilz.dms.service.DocumentSearchService;
 import org.openfilz.dms.service.IndexNameProvider;
@@ -71,8 +72,11 @@ public class OpenSearchDocumentSearchService implements DocumentSearchService, O
 
                     // 7. Execute the request asynchronously
                     SearchRequest searchRequest = requestBuilder
+                            // The insight mirror adds category / summary / language to the source: the first two
+                            // facets travel with the hit (DocumentSearchInfo), the summary is long text nobody lists
                             .source(fn -> fn.filter(v ->
-                                    v.excludes(NAME_SUGGEST, openSearchQueryService.getSourceOtherExclusions()).excludes(ACTIVE))).build();
+                                    v.excludes(NAME_SUGGEST, openSearchQueryService.getSourceOtherExclusions()).excludes(ACTIVE)
+                                            .excludes(OpenSearchDocumentKey.summary.toString()))).build();
                     try {
                         return Mono.fromFuture(client.search(searchRequest, DocumentSearchInfo.class))
                                 .map(this::toDocumentSearchResult); // Convert the response to our DTO

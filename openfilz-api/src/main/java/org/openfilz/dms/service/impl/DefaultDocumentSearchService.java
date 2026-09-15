@@ -37,25 +37,7 @@ public class DefaultDocumentSearchService implements DocumentSearchService {
     public Mono<DocumentSearchResult> search(String query, List<FilterInput> filters, SortInput sort, int page, int size, DataFetchingEnvironment environment) {
         Map<String, String> filterMap = documentSearchUtil.toFilterMap(filters);
         ListFolderRequest searchListFolderRequest = documentSearchUtil.toListFolderRequest(query, filterMap, sort, page, size);
-        ListFolderRequest countListFolderRequest = new ListFolderRequest(
-                searchListFolderRequest.id(),
-                searchListFolderRequest.type(),
-                searchListFolderRequest.contentType(),
-                searchListFolderRequest.name(),
-                searchListFolderRequest.nameLike(),
-                searchListFolderRequest.metadata(),
-                searchListFolderRequest.size(),
-                searchListFolderRequest.createdAtAfter(),
-                searchListFolderRequest.createdAtBefore(),
-                searchListFolderRequest.updatedAtAfter(),
-                searchListFolderRequest.updatedAtBefore(),
-                searchListFolderRequest.createdBy(),
-                searchListFolderRequest.updatedBy(),
-                searchListFolderRequest.favorite(),
-                searchListFolderRequest.active(),
-                null,
-                searchListFolderRequest.recursive()
-        );
+        ListFolderRequest countListFolderRequest = searchListFolderRequest.forCount();
         if(filterMap!=null && filterMap.containsKey(FILTER_PARENT_ID)) {
             return Mono.zip(
                     documentQueryService.count(countListFolderRequest, environment),

@@ -113,5 +113,21 @@ public class SqlUtils {
         appendPrefix(prefix, sql).append(criteria).append(" @> :criteria::jsonb ");
     }
 
+    /**
+     * Restricts to the documents whose {@code ai_document_insights} row has {@code column} among
+     * the bound keys: {@code <prefix>id IN (SELECT document_id FROM ai_document_insights WHERE
+     * <column> = ANY(:<bind>)) }. Bind the keys as a {@code String[]} with
+     * {@link #bindInsightCriteria(String, List, DatabaseClient.GenericExecuteSpec)}. A document
+     * without an insight row never matches.
+     */
+    public void appendInsightCriteria(String prefix, String column, String bind, StringBuilder sql) {
+        appendPrefix(prefix, sql).append("id IN (SELECT document_id FROM ai_document_insights WHERE ")
+                .append(column).append(" = ANY(:").append(bind).append(")) ");
+    }
+
+    public DatabaseClient.GenericExecuteSpec bindInsightCriteria(String bind, List<String> keys, DatabaseClient.GenericExecuteSpec query) {
+        return query.bind(bind, keys.toArray(new String[0]));
+    }
+
 
 }

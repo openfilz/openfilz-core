@@ -37,6 +37,11 @@ public class NoOpAutoFileService implements AutoFileService {
     }
 
     @Override
+    public AutoFileJobView fileInbox(Caller caller, Boolean allowNewFolders) {
+        throw new IllegalStateException(OFF);
+    }
+
+    @Override
     public FilingOutcome fileNow(UUID documentId, Caller caller, Boolean allowNewFolders) {
         throw new IllegalStateException(OFF);
     }

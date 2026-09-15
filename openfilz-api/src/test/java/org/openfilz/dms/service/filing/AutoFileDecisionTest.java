@@ -88,6 +88,44 @@ class AutoFileDecisionTest {
     }
 
     @Test
+    @DisplayName("feedback weights scale each folder's pull in the vote, clamped, without touching the similarity guards")
+    void feedbackWeightsTheVote() {
+        // Two folders of equal similarity weight: a split vote nobody wins…
+        List<Neighbour> split = List.of(
+                new Neighbour(UUID.randomUUID(), INVOICES, 0.9),
+                new Neighbour(UUID.randomUUID(), CONTRACTS, 0.9));
+        assertThat(AutoFileDecision.vote(split, null, 0.6, 0.5, 0, Map.of())).isEmpty();
+        // …until the feedback says the user keeps filing this kind into INVOICES (weight 2 → share 2/3)
+        Optional<Vote> weighted = AutoFileDecision.vote(split, null, 0.6, 0.5, 0, Map.of(INVOICES, 2.0));
+        assertThat(weighted).isPresent();
+        assertThat(weighted.get().folderId()).isEqualTo(INVOICES);
+        assertThat(weighted.get().share()).isCloseTo(2.0 / 3.0, within(0.001));
+        assertThat(weighted.get().bestSimilarity()).as("the raw similarity, not the weighted one").isEqualTo(0.9);
+        // …or keeps undoing filings into CONTRACTS (weight 0.5 → INVOICES holds 2/3 as well)
+        assertThat(AutoFileDecision.vote(split, null, 0.6, 0.5, 0, Map.of(CONTRACTS, 0.5)))
+                .get().extracting(Vote::folderId).isEqualTo(INVOICES);
+
+        // A weight is clamped to [0.1, 3.0]: 100 counts as 3, so a 3-vs-1 headcount is still 50/50 at most
+        List<Neighbour> outnumbered = List.of(
+                new Neighbour(UUID.randomUUID(), INVOICES, 0.9),
+                new Neighbour(UUID.randomUUID(), CONTRACTS, 0.9),
+                new Neighbour(UUID.randomUUID(), CONTRACTS, 0.9),
+                new Neighbour(UUID.randomUUID(), CONTRACTS, 0.9));
+        Optional<Vote> clamped = AutoFileDecision.vote(outnumbered, null, 0.6, 0.5, 0, Map.of(INVOICES, 100.0));
+        assertThat(clamped).as("3 × 0.9 against 3 × 0.9: no 60 % share for anyone").isEmpty();
+        assertThat(AutoFileDecision.folderWeight(Map.of(INVOICES, 100.0), INVOICES)).isEqualTo(3.0);
+        assertThat(AutoFileDecision.folderWeight(Map.of(INVOICES, 0.0), INVOICES)).isEqualTo(0.1);
+        assertThat(AutoFileDecision.folderWeight(Map.of(), INVOICES)).isEqualTo(1.0);
+        assertThat(AutoFileDecision.folderWeight(Map.of(INVOICES, 2.0), null)).as("a neighbour with no folder").isEqualTo(1.0);
+
+        // A weight never makes a distant neighbour close: the similarity floor still applies to the raw value
+        List<Neighbour> weak = List.of(new Neighbour(UUID.randomUUID(), INVOICES, 0.3));
+        assertThat(AutoFileDecision.vote(weak, null, 0.6, 0.5, 0, Map.of(INVOICES, 3.0))).isEmpty();
+        // The unweighted overloads are the weighted vote with no weights
+        assertThat(AutoFileDecision.vote(split, null, 0.6, 0.5, 0)).isEqualTo(AutoFileDecision.vote(split, null, 0.6, 0.5, 0, null));
+    }
+
+    @Test
     @DisplayName("similarity purity: the share of a folder's files close to the document, no category needed")
     void similarityPurity() {
         // An invoice seen from a folder of 3 invoices and 2 reports: two clusters, a gap of 0.33 between them

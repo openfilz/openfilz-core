@@ -780,7 +780,9 @@ searchable (`category` facet).
 |---|---|---|
 | `TRANSFORMERS_EMBEDDING_ENABLED` | `false` | Embeddings computed inside the API through ONNX Runtime (nomic-embed-text-v1.5 by default, `TRANSFORMERS_EMBEDDING_MODEL_URI` / `_TOKENIZER_URI` for another ONNX model, `_CACHE_DIR` for where it is kept) — no Ollama, no embedding server; JVM images. Changing provider or model changes the vector space: re-embed the library |
 | `OPENFILZ_AI_INSIGHTS_ACTIVE` | `false` | Turn the model enrichment on |
-| `OPENFILZ_AI_INSIGHTS_MODEL` | *(chat model)* | `provider:model` for the enrichment, e.g. `anthropic:claude-haiku-4-5` — a cheap model is enough |
+| `OPENFILZ_AI_INSIGHTS_MODEL` | *(chat model)* | `provider:model` for the enrichment, e.g. `anthropic:claude-haiku-4-5` — a cheap model is enough. `openfilz-cloud:default` uses the managed model of the EE CLOUD_AI addon |
+| `OPENFILZ_AI_CLOUD_URL` | `https://ai.openfilz.com` | The OpenFilz AI gateway the `openfilz-cloud` provider talks to (EE CLOUD_AI addon) |
+| `OPENFILZ_AI_CLOUD_API_KEY` | *(none)* | The tenant key issued with a CLOUD_AI order; without it the `openfilz-cloud` provider is skipped |
 | `OPENFILZ_AI_INSIGHTS_MAX_CHARS` | `6000` | Characters of text sent per file |
 | `OPENFILZ_AI_INSIGHTS_MAX_FILE_SIZE` | `50MB` | Larger files are not enriched |
 | `OPENFILZ_AI_EMBEDDING_BACKFILL_CONCURRENCY` | `2` | Documents embedded in parallel by `POST /api/v1/ai/embeddings/backfill` — the job that re-embeds a library after an embedding-provider switch (wipe `vector_store` and `ai_embedding_registry` first, restart, then call it as a CONTRIBUTOR; without `force` it embeds only the files that have no vector, so it also repairs a failed upload embedding) |
@@ -820,6 +822,7 @@ an undo, and the details panel shows "Filed by OpenFilz" with the reason.
 | `OPENFILZ_AI_AUTO_FILE_ACTIVE` | `false` | Master switch |
 | `OPENFILZ_AI_AUTO_FILE_DEFAULT` | `false` | Initial value of the per-user switch |
 | `OPENFILZ_AI_AUTO_FILE_NEW_FOLDERS` | `true` | Whether filing may create folders (deployment ceiling) |
+| `OPENFILZ_AI_AUTO_FILE_INBOX_ENABLED` | `false` | Offer each user an Inbox folder: documents dropped there are filed anywhere in their library, never back into the Inbox |
 | `OPENFILZ_AI_AUTO_FILE_CONCURRENCY` | `8` | Documents filed at once. Each filing waits for its document's insight (up to 30 s) and may ask the model, so a filing worker is idle most of its life — raise it together with `OPENFILZ_AI_INSIGHTS_CONCURRENCY` (or `…_LOCAL_CONCURRENCY`) when users drop batches of hundreds of files |
 | `OPENFILZ_AI_AUTO_FILE_TEXT_HANDOFF` | `true` | The upload hands the text its own Tika pass produced to the filing that follows, so one upload is parsed once instead of twice. Only written when full-text indexing is off — with OpenSearch the filing reads the indexed content and nothing is held. Off = the filing re-parses the file |
 | `OPENFILZ_AI_AUTO_FILE_TEXT_HANDOFF_MAX_CHARS` | `2000000` | Ceiling on everything the hand-off holds at once, in characters (~4 MB of heap). Entries are evicted by total size, so this is the worst case whatever the size of the upload batch |

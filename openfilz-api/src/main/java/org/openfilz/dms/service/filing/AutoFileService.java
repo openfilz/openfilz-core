@@ -34,6 +34,14 @@ public interface AutoFileService {
     /** File existing documents on demand for the caller (their Inbox, a selection…). */
     AutoFileJobView schedule(List<UUID> documentIds, Caller caller, Boolean allowNewFolders);
 
+    /**
+     * File every active file lying directly in the caller's Inbox (design §13.5), as one job.
+     *
+     * @throws IllegalStateException    when the deployment does not offer the Inbox
+     * @throws IllegalArgumentException when the caller has no Inbox
+     */
+    AutoFileJobView fileInbox(Caller caller, Boolean allowNewFolders);
+
     /** Run the pipeline now for one document, on the caller's thread (the AI tools; bounded by the wait budget). */
     FilingOutcome fileNow(UUID documentId, Caller caller, Boolean allowNewFolders);
 

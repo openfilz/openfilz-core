@@ -2,13 +2,13 @@ package org.openfilz.dms.service.insight;
 
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.AiProperties;
+import org.openfilz.dms.service.insight.CategoryTaxonomy.Category;
 import org.springframework.ai.embedding.EmbeddingModel;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -22,89 +22,73 @@ import java.util.UUID;
  * runner-up, the lower it. Below {@code min-similarity} nothing fits and the answer is
  * {@value InsightResult#OTHER}. Coarse kinds (invoice / report / contract) separate well; fine
  * ones (supplier vs customer invoice) do not — that is the neighbour vote's job.
+ * <p>
+ * The descriptions come from the {@link CategoryTaxonomy}. The prototype vectors are cached
+ * against a fingerprint of the taxonomy's content: a taxonomy an extension manages may change at
+ * runtime, and the classifier must then name the new kinds and drop the old ones without a
+ * restart — the next classification re-embeds, every other one costs a string comparison.
  */
 @Slf4j
 public class PrototypeCategoryClassifier implements CategoryClassifier {
 
-    /**
-     * What each default category looks like, in the languages OpenFilz ships: the embedding
-     * model reads the description, so it names the words a document of that kind carries.
-     * Overridden per key by {@code openfilz.ai.insights.classifier.prototypes}.
-     */
-    public static final Map<String, String> DEFAULT_PROTOTYPES = Map.ofEntries(
-            Map.entry("invoice", "An invoice: a bill requesting payment for goods or services, with an invoice number, "
-                    + "amounts, VAT, the total due and payment terms. Facture, montant HT et TTC, TVA, échéance de paiement. "
-                    + "Rechnung, Betrag, MwSt."),
-            Map.entry("quote", "A quote or estimate proposing prices for goods or services before an order, valid until a date. "
-                    + "Devis, proposition de prix, validité de l'offre. Angebot, Kostenvoranschlag."),
-            Map.entry("contract", "A contract or agreement between parties: clauses, obligations, terms, duration, liability, "
-                    + "signatures. Contrat, convention, accord, conditions générales, parties, signature. Vertrag, Vereinbarung."),
-            Map.entry("report", "A report: analysis, findings, figures, results and conclusions on a subject or a period. "
-                    + "Rapport, bilan, compte rendu d'activité, résultats, synthèse. Bericht, Ergebnisse."),
-            Map.entry("letter", "A letter or formal correspondence addressed to a person or an organisation, with a date, "
-                    + "a salutation and a signature. Courrier, lettre, madame, monsieur, veuillez agréer. Brief, Schreiben."),
-            Map.entry("cv", "A curriculum vitae or résumé: a person's work experience, education, skills and languages. "
-                    + "CV, curriculum vitae, parcours professionnel, formation, compétences. Lebenslauf, Berufserfahrung."),
-            Map.entry("presentation", "A slide deck or presentation: slide titles, bullet points, an agenda, a closing slide. "
-                    + "Présentation, diapositives, sommaire. Präsentation, Folien."),
-            Map.entry("spreadsheet", "A spreadsheet or table of data: rows and columns of figures, sheets, totals, cells. "
-                    + "Tableur, feuille de calcul, tableau de chiffres, colonnes. Tabelle, Kalkulation."),
-            Map.entry("form", "A form to fill in: fields, checkboxes, applicant details, declarations, date and signature boxes. "
-                    + "Formulaire, demande à compléter, cocher la case. Formular, Antrag."),
-            Map.entry("id-document", "An identity document: passport, identity card or driving licence with a name, a date of birth, "
-                    + "a number and an expiry date. Pièce d'identité, carte nationale d'identité, passeport, permis de conduire. "
-                    + "Ausweis, Reisepass."),
-            Map.entry("receipt", "A receipt or proof of payment for a purchase: items, amount paid, date, merchant, card. "
-                    + "Reçu, ticket de caisse, justificatif de paiement, montant réglé. Quittung, Kassenbon, Beleg."),
-            Map.entry("minutes", "Minutes of a meeting: attendees, agenda, discussion, decisions taken, actions and owners. "
-                    + "Compte rendu de réunion, procès-verbal, participants, décisions, ordre du jour. Protokoll, Sitzung."),
-            Map.entry("specification", "A specification or requirements document: features, functional and technical "
-                    + "requirements, architecture, constraints. Cahier des charges, spécifications fonctionnelles et techniques. "
-                    + "Spezifikation, Anforderungen, Lastenheft."),
-            Map.entry("manual", "A user manual, guide or instructions: how to install, configure, use or operate a product, "
-                    + "step by step. Manuel d'utilisation, notice, mode d'emploi, guide. Handbuch, Bedienungsanleitung."));
+    /** The built-in descriptions — now owned by the taxonomy; kept under the old name for the readers of this class. */
+    public static final Map<String, String> DEFAULT_PROTOTYPES = CategoryTaxonomy.BUILT_IN_DESCRIPTIONS;
 
     private final EmbeddingModel embeddingModel;
     private final String name;
-    private final List<String> categories;
-    private final List<String> descriptions;
+    private final CategoryTaxonomy taxonomy;
     private final double temperature;
     private final double minSimilarity;
     private final int maxChars;
     private final String prefix;
-    private volatile float[][] prototypeVectors;
+    private volatile Prototypes prototypes;
+
+    /** The embedded descriptions of one version of the taxonomy. */
+    private record Prototypes(String fingerprint, List<String> categories, float[][] vectors) {
+    }
 
     /**
      * @param embeddingModel the deployment's embedding model (the one the vector store uses)
      * @param modelName      the embedding model's id, for {@link #name()}
-     * @param categories     the closed category list; {@value InsightResult#OTHER} gets no prototype
-     * @param config         mode-independent settings: temperature, floor, text head, prefix, prototype overrides
+     * @param taxonomy       the kinds and their descriptions; {@value InsightResult#OTHER} gets no prototype
+     * @param config         mode-independent settings: temperature, floor, text head, prefix
      */
-    public PrototypeCategoryClassifier(EmbeddingModel embeddingModel, String modelName, List<String> categories,
+    public PrototypeCategoryClassifier(EmbeddingModel embeddingModel, String modelName, CategoryTaxonomy taxonomy,
                                        AiProperties.Insights.Classifier config) {
         this.embeddingModel = embeddingModel;
         this.name = "prototype:" + (modelName == null || modelName.isBlank() ? "embedding" : modelName);
+        this.taxonomy = taxonomy;
         this.temperature = config.getTemperature() > 0 ? config.getTemperature() : 0.02;
         this.minSimilarity = config.getMinSimilarity();
         this.maxChars = Math.max(200, config.getMaxChars());
         this.prefix = config.getPrefix() == null ? "" : config.getPrefix();
-        Map<String, String> prototypes = prototypes(categories, config.getPrototypes());
-        this.categories = List.copyOf(prototypes.keySet());
-        this.descriptions = List.copyOf(prototypes.values());
     }
 
-    /** The categories that carry a prototype, in order: every listed one but {@value InsightResult#OTHER}. */
+    /**
+     * A classifier over a fixed key list (tests, benchmarks): the built-in descriptions, overridden
+     * per key by {@code config.prototypes}.
+     */
+    public PrototypeCategoryClassifier(EmbeddingModel embeddingModel, String modelName, List<String> categories,
+                                       AiProperties.Insights.Classifier config) {
+        this(embeddingModel, modelName, PropertiesCategoryTaxonomy.of(categories, config.getPrototypes()), config);
+    }
+
+    /** The categories that carry a prototype with their description, in order: every listed one but {@value InsightResult#OTHER}. */
     static Map<String, String> prototypes(List<String> categories, Map<String, String> overrides) {
+        return prototypes(PropertiesCategoryTaxonomy.build(categories, overrides));
+    }
+
+    /** What is embedded per category: the description (else the key as words) and the examples, {@value InsightResult#OTHER} excluded. */
+    static Map<String, String> prototypes(List<Category> categories) {
         Map<String, String> out = new LinkedHashMap<>();
-        List<String> listed = categories == null || categories.isEmpty() ? List.copyOf(DEFAULT_PROTOTYPES.keySet()) : categories;
-        for (String raw : listed) {
-            if (raw == null) continue;
-            String category = raw.trim().toLowerCase(Locale.ROOT);
-            if (category.isEmpty() || InsightResult.OTHER.equals(category)) continue;
-            String override = overrides == null ? null : overrides.get(category);
-            String description = override != null && !override.isBlank() ? override : DEFAULT_PROTOTYPES.get(category);
+        for (Category category : categories) {
+            if (InsightResult.OTHER.equals(category.key())) continue;
             // A category nobody described is still a word the model can place
-            out.put(category, description == null || description.isBlank() ? category.replace('-', ' ') : description);
+            String text = category.description().isEmpty() ? category.key().replace('-', ' ') : category.description();
+            if (!category.examples().isEmpty()) {
+                text += " Examples: " + String.join(", ", category.examples()) + ".";
+            }
+            out.put(category.key(), text);
         }
         return out;
     }
@@ -114,9 +98,9 @@ public class PrototypeCategoryClassifier implements CategoryClassifier {
         return name;
     }
 
-    /** The categories that carry a prototype, in the configured order. */
+    /** The categories that carry a prototype, in the taxonomy's current order. */
     public List<String> categories() {
-        return categories;
+        return List.copyOf(prototypes(taxonomy.categories()).keySet());
     }
 
     @Override
@@ -129,14 +113,14 @@ public class PrototypeCategoryClassifier implements CategoryClassifier {
      * embedding call; the benchmark reuses it to score several temperatures at once.
      */
     public List<CategoryPrediction.Scored> similarities(String fileName, String text) {
-        if (categories.isEmpty()) {
+        Prototypes current = prototypes();
+        if (current.categories().isEmpty()) {
             return List.of();
         }
-        float[][] prototypes = prototypeVectors();
         float[] vector = embeddingModel.embed(input(fileName, text));
-        List<CategoryPrediction.Scored> scored = new ArrayList<>(categories.size());
-        for (int i = 0; i < categories.size(); i++) {
-            scored.add(new CategoryPrediction.Scored(categories.get(i), cosine(vector, prototypes[i])));
+        List<CategoryPrediction.Scored> scored = new ArrayList<>(current.categories().size());
+        for (int i = 0; i < current.categories().size(); i++) {
+            scored.add(new CategoryPrediction.Scored(current.categories().get(i), cosine(vector, current.vectors()[i])));
         }
         scored.sort(Comparator.comparingDouble(CategoryPrediction.Scored::score).reversed());
         return scored;
@@ -167,24 +151,46 @@ public class PrototypeCategoryClassifier implements CategoryClassifier {
         return prefix + (name.isEmpty() ? "" : "File name: " + name + "\n") + body;
     }
 
-    private float[][] prototypeVectors() {
-        float[][] current = prototypeVectors;
-        if (current != null) {
+    /**
+     * The prototypes of the taxonomy as it is now: reused while its fingerprint is unchanged,
+     * re-embedded in one batch when a kind or a description changed.
+     */
+    private Prototypes prototypes() {
+        Map<String, String> wanted = prototypes(taxonomy.categories());
+        String fingerprint = fingerprint(wanted);
+        Prototypes current = prototypes;
+        if (current != null && current.fingerprint().equals(fingerprint)) {
             return current;
         }
         synchronized (this) {
-            if (prototypeVectors == null) {
-                List<String> inputs = descriptions.stream().map(d -> prefix + d).toList();
-                List<float[]> vectors = embeddingModel.embed(inputs);
-                if (vectors.size() != descriptions.size()) {
-                    throw new IllegalStateException("the embedding model returned " + vectors.size()
-                            + " vectors for " + descriptions.size() + " prototypes");
-                }
-                prototypeVectors = vectors.toArray(new float[0][]);
-                log.info("[INSIGHTS] {} prototype(s) embedded for the category classifier ({})", vectors.size(), name);
+            current = prototypes;
+            if (current != null && current.fingerprint().equals(fingerprint)) {
+                return current;
             }
-            return prototypeVectors;
+            List<String> categories = List.copyOf(wanted.keySet());
+            float[][] vectors = new float[0][];
+            if (!categories.isEmpty()) {
+                List<String> inputs = wanted.values().stream().map(d -> prefix + d).toList();
+                List<float[]> embedded = embeddingModel.embed(inputs);
+                if (embedded.size() != inputs.size()) {
+                    throw new IllegalStateException("the embedding model returned " + embedded.size()
+                            + " vectors for " + inputs.size() + " prototypes");
+                }
+                vectors = embedded.toArray(new float[0][]);
+            }
+            log.info("[INSIGHTS] {} prototype(s) embedded for the category classifier ({}){}", categories.size(), name,
+                    prototypes == null ? "" : " — the taxonomy changed");
+            current = new Prototypes(fingerprint, categories, vectors);
+            prototypes = current;
+            return current;
         }
+    }
+
+    /** A cheap identity of the taxonomy's content: the keys and the texts embedded for them, in order. */
+    static String fingerprint(Map<String, String> prototypes) {
+        StringBuilder sb = new StringBuilder();
+        prototypes.forEach((key, text) -> sb.append(key).append('').append(text).append(''));
+        return Integer.toHexString(sb.toString().hashCode()) + ':' + sb.length();
     }
 
     static double cosine(float[] a, float[] b) {

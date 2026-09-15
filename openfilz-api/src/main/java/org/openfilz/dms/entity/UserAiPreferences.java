@@ -11,6 +11,7 @@ import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
 import java.time.OffsetDateTime;
+import java.util.UUID;
 
 /** A user's AI preferences that need no BYOK key: the smart-filing switch and its new-folder option. */
 @Data
@@ -29,6 +30,10 @@ public class UserAiPreferences implements Persistable<String> {
 
     @Column("auto_file_new_folders")
     private boolean autoFileNewFolders;
+
+    /** The user's Inbox folder (design §13.5); null = none. Cleared, never deleted, when the Inbox is turned off. */
+    @Column("inbox_folder_id")
+    private UUID inboxFolderId;
 
     @Column("updated_at")
     private OffsetDateTime updatedAt;
