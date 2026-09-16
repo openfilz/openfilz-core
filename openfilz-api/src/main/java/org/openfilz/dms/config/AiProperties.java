@@ -35,6 +35,27 @@ public class AiProperties {
     private boolean active = false;
 
     /**
+     * The deployment's model as one {@code provider:model} value ({@code OPENFILZ_AI_MODEL}), e.g.
+     * {@code google:gemini-3.6-flash}, {@code anthropic:claude-haiku-4-5}, {@code openai:gpt-4o-mini},
+     * {@code ollama:qwen2.5} or {@code openfilz-cloud:default}. A vendor provider names the chat
+     * model (which insights and smart filing use too unless {@code insights.model} is set);
+     * {@code openfilz-cloud} names the insights / smart-filing model only and leaves chat off.
+     * <p>
+     * Translated at environment preparation by {@link AiModelProviderEnvironmentPostProcessor}
+     * (precedence: explicit selector &gt; {@code <PROVIDER>_CHAT_ENABLED} &gt; this &gt; the fallback
+     * chain's first entry &gt; Ollama); bound here for the startup warning on an unusable value. It
+     * never implies {@link #active}: {@code OPENFILZ_AI_ACTIVE} stays the master switch.
+     */
+    private String model = "";
+
+    /**
+     * The API key of {@link #model}'s provider ({@code OPENFILZ_AI_API_KEY}); the gateway tenant key
+     * for {@code openfilz-cloud}; ignored for Ollama. A vendor-specific variable
+     * ({@code GOOGLE_API_KEY}, {@code OPENFILZ_AI_CLOUD_API_KEY}, ...) wins over it.
+     */
+    private String apiKey = "";
+
+    /**
      * Longest answer accepted from the JSON-contract calls (tier-2 insights, smart filing stage 2),
      * passed as {@code maxTokens}. The contract itself fits in a few hundred tokens; the cap exists
      * because a small local model at temperature 0 otherwise loops on it until its context shifts
@@ -115,6 +136,30 @@ public class AiProperties {
 
     /** Smart filing on upload: OpenFilz chooses the destination folder on the user's request. */
     private AutoFile autoFile = new AutoFile();
+
+    /** The managed model provider ({@code openfilz-cloud:<model>} in the insights model or the fallback chain). */
+    private Cloud cloud = new Cloud();
+
+    /**
+     * The OpenFilz AI gateway behind the {@code openfilz-cloud} provider token: an
+     * OpenAI-compatible endpoint ({@code /v1/chat/completions}) that resolves model aliases such
+     * as {@code default} itself, so a deployment names {@code openfilz-cloud:default} and never
+     * a vendor model. The API key is the tenant key issued with the order; without it every
+     * {@code openfilz-cloud} entry is skipped with a warning, exactly like a provider whose
+     * server key is missing. No key pool: one tenant, one key.
+     */
+    @Data
+    public static class Cloud {
+        /** Base URL of the gateway. */
+        private String url = "https://ai.openfilz.com";
+        /** The tenant key; empty = the provider is not usable on this deployment. */
+        private String apiKey = "";
+
+        /** Whether a key is configured, i.e. whether {@code openfilz-cloud} entries can be built. */
+        public boolean isConfigured() {
+            return apiKey != null && !apiKey.isBlank();
+        }
+    }
 
     @Data
     public static class AutoFile {
@@ -201,6 +246,54 @@ public class AiProperties {
         private Duration waitForInsights = Duration.ofSeconds(30);
         /** The upload → filing text hand-off, so one upload is parsed by Tika once instead of twice. */
         private TextHandoff textHandoff = new TextHandoff();
+        /** The per-user Inbox convention (design §13.5): off unless the deployment turns it on. */
+        private Inbox inbox = new Inbox();
+
+        /**
+         * The Inbox: one optional folder per user, created on demand at their root, into which
+         * "file this somewhere for me" documents are dropped. A document lying there is filed with
+         * the <em>whole library</em> as scope (not the folder it was dropped in) and the Inbox
+         * itself is never a destination — so what is still there afterwards is exactly what needs
+         * a human. A deployment switch, because the folder is user-visible: an operator who has not
+         * explained it to the users should not find Inboxes appearing in their libraries.
+         */
+        @Data
+        public static class Inbox {
+            /** Deployment switch; the preferences view reports {@code inboxAvailable} from it. */
+            private boolean enabled = false;
+            /**
+             * Folder name per language on top of the built-in table ({@code inbox.names.fr: Courrier
+             * entrant}); the user's {@code Accept-Language} picks the language, then
+             * {@code default-language}, then English.
+             */
+            private Map<String, String> names = new LinkedHashMap<>();
+
+            /** The built-in Inbox names; a property entry for the same language overrides it. */
+            static final Map<String, String> BUILT_IN_NAMES = Map.of(
+                    "en", "Inbox",
+                    "fr", "Boîte de réception",
+                    "de", "Eingang",
+                    "es", "Bandeja de entrada",
+                    "it", "In arrivo",
+                    "nl", "Inbox",
+                    "pt", "Caixa de entrada",
+                    "ar", "صندوق الوارد");
+
+            /** The Inbox name for a language tag ("fr", "fr-CA"…), falling back to English. */
+            public String nameFor(String language) {
+                String code = language == null ? "" : language.trim().toLowerCase(java.util.Locale.ROOT);
+                int dash = code.indexOf('-');
+                String base = dash > 0 ? code.substring(0, dash) : code;
+                for (String candidate : new String[]{code, base, "en"}) {
+                    if (candidate.isEmpty()) continue;
+                    String override = names.get(candidate);
+                    if (override != null && !override.isBlank()) return override.trim();
+                    String builtIn = BUILT_IN_NAMES.get(candidate);
+                    if (builtIn != null) return builtIn;
+                }
+                return BUILT_IN_NAMES.get("en");
+            }
+        }
 
         /**
          * The buffer that carries the text of a freshly uploaded file from the pass that extracted

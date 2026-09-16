@@ -581,6 +581,100 @@ class AiFallbackChainTest {
         assertThat(chain.candidates(byok)).hasSizeGreaterThan(1);
     }
 
+    // ------------------------------------------------------------------ the managed provider (openfilz-cloud)
+
+    /**
+     * {@code openfilz-cloud:<model>} names the OpenFilz AI gateway: an OpenAI-compatible client
+     * built on {@code openfilz.ai.cloud.url} with the tenant key — never the deployment's own
+     * OpenAI key or base URL — and a provider of its own for cooldowns.
+     */
+    @Nested
+    @DisplayName("openfilz-cloud")
+    class ManagedProvider {
+
+        @Test
+        @DisplayName("a configured model on the gateway is built as an OpenAI-compatible client on the cloud URL and tenant key")
+        void configuredModelBuildsOnTheGateway() {
+            properties.getCloud().setUrl("https://ai.example.test");
+            properties.getCloud().setApiKey("tenant-key");
+            environment.setProperty("spring.ai.openai.api-key", "sk-must-not-be-used");
+            environment.setProperty("spring.ai.openai.base-url", "https://api.openai.com");
+
+            java.util.Optional<ResolvedChat> resolved = chain.configuredModel("openfilz-cloud:default");
+
+            assertThat(resolved).isPresent();
+            assertThat(resolved.get().provider()).isEqualTo("openfilz-cloud");
+            assertThat(resolved.get().model()).as("the alias is passed through; the gateway resolves it").isEqualTo("default");
+            assertThat(resolved.get().keyRef()).isEqualTo(AiKeyRef.of("tenant-key"));
+            org.mockito.Mockito.verify(resolver).buildChatModel(
+                    eq(AiProvider.OPENAI_COMPATIBLE), eq("tenant-key"), eq("https://ai.example.test"), eq("default"));
+            assertThat(chain.configuredModel("openfilz-cloud:default")).as("cached").containsSame(resolved.get());
+        }
+
+        @Test
+        @DisplayName("without a tenant key the managed model is skipped, like a provider with no server key")
+        void noTenantKeyMeansNoModel() {
+            environment.setProperty("spring.ai.openai.api-key", "sk-not-a-tenant-key");
+
+            assertThat(chain.configuredModel("openfilz-cloud:default")).isEmpty();
+            org.mockito.Mockito.verifyNoInteractions(resolver);
+        }
+
+        @Test
+        @DisplayName("a chain entry on the gateway is a candidate of its own, grouped apart from openai-compatible")
+        void chainEntryIsItsOwnProvider() {
+            chain("openai-compatible:mistral-small", "openfilz-cloud:default");
+            keys(AiProvider.OPENAI_COMPATIBLE, "sk-compat");
+            environment.setProperty("spring.ai.openai.base-url", "https://api.mistral.ai");
+            properties.getCloud().setApiKey("tenant-key");
+
+            List<ResolvedChat> candidates = chain.candidates(benchedPrimary(), T0);
+
+            assertThat(candidates).extracting(ResolvedChat::provider)
+                    .containsExactly("OPENAI_COMPATIBLE", "openfilz-cloud");
+            assertThat(candidates).extracting(ResolvedChat::keyRef)
+                    .containsExactly(AiKeyRef.of("sk-compat"), AiKeyRef.of("tenant-key"));
+            org.mockito.Mockito.verify(resolver).buildChatModel(
+                    eq(AiProvider.OPENAI_COMPATIBLE), eq("sk-compat"), eq("https://api.mistral.ai"), eq("mistral-small"));
+            org.mockito.Mockito.verify(resolver).buildChatModel(
+                    eq(AiProvider.OPENAI_COMPATIBLE), eq("tenant-key"), eq("https://ai.openfilz.com"), eq("default"));
+        }
+
+        @Test
+        @DisplayName("a benched gateway model drops out of the candidates without touching the openai-compatible one")
+        void cooldownsAreSeparate() {
+            chain("openfilz-cloud:default", "openai-compatible:mistral-small");
+            keys(AiProvider.OPENAI_COMPATIBLE, "sk-compat");
+            environment.setProperty("spring.ai.openai.base-url", "https://api.mistral.ai");
+            properties.getCloud().setApiKey("tenant-key");
+            ResolvedChat primary = benchedPrimary();
+
+            ResolvedChat managed = chain.candidates(primary, T0).getFirst();
+            assertThat(managed.provider()).isEqualTo("openfilz-cloud");
+            chain.trip(managed, Failure.QUOTA_EXHAUSTED, T0);
+
+            assertThat(chain.candidates(primary, T0.plusSeconds(1))).extracting(ResolvedChat::provider)
+                    .containsExactly("OPENAI_COMPATIBLE");
+            assertThat(chain.candidates(primary, T0.plus(properties.getFallback().getQuotaCooldown()).plusSeconds(1)))
+                    .extracting(ResolvedChat::provider).containsExactly("openfilz-cloud", "OPENAI_COMPATIBLE");
+        }
+
+        @Test
+        @DisplayName("the token is parsed in either spelling and rejected messages name it")
+        void parsing() {
+            List<String> rejected = new ArrayList<>();
+            List<AiFallbackChain.ChainEntry> entries = AiFallbackChain.parseChain(
+                    List.of("openfilz-cloud:default", "OPENFILZ_CLOUD:fast", "nope:x"), rejected::add);
+
+            assertThat(entries).extracting(AiFallbackChain.ChainEntry::name).containsExactly("openfilz-cloud", "openfilz-cloud");
+            assertThat(entries).extracting(AiFallbackChain.ChainEntry::provider)
+                    .containsOnly(AiProvider.OPENAI_COMPATIBLE);
+            assertThat(entries).allMatch(AiFallbackChain.ChainEntry::managed);
+            assertThat(new AiFallbackChain.ChainEntry(AiProvider.GOOGLE, "m").managed()).isFalse();
+            assertThat(rejected).singleElement().asString().contains("openfilz-cloud");
+        }
+    }
+
     @Test
     @DisplayName("provider spelling differences resolve to the same cooldown entry")
     void normalisesProviderSpelling() {

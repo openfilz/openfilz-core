@@ -300,13 +300,83 @@ no metadata audit):
   since those never call a model and only CPU limits them) and stores a category from the closed list (`categories`, unknown → `other`), a summary,
   keywords, the language and a few entities; FAILED on a non-contract answer, SKIPPED above
   `max-file-size` / without text / past `daily-limit`. The model is the chat model or
-  `openfilz.ai.insights.model` (`provider:model`, server key). Results are mirrored to OpenSearch
+  `openfilz.ai.insights.model` (`provider:model`, server key — see *the managed model* below).
+  Results are mirrored to OpenSearch
   (`category`, `summary`, `language` — fixed fields, added to existing indexes at startup).
   `NoOpDocumentInsightService` + `DocumentInsightConfig` select the implementation at runtime
   (native-safe). Backfill: `POST /api/v1/ai/insights/backfill {folderId, force}` (CONTRIBUTOR),
   `GET …/backfill/{jobId}`.
 - Read: `GET /api/v1/documents/{id}/insights`; the `getMetadata` tool appends an *Insights* block;
-  `queryDocuments(category=…)` filters through the insights; `Settings.aiInsightsActive`.
+  `queryDocuments(category=…)` filters through the insights; `Settings.aiInsightsActive` and
+  `Settings.aiInsightsCategories` (the taxonomy's keys, `other` last — what the kind editor offers).
+- Correct: `PATCH /api/v1/documents/{id}/insights {category}` — validated against the taxonomy
+  (`CategoryTaxonomy.find`, so `ID Document` is accepted and stored as `id-document`; 400 for a kind
+  the deployment has not), recorded as the user's (`model = user`), mirrored to the index.
+- **Search facets.** The GraphQL `searchDocuments(filters: [FilterInput{field, value}])` takes two
+  more fields, `category` and `language`; the value is one key or several comma-separated
+  (`"invoice,quote"`, `"fr, en"` — trimmed and lower-cased, like the stored values), and both may be
+  combined with each other and with the existing filters. Both search paths honour them: the
+  OpenSearch one turns each into a `terms` filter on the keyword field of the same name
+  (`OpenSearchQueryService.addFilterClauses`, so the enterprise override inherits it), the DB one
+  carries them as `ListFolderRequest.categories` / `languages` (also exposed on the GraphQL input, so
+  `listFolder` / `count` / `listAllFolder` can narrow by kind) down to `ListFolderCriteria`, which
+  appends `id IN (SELECT document_id FROM ai_document_insights WHERE category = ANY(:insight_category))`
+  — a sub-select, no join, so an extension's access predicate on the documents is untouched; a
+  file without an insight row never matches. Existing clients are unaffected (both fields default
+  to null). A hit (`DocumentSearchInfo`) now carries `category` and `language` on the OpenSearch
+  path (null on the DB path, which does not join the insight row); `summary` is excluded from the
+  hits' source, and the OpenSearch client's mapper ignores unknown source fields — before this, a
+  search whose hits included an enriched document failed on the mirrored fields the DTO did not
+  know. The facet *values* come from `GET /api/v1/ai/insights/facets` →
+  `{"categories":[{"key":"invoice","count":41},…],"languages":[{"key":"fr","count":12},…]}`, largest
+  first: one grouped query over `ai_document_insights` joined to the active `FILE` documents
+  (`InsightFacetsService`; READER, 404 when `openfilz.ai.active` is off). Its SQL joins and
+  predicate are `protected` seams (`facetJoins`, `facetPredicate`, `bindFacetUserContext` — reactive,
+  never block) so an extension scopes the counts to what the caller may see; the core counts the
+  library. `InsightFacetsRuntimeHints` registers the DTO for the native image.
+- **The taxonomy seam** (`CategoryTaxonomy`). The kinds a deployment knows — key, description,
+  examples — behind one interface every reader goes through: the enrichment prompt
+  (`InsightPrompts.system` lists each kind with its description, so `minutes` or `form` are no longer
+  bare, ambiguous words to the model — `PROMPT_VERSION = 2`), the prototype classifier (the
+  descriptions are what it embeds, and it re-embeds when the taxonomy's content fingerprint changes,
+  so a taxonomy managed at runtime needs no restart), the kind editor (`Settings.aiInsightsCategories`)
+  and the correction endpoint. The core's `PropertiesCategoryTaxonomy` reads
+  `openfilz.ai.insights.categories` (normalised: lower case, hyphens, de-duplicated, `other` always
+  last) and describes each key with `CategoryTaxonomy.BUILT_IN_DESCRIPTIONS` unless
+  `classifier.prototypes.<key>` overrides it; a key nobody described gets an empty description (the
+  classifier then embeds the key as words). An extension registers a `@Primary` taxonomy managed
+  elsewhere — readers never cache the list beyond one operation. `SettingsServiceImpl` gets it
+  through a field-injected `ObjectProvider` (its constructor is called by a subclass's `super(...)`).
+- **The policy seam** (`InsightsPolicy`). Asked on the worker — never on the upload path, so it may
+  read the database — before a document is enriched: `forDocument(document)` answers a `Verdict`
+  (`enrichmentAllowed`, `modelAllowed`, `blockedCategories`, `reason`) and `autoFileAllowed(user)`
+  gates smart filing. The core's `PermitAllInsightsPolicy` allows everything (always a bean, never a
+  bean condition); an extension registers a `@Primary` one answering per organisation, group or
+  document. The worker honours it in this order: enrichment denied → a SKIPPED row *"disabled by
+  policy: <reason>"*, no pending mark, no model call; a policy that fails to answer fails closed the
+  same way (*"policy lookup failed"*); model barred → the local `CategoryClassifier` is the only thing
+  allowed to answer, whatever `classifier.mode` — a category-only row under the classifier's name, or
+  SKIPPED when no classifier is configured (the text never reaches a model as a fallback);
+  `blockedCategories` set → before any model call the classifier screens the document, and a blocked
+  kind is stored category-only under `model = policy:<classifier name>`
+  (`InsightsPolicy.SCREENED_MODEL_PREFIX`) while any other kind goes to the model as usual. Pinned by
+  `AiDocumentInsightServiceTest`.
+- **The managed model** (`openfilz-cloud`). `openfilz.ai.insights.model` and the fallback chain
+  accept `openfilz-cloud:<alias>` (`openfilz-cloud:default`): `AiFallbackChain` builds an
+  OpenAI-compatible client on `openfilz.ai.cloud.url` (`OPENFILZ_AI_CLOUD_URL`, default
+  `https://ai.openfilz.com`) with `openfilz.ai.cloud.api-key` (`OPENFILZ_AI_CLOUD_API_KEY`, the
+  tenant key issued with an order); the gateway resolves the alias to a vendor model itself, so a
+  deployment never names one. Without the key every `openfilz-cloud` entry is skipped with a warning
+  (`AiFallbackValidator`), like a provider whose server key is missing; one tenant, one key, no pool.
+
+  | Property | Env | Default | What it does |
+  |---|---|---|---|
+  | `openfilz.ai.insights.categories` | `OPENFILZ_AI_INSIGHTS_CATEGORIES` | invoice, quote, contract, report, letter, cv, presentation, spreadsheet, form, id-document, receipt, minutes, specification, manual, other | The core taxonomy's keys (`PropertiesCategoryTaxonomy`) |
+  | `openfilz.ai.insights.classifier.prototypes.<key>` | — | built-in | Overrides the description of one kind (prompt and prototype alike) |
+  | `openfilz.ai.cloud.url` | `OPENFILZ_AI_CLOUD_URL` | `https://ai.openfilz.com` | The gateway behind `openfilz-cloud:<alias>` |
+  | `openfilz.ai.cloud.api-key` | `OPENFILZ_AI_CLOUD_API_KEY` | *(empty)* | The tenant key; empty = the provider is skipped |
+  | `GET /api/v1/ai/insights/facets` | — | — | Category / language counts for the search facets (READER; 404 when AI is off) |
+  | `searchDocuments` filter fields `category`, `language` | — | — | One key or several comma-separated; both search paths |
 - Every stored tier-2 row publishes a Spring `DocumentInsightsReadyEvent` (the enterprise webhook
   producer relays it as `document.insights.ready`).
 
@@ -323,6 +393,22 @@ switch (`GET/PUT /api/v1/settings/ai/preferences`) or `autoFile=true` on `POST /
 uploaded document seconds after the upload response (which carries `autoFile.jobId`):
 
 1. *eligibility*: an active FILE the caller may move, with a live session;
+1b. *stage 0, the policy*: every `DestinationRule` bean (`service/filing`, a plain SPI: `order()`,
+   `decide(FilingContext) → Optional<Decision>`, blocking on the filing worker) runs in order once
+   the insight row and the text head are known — before the "no text" skip, so a rule on the
+   category or the metadata can file a scan nothing was extracted from. The context carries the
+   document, its insight, the scope so far (root + readable path), the caller, the text head and
+   the metadata JSON as a map. A decision may *re-scope* the filing (`scopeOverride`: the last one
+   wins), *exclude* folders from ever being a destination (`excludedDestinations`, unioned across
+   rules: the vote treats a neighbour lying in one — or below one — as unfiled ground, the
+   rule-by-kind never picks one, the model's inventory marks it `(not a destination)` and an
+   answer resolving to one is SKIPPED), or *name the destination* (`targetPath`, relative to the
+   effective scope): the first rule that does ends the stage — stage `POLICY`, confidence 1,
+   filed through the same one-item plan, or SKIPPED with *"rule X would file it into … (dry run)"*
+   when `dryRun`, or SKIPPED when the folder is missing and `allowCreateFolders` is false. The
+   record's `details` keep `ruleId` and the effective `scope`. A rule that throws is logged and
+   skipped. The core ships one rule, the Inbox (below); an extension registers its own beans
+   (organisation-level routing, team policies);
 2. *stage 1, the neighbour vote*: the vector store's nearest documents, resolved to their **live**
    folders (never the chunk metadata's `parent_id`), inside the scope (the folder it was dropped in;
    root = whole library) and writable — neighbours lying at the root never vote, a file at the root
@@ -346,7 +432,14 @@ uploaded document seconds after the upload response (which carries `autoFile.job
    documents in two languages or templates are two clusters by similarity, one kind by category —
    and the fit files 75 % wrong (the tightest voted folder is not the right kind). Hence the
    defaults: `category` and `vote`; the others stay for libraries without insight rows and for
-   the next measurement. One vector query plus small reads, no model call;
+   the next measurement. One vector query plus small reads, no model call. The vote also takes
+   per-folder weights from the `FilingFeedback` seam (`folderWeights(category, folderIds,
+   userEmail)`, absent = 1, clamped to [0.1, 3.0]): each neighbour's similarity counts *weight*
+   times towards its folder's share and the total, while the similarity guards still read the raw
+   value — a weight nudges the vote, it never makes a distant neighbour close nor silences a
+   folder. The core's `NoOpFilingFeedback` weighs nothing; an extension registers a `@Primary`
+   one that learns from `onUndone(filing, caller)`, called after every successful undo (toast,
+   chip, job), so a folder the user keeps moving documents out of loses its pull;
 2b. *stage 1b, the rule* (`auto-file.rule-folders`, on by default): a document of a known kind
    (tier-2 category, from the model or the prototype classifier, §3c) whose neighbours offer no
    home — none close enough, or a grab-bag — goes to the scope's folder for that kind: an existing
@@ -373,6 +466,27 @@ uploaded document seconds after the upload response (which carries `autoFile.job
    Flyway `V1_10`) validated and applied through `ReorganizationPlanService.fileDocument`: same
    permission / name-clash / no-op checks as a chat proposal, same audited move. Below the
    thresholds the document stays (SKIPPED with the reason).
+
+**The Inbox** (`auto-file.inbox.enabled`, `OPENFILZ_AI_AUTO_FILE_INBOX_ENABLED`, off by default —
+the folder is user-visible, so an operator turns it on once the users know what it is): one
+optional folder per user, remembered in `user_ai_preferences.inbox_folder_id` (Flyway `V1_12`).
+`PUT /settings/ai/preferences {inbox: true}` creates it on demand at the user's root through the
+ordinary folder API *as the caller* (their audit, their ownership, their name-clash rules) — or
+reuses a root folder already bearing the name — named from the request's `Accept-Language`, else
+`auto-file.default-language`, else English (`Inbox`, `Boîte de réception`, `Eingang`, `Bandeja de
+entrada`, `In arrivo`, `Caixa de entrada`, `صندوق الوارد`; `auto-file.inbox.names.<lang>` overrides);
+`{inbox: false}` only forgets it, the folder and its content stay; a deleted folder counts as no
+Inbox. The view reports `inboxAvailable` (switch on and smart filing available — the single gate
+stays `AiPreferencesController.autoFileAvailable()`), `inbox` (the user has a live one) and
+`inboxFolderId`; 400 to turn it on where it is not offered. The `InboxScopeRule` (order −1000)
+is the convention itself: a document lying in the caller's Inbox is filed with the **whole
+library** as scope, and the Inbox is never a destination for anything — what is still there
+afterwards is exactly what needs a human. `POST /api/v1/ai/auto-file/inbox` (CONTRIBUTOR, body
+`{allowNewFolders}` optional) schedules one job for every active file lying *directly* in the
+Inbox (a sub-folder made there is the user's own) and returns the job like the on-demand
+endpoint; 404 without an Inbox, 400 when the deployment does not offer it. Tests:
+`AutoFileInboxIT` (own context, switch on: create / reuse / forget, filing out of the Inbox, the
+endpoint, a test `DestinationRule` bean for the policy stage) and `AutoFileIT` (switch off).
 
 **One parse per upload.** The filing needs the head of the document's text (the vector query, and
 the model when it is reached). It reads it from the search index when full-text is on; when it is
@@ -711,8 +825,9 @@ bean must exist. So the chain now names it too:
 |---|---|
 | 1 | an explicit `spring.ai.model.chat` |
 | 2 | `<PROVIDER>_CHAT_ENABLED` (Ollama > Anthropic > Google > OpenAI) |
-| 3 | **the fallback chain's first entry** |
-| 4 | Ollama (stock local install) |
+| 3 | `OPENFILZ_AI_MODEL` (`provider:model`, with `OPENFILZ_AI_API_KEY`) — see below |
+| 4 | **the fallback chain's first entry** (its first non-`openfilz-cloud` entry) |
+| 5 | Ollama (stock local install) — or `none` when `OPENFILZ_AI_MODEL` is `openfilz-cloud:…` |
 
 `AI_FALLBACK_CHAIN=google:gemini-3.6-flash,anthropic:claude-haiku-4-5` is therefore a complete
 chat configuration on its own. Existing deployments that set switches are unaffected — they keep
@@ -732,6 +847,21 @@ Spring's own precedence resolves it: an explicit `<PROVIDER>_CHAT_MODEL` wins, t
 the value when that is unset, and the hard-coded default applies when there is no chain either.
 The `openfilz-internal.*` namespace sits outside the `@ConfigurationProperties` prefixes on
 purpose, so it can never be mistaken for user-facing configuration.
+
+**The one-pair setup (`OPENFILZ_AI_MODEL` + `OPENFILZ_AI_API_KEY`)** uses the same technique. A
+vendor provider (`google|gemini|google-genai`, `anthropic|claude`, `openai|openai-compatible`,
+`ollama`) contributes `openfilz-internal.ai.chat-model.<selector>` and
+`openfilz-internal.ai.api-key.<selector>`, consulted after the vendor variable
+(`api-key: ${GOOGLE_API_KEY:${openfilz-internal.ai.api-key.google-genai:disabled}}`), so the chain,
+the insights model and the runtime-rebuilt primary — which all read `spring.ai.<provider>.api-key` —
+get the key too. `openfilz-cloud` contributes `openfilz-internal.ai.insights-model` and
+`openfilz-internal.ai.cloud-api-key` instead and leaves the chat selector at `none`. The pair never
+implies `openfilz.ai.active`, and an unusable value is ignored (the post-processor has no logger)
+and reported by `AiFallbackValidator` at startup. Deployment targets must pass the vendor keys and
+models **only when set** (bare Compose keys, `with` blocks in Helm): an empty environment variable is
+a value, and would shadow the derived one. With no chat model, `UserChatClientResolver.hasDefaultChatModel()`
+is false and `Settings` reports `aiChatActive=false`, `aiChatUnavailableReason=NO_MODEL`; a native
+image's compiled-in Ollama bean is ignored under a runtime selector of `none`.
 
 Since chain[0] then *is* the primary, the two are the same candidate and get de-duplicated.
 
@@ -868,6 +998,8 @@ request, well under the SDK cycle, classified `QUOTA_EXHAUSTED`).
 | Model resolution (BYOK) | `service/ai/UserChatClientResolver` |
 | Client assembly + tools | `service/ai/ChatClientAssembler`, `service/ai/DocumentAiTools(+Factory)` |
 | BYOK settings API + crypto | `controller/rest/AiSettingsController`, `service/impl/AiSettingsCipher` |
+| Insight taxonomy / policy seams | `service/insight/CategoryTaxonomy`, `PropertiesCategoryTaxonomy`, `InsightsPolicy`, `PermitAllInsightsPolicy` |
+| Insight search facets | `service/insight/InsightFacetsService`, `utils/DocumentSearchUtil.toKeys`, `repository/graphql/ListFolderCriteria` (`INSIGHT_*`), `service/OpenSearchQueryService.addInsightFacetClause` |
 | Migrations | `resources/db/ai-migration/V1_4..V1_6` |
 | Native hints (Anthropic SDK) | `config/AnthropicSdkRuntimeHints` |
 | MCP front-end onto the same tools | `config/McpProperties`, `config/McpConfig`, `service/mcp/**` — see [mcp.md](mcp.md) |

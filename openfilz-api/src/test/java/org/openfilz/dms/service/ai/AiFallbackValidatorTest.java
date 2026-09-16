@@ -135,6 +135,20 @@ class AiFallbackValidatorTest {
         assertThatCode(this::validate).doesNotThrowAnyException();
     }
 
+    @Test
+    @DisplayName("openfilz-cloud is checked against the tenant key, not the OpenAI key or base URL")
+    void managedProviderNeedsTheTenantKeyOnly() {
+        chain("openfilz-cloud:default");
+        // No OPENAI_API_KEY, no OPENAI_BASE_URL: the managed provider borrows the client type only
+        assertThatThrownBy(this::validate)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("OPENFILZ_AI_CLOUD_API_KEY")
+                .satisfies(e -> assertThat(e.getMessage()).doesNotContain("OPENAI_BASE_URL"));
+
+        properties.getCloud().setApiKey("tenant-key");
+        assertThatCode(this::validate).doesNotThrowAnyException();
+    }
+
     // ---------------------------------------------------------------- when validation must stay quiet
 
     @Test

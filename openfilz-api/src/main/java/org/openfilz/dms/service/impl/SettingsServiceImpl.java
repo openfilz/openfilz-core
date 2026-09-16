@@ -8,8 +8,12 @@ import org.openfilz.dms.config.RecycleBinProperties;
 import org.openfilz.dms.dto.response.Settings;
 import org.openfilz.dms.enums.SignatureAuthMethod;
 import org.openfilz.dms.service.SettingsService;
+import org.openfilz.dms.service.ai.UserChatClientResolver;
+import org.openfilz.dms.service.insight.CategoryTaxonomy;
 import org.openfilz.dms.service.signature.SignatureOtpSender;
 import org.openfilz.dms.service.signature.SignatureReminderSender;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
@@ -78,6 +82,30 @@ public class SettingsServiceImpl implements SettingsService {
     // (shared-visibility warning, upsell links). Plain runtime flag — never a bean condition.
     @Value("${openfilz.demo-mode:false}")
     private Boolean demoMode;
+
+    /**
+     * The deployment's category taxonomy (the core reads the properties; an extension registers a
+     * {@code @Primary} one managed elsewhere). Field-injected on purpose: the class is subclassed
+     * with a {@code super(...)} call over the constructor below, so a constructor parameter would
+     * break every subclass; an {@code ObjectProvider} also keeps the class constructible by hand
+     * in tests, where the settings fall back to the property list.
+     */
+    @Autowired
+    private ObjectProvider<CategoryTaxonomy> categoryTaxonomyProvider;
+
+    /**
+     * Where the chat gets its server model — consulted only while AI and the chat are on, so a
+     * deployment with AI off never instantiates the (lazy) resolver. Field-injected for the same
+     * subclassing reason as {@link #categoryTaxonomyProvider}; null (plain construction in tests)
+     * means "assume a model", the behaviour before the check existed.
+     */
+    @Autowired
+    private ObjectProvider<UserChatClientResolver> chatResolverProvider;
+
+    /** {@link Settings#aiChatUnavailableReason()}: the chat kill switch is off. */
+    public static final String CHAT_DISABLED = "DISABLED";
+    /** {@link Settings#aiChatUnavailableReason()}: the chat is on but the server has no chat model. */
+    public static final String CHAT_NO_MODEL = "NO_MODEL";
 
     private final RecycleBinProperties recycleBinProperties;
 
@@ -155,6 +183,8 @@ public class SettingsServiceImpl implements SettingsService {
                 }
             }
         }
+       String chatUnavailable = chatUnavailableReason();
+       boolean chatActive = Boolean.TRUE.equals(aiActive) && chatUnavailable == null;
        return Mono.just(Settings.builder()
                .emptyBinInterval(emptyBinInterval)
                .fileQuotaMB(quotaProperties.getFileUpload())
@@ -163,13 +193,13 @@ public class SettingsServiceImpl implements SettingsService {
                .aiActive(aiActive)
                // The chat assistant has its own kill switch: a deployment can run the automatic AI
                // features (insights, filing, semantic retrieval) with no chat model at all.
-               .aiChatActive(Boolean.TRUE.equals(aiActive) && aiProperties.getChat().isActive())
-               // BYOK only ever overrides the *chat* model, so it follows the chat switch too.
-               .aiUserSettingsEnabled(Boolean.TRUE.equals(aiActive) && aiProperties.getChat().isActive()
-                       && Boolean.TRUE.equals(aiUserSettingsEnabled))
+               .aiChatActive(chatActive)
+               .aiChatUnavailableReason(chatUnavailable)
+               // BYOK only ever overrides the *chat* model, so it follows the chat availability too.
+               .aiUserSettingsEnabled(chatActive && Boolean.TRUE.equals(aiUserSettingsEnabled))
                .aiInsightsActive(Boolean.TRUE.equals(aiActive) && Boolean.TRUE.equals(aiInsightsActive))
                .aiInsightsCategories(Boolean.TRUE.equals(aiActive) && Boolean.TRUE.equals(aiInsightsActive)
-                       ? List.copyOf(aiProperties.getInsights().getCategories()) : List.of())
+                       ? insightCategories() : List.of())
                .aiAutoFileActive(Boolean.TRUE.equals(aiActive) && Boolean.TRUE.equals(aiAutoFileActive))
                .signatureActive(Boolean.TRUE.equals(signatureActive))
                .workflowsActive(Boolean.TRUE.equals(workflowsActive))
@@ -188,6 +218,44 @@ public class SettingsServiceImpl implements SettingsService {
                .mcpClientId(mcpProperties.isActive() ? mcpProperties.getClientId() : null)
                .build());
 
+    }
+
+    /**
+     * Why the chat assistant is unavailable, or null when it works or when the AI feature is off
+     * (the whole AI section is hidden then). {@code NO_MODEL} follows the resolver's own decision
+     * ({@link UserChatClientResolver#hasDefaultChatModel()}): the runtime selector plus the model
+     * bean or a provider it can build, so a deployment whose chat would fail on the first message
+     * (e.g. {@code OPENFILZ_AI_MODEL=openfilz-cloud:default}, {@code spring.ai.model.chat=none})
+     * never shows the chat button. Protected: an extension may know of models the core does not.
+     */
+    protected String chatUnavailableReason() {
+        if (!Boolean.TRUE.equals(aiActive)) {
+            return null;
+        }
+        if (!aiProperties.getChat().isActive()) {
+            return CHAT_DISABLED;
+        }
+        // Per-user BYOK: every user can bring their own key in their settings, so a deployment
+        // without a server chat model still offers the chat (and the page where the key goes).
+        if (Boolean.TRUE.equals(aiUserSettingsEnabled) || chatResolverProvider == null) {
+            return null;
+        }
+        try {
+            UserChatClientResolver resolver = chatResolverProvider.getIfAvailable();
+            return resolver != null && !resolver.hasDefaultChatModel() ? CHAT_NO_MODEL : null;
+        } catch (RuntimeException e) {
+            // The resolver itself cannot be built (its AI infrastructure is missing): no chat can work.
+            return CHAT_NO_MODEL;
+        }
+    }
+
+    /**
+     * The kinds the web app offers in the kind editor: the taxonomy's keys as they are now
+     * ({@code other} last), the raw property list when no taxonomy bean is wired (plain construction).
+     */
+    protected List<String> insightCategories() {
+        CategoryTaxonomy taxonomy = categoryTaxonomyProvider == null ? null : categoryTaxonomyProvider.getIfAvailable();
+        return taxonomy != null ? taxonomy.keys() : List.copyOf(aiProperties.getInsights().getCategories());
     }
 
     /**

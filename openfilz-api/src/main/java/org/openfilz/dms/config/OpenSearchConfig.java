@@ -9,6 +9,8 @@ import org.apache.hc.client5.http.impl.nio.PoolingAsyncClientConnectionManagerBu
 import org.apache.hc.client5.http.ssl.ClientTlsStrategyBuilder;
 import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.ssl.SSLContextBuilder;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.opensearch.client.json.jackson.JacksonJsonpMapper;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.transport.httpclient5.ApacheHttpClient5TransportBuilder;
@@ -75,7 +77,11 @@ public class OpenSearchConfig {
                     .setDefaultCredentialsProvider(credentialsProvider)
                     .setConnectionManager(connectionManager);
         })
-        .setMapper(new JacksonJsonpMapper());
+        // Lenient on unknown fields: the index carries what the mirrors write (document insights,
+        // an extension's own keys), and a hit's source must never fail the search because the DTO
+        // lags behind. Jackson 2 on purpose — the OpenSearch client's mapper, not the application's.
+        .setMapper(new JacksonJsonpMapper(new ObjectMapper()
+                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)));
         return new OpenSearchAsyncClient(builder.build());
     }
 

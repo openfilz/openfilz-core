@@ -498,6 +498,21 @@ from a frontend variable of its own. There is nothing to keep in sync.
 
 When `openfilz.ai.active=false` (default), the AI feature is completely inert: no AI beans are created, no AI REST endpoints are exposed, no embedding processing occurs, no LLM provider is auto-configured, and the AI database tables (`ai_chat_conversations`, `ai_chat_messages`, `vector_store`) are **not created**. The Flyway migration for AI only runs when the feature is active.
 
+#### Model: one pair (recommended)
+
+| Property / Env Variable | Default | Description |
+|--------------------------|---------|-------------|
+| `openfilz.ai.model` / `OPENFILZ_AI_MODEL` | *(none)* | `provider:model` — `google:gemini-3.6-flash`, `anthropic:claude-haiku-4-5`, `openai:gpt-4o-mini`, `ollama:qwen2.5`, or `openfilz-cloud:default` (managed gateway, EE CLOUD_AI addon: insights + smart filing only, never the chat). A vendor model becomes the chat model (and the insights / smart-filing model unless `OPENFILZ_AI_INSIGHTS_MODEL` is set). Does not turn AI on |
+| `openfilz.ai.api-key` / `OPENFILZ_AI_API_KEY` | *(none)* | The key of that provider (the gateway tenant key for `openfilz-cloud`; ignored for Ollama). A Helm **secret** (`ai.apiKey` or `ai.existingSecret`, key `api-key`) |
+
+Bring your own model and key: `OPENFILZ_AI_ACTIVE=true` + these two variables is a complete
+configuration. The provider-specific variables below still work and **win** over the pair
+(`GOOGLE_API_KEY`, `GOOGLE_CHAT_MODEL`, `OPENFILZ_AI_INSIGHTS_MODEL`, `OPENFILZ_AI_CLOUD_API_KEY`, …).
+Chat provider precedence: `SPRING_AI_MODEL_CHAT` > a `<PROVIDER>_CHAT_ENABLED` switch >
+`OPENFILZ_AI_MODEL` > the first `AI_FALLBACK_CHAIN` entry > Ollama — except that with
+`openfilz-cloud` the chat has no model (`Settings.aiChatUnavailableReason=NO_MODEL`) unless a switch
+or the chain names one. A malformed value is ignored with a startup warning. See `docs/ai-overview.md`.
+
 #### LLM Provider Configuration
 
 With the feature on and no provider switch set, OpenFilz uses **Ollama**, whose defaults target a
@@ -780,7 +795,9 @@ searchable (`category` facet).
 |---|---|---|
 | `TRANSFORMERS_EMBEDDING_ENABLED` | `false` | Embeddings computed inside the API through ONNX Runtime (nomic-embed-text-v1.5 by default, `TRANSFORMERS_EMBEDDING_MODEL_URI` / `_TOKENIZER_URI` for another ONNX model, `_CACHE_DIR` for where it is kept) — no Ollama, no embedding server; JVM images. Changing provider or model changes the vector space: re-embed the library |
 | `OPENFILZ_AI_INSIGHTS_ACTIVE` | `false` | Turn the model enrichment on |
-| `OPENFILZ_AI_INSIGHTS_MODEL` | *(chat model)* | `provider:model` for the enrichment, e.g. `anthropic:claude-haiku-4-5` — a cheap model is enough |
+| `OPENFILZ_AI_INSIGHTS_MODEL` | *(chat model)* | `provider:model` for the enrichment, e.g. `anthropic:claude-haiku-4-5` — a cheap model is enough. `openfilz-cloud:default` uses the managed model of the EE CLOUD_AI addon |
+| `OPENFILZ_AI_CLOUD_URL` | `https://ai.openfilz.com` | The OpenFilz AI gateway the `openfilz-cloud` provider talks to (EE CLOUD_AI addon) |
+| `OPENFILZ_AI_CLOUD_API_KEY` | *(none)* | The tenant key issued with a CLOUD_AI order; without it the `openfilz-cloud` provider is skipped |
 | `OPENFILZ_AI_INSIGHTS_MAX_CHARS` | `6000` | Characters of text sent per file |
 | `OPENFILZ_AI_INSIGHTS_MAX_FILE_SIZE` | `50MB` | Larger files are not enriched |
 | `OPENFILZ_AI_EMBEDDING_BACKFILL_CONCURRENCY` | `2` | Documents embedded in parallel by `POST /api/v1/ai/embeddings/backfill` — the job that re-embeds a library after an embedding-provider switch (wipe `vector_store` and `ai_embedding_registry` first, restart, then call it as a CONTRIBUTOR; without `force` it embeds only the files that have no vector, so it also repairs a failed upload embedding) |
@@ -820,6 +837,7 @@ an undo, and the details panel shows "Filed by OpenFilz" with the reason.
 | `OPENFILZ_AI_AUTO_FILE_ACTIVE` | `false` | Master switch |
 | `OPENFILZ_AI_AUTO_FILE_DEFAULT` | `false` | Initial value of the per-user switch |
 | `OPENFILZ_AI_AUTO_FILE_NEW_FOLDERS` | `true` | Whether filing may create folders (deployment ceiling) |
+| `OPENFILZ_AI_AUTO_FILE_INBOX_ENABLED` | `false` | Offer each user an Inbox folder: documents dropped there are filed anywhere in their library, never back into the Inbox |
 | `OPENFILZ_AI_AUTO_FILE_CONCURRENCY` | `8` | Documents filed at once. Each filing waits for its document's insight (up to 30 s) and may ask the model, so a filing worker is idle most of its life — raise it together with `OPENFILZ_AI_INSIGHTS_CONCURRENCY` (or `…_LOCAL_CONCURRENCY`) when users drop batches of hundreds of files |
 | `OPENFILZ_AI_AUTO_FILE_TEXT_HANDOFF` | `true` | The upload hands the text its own Tika pass produced to the filing that follows, so one upload is parsed once instead of twice. Only written when full-text indexing is off — with OpenSearch the filing reads the indexed content and nothing is held. Off = the filing re-parses the file |
 | `OPENFILZ_AI_AUTO_FILE_TEXT_HANDOFF_MAX_CHARS` | `2000000` | Ceiling on everything the hand-off holds at once, in characters (~4 MB of heap). Entries are evicted by total size, so this is the worst case whatever the size of the upload batch |

@@ -29,7 +29,7 @@ live elsewhere and are linked from each section:
 - [3. Folder reorganisation](#3-folder-reorganisation)
 - [4. Auto-filing on upload](#4-auto-filing-on-upload)
 - [5. Document insights — the layer features 3 and 4 stand on](#5-document-insights--the-layer-features-3-and-4-stand-on)
-- [6. Running OpenFilz without an LLM](#6-running-openfilz-without-an-llm)
+- [6. Running OpenFilz without an LLM](#6-running-openfilz-without-an-llm) — incl. [6.4 Choosing the model: two variables](#64-choosing-the-model-two-variables)
 - [7. What the UI does in each profile](#7-what-the-ui-does-in-each-profile)
 - [8. Picking a profile for a customer](#8-picking-a-profile-for-a-customer)
 
@@ -59,6 +59,11 @@ tools are served over `/mcp` even on a deployment with no model at all.
 
 \*\* It needs *categories* to exist, which come either from the classifier (embeddings), from a
 model, or from users correcting them by hand.
+
+> **Where a model is needed, it takes two variables.** Bring your own model and key:
+> `OPENFILZ_AI_MODEL=provider:model` (`google:gemini-3.6-flash`, `anthropic:claude-haiku-4-5`,
+> `openai:gpt-4o-mini`, `ollama:qwen2.5`) and `OPENFILZ_AI_API_KEY`, next to `OPENFILZ_AI_ACTIVE=true`.
+> Precedence, the managed `openfilz-cloud` option and what the UI is told: [§6.4](#64-choosing-the-model-two-variables).
 
 ---
 
@@ -311,14 +316,22 @@ later, and the user gets a toast with **Undo**.
 flowchart TD
     U["Upload with autoFile"] --> E{"Eligible?<br/>a file, and the user may move it"}
     E -->|no| SK["SKIPPED, with the reason"]
-    E -->|yes| S1["Stage 1 — the neighbour vote<br/>which folders hold the most similar documents?"]
-    S1 -->|"a clear, coherent winner"| DONE["Move + audit + Undo"]
+    E -->|yes| S0["Stage 0 — the policy<br/>filing rules: re-scope, rule folders out,<br/>or decide outright"]
+    S0 -->|"a rule decided"| DONE["Move + audit + Undo"]
+    S0 -->|"no rule decided"| S1["Stage 1 — the neighbour vote<br/>which folders hold the most similar documents?"]
+    S1 -->|"a clear, coherent winner"| DONE
     S1 -->|"no winner"| S1B["Stage 1b — the rule<br/>a known kind goes to the scope's folder<br/>for that kind, created if needed"]
     S1B -->|"decided"| DONE
     S1B -->|"undecided"| S2["Stage 2 — ask the model<br/>the folder inventory + what we know of the file"]
     S2 -->|"confident enough"| DONE
     S2 -->|"not confident"| SK
 ```
+
+**Stage 0, the policy — no model.** Before anything is compared, the *filing rules* have their
+say: a rule may widen or narrow the scope, rule folders out as destinations, or name the
+destination outright (the outcome then says *filed by policy*, or what the rule *would* have done
+when it runs dry). The core ships one rule, the **Inbox** (below); an extension can add its own —
+organisation-level routing, team policies. A rule that names nothing lets the stages below decide.
 
 **Stage 1, the neighbour vote — no model.** The vector store answers "which documents are most like
 this one?"; those documents are resolved to the folders they *currently* live in, and the leading
@@ -340,6 +353,21 @@ folder or — above a confidence threshold, within a depth limit, if the user al
 **Stage 3, apply.** The decision becomes a one-item reorganisation plan and goes through exactly the
 same validation and audit as a chat proposal. Below the thresholds nothing moves, and the reason is
 recorded.
+
+**The Inbox — a folder that means "file this for me".** Off by default
+(`OPENFILZ_AI_AUTO_FILE_INBOX_ENABLED=true` turns it on, because the folder is visible to users
+and deserves a word of explanation first). Each user may have one, created from the AI
+preferences in their own language (*Inbox*, *Boîte de réception*, *Eingang*…) at the root of
+their library; turning it off only forgets it, nothing is deleted. Whatever is dropped there is
+filed against the **whole library**, not the Inbox, and the Inbox itself is never a destination —
+so what is still in it afterwards is exactly what needs a human decision. *File my Inbox*
+(`POST /api/v1/ai/auto-file/inbox`) files whatever still lies loose in it, in one job with the
+usual toast and undo.
+
+**Corrections teach the vote.** Every undo is handed to a feedback seam that, in the core, does
+nothing; an extension can turn it into per-folder weights (bounded, never silencing a folder nor
+promoting a distant match) so a folder the user keeps moving documents out of gradually loses its
+pull.
 
 What the user sees: the switch in the upload area, a toast once the batch is done — *"X filed · Y
 left in place"* — whose action opens **where your documents went**: the files grouped by the folder
@@ -388,8 +416,18 @@ the user's, never overwritten by a backfill, and from then on it votes for its n
 `learned` / `auto` mode and counts for by-kind reorganisation and the filing rule. A person icon
 marks a kind a human set.
 
-The category is also mirrored into the search index and filterable through the API and the AI/MCP
-tools (`queryDocuments(category=…)`); the web app does not yet expose it as a search facet.
+**Search facets.** The category and the language are search facets: the GraphQL `searchDocuments`
+takes `category` and `language` filters (one key or several, `"invoice,quote"`), on both the
+OpenSearch and the database search paths, and `GET /api/v1/ai/insights/facets` answers how many
+files carry each kind and each language (`{"categories":[{"key":"invoice","count":41},…],
+"languages":[{"key":"fr","count":12},…]}`) so a UI can offer the values that exist. The AI/MCP tools
+filter the same way (`queryDocuments(category=…)`). The kinds themselves come from a single
+**taxonomy** (the `OPENFILZ_AI_INSIGHTS_CATEGORIES` list in the core, each kind with a built-in
+multilingual description the prompt and the local classifier both use; an extension may manage it at
+runtime), and a **policy seam** decides, per document, whether it is enriched at all, whether a model
+may read it, and which kinds — identity documents, say — must never leave the premises: those are
+classified locally and stored without a model call. The core permits everything; the Enterprise
+Edition is where the organisation-level rules live. Details: [ai.md §3b](ai.md#3b-document-insights--smart-filing).
 
 ---
 
@@ -404,7 +442,7 @@ itself.**
 
 | | **A · No AI** | **B · Bring your own agent** | **C · Light AI (no LLM)** | **D · Full AI, local** | **E · Full AI, cloud** |
 |---|---|---|---|---|---|
-| Switches | `AI_ACTIVE=false` | `AI_ACTIVE=false`<br/>`MCP_ACTIVE=true` | `AI_ACTIVE=true`<br/>`AI_CHAT_ACTIVE=false`<br/>`TRANSFORMERS_EMBEDDING_ENABLED=true`<br/>`INSIGHTS_CLASSIFIER=learned` | `AI_ACTIVE=true`<br/>`OLLAMA_CHAT_ENABLED=true`<br/>`OLLAMA_EMBEDDING_ENABLED=true` | `AI_ACTIVE=true`<br/>`ANTHROPIC/OPENAI/GOOGLE_CHAT_ENABLED=true`<br/>+ an embedding provider |
+| Switches | `AI_ACTIVE=false` | `AI_ACTIVE=false`<br/>`MCP_ACTIVE=true` | `AI_ACTIVE=true`<br/>`AI_CHAT_ACTIVE=false`<br/>`TRANSFORMERS_EMBEDDING_ENABLED=true`<br/>`INSIGHTS_CLASSIFIER=learned` | `AI_ACTIVE=true`<br/>`OPENFILZ_AI_MODEL=ollama:<model>`<br/>`OLLAMA_EMBEDDING_ENABLED=true` | `AI_ACTIVE=true`<br/>`OPENFILZ_AI_MODEL=<provider>:<model>`<br/>`OPENFILZ_AI_API_KEY=…`<br/>+ an embedding provider |
 | Extra services to run | — | — | — (embeddings run **inside** the API) | **Ollama** — and a GPU to be usable | — |
 | pgvector image required | no | no | **yes** | **yes** | **yes** |
 | Document text leaves the premises | never | yes — the agent's model reads it | **never** | never | yes |
@@ -460,6 +498,7 @@ is what makes profile C expressible rather than merely almost-expressible:
 | Embeddings, semantic retrieval, insights, smart filing, by-kind reorganisation | work | **work** |
 | `POST /mcp` and every tool on it | works | **works** |
 | `Settings.aiActive` | true | **still true** |
+| `Settings.aiChatUnavailableReason` | `null` (or `NO_MODEL`, see [§6.4](#64-choosing-the-model-two-variables)) | **`DISABLED`** |
 
 With the `prototype` or `learned` classifier, nothing in that bottom half ever calls a chat model.
 So the two switches together give a deployment with **no LLM at all**:
@@ -485,7 +524,64 @@ embeddings for everything automatic, a cheap cloud model for the chat a user exp
 often the better product. The switch is there for when a chat model is genuinely unavailable or
 unwanted — no budget, no egress, no GPU.
 
-### 6.4 Recipes
+### 6.4 Choosing the model: two variables
+
+OpenFilz has no model of its own to sell you: the default, in the Community and the Enterprise
+edition alike, is **bring your own model and key**. One pair of variables configures it:
+
+```bash
+OPENFILZ_AI_ACTIVE=true                         # still the master switch — the pair never implies it
+OPENFILZ_AI_MODEL=google:gemini-3.6-flash       # provider:model
+OPENFILZ_AI_API_KEY=AIza-…                      # that provider's key
+```
+
+| `OPENFILZ_AI_MODEL` provider | Aliases | What it configures | Key |
+|---|---|---|---|
+| `google` | `gemini`, `google-genai` | the chat model (Gemini Developer API) | required |
+| `anthropic` | `claude` | the chat model | required |
+| `openai` | `openai-compatible` | the chat model; any OpenAI-compatible server through `OPENAI_BASE_URL` | required |
+| `ollama` | — | the chat model on your Ollama (`ollama:qwen2.5:1.5b` keeps the tag) | none |
+| `openfilz-cloud` | `openfilz_cloud` | **document insights + smart filing only** — never the chat | the tenant key |
+
+A vendor model becomes the **chat model**, and also the model document insights and smart filing
+use unless `OPENFILZ_AI_INSIGHTS_MODEL` names another one. Embeddings are not affected: they keep
+their own provider (§1).
+
+**Precedence.** The pair is the simplest layer, not the strongest:
+
+| Decides | Wins first … | … then | … then | … last |
+|---|---|---|---|---|
+| the chat **provider** | `SPRING_AI_MODEL_CHAT` | a `<PROVIDER>_CHAT_ENABLED` switch | `OPENFILZ_AI_MODEL` | the first `AI_FALLBACK_CHAIN` entry, then Ollama |
+| a provider's **key** / **model** | `GOOGLE_API_KEY`, `GOOGLE_CHAT_MODEL`, … | `OPENFILZ_AI_API_KEY` / `OPENFILZ_AI_MODEL` | the chain's first entry (model only) | the built-in default |
+| the **insights model** / **gateway key** | `OPENFILZ_AI_INSIGHTS_MODEL` / `OPENFILZ_AI_CLOUD_API_KEY` | `OPENFILZ_AI_MODEL=openfilz-cloud:…` / `OPENFILZ_AI_API_KEY` | — | the chat model / none |
+
+So existing deployments that set switches and vendor variables behave exactly as before. When the
+pair names the primary, a fallback chain still supplies the *fallbacks* — it just no longer names
+the primary. A malformed value (`gemini-3.6-flash`, `mistral:small`, `google:`) is ignored with a
+startup warning naming the problem.
+
+**`openfilz-cloud` — the managed model.** `OPENFILZ_AI_MODEL=openfilz-cloud:default` with the tenant
+key sends the insight and smart-filing prompts to the OpenFilz AI gateway (only those: the gateway
+refuses tools and streaming, so it can never be the chat model). It is an **Enterprise addon
+(CLOUD_AI) that is not commercially available yet**. With it, the chat has **no model** — OpenFilz
+does not fall back to an Ollama nobody deployed — unless a `<PROVIDER>_CHAT_ENABLED` switch or a
+fallback chain with a vendor entry names one.
+
+**What the web app is told.** `GET /api/v1/settings` reports why the chat is missing, so the UI can
+say so instead of offering a chat that fails on its first message:
+
+| `aiChatActive` | `aiChatUnavailableReason` | Meaning |
+|---|---|---|
+| `true` | `null` | the chat works |
+| `false` | `"DISABLED"` | `OPENFILZ_AI_CHAT_ACTIVE=false` (§6.3) |
+| `false` | `"NO_MODEL"` | the chat is on but the server has no chat model — e.g. `openfilz-cloud` alone, or `SPRING_AI_MODEL_CHAT=none` |
+| `false` | `null` | the AI feature itself is off — the whole AI section is hidden |
+
+`aiUserSettingsEnabled` (the per-user key page) follows `aiChatActive` in every case. When per-user keys are
+enabled (`AI_USER_SETTINGS_ENABLED=true`) the server never reports `NO_MODEL`: each user can bring their own
+key, so the chat stays offered even without a server model.
+
+### 6.5 Recipes
 
 ```bash
 # A — No AI. This is the default; nothing to set.
@@ -509,21 +605,27 @@ OPENFILZ_AI_AUTO_FILE_ACTIVE=true                   # stages 1 + 1b decide; no m
 
 # D — Full AI on your own hardware (add the ollama service; a GPU makes it usable).
 OPENFILZ_AI_ACTIVE=true
-OLLAMA_CHAT_ENABLED=true
+OPENFILZ_AI_MODEL=ollama:qwen2.5
 OLLAMA_EMBEDDING_ENABLED=true
 
 # E — Full AI with a cloud model and local embeddings (a good default for a small VPS).
 OPENFILZ_AI_ACTIVE=true
-ANTHROPIC_CHAT_ENABLED=true
-ANTHROPIC_API_KEY=sk-ant-…
+OPENFILZ_AI_MODEL=anthropic:claude-haiku-4-5        # bring your own model …
+OPENFILZ_AI_API_KEY=sk-ant-…                        # … and key (§6.4)
 TRANSFORMERS_EMBEDDING_ENABLED=true
 OPENFILZ_AI_INSIGHTS_ACTIVE=true
 OPENFILZ_AI_INSIGHTS_CLASSIFIER=auto                # local when confident, the model otherwise
+
+# C + the managed model (EE CLOUD_AI addon, not commercially available yet): on top of profile C,
+#     the gateway writes the full insights and backs smart-filing stage 2; the chat stays off.
+OPENFILZ_AI_MODEL=openfilz-cloud:default
+OPENFILZ_AI_API_KEY=<tenant key>
+OPENFILZ_AI_INSIGHTS_CLASSIFIER=auto
 ```
 
 Every variable, with its defaults: [admin guide → AI Document Chat](admin-guide.md#ai-document-chat).
 
-### 6.5 Moving between profiles
+### 6.6 Moving between profiles
 
 - **A → B**: flip one switch. Nothing to migrate.
 - **A/B → C/D/E**: PostgreSQL must be a pgvector image (**never** swap `postgres:*-alpine` for the
@@ -556,7 +658,9 @@ so an out-of-date frontend cannot call a feature into existence.
 | Settings → **AI maintenance** (re-embed / re-enrich) | `aiActive` + CONTRIBUTOR | hidden | hidden | shown | shown |
 | Settings → **Connect your AI tool** (MCP) | `mcpActive` — *independent of every AI flag* | hidden | **shown** | if enabled | if enabled |
 
-The chat rows follow `aiChatActive`, everything else follows its own flag — which is exactly what
+The chat rows follow `aiChatActive` — false also when the chat is on but the server has no chat
+model, with `aiChatUnavailableReason` saying which (`DISABLED` / `NO_MODEL`, [§6.4](#64-choosing-the-model-two-variables)) —
+everything else follows its own flag — which is exactly what
 lets profile C keep insights, filing and maintenance while dropping the assistant ([§6.3](#63-the-chat-kill-switch)).
 
 Two consequences worth remembering when demoing:

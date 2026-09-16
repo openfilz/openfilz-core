@@ -25,11 +25,14 @@ import org.openfilz.dms.dto.response.DocumentInfo;
 import org.openfilz.dms.dto.response.Suggest;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.e2e.util.PdfLoremGeneratorStreaming;
+import org.openfilz.dms.enums.OpenSearchDocumentKey;
+import org.openfilz.dms.service.IndexService;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.opensearch._types.query_dsl.MatchQuery;
 import org.opensearch.client.opensearch.core.SearchRequest;
 import org.opensearch.client.transport.httpclient5.ApacheHttpClient5TransportBuilder;
 import org.opensearch.testcontainers.OpenSearchContainer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.graphql.client.ClientGraphQlResponse;
 import org.springframework.graphql.client.HttpGraphQlClient;
@@ -79,6 +82,9 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
 
     @Container
     static OpenSearchContainer<?> openSearch = new OpenSearchContainer<>(DockerImageName.parse("opensearchproject/opensearch:3"));
+
+    @Autowired
+    private IndexService indexService;
 
     public FullTextOpenSearchIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
         super(webTestClient, customJacksonJsonEncoder);
@@ -457,6 +463,61 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
                 .expectStatus().isNoContent();
 
         waitFor(3000);
+    }
+
+    /**
+     * The insight facets in the OpenSearch path: {@code category} and {@code language} are keyword
+     * fields mirrored from {@code ai_document_insights} when a tier-2 row lands; the GraphQL search
+     * takes them as {@code FilterInput}s (one key or several, comma-separated) and turns them into
+     * {@code terms} filters. AI is off in this suite, so the mirror is written here the way the
+     * insight worker writes it.
+     */
+    @Test
+    void testInsightFacetFilters() {
+        MultipartBodyBuilder builder = newFileBuilder("pdf-example.pdf");
+        UploadResponse uploaded = getUploadResponse(builder, true);
+        String id = uploaded.id().toString();
+
+        // The index entry exists once the async indexing has run: retry the mirror until it does
+        awaitIndexed("the insight mirror should reach the index entry", () -> indexService.updateIndexFields(uploaded.id(),
+                Map.of(OpenSearchDocumentKey.category.toString(), "invoice", OpenSearchDocumentKey.language.toString(), "fr"))
+                .block());
+
+        awaitIndexed("a category filter should find the mirrored document", () ->
+                Assertions.assertTrue(searchIdsByFacets("{ field: \"category\", value: \"invoice\" }").contains(id)));
+        // The hit carries the mirrored facets
+        Map<String, Object> hit = searchByFacets("{ field: \"category\", value: \"invoice\" }").stream()
+                .filter(d -> id.equals(String.valueOf(d.get("id")))).findFirst().orElseThrow();
+        Assertions.assertEquals("invoice", hit.get("category"));
+        Assertions.assertEquals("fr", hit.get("language"));
+        Assertions.assertTrue(searchIdsByFacets("{ field: \"category\", value: \"Invoice, quote\" }").contains(id));
+        Assertions.assertTrue(searchIdsByFacets("{ field: \"language\", value: \"fr,en\" }").contains(id));
+        Assertions.assertTrue(searchIdsByFacets("{ field: \"category\", value: \"invoice\" }, { field: \"language\", value: \"fr\" }").contains(id));
+        Assertions.assertFalse(searchIdsByFacets("{ field: \"category\", value: \"contract\" }").contains(id));
+        Assertions.assertFalse(searchIdsByFacets("{ field: \"language\", value: \"de\" }").contains(id));
+        Assertions.assertFalse(searchIdsByFacets("{ field: \"category\", value: \"invoice\" }, { field: \"language\", value: \"en\" }").contains(id));
+    }
+
+    /** The ids {@code searchDocuments} answers for the given filters alone (no text query). */
+    private List<String> searchIdsByFacets(String filters) {
+        return searchByFacets(filters).stream().map(d -> String.valueOf(d.get("id"))).toList();
+    }
+
+    /** The hits {@code searchDocuments} answers for the given filters alone (no text query), with their facets. */
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> searchByFacets(String filters) {
+        String document = """
+                query {
+                  searchDocuments(filters: [%s], page: 1, size: 50) {
+                    totalHits
+                    documents { id category language }
+                  }
+                }""".formatted(filters);
+        ClientGraphQlResponse response = getGraphQlHttpClient().document(document).execute().block();
+        Assertions.assertNotNull(response);
+        Assertions.assertTrue(response.getErrors().isEmpty(), response.toString());
+        return response.field("searchDocuments.documents").toEntityList(Map.class).stream()
+                .map(m -> (Map<String, Object>) m).toList();
     }
 
     @Disabled

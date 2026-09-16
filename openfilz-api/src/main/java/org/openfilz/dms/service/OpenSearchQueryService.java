@@ -1,6 +1,7 @@
 package org.openfilz.dms.service;
 
 import org.openfilz.dms.dto.request.FilterInput;
+import org.openfilz.dms.utils.DocumentSearchUtil;
 import org.opensearch.client.opensearch._types.FieldValue;
 import org.opensearch.client.opensearch._types.query_dsl.BoolQuery;
 import org.opensearch.client.opensearch._types.query_dsl.MultiMatchQuery;
@@ -21,6 +22,10 @@ public interface OpenSearchQueryService {
         // They are generally faster and cacheable.
         if (!CollectionUtils.isEmpty(filters)) {
             for (FilterInput filter : filters) {
+                if (isInsightFacet(filter.field())) {
+                    addInsightFacetClause(filter, boolQueryBuilder);
+                    continue;
+                }
                 // IMPORTANT: For exact matching on text fields, you must use the '.keyword' sub-field.
                 // This assumes your OpenSearch mapping for text fields includes a keyword multi-field.
                 // For fields like 'parentId' that might already be of type 'keyword', this is still safe.
@@ -33,6 +38,27 @@ public interface OpenSearchQueryService {
             }
         }
         return Mono.just(boolQueryBuilder);
+    }
+
+    /** The insight facets ({@code category}, {@code language}) are keyword fields of their own, mirrored from {@code ai_document_insights}. */
+    static boolean isInsightFacet(String field) {
+        return DocumentSearchUtil.FILTER_CATEGORY.equals(field) || DocumentSearchUtil.FILTER_LANGUAGE.equals(field);
+    }
+
+    /**
+     * One {@code terms} filter on the facet's keyword field: the value names one key or several,
+     * comma-separated ({@code invoice,quote}); an empty value filters nothing.
+     */
+    static void addInsightFacetClause(FilterInput filter, BoolQuery.Builder boolQueryBuilder) {
+        List<String> keys = DocumentSearchUtil.toKeys(filter.value());
+        if (keys == null) {
+            return;
+        }
+        List<FieldValue> values = keys.stream().map(FieldValue::of).toList();
+        boolQueryBuilder.filter(f -> f.terms(t -> t
+                .field(filter.field())
+                .terms(v -> v.value(values))
+        ));
     }
 
     default Mono<? extends QueryVariant> getQuery(String trimQuery, List<FilterInput> filters) {

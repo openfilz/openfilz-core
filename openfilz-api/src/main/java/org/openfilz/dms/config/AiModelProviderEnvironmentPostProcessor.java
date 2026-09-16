@@ -54,6 +54,36 @@ import java.util.Map;
  * property source is added last, so application.yml would shadow it — and the placeholder always
  * resolving to a value is exactly why "the operator chose this" cannot otherwise be told apart
  * from "nobody set it".
+ * <h2>The one-pair setup: {@code openfilz.ai.model} + {@code openfilz.ai.api-key}</h2>
+ * {@code OPENFILZ_AI_MODEL=provider:model} and {@code OPENFILZ_AI_API_KEY} configure a deployment's
+ * model with two variables instead of the switch + key + model + insights-model set. They are
+ * translated with the same nested-placeholder technique:
+ * <ul>
+ *   <li>{@code google|gemini|google-genai}, {@code anthropic|claude}, {@code openai}
+ *       ({@code openai-compatible}) or {@code ollama} names the <em>chat</em> provider and model:
+ *       {@code openfilz-internal.ai.chat-model.<selector>} = model and
+ *       {@code openfilz-internal.ai.api-key.<selector>} = key, which application.yml consults
+ *       after the explicit vendor variables ({@code GOOGLE_API_KEY}, {@code GOOGLE_CHAT_MODEL}, ...),
+ *       so those still win. The chain and the insights model read their keys through the same
+ *       {@code spring.ai.<provider>.api-key} properties, so the derived key reaches them too.</li>
+ *   <li>{@code openfilz-cloud} (or {@code openfilz_cloud}) is the managed gateway, which serves
+ *       document insights and smart filing only (it refuses tools and streaming, so it can never be
+ *       the chat model): {@code openfilz-internal.ai.insights-model} = {@code openfilz-cloud:<model>}
+ *       and {@code openfilz-internal.ai.cloud-api-key} = key. The chat selector then becomes
+ *       {@code none} (never the Ollama default) unless an explicit switch or a chain with a
+ *       non-managed entry names a chat provider.</li>
+ *   <li>Anything else (unknown provider, no {@code ':'}, empty model) is ignored here, where no
+ *       logger exists yet; {@code AiFallbackValidator} warns about it at startup
+ *       ({@link #invalidModelReason(String)}).</li>
+ * </ul>
+ * Chat selector precedence: explicit {@code spring.ai.model.chat} &gt; a
+ * {@code <PROVIDER>_CHAT_ENABLED} switch &gt; {@code openfilz.ai.model} &gt; the fallback chain's first
+ * entry &gt; Ollama ({@code none} instead when the model is {@code openfilz-cloud}). The chain still
+ * supplies the <em>fallbacks</em> when the model names the primary; it just no longer names it.
+ * {@code openfilz.ai.model} never implies {@code openfilz.ai.active}: the feature's master switch
+ * stays {@code OPENFILZ_AI_ACTIVE} (native images compile the provider auto-configurations in only
+ * when it is on at build time), and with the feature off nothing is derived from the model.
+ * <p>
  * The ordering matters: the switches read here come from {@code application.yml}, so this has to
  * run after {@code ConfigDataEnvironmentPostProcessor} has contributed the config data — otherwise
  * every switch would read as absent.
@@ -75,6 +105,20 @@ public class AiModelProviderEnvironmentPostProcessor implements EnvironmentPostP
      * can never be mistaken for user-facing configuration or trip unknown-field binding.
      */
     private static final String DERIVED_CHAT_MODEL = "openfilz-internal.ai.chat-model.";
+
+    /** The single model / key pair ({@code OPENFILZ_AI_MODEL} / {@code OPENFILZ_AI_API_KEY}). */
+    static final String MODEL = "openfilz.ai.model";
+    static final String API_KEY = "openfilz.ai.api-key";
+
+    /** Per-selector API key application.yml falls back to after the vendor variable. */
+    static final String DERIVED_API_KEY = "openfilz-internal.ai.api-key.";
+    /** Insights model application.yml falls back to after {@code OPENFILZ_AI_INSIGHTS_MODEL}. */
+    static final String DERIVED_INSIGHTS_MODEL = "openfilz-internal.ai.insights-model";
+    /** Gateway tenant key application.yml falls back to after {@code OPENFILZ_AI_CLOUD_API_KEY}. */
+    static final String DERIVED_CLOUD_API_KEY = "openfilz-internal.ai.cloud-api-key";
+
+    /** Canonical provider token of the managed gateway (same as {@code AiFallbackChain.OPENFILZ_CLOUD}). */
+    static final String OPENFILZ_CLOUD = "openfilz-cloud";
 
     /** Model kinds OpenFilz never uses; left enabled they would build clients we don't need. */
     private static final String[] UNUSED_SELECTORS = {
@@ -120,9 +164,13 @@ public class AiModelProviderEnvironmentPostProcessor implements EnvironmentPostP
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
         boolean aiActive = environment.getProperty(AI_ACTIVE, Boolean.class, false);
         Map<String, Object> selectors = new LinkedHashMap<>();
+        ModelChoice model = aiActive ? parseModel(environment.getProperty(MODEL)) : null;
+        if (model != null) {
+            contributeModel(environment, selectors, model);
+        }
 
         putIfAbsent(environment, selectors, CHAT_SELECTOR, aiActive
-                ? chatProvider(environment, selectors)
+                ? chatProvider(environment, selectors, model)
                 : NONE);
         putIfAbsent(environment, selectors, EMBEDDING_SELECTOR, aiActive
                 ? provider(environment, EMBEDDING_PROVIDERS)
@@ -137,14 +185,20 @@ public class AiModelProviderEnvironmentPostProcessor implements EnvironmentPostP
     }
 
     /**
-     * The chat provider: an explicit switch first, then the fallback chain's first entry, then
-     * Ollama. Switches keep precedence so an existing deployment that sets both is unaffected.
+     * The chat provider: an explicit switch first, then {@code openfilz.ai.model}, then the fallback
+     * chain's first entry, then Ollama; {@code none} instead of Ollama when the model is the managed
+     * gateway, which cannot serve chat. Switches keep precedence so an existing deployment that sets
+     * both is unaffected.
      */
-    private String chatProvider(ConfigurableEnvironment environment, Map<String, Object> selectors) {
+    private String chatProvider(ConfigurableEnvironment environment, Map<String, Object> selectors,
+                                ModelChoice model) {
         for (String[] candidate : CHAT_PROVIDERS) {
             if (environment.getProperty(candidate[0], Boolean.class, false)) {
                 return candidate[1];
             }
+        }
+        if (model != null && !model.managed()) {
+            return model.selector();
         }
         ChainChoice fromChain = firstChainEntry(environment);
         if (fromChain != null) {
@@ -153,9 +207,93 @@ public class AiModelProviderEnvironmentPostProcessor implements EnvironmentPostP
             selectors.put(DERIVED_CHAT_MODEL + fromChain.selector(), fromChain.model());
             return fromChain.selector();
         }
+        if (model != null) {
+            // openfilz-cloud: the operator chose the managed gateway, which refuses tools and
+            // streaming. Falling back to a local Ollama nobody deployed would only fail per request.
+            return NONE;
+        }
         // Nothing configured: Ollama, whose defaults target a stock local install, so
         // `openfilz.ai.active=true` alone is a working setup.
         return OLLAMA;
+    }
+
+    /**
+     * Contribute what {@code openfilz.ai.model} / {@code openfilz.ai.api-key} imply, as nested
+     * placeholder defaults (see the class Javadoc for why properties cannot be overridden directly).
+     * Contributed whichever provider ends up selected: a property is only ever read for the provider
+     * actually configured, and a switch naming the same provider then picks the model up.
+     */
+    private void contributeModel(ConfigurableEnvironment environment, Map<String, Object> selectors,
+                                 ModelChoice model) {
+        String apiKey = environment.getProperty(API_KEY);
+        boolean hasKey = apiKey != null && !apiKey.isBlank();
+        if (model.managed()) {
+            selectors.put(DERIVED_INSIGHTS_MODEL, OPENFILZ_CLOUD + ':' + model.model());
+            if (hasKey) {
+                selectors.put(DERIVED_CLOUD_API_KEY, apiKey.trim());
+            }
+            return;
+        }
+        selectors.put(DERIVED_CHAT_MODEL + model.selector(), model.model());
+        if (hasKey && !OLLAMA.equals(model.selector())) {
+            selectors.put(DERIVED_API_KEY + model.selector(), apiKey.trim());
+        }
+    }
+
+    /** What {@code openfilz.ai.model} names: a Spring AI selector (or the managed gateway) and a model. */
+    record ModelChoice(String selector, String model) {
+        boolean managed() {
+            return OPENFILZ_CLOUD.equals(selector);
+        }
+    }
+
+    /**
+     * Parse {@code provider:model}; null when blank or unusable. Only the first {@code ':'} separates,
+     * so Ollama tags ({@code ollama:qwen2.5:1.5b}) survive.
+     */
+    static ModelChoice parseModel(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String trimmed = value.trim();
+        int separator = trimmed.indexOf(':');
+        if (separator <= 0) {
+            return null;
+        }
+        String selector = modelSelector(trimmed.substring(0, separator));
+        String model = trimmed.substring(separator + 1).trim();
+        return selector == null || model.isEmpty() ? null : new ModelChoice(selector, model);
+    }
+
+    private static String modelSelector(String provider) {
+        return switch (provider.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "google", "gemini", "google-genai" -> GOOGLE_GENAI;
+            case "anthropic", "claude" -> ANTHROPIC;
+            case "openai", "openai-compatible", "openai_compatible" -> OPENAI;
+            case "ollama" -> OLLAMA;
+            case "openfilz-cloud", "openfilz_cloud" -> OPENFILZ_CLOUD;
+            default -> null;
+        };
+    }
+
+    /**
+     * Why a configured {@code openfilz.ai.model} is ignored, or null when it is usable or unset.
+     * For the startup warning: this post-processor runs before logging is set up.
+     */
+    public static String invalidModelReason(String value) {
+        if (value == null || value.isBlank() || parseModel(value) != null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        int separator = trimmed.indexOf(':');
+        if (separator <= 0) {
+            return "expected 'provider:model', e.g. google:gemini-3.6-flash";
+        }
+        String provider = trimmed.substring(0, separator).trim();
+        if (modelSelector(provider) == null) {
+            return "unknown provider '" + provider + "' (expected google, anthropic, openai, ollama or openfilz-cloud)";
+        }
+        return "no model after the provider, e.g. " + provider + ":<model>";
     }
 
     /** The provider selector and model named by one chain entry. */

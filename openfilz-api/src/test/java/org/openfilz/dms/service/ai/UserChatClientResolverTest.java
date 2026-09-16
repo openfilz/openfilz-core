@@ -208,4 +208,50 @@ class UserChatClientResolverTest {
         assertThat(ReflectionTestUtils.getField(model, "retryTemplate"))
                 .isSameAs(UserChatClientResolver.SHORT_RETRY_TEMPLATE);
     }
+
+    // ---------------------------------------------------------------- hasDefaultChatModel (Settings.aiChatActive)
+
+    @Test
+    @DisplayName("matching bean -> a chat model exists")
+    void hasDefaultChatModel_trueWithAMatchingBean() {
+        environment.setProperty("spring.ai.model.chat", "ollama");
+        assertThat(resolver(mock(OllamaChatModel.class)).hasDefaultChatModel()).isTrue();
+    }
+
+    @Test
+    @DisplayName("no bean and selector none -> no chat model")
+    void hasDefaultChatModel_falseWithNoBean() {
+        environment.setProperty("spring.ai.model.chat", "none");
+        assertThat(resolver(TestChatModelProvider.none()).hasDefaultChatModel()).isFalse();
+    }
+
+    /**
+     * The native image compiles the Ollama bean in at build time; a runtime selector of none (e.g.
+     * OPENFILZ_AI_MODEL=openfilz-cloud:default) must not let that bean serve a chat nobody deployed.
+     */
+    @Test
+    @DisplayName("selector none but a compiled-in Ollama bean -> no chat model, and resolve refuses")
+    void selectorNone_ignoresACompiledInProviderBean() {
+        environment.setProperty("spring.ai.model.chat", "none");
+        UserChatClientResolver resolver = resolver(mock(OllamaChatModel.class));
+
+        assertThat(resolver.hasDefaultChatModel()).isFalse();
+        assertThatThrownBy(() -> resolver.resolve("user@example.com").block())
+                .hasMessageContaining("No chat model is configured");
+    }
+
+    /** Mocked-model suites pin the selector to none; their unrecognised bean is still the model. */
+    @Test
+    @DisplayName("selector none with an unrecognised (mock) bean -> trusted as the chat model")
+    void selectorNone_trustsAnUnrecognisedBean() {
+        environment.setProperty("spring.ai.model.chat", "none");
+        assertThat(resolver(mock(ChatModel.class)).hasDefaultChatModel()).isTrue();
+    }
+
+    @Test
+    @DisplayName("selector names a cloud provider with no bean and no key -> no chat model")
+    void hasDefaultChatModel_falseWhenTheSelectedProviderCannotBeBuilt() {
+        environment.setProperty("spring.ai.model.chat", "google-genai");
+        assertThat(resolver(TestChatModelProvider.none()).hasDefaultChatModel()).isFalse();
+    }
 }

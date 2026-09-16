@@ -142,6 +142,24 @@ mcp:
 ai:
   # @param ai.active Enable the AI feature (embeddings, insights, smart filing, chat)
   active: false
+  # -- Recommended setup: ONE model pair, bring your own model and key (needs ai.active — the
+  # model never turns the feature on). provider:model, e.g. google:gemini-3.6-flash,
+  # anthropic:claude-haiku-4-5, openai:gpt-4o-mini, ollama:qwen2.5 (no key). A vendor provider is
+  # the chat model (and the insights / smart-filing model unless insights.model is set).
+  # Alternative: openfilz-cloud:default — the managed gateway, insights + smart filing ONLY (no
+  # chat), requires the CLOUD_AI addon. Precedence for the chat provider: a provider's
+  # chat.enabled switch > model > first fallback.chain entry > Ollama. The provider-specific
+  # apiKey / chat.model values below still win over the pair. See docs/ai-overview.md.
+  model: ""
+  # -- API key of ai.model's provider (the gateway tenant key for openfilz-cloud). Rendered into a
+  # chart-managed Secret; or set existingSecret (key: api-key) and leave this empty.
+  apiKey: ""
+  existingSecret: ""
+  # -- The managed gateway behind openfilz-cloud (EE CLOUD_AI addon). ai.model=openfilz-cloud:default
+  # with ai.apiKey is the simpler way to set both; apiKey here wins over it.
+  cloud:
+    url: "https://ai.openfilz.com"
+    apiKey: ""
   # -- The in-app chat assistant alone. false answers 404 on /ai/chat** and hides the chat
   # button and "Organise with AI"; embeddings, insights, smart filing, the by-kind
   # reorganisation and MCP are unaffected — that is the "light" profile, which with
@@ -152,7 +170,8 @@ ai:
   # summary, keywords, language, entities). Needs ai.active. See docs/ai.md §3b.
   insights:
     active: false
-    # provider:model for the enrichment (e.g. anthropic:claude-haiku-4-5); empty = the chat model
+    # provider:model for the enrichment (e.g. anthropic:claude-haiku-4-5); empty = the chat model,
+    # or openfilz-cloud:<model> when ai.model names openfilz-cloud
     model: ""
     dailyLimit: 2000
     # Parallel model calls; raise together with autoFile.concurrency for bulk uploads
@@ -181,6 +200,8 @@ ai:
     active: false
     defaultForUsers: false
     allowNewFolders: true
+    # offer each user an Inbox folder whose content is filed anywhere in their library
+    inboxEnabled: false
     # Documents filed at once; each waits for its document's insight, so raise with insights.concurrency
     concurrency: 8
     # How long past the uploader's token expiry a filing queued while it was valid may still
@@ -273,7 +294,8 @@ ai:
     baseUrl: "https://api.openai.com"
     chat:
       enabled: false
-      model: "gpt-4o"
+      # empty = ai.model, else the application default (gpt-4o)
+      model: ""
     embedding:
       enabled: false
       model: "text-embedding-3-small"
@@ -284,7 +306,8 @@ ai:
     apiKey: ""
     chat:
       enabled: false
-      model: "claude-opus-5"
+      # empty = ai.model, else the application default (claude-opus-5)
+      model: ""
   # -- Google Gemini via the Gemini Developer API (chat only — embeddings stay on Ollama/OpenAI)
   # Google retires model ids, and a retired one fails every chat with a 404 ("no longer
   # available to new users"): set model to "gemini-flash-latest" to track the current flash
@@ -293,7 +316,8 @@ ai:
     apiKey: ""
     chat:
       enabled: false
-      model: "gemini-3.6-flash"
+      # empty = ai.model, else the application default (gemini-3.6-flash)
+      model: ""
   # -- Per-user AI settings (BYOK): users override the chat LLM with their own provider + API key.
   # encryptionKey protects the stored keys (base64, 32 bytes): openssl rand -base64 32
   userSettings:

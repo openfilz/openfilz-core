@@ -187,4 +187,38 @@ class DocumentSearchUtilTest {
         ListFolderRequest req = util.toListFolderRequest("q", filters, null, 0, 10);
         assertNull(req.favorite());
     }
+
+    // --- insight facets (category / language) ---
+
+    @Test
+    void toKeys_splitsTrimsLowerCasesAndDeduplicates() {
+        assertEquals(List.of("invoice", "quote"), DocumentSearchUtil.toKeys(" Invoice , quote,,INVOICE "));
+        assertEquals(List.of("fr"), DocumentSearchUtil.toKeys("fr"));
+        assertNull(DocumentSearchUtil.toKeys(null));
+        assertNull(DocumentSearchUtil.toKeys("  "));
+        assertNull(DocumentSearchUtil.toKeys(" , "));
+    }
+
+    @Test
+    void toListFolderRequest_categoryAndLanguageFilters_becomeKeyLists() {
+        Map<String, String> filters = Map.of(
+                DocumentSearchUtil.FILTER_CATEGORY, "Invoice, contract",
+                DocumentSearchUtil.FILTER_LANGUAGE, "fr");
+
+        ListFolderRequest req = util.toListFolderRequest("q", filters, null, 1, 10);
+
+        assertEquals(List.of("invoice", "contract"), req.categories());
+        assertEquals(List.of("fr"), req.languages());
+        // The count request keeps the facets and drops the page
+        ListFolderRequest count = req.forCount();
+        assertEquals(req.categories(), count.categories());
+        assertEquals(req.languages(), count.languages());
+        assertNull(count.pageInfo());
+    }
+
+    @Test
+    void toListFolderRequest_withoutFacetFilters_leavesThemNull() {
+        assertNull(util.toListFolderRequest("q", null, null, 1, 10).categories());
+        assertNull(util.toListFolderRequest("q", Map.of(DocumentSearchUtil.FILTER_TYPE, "FILE"), null, 1, 10).languages());
+    }
 }

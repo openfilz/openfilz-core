@@ -17,6 +17,9 @@ import static org.openfilz.dms.utils.SqlUtils.WHERE;
 public class ListFolderCriteria {
 
     public static final String NON_FAVORITE_CLAUSE = "uf.doc_id IS NULL ";
+    /** Bind names of the insight facets (the columns of {@code ai_document_insights} they read). */
+    public static final String INSIGHT_CATEGORY = "insight_category";
+    public static final String INSIGHT_LANGUAGE = "insight_language";
     protected final SqlUtils sqlUtils;
 
     public DatabaseClient.GenericExecuteSpec bindCriteria(DatabaseClient.GenericExecuteSpec query, ListFolderRequest filter) {
@@ -73,7 +76,17 @@ public class ListFolderCriteria {
         if(filter.active() != null) {
             query = sqlUtils.bindCriteria(ACTIVE, filter.active(), query);
         }
+        if(hasKeys(filter.categories())) {
+            query = sqlUtils.bindInsightCriteria(INSIGHT_CATEGORY, filter.categories(), query);
+        }
+        if(hasKeys(filter.languages())) {
+            query = sqlUtils.bindInsightCriteria(INSIGHT_LANGUAGE, filter.languages(), query);
+        }
         return query;
+    }
+
+    private static boolean hasKeys(java.util.List<String> keys) {
+        return keys != null && !keys.isEmpty();
     }
 
     public void checkFilter(ListFolderRequest filter) {
@@ -149,6 +162,16 @@ public class ListFolderCriteria {
         }
         if(request.active() != null) {
             sqlUtils.appendEqualsCriteria(prefix, ACTIVE, appendAnd(query, appendAnd));
+            appendAnd = true;
+        }
+        // Insight facets: a sub-select on ai_document_insights, so the listing needs no join and
+        // an extension's access predicate on the documents stays untouched
+        if(hasKeys(request.categories())) {
+            sqlUtils.appendInsightCriteria(prefix, "category", INSIGHT_CATEGORY, appendAnd(query, appendAnd));
+            appendAnd = true;
+        }
+        if(hasKeys(request.languages())) {
+            sqlUtils.appendInsightCriteria(prefix, "language", INSIGHT_LANGUAGE, appendAnd(query, appendAnd));
         }
         if(request.favorite() != null && !request.favorite()) {
             if(!query.toString().contains(WHERE)) {

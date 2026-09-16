@@ -2,6 +2,7 @@ package org.openfilz.dms.service.ai;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.openfilz.dms.config.AiModelProviderEnvironmentPostProcessor;
 import org.openfilz.dms.config.AiProperties;
 import org.openfilz.dms.enums.AiProvider;
 import org.springframework.boot.ApplicationArguments;
@@ -36,6 +37,7 @@ public class AiFallbackValidator implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        checkModel();
         AiProperties.Fallback fallback = aiProperties.getFallback();
         if (!aiProperties.isActive() || !fallback.isEnabled()) {
             return;
@@ -63,10 +65,24 @@ public class AiFallbackValidator implements ApplicationRunner {
         List<AiFallbackChain.ChainEntry> entries =
                 AiFallbackChain.parseChain(fallback.getChain(), rejected -> problems.add("unusable entry '" + rejected + "'"));
 
-        Set<AiProvider> providers = new LinkedHashSet<>();
-        entries.forEach(entry -> providers.add(entry.provider()));
-
-        for (AiProvider provider : providers) {
+        // One check per provider token: the managed provider is checked against its own tenant
+        // key and gateway URL, never against the OpenAI key or base URL it merely borrows the
+        // client type of.
+        Set<String> providers = new LinkedHashSet<>();
+        for (AiFallbackChain.ChainEntry entry : entries) {
+            if (!providers.add(entry.name())) {
+                continue;
+            }
+            if (entry.managed()) {
+                if (!aiProperties.getCloud().isConfigured()) {
+                    problems.add("no API key for %s — set OPENFILZ_AI_CLOUD_API_KEY".formatted(AiFallbackChain.OPENFILZ_CLOUD));
+                }
+                if (isBlank(aiProperties.getCloud().getUrl())) {
+                    problems.add("%s needs a gateway URL — set OPENFILZ_AI_CLOUD_URL".formatted(AiFallbackChain.OPENFILZ_CLOUD));
+                }
+                continue;
+            }
+            AiProvider provider = entry.provider();
             if (AiFallbackChain.keyPool(fallback, provider, environment).isEmpty()) {
                 problems.add("no API key for %s — set %s (or %s)"
                         .formatted(provider, poolVariable(provider), singleKeyVariable(provider)));
@@ -97,10 +113,39 @@ public class AiFallbackValidator implements ApplicationRunner {
                 + "configured, so a quota failure may go unanswered.", detail);
     }
 
+    /**
+     * {@code openfilz.ai.model} is translated by {@link AiModelProviderEnvironmentPostProcessor},
+     * which runs before logging exists and silently ignores an unusable value — reported here so a
+     * typo does not leave the deployment quietly on the default model. Never fatal.
+     */
+    void checkModel() {
+        String model = aiProperties.getModel();
+        if (model == null || model.isBlank()) {
+            return;
+        }
+        if (!aiProperties.isActive()) {
+            log.warn("[AI] OPENFILZ_AI_MODEL is set ('{}') but the AI feature is off — set OPENFILZ_AI_ACTIVE=true "
+                    + "to use it", model.trim());
+            return;
+        }
+        String reason = AiModelProviderEnvironmentPostProcessor.invalidModelReason(model);
+        if (reason != null) {
+            log.warn("[AI] OPENFILZ_AI_MODEL='{}' is IGNORED: {}", model.trim(), reason);
+            return;
+        }
+        String provider = AiFallbackChain.canonicalProvider(model.substring(0, model.indexOf(':')));
+        if (AiFallbackChain.OPENFILZ_CLOUD.equals(provider)
+                && !aiProperties.getInsights().isActive() && !aiProperties.getAutoFile().isActive()) {
+            log.warn("[AI] OPENFILZ_AI_MODEL names {}, which serves document insights and smart filing only "
+                    + "(never the chat), but neither is active — set OPENFILZ_AI_INSIGHTS_ACTIVE / "
+                    + "OPENFILZ_AI_AUTO_FILE_ACTIVE", AiFallbackChain.OPENFILZ_CLOUD);
+        }
+    }
+
     /** Readable chain summary for the startup log; models only, never keys. */
     private String describe(List<AiFallbackChain.ChainEntry> entries) {
         return entries.stream()
-                .map(entry -> entry.provider() + ":" + entry.model())
+                .map(entry -> entry.name() + ":" + entry.model())
                 .reduce((a, b) -> a + ", " + b)
                 .orElse("");
     }

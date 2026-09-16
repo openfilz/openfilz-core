@@ -6,9 +6,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.InsightBackfillRequest;
 import org.openfilz.dms.dto.response.InsightBackfillStatus;
+import org.openfilz.dms.dto.response.InsightFacets;
 import org.openfilz.dms.service.ai.AiToolRolePolicy;
 import org.openfilz.dms.service.ai.ToolCapability;
 import org.openfilz.dms.service.insight.DocumentInsightService;
+import org.openfilz.dms.service.insight.InsightFacetsService;
 import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
@@ -37,10 +39,36 @@ public class AiInsightsController implements UserInfoService {
 
     private final DocumentInsightService insightService;
     private final AiToolRolePolicy rolePolicy;
+    private final InsightFacetsService facetsService;
+    private final org.openfilz.dms.config.AiProperties aiProperties;
 
-    public AiInsightsController(@Lazy DocumentInsightService insightService, AiToolRolePolicy rolePolicy) {
+    public AiInsightsController(@Lazy DocumentInsightService insightService, AiToolRolePolicy rolePolicy,
+                                InsightFacetsService facetsService, org.openfilz.dms.config.AiProperties aiProperties) {
         this.insightService = insightService;
         this.rolePolicy = rolePolicy;
+        this.facetsService = facetsService;
+        this.aiProperties = aiProperties;
+    }
+
+    @GetMapping(value = "/facets", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "The category and language facets of the library",
+            description = "How many active files carry each tier-2 category and each detected language, from the document "
+                    + "insights (largest first). The keys are what searchDocuments accepts in its 'category' / 'language' "
+                    + "filters. 404 when the AI features are off (openfilz.ai.active); READER.")
+    public Mono<InsightFacets> facets() {
+        if (!aiProperties.isActive()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "The AI features are disabled");
+        }
+        return getAuthenticationMono()
+                .map(java.util.Optional::of)
+                .defaultIfEmpty(java.util.Optional.empty())
+                .flatMap(authentication -> {
+                    if (!rolePolicy.isAllowed(authentication.orElse(null), ToolCapability.DOCUMENT_READ)) {
+                        return Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN,
+                                "Reading the insight facets needs the READER role"));
+                    }
+                    return getConnectedUserEmail().flatMap(facetsService::facets);
+                });
     }
 
     @PostMapping(value = "/backfill", produces = MediaType.APPLICATION_JSON_VALUE)

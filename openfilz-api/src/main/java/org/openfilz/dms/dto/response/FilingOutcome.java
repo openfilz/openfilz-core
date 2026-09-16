@@ -7,7 +7,7 @@ import java.util.UUID;
  * How smart filing ended for one document.
  *
  * @param status     FILED (moved), SKIPPED (stayed where it was, see reason), FAILED, UNDONE (moved back)
- * @param stage      what decided the destination: NEIGHBOURS (vector vote), MODEL, or NONE
+ * @param stage      what decided the destination: POLICY (a filing rule), NEIGHBOURS (vector vote), RULE (folder of its kind), MODEL, or NONE
  * @param confidence the vote share or the model's confidence (0..1), null when nothing was decided
  * @param planId     the AUTO_FILE plan record behind the move (history, undo)
  */
@@ -31,6 +31,8 @@ public record FilingOutcome(
     public static final String UNDONE = "UNDONE";
     public static final String PENDING = "PENDING";
 
+    /** A {@code DestinationRule} named the destination (or, dry, what it would have been) before the vote. */
+    public static final String STAGE_POLICY = "POLICY";
     public static final String STAGE_NEIGHBOURS = "NEIGHBOURS";
     /** The folder for the document's kind, found by name or created from the folder-name table — no model. */
     public static final String STAGE_RULE = "RULE";

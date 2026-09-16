@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.response.DocumentInsightView;
 import org.openfilz.dms.dto.response.InsightBackfillStatus;
+import org.openfilz.dms.dto.response.InsightFacets;
 import org.openfilz.dms.dto.response.Settings;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.service.ai.DocumentAiTools;
@@ -12,6 +13,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.graphql.client.ClientGraphQlResponse;
+import org.springframework.graphql.client.HttpGraphQlClient;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.http.codec.json.JacksonJsonEncoder;
@@ -23,6 +26,8 @@ import org.springframework.web.reactive.function.BodyInserters;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Predicate;
 
@@ -33,7 +38,8 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
  * Tier-2 document insights against the mocked chat model of {@link AiTestConfig}: an upload is
  * enriched asynchronously (category from the closed list, summary, entities), a model answer
  * that is not the contract ends as FAILED, the backfill re-enriches with force, the category
- * filters {@code queryDocuments}, and the settings advertise the feature.
+ * filters {@code queryDocuments} and the GraphQL search (DB path), the facets endpoint counts it,
+ * and the settings advertise the feature.
  */
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -82,7 +88,7 @@ class DocumentInsightsTier2IT extends TestContainersBaseConfig {
         assertThat(view.keywords()).contains("test", "report");
         assertThat(view.entities()).containsEntry("client", "ACME");
         assertThat(view.model()).isNotBlank();
-        assertThat(view.promptVersion()).isEqualTo(1);
+        assertThat(view.promptVersion()).isEqualTo(org.openfilz.dms.service.insight.AiDocumentInsightService.PROMPT_VERSION);
 
         assertThat(documentAiTools.getMetadata(uploaded.id().toString()))
                 .contains("Insights").contains("\"category\":\"report\"");
@@ -164,7 +170,67 @@ class DocumentInsightsTier2IT extends TestContainersBaseConfig {
         assertThat(compactRow).as(compact).contains("cat report").doesNotContain("A short test summary").contains("kw ");
     }
 
+    @Test
+    @DisplayName("the category and language filter the GraphQL search on the DB path, and the facets endpoint counts them")
+    void categoryFacetsAndSearchFilters() {
+        String name = "facet-" + UUID.randomUUID() + ".txt";
+        UploadResponse uploaded = uploadDocument(textFile(name, "Invoice F-2026-0777 from Globex, total due 1 200 EUR."));
+        awaitInsights(uploaded.id(), v -> "DONE".equals(v.status()) && v.tier() == 2 && "invoice".equals(v.category()));
+
+        HttpGraphQlClient client = newGraphQlClient();
+        String id = uploaded.id().toString();
+        assertThat(searchIds(client, name, "category", "invoice")).contains(id);
+        // several keys, spelled loosely: normalised like the stored value
+        assertThat(searchIds(client, name, "category", "Invoice, quote")).contains(id);
+        assertThat(searchIds(client, name, "category", "contract")).isEmpty();
+        assertThat(searchIds(client, name, "language", "en")).contains(id);
+        assertThat(searchIds(client, name, "language", "fr")).isEmpty();
+        // both facets at once
+        assertThat(searchIds(client, name, List.of(Map.of("field", "category", "value", "invoice"),
+                Map.of("field", "language", "value", "en")))).contains(id);
+        assertThat(searchIds(client, name, List.of(Map.of("field", "category", "value", "invoice"),
+                Map.of("field", "language", "value", "de")))).isEmpty();
+
+        InsightFacets facets = getWebTestClient().get().uri(INSIGHTS + "/facets")
+                .exchange().expectStatus().isOk()
+                .expectBody(InsightFacets.class).returnResult().getResponseBody();
+        assertThat(facets).isNotNull();
+        assertThat(facets.categories()).as(facets.toString())
+                .anyMatch(f -> "invoice".equals(f.key()) && f.count() >= 1);
+        assertThat(facets.languages()).as(facets.toString())
+                .anyMatch(f -> "en".equals(f.key()) && f.count() >= 1);
+        // largest first
+        assertThat(facets.categories()).isSortedAccordingTo((a, b) -> Long.compare(b.count(), a.count()));
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────
+
+    private List<String> searchIds(HttpGraphQlClient client, String query, String field, String value) {
+        return searchIds(client, query, List.of(Map.of("field", field, "value", value)));
+    }
+
+    /** The ids {@code searchDocuments} answers for a name query and the given {@code FilterInput}s. */
+    @SuppressWarnings("unchecked")
+    private List<String> searchIds(HttpGraphQlClient client, String query, List<Map<String, String>> filters) {
+        StringBuilder filterList = new StringBuilder();
+        for (Map<String, String> filter : filters) {
+            if (!filterList.isEmpty()) filterList.append(", ");
+            filterList.append("{ field: \"").append(filter.get("field")).append("\", value: \"").append(filter.get("value")).append("\" }");
+        }
+        String document = """
+                query {
+                  searchDocuments(query: "%s", filters: [%s], page: 1, size: 20) {
+                    totalHits
+                    documents { id name }
+                  }
+                }""".formatted(query, filterList);
+        ClientGraphQlResponse response = client.document(document).execute().block();
+        assertThat(response).isNotNull();
+        assertThat(response.getErrors()).as(response.toString()).isEmpty();
+        List<Map<String, Object>> documents = response.field("searchDocuments.documents").toEntityList(Map.class)
+                .stream().map(m -> (Map<String, Object>) m).toList();
+        return documents.stream().map(d -> String.valueOf(d.get("id"))).toList();
+    }
 
     private static MultipartBodyBuilder textFile(String name, String content) {
         MultipartBodyBuilder builder = new MultipartBodyBuilder();

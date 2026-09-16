@@ -351,6 +351,340 @@ class AiModelProviderEnvironmentPostProcessorTest {
         assertEquals("ollama", environment.getProperty("spring.ai.model.embedding"));
     }
 
+    // ---------------------------------------------------------------- OPENFILZ_AI_MODEL + OPENFILZ_AI_API_KEY
+
+    private static final String MODEL = "openfilz.ai.model";
+    private static final String KEY = "openfilz.ai.api-key";
+
+    @Test
+    void model_google_namesChatProviderModelAndKey() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                MODEL, "google:gemini-3.6-flash",
+                KEY, "AIza-test");
+
+        assertEquals("google-genai", environment.getProperty("spring.ai.model.chat"));
+        assertEquals("gemini-3.6-flash", environment.getProperty("openfilz-internal.ai.chat-model.google-genai"));
+        assertEquals("AIza-test", environment.getProperty("openfilz-internal.ai.api-key.google-genai"));
+        // Chat-only provider: embedding keeps its own resolution.
+        assertEquals("ollama", environment.getProperty("spring.ai.model.embedding"));
+        assertNull(environment.getProperty("openfilz-internal.ai.insights-model"));
+        assertNull(environment.getProperty("openfilz-internal.ai.cloud-api-key"));
+    }
+
+    @Test
+    void model_providerAliases_mapOntoTheSelectors() {
+        String[][] cases = {
+                {"gemini:g", "google-genai"}, {"google-genai:g", "google-genai"}, {"GOOGLE:g", "google-genai"},
+                {"anthropic:c", "anthropic"}, {"claude:c", "anthropic"},
+                {"openai:o", "openai"}, {"openai-compatible:o", "openai"},
+                {"ollama:q", "ollama"},
+        };
+        for (String[] c : cases) {
+            MockEnvironment environment = process("openfilz.ai.active", "true", MODEL, c[0], KEY, "k");
+            assertEquals(c[1], environment.getProperty("spring.ai.model.chat"), c[0]);
+            assertEquals(c[0].substring(c[0].indexOf(':') + 1),
+                    environment.getProperty("openfilz-internal.ai.chat-model." + c[1]), c[0]);
+        }
+    }
+
+    @Test
+    void model_anthropic_derivesItsKey() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                MODEL, " claude : claude-haiku-4-5 ",
+                KEY, " sk-ant ");
+
+        assertEquals("anthropic", environment.getProperty("spring.ai.model.chat"));
+        assertEquals("claude-haiku-4-5", environment.getProperty("openfilz-internal.ai.chat-model.anthropic"));
+        assertEquals("sk-ant", environment.getProperty("openfilz-internal.ai.api-key.anthropic"));
+    }
+
+    @Test
+    void model_openai_derivesItsKey() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                MODEL, "openai:gpt-4o-mini",
+                KEY, "sk-openai");
+
+        assertEquals("openai", environment.getProperty("spring.ai.model.chat"));
+        assertEquals("gpt-4o-mini", environment.getProperty("openfilz-internal.ai.chat-model.openai"));
+        assertEquals("sk-openai", environment.getProperty("openfilz-internal.ai.api-key.openai"));
+    }
+
+    /** Ollama needs no key; its tag keeps every colon after the provider. */
+    @Test
+    void model_ollama_keepsTheTagAndDerivesNoKey() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                MODEL, "ollama:qwen2.5:1.5b",
+                KEY, "ignored");
+
+        assertEquals("ollama", environment.getProperty("spring.ai.model.chat"));
+        assertEquals("qwen2.5:1.5b", environment.getProperty("openfilz-internal.ai.chat-model.ollama"));
+        assertNull(environment.getProperty("openfilz-internal.ai.api-key.ollama"));
+    }
+
+    @Test
+    void model_withoutKey_derivesTheModelOnly() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                MODEL, "google:gemini-3.6-flash");
+
+        assertEquals("google-genai", environment.getProperty("spring.ai.model.chat"));
+        assertNull(environment.getProperty("openfilz-internal.ai.api-key.google-genai"));
+    }
+
+    /** Existing deployments set switches; a switch keeps deciding the provider. */
+    @Test
+    void explicitSwitch_beatsTheModel() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.openai.chat.enabled", "true",
+                MODEL, "google:gemini-3.6-flash",
+                KEY, "AIza-test");
+
+        assertEquals("openai", environment.getProperty("spring.ai.model.chat"));
+    }
+
+    /** A switch naming the model's own provider picks up the model and key. */
+    @Test
+    void switchForTheSameProvider_usesTheModelAndKey() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.google.chat.enabled", "true",
+                MODEL, "google:gemini-2.5-pro",
+                KEY, "AIza-test");
+
+        assertEquals("google-genai", environment.getProperty("spring.ai.model.chat"));
+        assertEquals("gemini-2.5-pro", environment.getProperty("openfilz-internal.ai.chat-model.google-genai"));
+        assertEquals("AIza-test", environment.getProperty("openfilz-internal.ai.api-key.google-genai"));
+    }
+
+    @Test
+    void explicitSelector_beatsTheModel() {
+        MockEnvironment environment = process(
+                "spring.ai.model.chat", "anthropic",
+                "openfilz.ai.active", "true",
+                MODEL, "google:gemini-3.6-flash");
+
+        assertEquals("anthropic", environment.getProperty("spring.ai.model.chat"));
+    }
+
+    /** The model names the primary; the chain still supplies the fallbacks, but no longer the primary's model. */
+    @Test
+    void model_beatsTheFallbackChainForThePrimary() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                MODEL, "anthropic:claude-haiku-4-5",
+                KEY, "sk-ant",
+                "openfilz.ai.fallback.enabled", "true",
+                "openfilz.ai.fallback.chain", "google:gemini-2.0-flash,openai:gpt-4o-mini");
+
+        assertEquals("anthropic", environment.getProperty("spring.ai.model.chat"));
+        assertEquals("claude-haiku-4-5", environment.getProperty("openfilz-internal.ai.chat-model.anthropic"));
+        assertNull(environment.getProperty("openfilz-internal.ai.chat-model.google-genai"));
+    }
+
+    /** The explicit vendor properties win through application.yml's nested placeholders; nothing is overridden here. */
+    @Test
+    void model_neverOverridesTheVendorProperties() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "spring.ai.google.genai.api-key", "AIza-explicit",
+                "spring.ai.google.genai.chat.model", "gemini-explicit",
+                MODEL, "google:gemini-3.6-flash",
+                KEY, "AIza-pair");
+
+        assertEquals("AIza-explicit", environment.getProperty("spring.ai.google.genai.api-key"));
+        assertEquals("gemini-explicit", environment.getProperty("spring.ai.google.genai.chat.model"));
+    }
+
+    @Test
+    void model_openfilzCloud_setsInsightsModelAndCloudKey_andChatNone() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                MODEL, "openfilz-cloud:default",
+                KEY, "ofz-tenant");
+
+        assertEquals("none", environment.getProperty("spring.ai.model.chat"));
+        assertEquals("openfilz-cloud:default", environment.getProperty("openfilz-internal.ai.insights-model"));
+        assertEquals("ofz-tenant", environment.getProperty("openfilz-internal.ai.cloud-api-key"));
+        assertNull(environment.getProperty("openfilz-internal.ai.chat-model.openai"));
+        assertNull(environment.getProperty("openfilz-internal.ai.api-key.openai"));
+        // Embeddings are unaffected by the managed model.
+        assertEquals("ollama", environment.getProperty("spring.ai.model.embedding"));
+    }
+
+    @Test
+    void model_openfilzCloud_underscoreSpelling() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                MODEL, "openfilz_cloud:default");
+
+        assertEquals("none", environment.getProperty("spring.ai.model.chat"));
+        assertEquals("openfilz-cloud:default", environment.getProperty("openfilz-internal.ai.insights-model"));
+        assertNull(environment.getProperty("openfilz-internal.ai.cloud-api-key"));
+    }
+
+    @Test
+    void model_openfilzCloud_withAnExplicitChatSwitch_keepsTheSwitch() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.anthropic.chat.enabled", "true",
+                MODEL, "openfilz-cloud:default",
+                KEY, "ofz-tenant");
+
+        assertEquals("anthropic", environment.getProperty("spring.ai.model.chat"));
+        assertEquals("openfilz-cloud:default", environment.getProperty("openfilz-internal.ai.insights-model"));
+        // The pair's key belongs to the gateway, never to the vendor.
+        assertNull(environment.getProperty("openfilz-internal.ai.api-key.anthropic"));
+    }
+
+    @Test
+    void model_openfilzCloud_withAChain_takesTheChainsVendorEntryForChat() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                MODEL, "openfilz-cloud:default",
+                "openfilz.ai.fallback.enabled", "true",
+                "openfilz.ai.fallback.chain", "openfilz-cloud:default,google:gemini-3.6-flash");
+
+        assertEquals("google-genai", environment.getProperty("spring.ai.model.chat"));
+        assertEquals("gemini-3.6-flash", environment.getProperty("openfilz-internal.ai.chat-model.google-genai"));
+    }
+
+    @Test
+    void model_openfilzCloud_withAChainOfManagedEntriesOnly_staysNone() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                MODEL, "openfilz-cloud:default",
+                "openfilz.ai.fallback.enabled", "true",
+                "openfilz.ai.fallback.chain", "openfilz-cloud:default");
+
+        assertEquals("none", environment.getProperty("spring.ai.model.chat"));
+    }
+
+    /** OPENFILZ_AI_ACTIVE stays the master switch: the model alone turns nothing on. */
+    @Test
+    void model_whileAiIsInactive_derivesNothing() {
+        MockEnvironment environment = process(
+                MODEL, "openfilz-cloud:default",
+                KEY, "ofz-tenant");
+        assertEquals("none", environment.getProperty("spring.ai.model.chat"));
+        assertEquals("none", environment.getProperty("spring.ai.model.embedding"));
+        assertNull(environment.getProperty("openfilz-internal.ai.insights-model"));
+        assertNull(environment.getProperty("openfilz-internal.ai.cloud-api-key"));
+
+        environment = process(MODEL, "google:gemini-3.6-flash", KEY, "AIza-test");
+        assertEquals("none", environment.getProperty("spring.ai.model.chat"));
+        assertNull(environment.getProperty("openfilz-internal.ai.chat-model.google-genai"));
+        assertNull(environment.getProperty("openfilz-internal.ai.api-key.google-genai"));
+    }
+
+    /** A malformed value is ignored (warned about at startup), leaving the historical defaults. */
+    @Test
+    void model_malformed_isIgnored() {
+        for (String bad : new String[]{"gemini-3.6-flash", "mystery:x", "google:", ":model", "  "}) {
+            MockEnvironment environment = process(
+                    "openfilz.ai.active", "true",
+                    MODEL, bad,
+                    KEY, "k");
+
+            assertEquals("ollama", environment.getProperty("spring.ai.model.chat"), bad);
+            assertNull(environment.getProperty("openfilz-internal.ai.api-key.google-genai"), bad);
+            assertNull(environment.getProperty("openfilz-internal.ai.insights-model"), bad);
+        }
+    }
+
+    /**
+     * The derived properties only matter through application.yml's nested placeholders; a drifted key
+     * on either side silently does nothing, so resolve the real file end to end.
+     */
+    private org.springframework.core.env.StandardEnvironment realYaml(String... pairs) throws java.io.IOException {
+        org.springframework.core.env.StandardEnvironment environment = new org.springframework.core.env.StandardEnvironment();
+        // The developer's own GOOGLE_API_KEY & co. must not leak into the assertions.
+        environment.getPropertySources().remove(org.springframework.core.env.StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME);
+        environment.getPropertySources().remove(org.springframework.core.env.StandardEnvironment.SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME);
+        java.util.Map<String, Object> overrides = new java.util.LinkedHashMap<>();
+        for (int i = 0; i < pairs.length; i += 2) {
+            overrides.put(pairs[i], pairs[i + 1]);
+        }
+        environment.getPropertySources().addFirst(new org.springframework.core.env.MapPropertySource("test", overrides));
+        new org.springframework.boot.env.YamlPropertySourceLoader()
+                .load("application.yml", new org.springframework.core.io.ClassPathResource("application.yml"))
+                .forEach(environment.getPropertySources()::addLast);
+        postProcessor.postProcessEnvironment(environment, null);
+        return environment;
+    }
+
+    @Test
+    void applicationYml_resolvesThePairIntoTheVendorProperties() throws Exception {
+        var environment = realYaml(
+                "openfilz.ai.active", "true",
+                "OPENFILZ_AI_MODEL", "anthropic:claude-haiku-4-5",
+                "OPENFILZ_AI_API_KEY", "sk-ant-pair");
+
+        assertEquals("anthropic", environment.getProperty("spring.ai.model.chat"));
+        assertEquals("claude-haiku-4-5", environment.getProperty("spring.ai.anthropic.chat.model"));
+        assertEquals("sk-ant-pair", environment.getProperty("spring.ai.anthropic.api-key"));
+        assertEquals("disabled", environment.getProperty("spring.ai.google.genai.api-key"));
+    }
+
+    @Test
+    void applicationYml_explicitVendorVariablesWinOverThePair() throws Exception {
+        var environment = realYaml(
+                "openfilz.ai.active", "true",
+                "OPENFILZ_AI_MODEL", "google:gemini-3.6-flash",
+                "OPENFILZ_AI_API_KEY", "AIza-pair",
+                "GOOGLE_API_KEY", "AIza-explicit",
+                "GOOGLE_CHAT_MODEL", "gemini-explicit");
+
+        assertEquals("AIza-explicit", environment.getProperty("spring.ai.google.genai.api-key"));
+        assertEquals("gemini-explicit", environment.getProperty("spring.ai.google.genai.chat.model"));
+    }
+
+    @Test
+    void applicationYml_ollamaModelComesFromThePair() throws Exception {
+        var environment = realYaml(
+                "openfilz.ai.active", "true",
+                "OPENFILZ_AI_MODEL", "ollama:llama3.2:3b");
+
+        assertEquals("llama3.2:3b", environment.getProperty("spring.ai.ollama.chat.model"));
+    }
+
+    @Test
+    void applicationYml_openfilzCloudResolvesInsightsModelAndGatewayKey() throws Exception {
+        var environment = realYaml(
+                "openfilz.ai.active", "true",
+                "OPENFILZ_AI_MODEL", "openfilz-cloud:default",
+                "OPENFILZ_AI_API_KEY", "ofz-tenant");
+
+        assertEquals("none", environment.getProperty("spring.ai.model.chat"));
+        assertEquals("openfilz-cloud:default", environment.getProperty("openfilz.ai.insights.model"));
+        assertEquals("ofz-tenant", environment.getProperty("openfilz.ai.cloud.api-key"));
+        assertEquals("disabled", environment.getProperty("spring.ai.openai.api-key"));
+
+        var explicit = realYaml(
+                "openfilz.ai.active", "true",
+                "OPENFILZ_AI_MODEL", "openfilz-cloud:default",
+                "OPENFILZ_AI_API_KEY", "ofz-tenant",
+                "OPENFILZ_AI_INSIGHTS_MODEL", "anthropic:claude-haiku-4-5",
+                "OPENFILZ_AI_CLOUD_API_KEY", "ofz-explicit");
+        assertEquals("anthropic:claude-haiku-4-5", explicit.getProperty("openfilz.ai.insights.model"));
+        assertEquals("ofz-explicit", explicit.getProperty("openfilz.ai.cloud.api-key"));
+    }
+
+    @Test
+    void invalidModelReason_namesTheProblem() {
+        assertNull(AiModelProviderEnvironmentPostProcessor.invalidModelReason(null));
+        assertNull(AiModelProviderEnvironmentPostProcessor.invalidModelReason(""));
+        assertNull(AiModelProviderEnvironmentPostProcessor.invalidModelReason("google:gemini-3.6-flash"));
+        assertNull(AiModelProviderEnvironmentPostProcessor.invalidModelReason("openfilz-cloud:default"));
+        assertTrue(AiModelProviderEnvironmentPostProcessor.invalidModelReason("gemini").contains("provider:model"));
+        assertTrue(AiModelProviderEnvironmentPostProcessor.invalidModelReason("mistral:small").contains("unknown provider 'mistral'"));
+        assertTrue(AiModelProviderEnvironmentPostProcessor.invalidModelReason("google:").contains("no model"));
+    }
+
     @Test
     void unusedModelKinds_areDisabled() {
         MockEnvironment environment = process(

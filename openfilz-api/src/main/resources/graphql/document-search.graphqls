@@ -10,6 +10,10 @@ type DocumentSearchInfo {
     updatedAt: DateTime
     createdBy: String
     updatedBy: String
+    "The AI document insight's category of the file (OpenSearch search path only; null on the database path)"
+    category: String
+    "The document insight's language, BCP-47 primary tag (OpenSearch search path only; null on the database path)"
+    language: String
     contentSnippet: String # return a snippet instead of the full content
     "URL to fetch the thumbnail image, null if not available"
     thumbnailUrl: String

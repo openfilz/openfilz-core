@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.openfilz.dms.config.RestApiVersion;
+import org.openfilz.dms.dto.request.AutoFileInboxRequest;
 import org.openfilz.dms.dto.request.AutoFileJobsRequest;
 import org.openfilz.dms.dto.request.AutoFileRequest;
 import org.openfilz.dms.dto.response.AutoFileJobView;
@@ -60,6 +61,25 @@ public class AutoFileController implements UserInfoService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "documentIds is required");
         }
         return withCaller(caller -> autoFileService.schedule(ids, caller, request.allowNewFolders()));
+    }
+
+    @PostMapping(value = "/inbox", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "File everything lying loose in the caller's Inbox",
+            description = "Schedules one filing job for every active file directly in the caller's Inbox folder "
+                    + "(the per-user Inbox of the smart-filing preferences) and returns the job at once, like the "
+                    + "on-demand endpoint. 404 when the caller has no Inbox, 400 when the deployment does not offer it.")
+    public Mono<AutoFileJobView> fileInbox(@RequestBody(required = false) AutoFileInboxRequest request) {
+        requireActive();
+        Boolean allowNewFolders = request == null ? null : request.allowNewFolders();
+        return withCaller(caller -> {
+            try {
+                return autoFileService.fileInbox(caller, allowNewFolders);
+            } catch (IllegalStateException e) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+            } catch (IllegalArgumentException e) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+            }
+        });
     }
 
     @PostMapping(value = "/jobs", produces = MediaType.APPLICATION_JSON_VALUE)

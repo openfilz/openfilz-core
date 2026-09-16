@@ -36,11 +36,14 @@ import org.openfilz.dms.service.filing.AutoFileDecision.ModelAnswer;
 import org.openfilz.dms.service.filing.AutoFileDecision.Neighbour;
 import org.openfilz.dms.service.filing.AutoFileDecision.FolderFit;
 import org.openfilz.dms.service.filing.AutoFileDecision.Vote;
+import org.openfilz.dms.service.filing.DestinationRule.Decision;
+import org.openfilz.dms.service.filing.DestinationRule.FilingContext;
 import org.openfilz.dms.service.impl.TikaService;
 import org.openfilz.dms.service.insight.DocumentInsightService;
 import org.openfilz.dms.service.insight.DocumentInsightStore;
 import org.openfilz.dms.service.insight.InsightResult;
 import org.openfilz.dms.service.insight.InsightCompletionSignal;
+import org.openfilz.dms.service.insight.InsightsPolicy;
 import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
@@ -60,6 +63,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -72,7 +76,9 @@ import java.util.concurrent.TimeoutException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -88,6 +94,9 @@ import java.util.stream.Collectors;
  * The real smart-filing service (design §13). One document goes through:
  * <ol>
  *   <li><b>eligibility</b>: an active FILE the caller may modify, with a live session;</li>
+ *   <li><b>stage 0, the policy</b>: every {@link DestinationRule} bean in order — a rule may
+ *       re-scope the filing (the Inbox: the whole library), exclude folders from the destinations
+ *       (the Inbox itself), or name the destination outright (stage {@code POLICY}, no vote);</li>
  *   <li><b>stage 1, the neighbour vote</b>: the vector store's nearest documents, resolved to
  *       their <em>live</em> folders (never the folder stored in chunk metadata), inside the scope
  *       (the folder the document was dropped in; root = the whole library) and writable — the
@@ -109,6 +118,9 @@ import java.util.stream.Collectors;
 public class DefaultAutoFileService implements AutoFileService, UserInfoService {
 
     static final String PROMPT_MARKER = "AUTOFILE_V1";
+    /** Appended to a folder of the model's inventory a rule excluded from the destinations. */
+    static final String NOT_A_DESTINATION = " (not a destination)";
+    private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final int QUERY_CHARS = 2000;
     private static final int MODEL_TEXT_CHARS = 1500;
     private static final int MAX_JOBS = 5_000;
@@ -125,6 +137,13 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
     private final DocumentInsightService insightService;
     private final InsightCompletionSignal insightSignal;
     private final AiPreferencesService preferences;
+    /**
+     * The organisation-level gate (an extension's governance): consulted once per filing so every
+     * entry point — an upload, the on-demand endpoint, the Inbox, the AI tool — honours it. Setter
+     * injection keeps the constructor stable for the tests that build the service by hand; absent
+     * (or when the deployment permits everything) the filing proceeds as before.
+     */
+    private volatile ObjectProvider<InsightsPolicy> insightsPolicyProvider;
     private final ObjectProvider<VectorStore> vectorStoreProvider;
     private final ObjectProvider<IndexService> indexServiceProvider;
     private final UserChatClientResolver resolver;
@@ -134,6 +153,11 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
     private final ApplicationEventPublisher events;
     /** The text the upload's own Tika pass produced, when nothing else kept it. */
     private final DocumentTextHandoff textHandoff;
+    /** The policy stage: every rule bean, resolved on first use so a disabled deployment never builds them. */
+    private final ObjectProvider<DestinationRule> rulesProvider;
+    private volatile List<DestinationRule> rules;
+    /** The corrections seam: folder weights for the vote, undo notifications. Never fails a filing. */
+    private final FilingFeedback feedback;
 
     private final Sinks.Many<Task> queue = Sinks.many().unicast().onBackpressureBuffer();
     private final Map<UUID, Job> jobs = new ConcurrentHashMap<>();
@@ -162,7 +186,8 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
                                   InsightCompletionSignal insightSignal, AiPreferencesService preferences, ObjectProvider<VectorStore> vectorStoreProvider,
                                   ObjectProvider<IndexService> indexServiceProvider, UserChatClientResolver resolver,
                                   AiFallbackChain fallbackChain, TikaService tikaService, StorageService storageService,
-                                  ApplicationEventPublisher events, DocumentTextHandoff textHandoff) {
+                                  ApplicationEventPublisher events, DocumentTextHandoff textHandoff,
+                                  ObjectProvider<DestinationRule> rulesProvider, FilingFeedback feedback) {
         this.aiProperties = aiProperties;
         this.documentRepository = documentRepository;
         this.documentService = documentService;
@@ -182,7 +207,29 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
         this.storageService = storageService;
         this.events = events;
         this.textHandoff = textHandoff;
+        this.rulesProvider = rulesProvider;
+        this.feedback = feedback == null ? new NoOpFilingFeedback() : feedback;
         this.folderNames = new CategoryFolderNames(aiProperties.getAutoFile().getFolderNames());
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setInsightsPolicyProvider(ObjectProvider<InsightsPolicy> insightsPolicyProvider) {
+        this.insightsPolicyProvider = insightsPolicyProvider;
+    }
+
+    /** False when the organisation disabled smart filing for this user; a failing lookup fails closed. */
+    boolean autoFileAllowed(String email) {
+        ObjectProvider<InsightsPolicy> provider = insightsPolicyProvider;
+        InsightsPolicy policy = provider == null ? null : provider.getIfAvailable();
+        if (policy == null) {
+            return true;
+        }
+        try {
+            return Boolean.TRUE.equals(policy.autoFileAllowed(email).defaultIfEmpty(true).block());
+        } catch (Exception e) {
+            log.warn("[AUTOFILE] governance lookup failed for {} — not filing: {}", email, e.toString());
+            return false;
+        }
     }
 
     private record Task(UUID documentId, Caller caller, boolean allowNewFolders, UUID jobId) {
@@ -319,6 +366,23 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
     }
 
     @Override
+    public AutoFileJobView fileInbox(Caller caller, Boolean allowNewFolders) {
+        if (!preferences.inboxOffered()) {
+            throw new IllegalStateException("The Inbox is not enabled on this deployment");
+        }
+        UUID inbox = preferences.inboxFolderId(createdBy(caller)).block();
+        if (inbox == null) {
+            throw new IllegalArgumentException("You have no Inbox");
+        }
+        // Only what lies loose in the Inbox: a sub-folder someone made there is theirs to organise
+        List<UUID> ids = blockWithAuth(documentRepository.findByParentIdAndActiveIsTrue(inbox)
+                .filter(d -> d.getType() == DocumentType.FILE)
+                .map(Document::getId)
+                .collectList(), caller);
+        return schedule(ids == null ? List.of() : ids, caller, allowNewFolders);
+    }
+
+    @Override
     public FilingOutcome fileNow(UUID documentId, Caller caller, Boolean allowNewFolders) {
         boolean newFolders = allowNewFolders != null ? allowNewFolders && aiProperties.getAutoFile().isAllowNewFolders()
                 : Boolean.TRUE.equals(preferences.newFoldersAllowed(caller.email()).block());
@@ -439,10 +503,23 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
             return outcome(documentId, document.getName(), FilingOutcome.SKIPPED, document.getParentId(), from,
                     FilingOutcome.STAGE_NONE, null, "you cannot move this document", null);
         }
+        if (!autoFileAllowed(caller.email())) {
+            return outcome(documentId, document.getName(), FilingOutcome.SKIPPED, document.getParentId(), from,
+                    FilingOutcome.STAGE_NONE, null, "smart filing is disabled for you by your organisation", null);
+        }
 
-        UUID scopeRoot = document.getParentId();
         DocumentInsightView insight = awaitInsight(documentId);
         String text = textHead(document);
+
+        // Stage 0 — the policy: the rules may re-scope the filing, exclude folders, or decide
+        // outright. They run before the "no text" skip on purpose: a rule on the category or the
+        // metadata can file a scanned image no text was extracted from.
+        Policy policy = applyRules(document, insight, text, from, caller);
+        if (policy.outcome() != null) {
+            return policy.outcome();
+        }
+        UUID scopeRoot = policy.scopeRoot();
+        Set<UUID> excluded = policy.excluded();
         if (text == null || text.isBlank()) {
             return outcome(documentId, document.getName(), FilingOutcome.SKIPPED, document.getParentId(), from,
                     FilingOutcome.STAGE_NONE, null, "no extractable text to compare with other documents", null);
@@ -450,11 +527,12 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
 
         // Stage 1 — the neighbour vote (or the fit)
         AiProperties.AutoFile config = aiProperties.getAutoFile();
-        NeighbourScan scan = neighbours(document, scopeRoot, text, caller);
+        NeighbourScan scan = neighbours(document, scopeRoot, excluded, text, caller);
         List<Neighbour> neighbours = scan.votes();
         String category = insight == null ? null : insight.category();
         Optional<Vote> vote = AutoFileDecision.vote(neighbours, category, config.getNeighbourMinShare(),
-                config.getNeighbourMinSimilarity(), config.getNeighbourMinRelativeSimilarity());
+                config.getNeighbourMinSimilarity(), config.getNeighbourMinRelativeSimilarity(),
+                folderWeights(category, neighbours, caller));
         boolean incoherent = false;
         if (config.getStage1() == AiProperties.AutoFile.Stage1.FIT && !neighbours.isEmpty()) {
             // The fit: the voted folders re-ranked by purity × closeness, so a small tight folder of
@@ -504,7 +582,7 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
         boolean credibleNeighbours = neighbours.stream().anyMatch(n -> n.similarity() >= config.getNeighbourMinSimilarity());
         if (config.isRuleFolders() && (!credibleNeighbours || incoherent)
                 && category != null && !InsightResult.OTHER.equalsIgnoreCase(category)) {
-            FilingOutcome ruled = fileByKind(document, from, scopeRoot, category, insight, caller, allowNewFolders);
+            FilingOutcome ruled = fileByKind(document, from, scopeRoot, excluded, category, insight, caller, allowNewFolders);
             if (ruled != null) {
                 return ruled;
             }
@@ -513,7 +591,7 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
         // Stage 2 — the model
         String raw;
         try {
-            raw = askModel(document, scopeRoot, insight, text, scan.unfiledSiblings(), caller, allowNewFolders);
+            raw = askModel(document, scopeRoot, excluded, insight, text, scan.unfiledSiblings(), caller, allowNewFolders);
         } catch (Exception e) {
             // The model could not be asked at all (quota, outage, key), even through the fallback
             // chain: no decision was taken, so the outcome is FAILED — file it again later from
@@ -552,6 +630,12 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
                     FilingOutcome.STAGE_MODEL, answer.confidence(), "the model found no folder for it"
                             + (answer.reason() == null || answer.reason().isBlank() ? "" : " (" + answer.reason() + ")"), null);
         }
+        if (resolvesToExcluded(scopeRoot, target, excluded, caller)) {
+            // The model picked a folder a rule ruled out (the Inbox, say) despite the marking: a
+            // skip, not a filing — the document stays put rather than land where it must not.
+            return outcome(documentId, document.getName(), FilingOutcome.SKIPPED, document.getParentId(), from,
+                    FilingOutcome.STAGE_MODEL, answer.confidence(), "the model chose a folder that is not a destination (" + target + ")", null);
+        }
         boolean exists = planService.folderExists(scopeRoot, target, caller);
         if (!exists) {
             int newDepth = planService.missingDepth(scopeRoot, target, caller);
@@ -582,12 +666,27 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
 
     private FilingOutcome applyMove(Document document, String from, UUID scopeRoot, String relativeTarget, String stage,
                                     double confidence, String reason, Caller caller) {
+        return applyMove(document, from, scopeRoot, relativeTarget, stage, confidence, reason, caller, Map.of());
+    }
+
+    /**
+     * @param extraDetails what else the filing record keeps about the decision (a rule's id);
+     *                     {@code scope} — the effective scope root, null for the library — is always recorded
+     */
+    private FilingOutcome applyMove(Document document, String from, UUID scopeRoot, String relativeTarget, String stage,
+                                    double confidence, String reason, Caller caller, Map<String, Object> extraDetails) {
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("stage", stage);
         details.put("confidence", confidence);
         details.put("reason", reason);
         details.put("from", document.getParentId() == null ? null : document.getParentId().toString());
         details.put("fromPath", from);
+        details.put("scope", scopeRoot == null ? null : scopeRoot.toString());
+        if (extraDetails != null) {
+            extraDetails.forEach((key, value) -> {
+                if (value != null) details.put(key, value);
+            });
+        }
         ReorganizationPlanRequest request = new ReorganizationPlanRequest(
                 scopeRoot == null ? null : scopeRoot.toString(),
                 List.of(new ReorganizationPlanRequest.Move(document.getId().toString(), relativeTarget)),
@@ -615,10 +714,200 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
             if (item.planId() != null) {
                 planService.markUndone(item.planId(), caller);
             }
-            return item.withStatus(FilingOutcome.UNDONE, "moved back to " + (item.fromPath() == null ? "/" : item.fromPath()));
+            FilingOutcome undone = item.withStatus(FilingOutcome.UNDONE, "moved back to " + (item.fromPath() == null ? "/" : item.fromPath()));
+            try {
+                // A correction the feedback seam may learn from; the undo itself is done whatever it does with it
+                feedback.onUndone(item, caller);
+            } catch (Exception e) {
+                log.debug("[AUTOFILE] feedback on undo of {} failed: {}", item.documentId(), e.getMessage());
+            }
+            return undone;
         } catch (Exception e) {
             log.warn("[AUTOFILE] undo of {} failed: {}", item.documentId(), e.toString());
             return item.withStatus(FilingOutcome.FILED, "undo failed: " + reason(e));
+        }
+    }
+
+    // ── stage 0: the policy ─────────────────────────────────────────────────
+
+    /**
+     * What the rules left for the pipeline: an outcome when a rule decided (or ran dry), else the
+     * effective scope root and the folders no stage may choose.
+     */
+    private record Policy(FilingOutcome outcome, UUID scopeRoot, Set<UUID> excluded) {
+    }
+
+    /**
+     * Run every {@link DestinationRule} in order. Scope overrides apply as they come (the last one
+     * wins), exclusions accumulate, and the first rule naming a target ends the stage: dry, the
+     * document stays with the reason (stage POLICY, SKIPPED); otherwise it is filed there — into
+     * an existing folder, or a new one only when the rule allows creating it. A rule that throws is
+     * logged and skipped: a policy bug must not stall every upload.
+     */
+    private Policy applyRules(Document document, DocumentInsightView insight, String text, String from, Caller caller) {
+        UUID scopeRoot = document.getParentId();
+        Set<UUID> excluded = new HashSet<>();
+        List<DestinationRule> ordered = rules();
+        if (ordered.isEmpty()) {
+            return new Policy(null, scopeRoot, Set.of());
+        }
+        Map<String, Object> metadata = metadataOf(document);
+        for (DestinationRule rule : ordered) {
+            Optional<Decision> answer;
+            try {
+                answer = rule.decide(new FilingContext(document, insight, scopeRoot, planService.pathOf(scopeRoot, caller),
+                        caller, text == null ? "" : text, metadata));
+            } catch (Exception e) {
+                log.warn("[AUTOFILE] rule {} failed for '{}' ({}): {}", ruleName(rule), document.getName(),
+                        document.getId(), e.toString());
+                continue;
+            }
+            if (answer == null || answer.isEmpty()) {
+                continue;
+            }
+            Decision decision = answer.get();
+            if (decision.scopeOverride()) {
+                scopeRoot = decision.scopeRoot();
+            }
+            excluded.addAll(decision.excludedDestinations());
+            if (decision.targetPath() == null) {
+                continue;
+            }
+            String ruleId = decision.ruleId() == null || decision.ruleId().isBlank() ? ruleName(rule) : decision.ruleId();
+            String target = decision.targetPath().trim();
+            String scopePath = planService.pathOf(scopeRoot, caller);
+            String targetPath = target.isEmpty() || "/".equals(target) || ".".equals(target) ? scopePath
+                    : ("/".equals(scopePath) ? "/" : scopePath + "/") + target.replaceAll("^/+", "");
+            if (decision.dryRun()) {
+                return new Policy(outcome(document.getId(), document.getName(), FilingOutcome.SKIPPED, document.getParentId(), from,
+                        FilingOutcome.STAGE_POLICY, 1.0, "rule " + ruleId + " would file it into " + targetPath + " (dry run)", null),
+                        scopeRoot, Set.copyOf(excluded));
+            }
+            if (!decision.allowCreateFolders() && !planService.folderExists(scopeRoot, target, caller)) {
+                return new Policy(outcome(document.getId(), document.getName(), FilingOutcome.SKIPPED, document.getParentId(), from,
+                        FilingOutcome.STAGE_POLICY, 1.0, "rule " + ruleId + " targets " + targetPath + ", which does not exist, and may not create it", null),
+                        scopeRoot, Set.copyOf(excluded));
+            }
+            String reason = decision.reason() == null || decision.reason().isBlank() ? "Filed by rule " + ruleId : decision.reason();
+            Map<String, Object> details = Map.of("ruleId", ruleId);
+            FilingOutcome filed;
+            synchronized (createFolderLock(scopeRoot, target)) {
+                filed = applyMove(document, from, scopeRoot, target, FilingOutcome.STAGE_POLICY, 1.0, reason, caller, details);
+            }
+            return new Policy(filed, scopeRoot, Set.copyOf(excluded));
+        }
+        return new Policy(null, scopeRoot, Set.copyOf(excluded));
+    }
+
+    /** The rule beans, by {@link DestinationRule#order()}; resolved once, on the first filing. */
+    private List<DestinationRule> rules() {
+        List<DestinationRule> current = rules;
+        if (current != null) {
+            return current;
+        }
+        List<DestinationRule> resolved = rulesProvider == null ? List.of()
+                : rulesProvider.orderedStream().sorted(Comparator.comparingInt(DestinationRule::order)).toList();
+        rules = resolved;
+        if (!resolved.isEmpty()) {
+            log.info("[AUTOFILE] {} filing rule(s): {}", resolved.size(),
+                    resolved.stream().map(DefaultAutoFileService::ruleName).collect(Collectors.joining(", ")));
+        }
+        return resolved;
+    }
+
+    /** A rule's name for logs and the {@code ruleId} fallback; an anonymous class has no simple name. */
+    private static String ruleName(DestinationRule rule) {
+        String simple = rule.getClass().getSimpleName();
+        return simple.isBlank() ? rule.getClass().getName() : simple;
+    }
+
+    /** The document's user metadata as a map for the rules; empty when none or unreadable. */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> metadataOf(Document document) {
+        if (document.getMetadata() == null) {
+            return Map.of();
+        }
+        try {
+            Map<String, Object> parsed = JSON.readValue(document.getMetadata().asString(), Map.class);
+            return parsed == null ? Map.of() : Map.copyOf(parsed);
+        } catch (Exception e) {
+            return Map.of();
+        }
+    }
+
+    /**
+     * Whether a target path of the scope is one of the excluded folders or lies below one: each
+     * excluded folder is compared by its path relative to the scope (an excluded folder outside
+     * the scope cannot be reached by a relative path and needs no check).
+     */
+    private boolean resolvesToExcluded(UUID scopeRoot, String target, Set<UUID> excluded, Caller caller) {
+        if (excluded == null || excluded.isEmpty()) {
+            return false;
+        }
+        String wanted = normalize(target);
+        if (wanted.isEmpty()) {
+            return false;
+        }
+        Map<UUID, Boolean> scopeCache = new HashMap<>();
+        for (UUID folder : excluded) {
+            if (!planService.isWithin(folder, scopeRoot, scopeCache, caller)) continue;
+            String relative = normalize(planService.relativePath(folder, scopeRoot, caller));
+            if (relative.isEmpty()) continue;
+            if (wanted.equalsIgnoreCase(relative) || wanted.regionMatches(true, 0, relative + "/", 0, relative.length() + 1)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** A relative folder path with its separators tidied: no leading/trailing slashes, no empty segments. */
+    private static String normalize(String path) {
+        if (path == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (String segment : path.replace('\\', '/').split("/")) {
+            String s = segment.trim();
+            if (s.isEmpty() || ".".equals(s)) continue;
+            if (!sb.isEmpty()) sb.append('/');
+            sb.append(s);
+        }
+        return sb.toString();
+    }
+
+    /** Is the folder one of the excluded destinations, or below one? Cached per scan. */
+    private boolean excludedFolder(UUID folderId, Set<UUID> excluded, Map<UUID, Boolean> cache, Caller caller) {
+        if (folderId == null || excluded == null || excluded.isEmpty()) {
+            return false;
+        }
+        if (excluded.contains(folderId)) {
+            return true;
+        }
+        Boolean cached = cache.get(folderId);
+        if (cached != null) {
+            return cached;
+        }
+        boolean below = false;
+        for (UUID root : excluded) {
+            if (planService.isWithin(folderId, root, new HashMap<>(), caller)) {
+                below = true;
+                break;
+            }
+        }
+        cache.put(folderId, below);
+        return below;
+    }
+
+    /** The feedback seam's weights for the neighbours' folders; empty when it has none or fails. */
+    private Map<UUID, Double> folderWeights(String category, List<Neighbour> neighbours, Caller caller) {
+        if (neighbours.isEmpty()) {
+            return Map.of();
+        }
+        try {
+            Set<UUID> folders = neighbours.stream().map(Neighbour::folderId).filter(Objects::nonNull).collect(Collectors.toSet());
+            Map<UUID, Double> weights = feedback.folderWeights(category, folders, caller.email());
+            return weights == null ? Map.of() : weights;
+        } catch (Exception e) {
+            log.debug("[AUTOFILE] folder weights unavailable: {}", e.getMessage());
+            return Map.of();
         }
     }
 
@@ -634,7 +923,7 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
         static final NeighbourScan EMPTY = new NeighbourScan(List.of(), List.of());
     }
 
-    private NeighbourScan neighbours(Document document, UUID scopeRoot, String text, Caller caller) {
+    private NeighbourScan neighbours(Document document, UUID scopeRoot, Set<UUID> excluded, String text, Caller caller) {
         VectorStore vectorStore = vectorStoreProvider.getIfAvailable();
         if (vectorStore == null) {
             return NeighbourScan.EMPTY;
@@ -676,6 +965,7 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
                 : Optional.ofNullable(blockWithAuth(accessPolicy.modifiable(folderIds, caller.email()), caller)).orElse(Set.of());
         List<Neighbour> out = new ArrayList<>();
         List<String> unfiledSiblings = new ArrayList<>();
+        Map<UUID, Boolean> excludedCache = new HashMap<>();
         for (Document d : documents) {
             if (d.getType() != DocumentType.FILE || Boolean.FALSE.equals(d.getActive())) continue;
             UUID folder = d.getParentId();
@@ -684,9 +974,10 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
             // ("already in the folder where its 3 closest documents live"), which is exactly the
             // case the model stage exists for — so the root never wins stage 1. When the document
             // itself lies at the root, those neighbours are the rest of its batch: remembered for
-            // the model, so it picks one folder that suits them all.
-            if (folder == null) {
-                if (document.getParentId() == null) unfiledSiblings.add(d.getName());
+            // the model, so it picks one folder that suits them all. A folder a rule excluded
+            // from the destinations (an Inbox) is unfiled ground in the same sense.
+            if (folder == null || excludedFolder(folder, excluded, excludedCache, caller)) {
+                if (Objects.equals(folder, document.getParentId())) unfiledSiblings.add(d.getName());
                 continue;
             }
             if (!writable.contains(folder)) continue;
@@ -777,13 +1068,15 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
      * folder names (then the document's, then the deployment default). Null when the rule has
      * nothing to say (no name for the kind, or a new folder is not allowed).
      */
-    private FilingOutcome fileByKind(Document document, String from, UUID scopeRoot, String category, DocumentInsightView insight,
-                                     Caller caller, boolean allowNewFolders) {
+    private FilingOutcome fileByKind(Document document, String from, UUID scopeRoot, Set<UUID> excluded, String category,
+                                     DocumentInsightView insight, Caller caller, boolean allowNewFolders) {
         AiProperties.AutoFile config = aiProperties.getAutoFile();
         List<Document> folders = blockWithAuth((scopeRoot == null
                 ? documentRepository.findByParentIdIsNullAndActiveIsTrue()
                 : documentRepository.findByParentIdAndActiveIsTrue(scopeRoot))
-                .filter(d -> d.getType() == DocumentType.FOLDER).collectList(), caller);
+                .filter(d -> d.getType() == DocumentType.FOLDER)
+                .filter(d -> excluded == null || !excluded.contains(d.getId()))   // never the Inbox, whatever its name
+                .collectList(), caller);
         if (folders == null) {
             folders = List.of();
         }
@@ -854,13 +1147,13 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
     // ── stage 2 ─────────────────────────────────────────────────────────────
 
     /** The model's raw answer for stage 2, or null when there is no model to ask. */
-    private String askModel(Document document, UUID scopeRoot, DocumentInsightView insight, String text,
+    private String askModel(Document document, UUID scopeRoot, Set<UUID> excluded, DocumentInsightView insight, String text,
                             List<String> unfiledSiblings, Caller caller, boolean allowNewFolders) {
         ResolvedChat chat = model();
         if (chat == null) {
             return null;
         }
-        String inventory = planService.folderInventory(scopeRoot, caller);
+        String inventory = markExcluded(planService.folderInventory(scopeRoot, caller), excluded);
         String system = systemPrompt(allowNewFolders);
         String user = userPrompt(document, scopeRoot, insight, text, inventory, unfiledSiblings, caller);
         // Capped: a small local model at temperature 0 can loop on a JSON contract until its
@@ -878,6 +1171,32 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
     }
 
     /**
+     * The inventory with every excluded folder marked {@value #NOT_A_DESTINATION}: the inventory
+     * names each folder with its id, so the marking needs no second walk of the tree. Sub-folders
+     * of an excluded folder are caught by the answer check ({@link #resolvesToExcluded}) instead.
+     */
+    static String markExcluded(String inventory, Set<UUID> excluded) {
+        if (inventory == null || excluded == null || excluded.isEmpty()) {
+            return inventory;
+        }
+        StringBuilder sb = new StringBuilder(inventory.length() + 64);
+        for (String line : inventory.split("\n", -1)) {
+            String marked = line;
+            for (UUID id : excluded) {
+                int at = line.indexOf("(id " + id + ")");
+                if (at >= 0) {
+                    marked = line.substring(0, at + ("(id " + id + ")").length()) + NOT_A_DESTINATION
+                            + line.substring(at + ("(id " + id + ")").length());
+                    break;
+                }
+            }
+            if (!sb.isEmpty()) sb.append('\n');
+            sb.append(marked);
+        }
+        return sb.toString();
+    }
+
+    /**
      * The scope root is deliberately not offered as a target: it is where the document already
      * lies, unfiled, and the inventory shows it holding files (its loose ones), so a model given the
      * choice picked it — "already in the target folder" — and the batch of annual reports stayed
@@ -892,7 +1211,8 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
                 {"target": "<path of the destination folder relative to the scope root, e.g. Finance/Invoices/2026>", \
                 "createFolders": ["<the new path when target does not exist yet>"], "confidence": <0.0-1.0>, "reason": "<one sentence>"}
                 The scope root itself is never the destination: the document is already there, unfiled, and the loose files \
-                listed at the root are waiting to be filed too. \
+                listed at the root are waiting to be filed too. A folder marked "(not a destination)" is never the destination \
+                either (an Inbox: what lies there is waiting to be filed). \
                 Prefer an existing folder whose documents resemble this one (same category, client, project, period). \
                 A folder holding documents of many kinds (see its categories) is a dumping ground, not a home: never file \
                 there — choose or propose a folder dedicated to this kind of document. \
@@ -1086,7 +1406,7 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
         return createFolderLocks[Math.floorMod(hash, createFolderLocks.length)];
     }
 
-    private static <T> T blockWithAuth(Mono<T> mono, Caller caller) {
+    static <T> T blockWithAuth(Mono<T> mono, Caller caller) {
         return (caller.authentication() != null
                 ? mono.contextWrite(ReactiveSecurityContextHolder.withAuthentication(caller.authentication()))
                 : mono).block();

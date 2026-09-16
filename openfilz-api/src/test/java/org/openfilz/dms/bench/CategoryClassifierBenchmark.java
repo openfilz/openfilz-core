@@ -8,6 +8,7 @@ import org.openfilz.dms.config.AiProperties;
 import org.openfilz.dms.service.insight.CategoryClassifier.CategoryPrediction;
 import org.openfilz.dms.service.insight.CategoryClassifier.CategoryPrediction.Scored;
 import org.openfilz.dms.service.insight.InsightPrompts;
+import org.openfilz.dms.service.insight.PropertiesCategoryTaxonomy;
 import org.openfilz.dms.service.insight.InsightResult;
 import org.openfilz.dms.service.insight.PrototypeCategoryClassifier;
 import org.springframework.ai.chat.client.ChatClient;
@@ -231,7 +232,7 @@ class CategoryClassifierBenchmark {
     }
 
     private List<Outcome> runModel(ChatModel model, List<Sample> corpus, List<String> categories, int maxChars) {
-        String system = InsightPrompts.system("BENCH", categories);
+        String system = InsightPrompts.system("BENCH", PropertiesCategoryTaxonomy.build(categories, null));
         List<Outcome> outcomes = new ArrayList<>();
         for (Sample sample : corpus) {
             String text = sample.text().length() > maxChars ? sample.text().substring(0, maxChars) : sample.text();
