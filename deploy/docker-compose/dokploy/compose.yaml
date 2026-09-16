@@ -262,6 +262,16 @@ services:
       # "Organise with AI" and answers 404 on /ai/chat**, while insights, smart filing, the
       # by-kind reorganisation and MCP keep working (docs/ai-overview.md §6).
       OPENFILZ_AI_CHAT_ACTIVE: ${OPENFILZ_AI_CHAT_ACTIVE:-true}
+      # ONE model pair (recommended, bring your own model and key): provider:model + the provider's key.
+      #   google:gemini-3.6-flash | anthropic:claude-haiku-4-5 | openai:gpt-4o-mini
+      #   openfilz-cloud:default  (insights + smart filing only, no chat; requires the CLOUD_AI addon)
+      # A vendor model becomes the chat model; the explicit <PROVIDER>_* variables below still win.
+      # Precedence for the chat provider: <PROVIDER>_CHAT_ENABLED > OPENFILZ_AI_MODEL > first
+      # AI_FALLBACK_CHAIN entry > Ollama. For Ollama keep using OLLAMA_CHAT_MODEL (always passed).
+      # See docs/ai-overview.md.
+      OPENFILZ_AI_MODEL: ${OPENFILZ_AI_MODEL:-}
+      # Passed through only when set: an empty value would hide the key the pair derives.
+      OPENFILZ_AI_API_KEY:
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
       OLLAMA_CHAT_ENABLED: ${OLLAMA_CHAT_ENABLED:-false}
       OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-llama3}
@@ -275,19 +285,19 @@ services:
       TRANSFORMERS_EMBEDDING_MODEL_URI: ${TRANSFORMERS_EMBEDDING_MODEL_URI:-https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/onnx/model_quantized.onnx}
       TRANSFORMERS_EMBEDDING_TOKENIZER_URI: ${TRANSFORMERS_EMBEDDING_TOKENIZER_URI:-https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/tokenizer.json}
       TRANSFORMERS_EMBEDDING_CACHE_DIR: /app/onnx-cache
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_API_KEY:
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com}
       OPENAI_CHAT_ENABLED: ${OPENAI_CHAT_ENABLED:-false}
-      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4o}
+      OPENAI_CHAT_MODEL:
       OPENAI_EMBEDDING_ENABLED: ${OPENAI_EMBEDDING_ENABLED:-false}
       OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
       OPENAI_EMBEDDING_DIMENSIONS: ${OPENAI_EMBEDDING_DIMENSIONS:-768}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_API_KEY:
       ANTHROPIC_CHAT_ENABLED: ${ANTHROPIC_CHAT_ENABLED:-false}
-      ANTHROPIC_CHAT_MODEL: ${ANTHROPIC_CHAT_MODEL:-claude-opus-5}
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      ANTHROPIC_CHAT_MODEL:
+      GOOGLE_API_KEY:
       GOOGLE_CHAT_ENABLED: ${GOOGLE_CHAT_ENABLED:-false}
-      GOOGLE_CHAT_MODEL: ${GOOGLE_CHAT_MODEL:-gemini-3.6-flash}
+      GOOGLE_CHAT_MODEL:
       # Automatic failover when the active chat model is out of quota, retired, or unreachable
       # (see openfilz.ai.fallback). Chain entries are 'provider:model', tried in order.
       AI_FALLBACK_ENABLED: ${AI_FALLBACK_ENABLED:-false}
@@ -310,11 +320,12 @@ services:
       # upload (OpenFilz chooses the folder on the user's request). Both need
       # OPENFILZ_AI_ACTIVE=true; smart filing also needs embeddings. See docs/ai.md §3b.
       OPENFILZ_AI_INSIGHTS_ACTIVE: ${OPENFILZ_AI_INSIGHTS_ACTIVE:-false}
-      OPENFILZ_AI_INSIGHTS_MODEL: ${OPENFILZ_AI_INSIGHTS_MODEL:-}
+      OPENFILZ_AI_INSIGHTS_MODEL:
       # Managed model (EE CLOUD_AI addon): OPENFILZ_AI_INSIGHTS_MODEL=openfilz-cloud:default sends the
       # insight / filing prompts to the OpenFilz AI gateway with this key; nothing else uses them.
+      # OPENFILZ_AI_MODEL=openfilz-cloud:default + OPENFILZ_AI_API_KEY sets both for you.
       OPENFILZ_AI_CLOUD_URL: ${OPENFILZ_AI_CLOUD_URL:-https://ai.openfilz.com}
-      OPENFILZ_AI_CLOUD_API_KEY: ${OPENFILZ_AI_CLOUD_API_KEY:-}
+      OPENFILZ_AI_CLOUD_API_KEY:
       OPENFILZ_AI_INSIGHTS_DAILY_LIMIT: ${OPENFILZ_AI_INSIGHTS_DAILY_LIMIT:-2000}
       # Parallel model calls (insights) and documents filed at once (smart filing) — raise both for bulk uploads
       OPENFILZ_AI_INSIGHTS_CONCURRENCY: ${OPENFILZ_AI_INSIGHTS_CONCURRENCY:-2}

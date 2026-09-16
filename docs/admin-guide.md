@@ -498,6 +498,21 @@ from a frontend variable of its own. There is nothing to keep in sync.
 
 When `openfilz.ai.active=false` (default), the AI feature is completely inert: no AI beans are created, no AI REST endpoints are exposed, no embedding processing occurs, no LLM provider is auto-configured, and the AI database tables (`ai_chat_conversations`, `ai_chat_messages`, `vector_store`) are **not created**. The Flyway migration for AI only runs when the feature is active.
 
+#### Model: one pair (recommended)
+
+| Property / Env Variable | Default | Description |
+|--------------------------|---------|-------------|
+| `openfilz.ai.model` / `OPENFILZ_AI_MODEL` | *(none)* | `provider:model` — `google:gemini-3.6-flash`, `anthropic:claude-haiku-4-5`, `openai:gpt-4o-mini`, `ollama:qwen2.5`, or `openfilz-cloud:default` (managed gateway, EE CLOUD_AI addon: insights + smart filing only, never the chat). A vendor model becomes the chat model (and the insights / smart-filing model unless `OPENFILZ_AI_INSIGHTS_MODEL` is set). Does not turn AI on |
+| `openfilz.ai.api-key` / `OPENFILZ_AI_API_KEY` | *(none)* | The key of that provider (the gateway tenant key for `openfilz-cloud`; ignored for Ollama). A Helm **secret** (`ai.apiKey` or `ai.existingSecret`, key `api-key`) |
+
+Bring your own model and key: `OPENFILZ_AI_ACTIVE=true` + these two variables is a complete
+configuration. The provider-specific variables below still work and **win** over the pair
+(`GOOGLE_API_KEY`, `GOOGLE_CHAT_MODEL`, `OPENFILZ_AI_INSIGHTS_MODEL`, `OPENFILZ_AI_CLOUD_API_KEY`, …).
+Chat provider precedence: `SPRING_AI_MODEL_CHAT` > a `<PROVIDER>_CHAT_ENABLED` switch >
+`OPENFILZ_AI_MODEL` > the first `AI_FALLBACK_CHAIN` entry > Ollama — except that with
+`openfilz-cloud` the chat has no model (`Settings.aiChatUnavailableReason=NO_MODEL`) unless a switch
+or the chain names one. A malformed value is ignored with a startup warning. See `docs/ai-overview.md`.
+
 #### LLM Provider Configuration
 
 With the feature on and no provider switch set, OpenFilz uses **Ollama**, whose defaults target a

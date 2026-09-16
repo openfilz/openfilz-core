@@ -2,6 +2,7 @@ package org.openfilz.dms.service.ai;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.openfilz.dms.config.AiModelProviderEnvironmentPostProcessor;
 import org.openfilz.dms.config.AiProperties;
 import org.openfilz.dms.enums.AiProvider;
 import org.springframework.boot.ApplicationArguments;
@@ -36,6 +37,7 @@ public class AiFallbackValidator implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        checkModel();
         AiProperties.Fallback fallback = aiProperties.getFallback();
         if (!aiProperties.isActive() || !fallback.isEnabled()) {
             return;
@@ -109,6 +111,35 @@ public class AiFallbackValidator implements ApplicationRunner {
         }
         log.error("[AI-FALLBACK] {}\nStarting anyway because validation=WARN — the chain is shorter than "
                 + "configured, so a quota failure may go unanswered.", detail);
+    }
+
+    /**
+     * {@code openfilz.ai.model} is translated by {@link AiModelProviderEnvironmentPostProcessor},
+     * which runs before logging exists and silently ignores an unusable value — reported here so a
+     * typo does not leave the deployment quietly on the default model. Never fatal.
+     */
+    void checkModel() {
+        String model = aiProperties.getModel();
+        if (model == null || model.isBlank()) {
+            return;
+        }
+        if (!aiProperties.isActive()) {
+            log.warn("[AI] OPENFILZ_AI_MODEL is set ('{}') but the AI feature is off — set OPENFILZ_AI_ACTIVE=true "
+                    + "to use it", model.trim());
+            return;
+        }
+        String reason = AiModelProviderEnvironmentPostProcessor.invalidModelReason(model);
+        if (reason != null) {
+            log.warn("[AI] OPENFILZ_AI_MODEL='{}' is IGNORED: {}", model.trim(), reason);
+            return;
+        }
+        String provider = AiFallbackChain.canonicalProvider(model.substring(0, model.indexOf(':')));
+        if (AiFallbackChain.OPENFILZ_CLOUD.equals(provider)
+                && !aiProperties.getInsights().isActive() && !aiProperties.getAutoFile().isActive()) {
+            log.warn("[AI] OPENFILZ_AI_MODEL names {}, which serves document insights and smart filing only "
+                    + "(never the chat), but neither is active — set OPENFILZ_AI_INSIGHTS_ACTIVE / "
+                    + "OPENFILZ_AI_AUTO_FILE_ACTIVE", AiFallbackChain.OPENFILZ_CLOUD);
+        }
     }
 
     /** Readable chain summary for the startup log; models only, never keys. */

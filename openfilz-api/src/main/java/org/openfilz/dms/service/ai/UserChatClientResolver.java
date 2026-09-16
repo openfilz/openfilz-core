@@ -277,7 +277,7 @@ public class UserChatClientResolver {
             runtimeSwitchedDefault.set(switched);
         }
         return switched.orElseGet(() -> {
-            ChatModel bean = defaultChatModel();
+            ChatModel bean = selectedBean(provider);
             if (bean == null) {
                 // Deliberate configuration, not a bug: say which features need a model and which
                 // do not, so an operator running a light deployment knows whether to care.
@@ -289,6 +289,36 @@ public class UserChatClientResolver {
             }
             return new ResolvedChat(bean, provider, defaultModelFor(provider), defaultKeyRefFor(provider));
         });
+    }
+
+    /**
+     * Whether the server has a default chat model, i.e. whether {@link #resolve} can answer a user
+     * without personal settings. Same decision as {@code defaultChat()}, without throwing: what
+     * {@code Settings.aiChatActive} / {@code aiChatUnavailableReason} report, so the web apps never
+     * offer a chat that fails on its first message. Native-safe: runtime selector + bean lookup only.
+     */
+    public boolean hasDefaultChatModel() {
+        try {
+            return defaultChat() != null;
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    /**
+     * The auto-configured bean, unless the runtime selector is {@code none} and the bean is visibly
+     * a real provider: a native image compiles the provider (Ollama) in at build time, so the bean
+     * outlives a runtime {@code spring.ai.model.chat=none} and would otherwise serve a chat the
+     * operator switched off (e.g. {@code OPENFILZ_AI_MODEL=openfilz-cloud:default}) by calling a
+     * local Ollama nobody deployed. An unrecognised bean (a test mock under the pinned {@code none})
+     * is trusted as-is.
+     */
+    private ChatModel selectedBean(String selector) {
+        ChatModel bean = defaultChatModel();
+        if (bean != null && "none".equals(selector) && beanProvider(bean) != null) {
+            return null;
+        }
+        return bean;
     }
 
     /**

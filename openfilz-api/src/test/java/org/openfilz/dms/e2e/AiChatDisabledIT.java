@@ -92,6 +92,7 @@ class AiChatDisabledIT extends TestContainersBaseConfig {
         assertThat(settings).isNotNull();
         assertThat(settings.aiActive()).isTrue();
         assertThat(settings.aiChatActive()).isFalse();
+        assertThat(settings.aiChatUnavailableReason()).isEqualTo("DISABLED");
         assertThat(settings.aiUserSettingsEnabled()).isFalse();
     }
 

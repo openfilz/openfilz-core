@@ -219,6 +219,22 @@ openfilz:
   # AI Document Chat Configuration
   ai:
     active: false  # Set to true to enable AI chat features
+    # ONE model pair — the recommended setup (bring your own model and key):
+    #   OPENFILZ_AI_MODEL=provider:model     OPENFILZ_AI_API_KEY=<the provider's key>
+    # Providers: google (gemini, google-genai), anthropic (claude), openai (openai-compatible, with
+    # OPENAI_BASE_URL), ollama (no key), openfilz-cloud (managed gateway, see cloud: below).
+    #   google:gemini-3.6-flash   anthropic:claude-haiku-4-5   openai:gpt-4o-mini   ollama:qwen2.5
+    #   openfilz-cloud:default    (insights + smart filing ONLY, never chat; requires the CLOUD_AI addon)
+    # A vendor provider becomes the chat model (and the model insights / smart filing use unless
+    # OPENFILZ_AI_INSIGHTS_MODEL says otherwise); openfilz-cloud sets the insights model and the
+    # gateway key, and leaves chat off (spring.ai.model.chat=none) unless a switch or a fallback
+    # chain names a chat provider. Precedence for the chat provider: SPRING_AI_MODEL_CHAT >
+    # <PROVIDER>_CHAT_ENABLED > OPENFILZ_AI_MODEL > first AI_FALLBACK_CHAIN entry > Ollama.
+    # The explicit vendor variables (GOOGLE_API_KEY, GOOGLE_CHAT_MODEL, ...) still win over the pair.
+    # Does NOT turn the feature on: OPENFILZ_AI_ACTIVE stays the master switch. Translated by
+    # AiModelProviderEnvironmentPostProcessor; a malformed value is ignored with a startup warning.
+    model: ${OPENFILZ_AI_MODEL:}
+    api-key: ${OPENFILZ_AI_API_KEY:}
     # Kill switch for the in-app chat assistant ALONE. Off means /api/v1/ai/chat** and the per-user
     # BYOK settings answer 404 and the frontend hides the chat button and "Organise with AI"
     # (Settings.aiChatActive); embeddings, document insights, smart filing, the by-kind
@@ -295,7 +311,7 @@ openfilz:
     # every openfilz-cloud entry is skipped with a warning, like a provider with no server key.
     cloud:
       url: ${OPENFILZ_AI_CLOUD_URL:https://ai.openfilz.com}
-      api-key: ${OPENFILZ_AI_CLOUD_API_KEY:}
+      api-key: ${OPENFILZ_AI_CLOUD_API_KEY:${openfilz-internal.ai.cloud-api-key:}}
     # BYOK: users may override the chat LLM with their own provider + API key (personal settings).
     # Requires an encryption key for the stored API keys: openssl rand -base64 32
     user-settings:
@@ -332,7 +348,7 @@ openfilz:
     # full-text or AI runs Tika. Off by default: it spends tokens.
     insights:
       active: ${OPENFILZ_AI_INSIGHTS_ACTIVE:false}
-      model: ${OPENFILZ_AI_INSIGHTS_MODEL:}          # provider:model, empty = the chat model
+      model: ${OPENFILZ_AI_INSIGHTS_MODEL:${openfilz-internal.ai.insights-model:}}  # provider:model, empty = the chat model (OPENFILZ_AI_MODEL=openfilz-cloud:… sets it)
       max-chars: ${OPENFILZ_AI_INSIGHTS_MAX_CHARS:6000}
       max-file-size: ${OPENFILZ_AI_INSIGHTS_MAX_FILE_SIZE:50MB}
       concurrency: ${OPENFILZ_AI_INSIGHTS_CONCURRENCY:2}
@@ -578,8 +594,9 @@ onlyoffice:
 # ============================================================
 # Spring AI Configuration (only used when openfilz.ai.active=true)
 # ============================================================
-# Which provider serves chat / embeddings is driven by the openfilz.ai.<provider>.<kind>.enabled
-# switches below: AiModelProviderEnvironmentPostProcessor turns them into Spring AI 2.0's
+# Simplest: OPENFILZ_AI_MODEL + OPENFILZ_AI_API_KEY (openfilz.ai.model above) — the api-key / model
+# placeholders below fall back to what that pair derives. Otherwise, which provider serves chat /
+# embeddings is driven by the openfilz.ai.<provider>.<kind>.enabled switches below: AiModelProviderEnvironmentPostProcessor turns them into Spring AI 2.0's
 # spring.ai.model.chat / spring.ai.model.embedding selectors (Ollama wins if both are enabled,
 # 'none' if neither is). Set spring.ai.model.* explicitly to bypass that mapping.
 # The chat model can be swapped freely; the EMBEDDING model is a one-time deployment decision —
@@ -590,7 +607,7 @@ onlyoffice:
 spring.ai.ollama:
   base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
   chat:
-    model: ${OLLAMA_CHAT_MODEL:qwen2.5}
+    model: ${OLLAMA_CHAT_MODEL:${openfilz-internal.ai.chat-model.ollama:qwen2.5}}
   embedding:
     model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
 
@@ -598,7 +615,7 @@ spring.ai.ollama:
 # Note: api-key defaults to 'disabled' (not empty) to prevent OpenAI auto-configuration
 # from failing at startup. When actually using OpenAI, set OPENAI_API_KEY to your real key.
 spring.ai.openai:
-  api-key: ${OPENAI_API_KEY:disabled}
+  api-key: ${OPENAI_API_KEY:${openfilz-internal.ai.api-key.openai:disabled}}
   base-url: ${OPENAI_BASE_URL:https://api.openai.com}
   chat:
     model: ${OPENAI_CHAT_MODEL:${openfilz-internal.ai.chat-model.openai:gpt-4o}}
@@ -610,14 +627,14 @@ spring.ai.openai:
 
 # Anthropic Claude (activated via ANTHROPIC_CHAT_ENABLED=true; key from platform.claude.com)
 spring.ai.anthropic:
-  api-key: ${ANTHROPIC_API_KEY:disabled}
+  api-key: ${ANTHROPIC_API_KEY:${openfilz-internal.ai.api-key.anthropic:disabled}}
   chat:
     model: ${ANTHROPIC_CHAT_MODEL:${openfilz-internal.ai.chat-model.anthropic:claude-opus-5}}
 
 # Google Gemini — GenAI / Gemini Developer API (activated via GOOGLE_CHAT_ENABLED=true;
 # free-tier key from aistudio.google.com)
 spring.ai.google.genai:
-  api-key: ${GOOGLE_API_KEY:disabled}
+  api-key: ${GOOGLE_API_KEY:${openfilz-internal.ai.api-key.google-genai:disabled}}
   chat:
     model: ${GOOGLE_CHAT_MODEL:${openfilz-internal.ai.chat-model.google-genai:gemini-3.6-flash}}
 
