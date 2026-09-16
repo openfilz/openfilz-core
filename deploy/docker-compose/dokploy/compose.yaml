@@ -311,6 +311,10 @@ services:
       # OPENFILZ_AI_ACTIVE=true; smart filing also needs embeddings. See docs/ai.md §3b.
       OPENFILZ_AI_INSIGHTS_ACTIVE: ${OPENFILZ_AI_INSIGHTS_ACTIVE:-false}
       OPENFILZ_AI_INSIGHTS_MODEL: ${OPENFILZ_AI_INSIGHTS_MODEL:-}
+      # Managed model (EE CLOUD_AI addon): OPENFILZ_AI_INSIGHTS_MODEL=openfilz-cloud:default sends the
+      # insight / filing prompts to the OpenFilz AI gateway with this key; nothing else uses them.
+      OPENFILZ_AI_CLOUD_URL: ${OPENFILZ_AI_CLOUD_URL:-https://ai.openfilz.com}
+      OPENFILZ_AI_CLOUD_API_KEY: ${OPENFILZ_AI_CLOUD_API_KEY:-}
       OPENFILZ_AI_INSIGHTS_DAILY_LIMIT: ${OPENFILZ_AI_INSIGHTS_DAILY_LIMIT:-2000}
       # Parallel model calls (insights) and documents filed at once (smart filing) — raise both for bulk uploads
       OPENFILZ_AI_INSIGHTS_CONCURRENCY: ${OPENFILZ_AI_INSIGHTS_CONCURRENCY:-2}
@@ -323,6 +327,8 @@ services:
       OPENFILZ_AI_AUTO_FILE_ACTIVE: ${OPENFILZ_AI_AUTO_FILE_ACTIVE:-false}
       OPENFILZ_AI_AUTO_FILE_DEFAULT: ${OPENFILZ_AI_AUTO_FILE_DEFAULT:-false}
       OPENFILZ_AI_AUTO_FILE_NEW_FOLDERS: ${OPENFILZ_AI_AUTO_FILE_NEW_FOLDERS:-true}
+      # Per-user Inbox folder (a drop target filed anywhere in the library) offered when smart filing is on
+      OPENFILZ_AI_AUTO_FILE_INBOX_ENABLED: ${OPENFILZ_AI_AUTO_FILE_INBOX_ENABLED:-false}
       # The closed category list of the insights (also offered by the details panel's kind editor)
       OPENFILZ_AI_INSIGHTS_CATEGORIES: ${OPENFILZ_AI_INSIGHTS_CATEGORIES:-invoice,quote,contract,report,letter,cv,presentation,spreadsheet,form,id-document,receipt,minutes,specification,manual,other}
       # Who names the category: llm (the chat model, default), prototype (embedding descriptions,

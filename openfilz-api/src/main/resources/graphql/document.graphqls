@@ -79,6 +79,10 @@ input ListFolderRequest {
     recursive : Boolean
     "Keep only the folders the caller may write into (Enterprise: owned, or shared in editor mode). Ignored by the Community Edition, which has no per-document permissions."
     writableOnly : Boolean
+    "Keep only the files whose AI document insight carries one of these categories (the deployment's category keys, e.g. invoice, contract). Needs document insights; a file without an insight row never matches."
+    categories : [String]
+    "Keep only the files whose document insight names one of these languages (BCP-47 primary tags, e.g. fr, en)."
+    languages : [String]
 }
 
 input FavoriteRequest {

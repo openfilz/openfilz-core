@@ -5,14 +5,13 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.response.DocumentInsightView;
-import org.openfilz.dms.config.AiProperties;
 import org.openfilz.dms.dto.request.InsightCategoryUpdate;
 import org.openfilz.dms.enums.OpenSearchDocumentKey;
 import org.openfilz.dms.service.DocumentService;
 import org.openfilz.dms.service.IndexService;
 import org.openfilz.dms.service.ai.AiAccessPolicy;
 import org.openfilz.dms.service.insight.AiDocumentInsightService;
-import org.openfilz.dms.service.insight.InsightResult;
+import org.openfilz.dms.service.insight.CategoryTaxonomy;
 import org.openfilz.dms.service.insight.LearnedCategoryClassifier;
 import org.openfilz.dms.utils.UserInfoService;
 import org.openfilz.dms.service.insight.DocumentInsightStore;
@@ -49,35 +48,35 @@ public class DocumentInsightController implements UserInfoService {
     private final ObjectProvider<DocumentInsightStore> insightStoreProvider;
     private final ObjectProvider<AiAccessPolicy> accessPolicyProvider;
     private final ObjectProvider<IndexService> indexServiceProvider;
-    private final AiProperties aiProperties;
+    /** The deployment's kinds: the core's properties, or an extension's managed list — read per request, never cached. */
+    private final CategoryTaxonomy taxonomy;
 
     public DocumentInsightController(DocumentService documentService,
                                      ObjectProvider<DocumentInsightStore> insightStoreProvider,
                                      ObjectProvider<AiAccessPolicy> accessPolicyProvider,
                                      ObjectProvider<IndexService> indexServiceProvider,
-                                     AiProperties aiProperties) {
+                                     CategoryTaxonomy taxonomy) {
         this.documentService = documentService;
         this.insightStoreProvider = insightStoreProvider;
         this.accessPolicyProvider = accessPolicyProvider;
         this.indexServiceProvider = indexServiceProvider;
-        this.aiProperties = aiProperties;
+        this.taxonomy = taxonomy;
     }
 
     @PatchMapping(value = "/{documentId}/insights", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Correct the kind of a document",
-            description = "Sets the tier-2 category to one of the deployment's categories (openfilz.ai.insights.categories, "
-                    + "or 'other'), recorded as written by the user: it is never overwritten by a non-forced backfill, it "
-                    + "teaches the learned classifier, and the by-kind reorganisation and smart filing use it like a "
-                    + "model's label. 400 for a kind the deployment does not know; 403 without modify access.")
+            description = "Sets the tier-2 category to one of the deployment's kinds (the category taxonomy: "
+                    + "openfilz.ai.insights.categories, or 'other'), recorded as written by the user: it is never overwritten by a "
+                    + "non-forced backfill, it teaches the learned classifier, and the by-kind reorganisation and smart filing "
+                    + "use it like a model's label. 400 for a kind the deployment does not know; 403 without modify access.")
     public Mono<DocumentInsightView> setCategory(@PathVariable UUID documentId, @RequestBody InsightCategoryUpdate body) {
-        List<String> categories = aiProperties.getInsights().getCategories();
         String raw = body == null ? null : body.category();
-        String category = InsightResult.category(raw, categories);
-        if (raw == null || raw.isBlank() || (!InsightResult.OTHER.equals(category)
-                && categories != null && categories.stream().noneMatch(c -> c.trim().equalsIgnoreCase(category)))
-                || (InsightResult.OTHER.equals(category) && !InsightResult.OTHER.equalsIgnoreCase(raw.trim()))) {
+        // The taxonomy as it is now: spelled as stored (lower case, hyphens), unknown kinds refused
+        List<String> known = taxonomy.keys();
+        String category = taxonomy.find(raw).map(CategoryTaxonomy.Category::key).orElse(null);
+        if (category == null) {
             return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Unknown kind '" + raw + "'; one of: " + String.join(", ", categories == null ? List.of(InsightResult.OTHER) : categories)));
+                    "Unknown kind '" + raw + "'; one of: " + String.join(", ", known)));
         }
         DocumentInsightStore store = insightStoreProvider.getObject();
         return documentService.findDocumentToDownloadById(documentId)

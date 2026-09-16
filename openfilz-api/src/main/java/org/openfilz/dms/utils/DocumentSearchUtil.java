@@ -36,6 +36,10 @@ public class DocumentSearchUtil {
     public static final String FILTER_UPDATED_BY = "updatedBy";
     public static final String FILTER_METADATA = "metadata.";
     public static final String FILTER_FAVORITE = "favorite";
+    /** Insight facet: the tier-2 category key(s), one or several comma-separated ({@code invoice,quote}). */
+    public static final String FILTER_CATEGORY = "category";
+    /** Insight facet: the document language(s), BCP-47 primary tags, one or several comma-separated ({@code fr,en}). */
+    public static final String FILTER_LANGUAGE = "language";
 
     public static Long toLong(Map<String, String> map) {
         String size = map.get(DocumentSearchUtil.FILTER_SIZE);
@@ -149,6 +153,7 @@ public class DocumentSearchUtil {
                 toDocumentType(filters),
                 ContentTypeMapper.getContentType(filters.get(DocumentSearchUtil.FILTER_EXTENSION)),
                 null,
+                null,
                 query,
                 totMetadataMap(filters),
                 DocumentSearchUtil.toLong(filters),
@@ -161,8 +166,28 @@ public class DocumentSearchUtil {
                 toBoolean(filters.get(FILTER_FAVORITE)),
                 true,
                 toPageCriteria(sort, page, size),
-                null
+                null,
+                null,
+                toKeys(filters.get(FILTER_CATEGORY)),
+                toKeys(filters.get(FILTER_LANGUAGE))
         );
+    }
+
+    /**
+     * The keys of a facet filter value: comma-separated, trimmed, lower-cased (the insight columns
+     * are stored that way); null when the value names nothing.
+     */
+    public static List<String> toKeys(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        List<String> keys = java.util.Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(s -> s.toLowerCase(java.util.Locale.ROOT))
+                .distinct()
+                .toList();
+        return keys.isEmpty() ? null : keys;
     }
 
     private Boolean toBoolean(String bool) {

@@ -8,8 +8,11 @@ import org.openfilz.dms.config.RecycleBinProperties;
 import org.openfilz.dms.dto.response.Settings;
 import org.openfilz.dms.enums.SignatureAuthMethod;
 import org.openfilz.dms.service.SettingsService;
+import org.openfilz.dms.service.insight.CategoryTaxonomy;
 import org.openfilz.dms.service.signature.SignatureOtpSender;
 import org.openfilz.dms.service.signature.SignatureReminderSender;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
@@ -78,6 +81,16 @@ public class SettingsServiceImpl implements SettingsService {
     // (shared-visibility warning, upsell links). Plain runtime flag — never a bean condition.
     @Value("${openfilz.demo-mode:false}")
     private Boolean demoMode;
+
+    /**
+     * The deployment's category taxonomy (the core reads the properties; an extension registers a
+     * {@code @Primary} one managed elsewhere). Field-injected on purpose: the class is subclassed
+     * with a {@code super(...)} call over the constructor below, so a constructor parameter would
+     * break every subclass; an {@code ObjectProvider} also keeps the class constructible by hand
+     * in tests, where the settings fall back to the property list.
+     */
+    @Autowired
+    private ObjectProvider<CategoryTaxonomy> categoryTaxonomyProvider;
 
     private final RecycleBinProperties recycleBinProperties;
 
@@ -169,7 +182,7 @@ public class SettingsServiceImpl implements SettingsService {
                        && Boolean.TRUE.equals(aiUserSettingsEnabled))
                .aiInsightsActive(Boolean.TRUE.equals(aiActive) && Boolean.TRUE.equals(aiInsightsActive))
                .aiInsightsCategories(Boolean.TRUE.equals(aiActive) && Boolean.TRUE.equals(aiInsightsActive)
-                       ? List.copyOf(aiProperties.getInsights().getCategories()) : List.of())
+                       ? insightCategories() : List.of())
                .aiAutoFileActive(Boolean.TRUE.equals(aiActive) && Boolean.TRUE.equals(aiAutoFileActive))
                .signatureActive(Boolean.TRUE.equals(signatureActive))
                .workflowsActive(Boolean.TRUE.equals(workflowsActive))
@@ -188,6 +201,15 @@ public class SettingsServiceImpl implements SettingsService {
                .mcpClientId(mcpProperties.isActive() ? mcpProperties.getClientId() : null)
                .build());
 
+    }
+
+    /**
+     * The kinds the web app offers in the kind editor: the taxonomy's keys as they are now
+     * ({@code other} last), the raw property list when no taxonomy bean is wired (plain construction).
+     */
+    protected List<String> insightCategories() {
+        CategoryTaxonomy taxonomy = categoryTaxonomyProvider == null ? null : categoryTaxonomyProvider.getIfAvailable();
+        return taxonomy != null ? taxonomy.keys() : List.copyOf(aiProperties.getInsights().getCategories());
     }
 
     /**

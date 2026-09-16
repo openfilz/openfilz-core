@@ -49,7 +49,8 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
  *   <li>a document of a known kind with no home goes to the folder of its kind (the rule, no model);</li>
  *   <li>a folder seeded with many documents then wins the neighbour vote for a new upload;</li>
  *   <li>undo moves the batch back; autoFile=false and the user's switch are honoured;</li>
- *   <li>the settings and the filing record are exposed.</li>
+ *   <li>the settings and the filing record are exposed;</li>
+ *   <li>the Inbox convention, off here, is refused (the on case is {@link AutoFileInboxIT}).</li>
  * </ol>
  */
 @Testcontainers
@@ -322,6 +323,29 @@ class AutoFileIT extends TestContainersBaseConfig {
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(BodyInserters.fromValue(new AutoFileJobsRequest(List.of())))
                 .exchange().expectStatus().isOk().expectBodyList(AutoFileJobView.class).hasSize(0);
+    }
+
+    @Test
+    @Order(8)
+    @DisplayName("a deployment that does not offer the Inbox says so: not available, 400 to turn it on or file it")
+    void inboxOffIsRefused() {
+        // The Inbox convention is a deployment switch (auto-file.inbox.enabled), off here — see AutoFileInboxIT for it on
+        AiPreferencesView view = getWebTestClient().get().uri(PREFERENCES)
+                .exchange().expectStatus().isOk().expectBody(AiPreferencesView.class).returnResult().getResponseBody();
+        assertThat(view).isNotNull();
+        assertThat(view.autoFileAvailable()).isTrue();
+        assertThat(view.inboxAvailable()).isFalse();
+        assertThat(view.inbox()).isFalse();
+        assertThat(view.inboxFolderId()).isNull();
+
+        getWebTestClient().put().uri(PREFERENCES).contentType(MediaType.APPLICATION_JSON)
+                .body(BodyInserters.fromValue("{\"inbox\":true}"))
+                .exchange().expectStatus().isBadRequest();
+        // Turning it off is harmless: there is nothing to forget
+        getWebTestClient().put().uri(PREFERENCES).contentType(MediaType.APPLICATION_JSON)
+                .body(BodyInserters.fromValue("{\"inbox\":false}"))
+                .exchange().expectStatus().isOk();
+        getWebTestClient().post().uri(AUTO_FILE + "/inbox").exchange().expectStatus().isBadRequest();
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────

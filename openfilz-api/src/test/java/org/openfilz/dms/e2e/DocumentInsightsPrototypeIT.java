@@ -69,7 +69,7 @@ class DocumentInsightsPrototypeIT extends TestContainersBaseConfig {
         assertThat(view.summary()).as("category-only: the prototype classifier writes no summary").isNull();
         assertThat(view.keywords()).isEmpty();
         assertThat(view.entities()).isNullOrEmpty();
-        assertThat(view.promptVersion()).isEqualTo(1);
+        assertThat(view.promptVersion()).isEqualTo(org.openfilz.dms.service.insight.AiDocumentInsightService.PROMPT_VERSION);
 
         UploadResponse report = upload("report-" + UUID.randomUUID() + ".txt",
                 "Quarterly report of ACME: analysis, findings, figures and conclusions on the period.");

@@ -34,8 +34,31 @@ public record ListFolderRequest(
      * {@code doc_share.w}. Used by the pickers that choose a destination (workflow hot folders and
      * MOVE_TO_FOLDER targets), where offering a read-only folder only produces a failure later.
      */
-    Boolean writableOnly
+    Boolean writableOnly,
+    /**
+     * Keep only the files whose tier-2 document insight carries one of these categories
+     * ({@code invoice}, {@code contract}, ... — the keys of the deployment's {@code CategoryTaxonomy}).
+     * Null or empty = no filter. A file without an insight row never matches.
+     */
+    List<String> categories,
+    /**
+     * Keep only the files whose document insight names one of these languages (BCP-47 primary
+     * tags: {@code fr}, {@code en}). Null or empty = no filter.
+     */
+    List<String> languages
     ) {
+
+    /** Backward-compatible constructor without the insight facets ({@code categories} / {@code languages} default to {@code null}). */
+    public ListFolderRequest(UUID id, DocumentType type, String contentType, List<String> contentTypes, String name, String nameLike,
+                             Map<String, Object> metadata, Long size,
+                             OffsetDateTime createdAtAfter, OffsetDateTime createdAtBefore,
+                             OffsetDateTime updatedAtAfter, OffsetDateTime updatedAtBefore,
+                             String createdBy, String updatedBy, Boolean favorite, Boolean active,
+                             PageCriteria pageInfo, Boolean recursive, Boolean writableOnly) {
+        this(id, type, contentType, contentTypes, name, nameLike, metadata, size, createdAtAfter, createdAtBefore,
+                updatedAtAfter, updatedAtBefore, createdBy, updatedBy, favorite, active, pageInfo, recursive, writableOnly,
+                null, null);
+    }
 
     /** Backward-compatible constructor without {@code writableOnly} (defaults to {@code null} = no filter). */
     public ListFolderRequest(UUID id, DocumentType type, String contentType, List<String> contentTypes, String name, String nameLike,
@@ -45,7 +68,7 @@ public record ListFolderRequest(
                              String createdBy, String updatedBy, Boolean favorite, Boolean active,
                              PageCriteria pageInfo, Boolean recursive) {
         this(id, type, contentType, contentTypes, name, nameLike, metadata, size, createdAtAfter, createdAtBefore,
-                updatedAtAfter, updatedAtBefore, createdBy, updatedBy, favorite, active, pageInfo, recursive, null);
+                updatedAtAfter, updatedAtBefore, createdBy, updatedBy, favorite, active, pageInfo, recursive, null, null, null);
     }
 
     /**
@@ -59,7 +82,14 @@ public record ListFolderRequest(
                              String createdBy, String updatedBy, Boolean favorite, Boolean active,
                              PageCriteria pageInfo, Boolean recursive) {
         this(id, type, contentType, null, name, nameLike, metadata, size, createdAtAfter, createdAtBefore,
-                updatedAtAfter, updatedAtBefore, createdBy, updatedBy, favorite, active, pageInfo, recursive, null);
+                updatedAtAfter, updatedAtBefore, createdBy, updatedBy, favorite, active, pageInfo, recursive, null, null, null);
+    }
+
+    /** The same request with a null {@code pageInfo}: what the {@code count} queries take. */
+    public ListFolderRequest forCount() {
+        return new ListFolderRequest(id, type, contentType, contentTypes, name, nameLike, metadata, size, createdAtAfter,
+                createdAtBefore, updatedAtAfter, updatedAtBefore, createdBy, updatedBy, favorite, active, null, recursive,
+                writableOnly, categories, languages);
     }
 
 }

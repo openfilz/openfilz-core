@@ -2,6 +2,7 @@ package org.openfilz.dms.config;
 
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.service.insight.CategoryClassifier;
+import org.openfilz.dms.service.insight.CategoryTaxonomy;
 import org.openfilz.dms.service.insight.DocumentInsightService;
 import org.openfilz.dms.service.insight.DocumentInsightStore;
 import org.openfilz.dms.service.insight.LearnedCategoryClassifier;
@@ -48,11 +49,14 @@ public class DocumentInsightConfig {
      * descriptions on the embedding model ({@code prototype}), or the library's own labelled
      * documents with the descriptions as cold start ({@code learned}, {@code auto}). Lazy: built on
      * the first tier-2 enrichment, never in {@code llm} mode; without an embedding model it exists
-     * but every classification fails with a clear message.
+     * but every classification fails with a clear message. The descriptions it embeds are the
+     * {@link CategoryTaxonomy}'s — an extension's taxonomy drives them, and the classifier
+     * re-embeds when the taxonomy's content changes (it caches by content fingerprint).
      */
     @Bean
     @Lazy
     public CategoryClassifier categoryClassifier(AiProperties aiProperties, Environment environment,
+                                                 CategoryTaxonomy taxonomy,
                                                  ObjectProvider<EmbeddingModels> embeddingModelsProvider,
                                                  ObjectProvider<VectorStore> vectorStoreProvider,
                                                  ObjectProvider<DocumentInsightStore> insightStoreProvider) {
@@ -80,7 +84,7 @@ public class DocumentInsightConfig {
                 }
             };
         } else {
-            prototype = new PrototypeCategoryClassifier(embeddingModel, modelName, aiProperties.getInsights().getCategories(), config);
+            prototype = new PrototypeCategoryClassifier(embeddingModel, modelName, taxonomy, config);
         }
         AiProperties.Insights.Classifier.Mode mode = config.getMode() == null ? AiProperties.Insights.Classifier.Mode.LLM : config.getMode();
         if (mode == AiProperties.Insights.Classifier.Mode.LEARNED || mode == AiProperties.Insights.Classifier.Mode.AUTO) {

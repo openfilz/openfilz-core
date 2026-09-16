@@ -311,14 +311,22 @@ later, and the user gets a toast with **Undo**.
 flowchart TD
     U["Upload with autoFile"] --> E{"Eligible?<br/>a file, and the user may move it"}
     E -->|no| SK["SKIPPED, with the reason"]
-    E -->|yes| S1["Stage 1 — the neighbour vote<br/>which folders hold the most similar documents?"]
-    S1 -->|"a clear, coherent winner"| DONE["Move + audit + Undo"]
+    E -->|yes| S0["Stage 0 — the policy<br/>filing rules: re-scope, rule folders out,<br/>or decide outright"]
+    S0 -->|"a rule decided"| DONE["Move + audit + Undo"]
+    S0 -->|"no rule decided"| S1["Stage 1 — the neighbour vote<br/>which folders hold the most similar documents?"]
+    S1 -->|"a clear, coherent winner"| DONE
     S1 -->|"no winner"| S1B["Stage 1b — the rule<br/>a known kind goes to the scope's folder<br/>for that kind, created if needed"]
     S1B -->|"decided"| DONE
     S1B -->|"undecided"| S2["Stage 2 — ask the model<br/>the folder inventory + what we know of the file"]
     S2 -->|"confident enough"| DONE
     S2 -->|"not confident"| SK
 ```
+
+**Stage 0, the policy — no model.** Before anything is compared, the *filing rules* have their
+say: a rule may widen or narrow the scope, rule folders out as destinations, or name the
+destination outright (the outcome then says *filed by policy*, or what the rule *would* have done
+when it runs dry). The core ships one rule, the **Inbox** (below); an extension can add its own —
+organisation-level routing, team policies. A rule that names nothing lets the stages below decide.
 
 **Stage 1, the neighbour vote — no model.** The vector store answers "which documents are most like
 this one?"; those documents are resolved to the folders they *currently* live in, and the leading
@@ -340,6 +348,21 @@ folder or — above a confidence threshold, within a depth limit, if the user al
 **Stage 3, apply.** The decision becomes a one-item reorganisation plan and goes through exactly the
 same validation and audit as a chat proposal. Below the thresholds nothing moves, and the reason is
 recorded.
+
+**The Inbox — a folder that means "file this for me".** Off by default
+(`OPENFILZ_AI_AUTO_FILE_INBOX_ENABLED=true` turns it on, because the folder is visible to users
+and deserves a word of explanation first). Each user may have one, created from the AI
+preferences in their own language (*Inbox*, *Boîte de réception*, *Eingang*…) at the root of
+their library; turning it off only forgets it, nothing is deleted. Whatever is dropped there is
+filed against the **whole library**, not the Inbox, and the Inbox itself is never a destination —
+so what is still in it afterwards is exactly what needs a human decision. *File my Inbox*
+(`POST /api/v1/ai/auto-file/inbox`) files whatever still lies loose in it, in one job with the
+usual toast and undo.
+
+**Corrections teach the vote.** Every undo is handed to a feedback seam that, in the core, does
+nothing; an extension can turn it into per-folder weights (bounded, never silencing a folder nor
+promoting a distant match) so a folder the user keeps moving documents out of gradually loses its
+pull.
 
 What the user sees: the switch in the upload area, a toast once the batch is done — *"X filed · Y
 left in place"* — whose action opens **where your documents went**: the files grouped by the folder
@@ -388,8 +411,18 @@ the user's, never overwritten by a backfill, and from then on it votes for its n
 `learned` / `auto` mode and counts for by-kind reorganisation and the filing rule. A person icon
 marks a kind a human set.
 
-The category is also mirrored into the search index and filterable through the API and the AI/MCP
-tools (`queryDocuments(category=…)`); the web app does not yet expose it as a search facet.
+**Search facets.** The category and the language are search facets: the GraphQL `searchDocuments`
+takes `category` and `language` filters (one key or several, `"invoice,quote"`), on both the
+OpenSearch and the database search paths, and `GET /api/v1/ai/insights/facets` answers how many
+files carry each kind and each language (`{"categories":[{"key":"invoice","count":41},…],
+"languages":[{"key":"fr","count":12},…]}`) so a UI can offer the values that exist. The AI/MCP tools
+filter the same way (`queryDocuments(category=…)`). The kinds themselves come from a single
+**taxonomy** (the `OPENFILZ_AI_INSIGHTS_CATEGORIES` list in the core, each kind with a built-in
+multilingual description the prompt and the local classifier both use; an extension may manage it at
+runtime), and a **policy seam** decides, per document, whether it is enriched at all, whether a model
+may read it, and which kinds — identity documents, say — must never leave the premises: those are
+classified locally and stored without a model call. The core permits everything; the Enterprise
+Edition is where the organisation-level rules live. Details: [ai.md §3b](ai.md#3b-document-insights--smart-filing).
 
 ---
 

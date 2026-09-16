@@ -133,6 +133,11 @@ piped:
   buffer:
     size: 8192
 
+management:
+  health:
+    mail:
+      enabled: false
+      
 openfilz:
   common:
     # URL that OnlyOffice DocumentServer uses to reach OpenFilz API
@@ -284,6 +289,13 @@ openfilz:
       validation: ${AI_FALLBACK_VALIDATION:FAIL_FAST}
       quota-cooldown: ${AI_FALLBACK_QUOTA_COOLDOWN:5m}
       unavailable-cooldown: ${AI_FALLBACK_UNAVAILABLE_COOLDOWN:6h}
+    # The managed model provider: `openfilz-cloud:default` — as OPENFILZ_AI_INSIGHTS_MODEL or as a
+    # fallback-chain entry — talks to the OpenFilz AI gateway (OpenAI-compatible) with the tenant
+    # key issued with the order; the gateway resolves the `default` alias itself. Without a key
+    # every openfilz-cloud entry is skipped with a warning, like a provider with no server key.
+    cloud:
+      url: ${OPENFILZ_AI_CLOUD_URL:https://ai.openfilz.com}
+      api-key: ${OPENFILZ_AI_CLOUD_API_KEY:}
     # BYOK: users may override the chat LLM with their own provider + API key (personal settings).
     # Requires an encryption key for the stored API keys: openssl rand -base64 32
     user-settings:
@@ -408,6 +420,15 @@ openfilz:
       # folder-names:            # add to or override the built-in table (en, fr, de, es, it, nl, pt, ar)
       #   fr:
       #     invoice: Factures fournisseurs
+      # The Inbox convention: one optional folder per user, created on demand at their root from the
+      # preferences (PUT /settings/ai/preferences {inbox: true}, named from Accept-Language). A
+      # document dropped there is filed with the whole library as scope and the Inbox is never a
+      # destination; POST /ai/auto-file/inbox files whatever still lies loose in it. Off by default:
+      # the folder is user-visible, so an operator turns it on once the users know what it is.
+      inbox:
+        enabled: ${OPENFILZ_AI_AUTO_FILE_INBOX_ENABLED:false}
+        # names:                 # override the built-in name per language (en Inbox, fr Boîte de réception, de Eingang,
+        #   fr: Courrier entrant #   es Bandeja de entrada, it In arrivo, nl Inbox, pt Caixa de entrada, ar صندوق الوارد)
       llm-min-confidence: 0.7
       new-folder-min-confidence: 0.85
       new-folder-max-depth: 2

@@ -19,6 +19,8 @@ import org.openfilz.dms.service.ai.ModelAnswers;
 import org.openfilz.dms.service.ai.UserChatClientResolver;
 import org.openfilz.dms.service.ai.UserChatClientResolver.ResolvedChat;
 import org.openfilz.dms.service.impl.TikaService;
+import org.openfilz.dms.service.insight.CategoryClassifier.CategoryPrediction;
+import org.openfilz.dms.service.insight.InsightsPolicy.Verdict;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.beans.factory.ObjectProvider;
@@ -58,6 +60,15 @@ import java.util.concurrent.atomic.AtomicReference;
  * that the backfill picks up later. The model is the deployment's chat model unless
  * {@code openfilz.ai.insights.model} names a cheaper {@code provider:model}; BYOK is not
  * consulted, insights are deployment-level data.
+ * <p>
+ * Two seams sit in front of the model. The {@link CategoryTaxonomy} is the closed list the
+ * prompt describes and the answer is validated against; the {@link InsightsPolicy} is asked,
+ * per document and on the worker, whether the document may be enriched at all, whether a model
+ * may read its text, and which kinds must never reach one — the core permits everything, an
+ * extension narrows it. When the policy bars the model, the local {@link CategoryClassifier}
+ * is the only thing allowed to answer, whatever the configured mode; when it bars some kinds,
+ * the classifier screens the document first and a blocked kind is stored as a category-only
+ * row without a model call. Neither case ever sends text to a model "just to check".
  */
 @Slf4j
 @Service
@@ -65,8 +76,12 @@ import java.util.concurrent.atomic.AtomicReference;
 @Qualifier("aiDocumentInsightService")
 public class AiDocumentInsightService implements DocumentInsightService {
 
-    /** Bump when the prompt or the output contract changes: a backfill with force re-enriches older rows. */
-    public static final int PROMPT_VERSION = 1;
+    /**
+     * Bump when the prompt or the output contract changes: a backfill with force re-enriches
+     * older rows. 2 = the prompt describes every kind of the taxonomy (key — description)
+     * instead of listing bare keys; the JSON contract is unchanged.
+     */
+    public static final int PROMPT_VERSION = 2;
     /** Marker the test configuration keys its stub on; also documents which prompt produced a row. */
     static final String PROMPT_MARKER = "INSIGHTS_V1";
 
@@ -84,6 +99,8 @@ public class AiDocumentInsightService implements DocumentInsightService {
     private final org.springframework.context.ApplicationEventPublisher events;
     private final InsightCompletionSignal signal;
     private final ObjectProvider<CategoryClassifier> classifierProvider;
+    private final InsightsPolicy policy;
+    private final CategoryTaxonomy taxonomy;
 
     private final Sinks.Many<Task> queue = Sinks.many().unicast().onBackpressureBuffer();
     private final Map<UUID, Job> jobs = new ConcurrentHashMap<>();
@@ -103,7 +120,8 @@ public class AiDocumentInsightService implements DocumentInsightService {
                                     DocumentRepository documentRepository, StorageService storageService,
                                     TikaService tikaService, ObjectProvider<IndexService> indexServiceProvider,
                                     org.springframework.context.ApplicationEventPublisher events,
-                                    InsightCompletionSignal signal, ObjectProvider<CategoryClassifier> classifierProvider) {
+                                    InsightCompletionSignal signal, ObjectProvider<CategoryClassifier> classifierProvider,
+                                    InsightsPolicy policy, CategoryTaxonomy taxonomy) {
         this.aiProperties = aiProperties;
         this.store = store;
         this.resolver = resolver;
@@ -115,10 +133,23 @@ public class AiDocumentInsightService implements DocumentInsightService {
         this.events = events;
         this.signal = signal;
         this.classifierProvider = classifierProvider;
+        this.policy = policy;
+        this.taxonomy = taxonomy;
     }
 
     /** One queued enrichment: the document to enrich, the text head when already known, the job it belongs to. */
-    private record Task(UUID documentId, String textHead, UUID jobId) {
+    record Task(UUID documentId, String textHead, UUID jobId) {
+    }
+
+    /**
+     * The enrichment stops here with a SKIPPED row: nothing failed, the policy or the
+     * configuration decided that this document gets no verdict today (the backfill offers it
+     * again). Thrown from the worker's callable so the reactive chain routes it like an outcome.
+     */
+    static final class SkipEnrichment extends RuntimeException {
+        SkipEnrichment(String reason) {
+            super(reason, null, false, false);
+        }
     }
 
     /** An in-memory backfill job; a restart simply re-enqueues what is not DONE. */
@@ -171,10 +202,11 @@ public class AiDocumentInsightService implements DocumentInsightService {
                         }), concurrency)
                 .subscribeOn(scheduler)
                 .subscribe();
-        log.info("[INSIGHTS] tier-2 enrichment worker started (concurrency={}, classifier={}, daily-limit={}, model={})",
+        log.info("[INSIGHTS] tier-2 enrichment worker started (concurrency={}, classifier={}, daily-limit={}, model={}, policy={})",
                 concurrency, classifierMode(), aiProperties.getInsights().getDailyLimit(),
                 aiProperties.getInsights().getModel() == null || aiProperties.getInsights().getModel().isBlank()
-                        ? "chat model" : aiProperties.getInsights().getModel());
+                        ? "chat model" : aiProperties.getInsights().getModel(),
+                policy.getClass().getSimpleName());
     }
 
     /**
@@ -259,7 +291,8 @@ public class AiDocumentInsightService implements DocumentInsightService {
 
     // ── the enrichment itself ───────────────────────────────────────────────
 
-    private Mono<Void> process(Task task) {
+    /** One enrichment, start to terminal row. Package-private so the unit test drives it without the queue. */
+    Mono<Void> process(Task task) {
         return documentRepository.findById(task.documentId())
                 .switchIfEmpty(Mono.fromRunnable(() -> log.debug("[INSIGHTS] {} vanished before enrichment", task.documentId())))
                 .flatMap(document -> {
@@ -271,22 +304,45 @@ public class AiDocumentInsightService implements DocumentInsightService {
                     if (document.getSize() != null && document.getSize() > maxBytes) {
                         return outcome(task, AiDocumentInsight.STATUS_SKIPPED, "file larger than the insights size limit");
                     }
-                    // The daily cap counts model calls: with a local classifier there is always an answer
-                    if (classifierMode() == Mode.LLM && !underDailyCap()) {
-                        return outcome(task, AiDocumentInsight.STATUS_SKIPPED, "daily enrichment limit reached");
-                    }
-                    return store.markPending(document.getId())
-                            .then(textFor(document, task.textHead()))
-                            .defaultIfEmpty("")
-                            .flatMap(text -> text.isBlank()
-                                    ? outcome(task, AiDocumentInsight.STATUS_SKIPPED, "no extractable text")
-                                    : enrich(task, document, text));
+                    return verdictFor(document).flatMap(verdict -> {
+                        if (!verdict.enrichmentAllowed()) {
+                            return outcome(task, AiDocumentInsight.STATUS_SKIPPED, "disabled by policy" + reasonSuffix(verdict));
+                        }
+                        // The daily cap counts model calls: with a local classifier there is always an answer
+                        if (classifierMode() == Mode.LLM && verdict.modelAllowed() && !underDailyCap()) {
+                            return outcome(task, AiDocumentInsight.STATUS_SKIPPED, "daily enrichment limit reached");
+                        }
+                        return store.markPending(document.getId())
+                                .then(textFor(document, task.textHead()))
+                                .defaultIfEmpty("")
+                                .flatMap(text -> text.isBlank()
+                                        ? outcome(task, AiDocumentInsight.STATUS_SKIPPED, "no extractable text")
+                                        : enrich(task, document, text, verdict));
+                    });
                 });
     }
 
-    private Mono<Void> enrich(Task task, Document document, String text) {
+    /**
+     * The policy's answer for this document. A policy that fails to answer fails closed: the
+     * document is treated as not enrichable now (SKIPPED, the backfill offers it again) — never
+     * enriched on the assumption that everything is allowed.
+     */
+    private Mono<Verdict> verdictFor(Document document) {
+        return Mono.defer(() -> policy.forDocument(document))
+                .defaultIfEmpty(Verdict.permitAll())
+                .onErrorResume(e -> {
+                    log.warn("[INSIGHTS] policy lookup failed for {} — not enriching it now: {}", document.getId(), e.toString());
+                    return Mono.just(new Verdict(false, false, java.util.Set.of(), "policy lookup failed: " + e.getMessage()));
+                });
+    }
+
+    private static String reasonSuffix(Verdict verdict) {
+        return verdict.reason() == null || verdict.reason().isBlank() ? "" : ": " + verdict.reason().trim();
+    }
+
+    private Mono<Void> enrich(Task task, Document document, String text, Verdict verdict) {
         return Mono.fromCallable(() -> {
-                    Map.Entry<String, InsightResult> local = classifyLocally(document, text);
+                    Map.Entry<String, InsightResult> local = classifyLocally(document, text, verdict);
                     if (local != null) {
                         return local;
                     }
@@ -307,7 +363,7 @@ public class AiDocumentInsightService implements DocumentInsightService {
                     });
                     InsightResult result;
                     try {
-                        result = InsightResult.parse(answer, aiProperties.getInsights().getCategories());
+                        result = InsightResult.parse(answer, taxonomy.keys());
                     } catch (IllegalArgumentException e) {
                         // The answer itself goes to the log (not to the row) so the prompt can be tuned.
                         log.warn("[INSIGHTS] model answer rejected for '{}' ({}): {} — answer: {}", document.getName(),
@@ -329,6 +385,10 @@ public class AiDocumentInsightService implements DocumentInsightService {
                             .doOnSuccess(v -> log.info("[INSIGHTS] '{}' ({}) -> {} [{}]", document.getName(), document.getId(),
                                     entry.getValue().category(), modelName));
                 })
+                .onErrorResume(SkipEnrichment.class, skip -> {
+                    log.info("[INSIGHTS] '{}' ({}) not enriched: {}", document.getName(), document.getId(), skip.getMessage());
+                    return outcome(task, AiDocumentInsight.STATUS_SKIPPED, skip.getMessage());
+                })
                 .onErrorResume(e -> {
                     String reason = e instanceof IllegalArgumentException
                             ? "model answer rejected: " + e.getMessage()
@@ -339,31 +399,61 @@ public class AiDocumentInsightService implements DocumentInsightService {
     }
 
     /**
-     * The category from the local classifier when the mode wants it: always in {@code prototype}
-     * mode, in {@code auto} mode when it is sure enough (or the daily model cap is spent), never in
-     * {@code llm} mode. A category-only insight: no summary, keywords or entities.
+     * The category from the local classifier when the mode — or the policy — wants it. By mode:
+     * always in {@code prototype} / {@code learned}, in {@code auto} when it is sure enough (or
+     * the daily model cap is spent), never in {@code llm}. By policy, over the mode: when the
+     * model is barred for this document the classifier's verdict is final whatever the mode;
+     * when some kinds are barred from the model, the classifier screens the document before a
+     * model call and a barred kind is stored as it is, without the call. A category-only
+     * insight: no summary, keywords or entities. Null = ask the model; {@link SkipEnrichment}
+     * = the policy wants a classifier and there is none, so the document is left alone (its text
+     * never reaches a model as a fallback).
      */
-    private Map.Entry<String, InsightResult> classifyLocally(Document document, String text) {
+    private Map.Entry<String, InsightResult> classifyLocally(Document document, String text, Verdict verdict) {
         Mode mode = classifierMode();
-        if (mode == Mode.LLM) {
+        boolean modelBarred = !verdict.modelAllowed();
+        boolean screening = !verdict.blockedCategories().isEmpty();
+        if (mode == Mode.LLM && !modelBarred && !screening) {
             return null;
         }
         CategoryClassifier classifier = classifierProvider.getIfAvailable();
         if (classifier == null) {
+            if (modelBarred) {
+                throw new SkipEnrichment("the model may not be used for this document and no local classifier is configured");
+            }
+            if (screening) {
+                throw new SkipEnrichment("the policy keeps some kinds away from the model and no local classifier can screen the document");
+            }
             log.warn("[INSIGHTS] classifier mode {} but no CategoryClassifier bean — asking the model", mode);
             return null;
         }
         AiProperties.Insights.Classifier config = aiProperties.getInsights().getClassifier();
-        CategoryClassifier.CategoryPrediction prediction = classifier.classify(document.getId(), document.getName(),
+        CategoryPrediction prediction = classifier.classify(document.getId(), document.getName(),
                 head(text, Math.max(200, config.getMaxChars())));
-        if (!acceptLocal(mode, prediction.confidence(), config.getMinConfidence(), underDailyCap())) {
-            log.debug("[INSIGHTS] '{}' ({}): {} says {} at {} — below {}, asking the model", document.getName(),
-                    document.getId(), classifier.name(), prediction.category(), fmt(prediction.confidence()), config.getMinConfidence());
-            return null;
+        if (modelBarred) {
+            log.debug("[INSIGHTS] '{}' ({}): the policy bars the model{} — {} says {} at {}", document.getName(),
+                    document.getId(), reasonSuffix(verdict), classifier.name(), prediction.category(), fmt(prediction.confidence()));
+            return Map.entry(classifier.name(), categoryOnly(prediction.category()));
         }
-        log.debug("[INSIGHTS] '{}' ({}): {} says {} at {}", document.getName(), document.getId(), classifier.name(),
-                prediction.category(), fmt(prediction.confidence()));
-        return Map.entry(classifier.name(), new InsightResult(prediction.category(), null, List.of(), null, Map.of()));
+        if (mode != Mode.LLM && acceptLocal(mode, prediction.confidence(), config.getMinConfidence(), underDailyCap())) {
+            log.debug("[INSIGHTS] '{}' ({}): {} says {} at {}", document.getName(), document.getId(), classifier.name(),
+                    prediction.category(), fmt(prediction.confidence()));
+            return Map.entry(classifier.name(), categoryOnly(prediction.category()));
+        }
+        // A model call is next: the policy may keep this kind of document away from it
+        if (verdict.blocks(prediction.category())) {
+            log.info("[INSIGHTS] '{}' ({}) looks like a {} ({} at {}) — a kind the policy keeps away from the model; "
+                            + "stored as category-only", document.getName(), document.getId(), prediction.category(),
+                    classifier.name(), fmt(prediction.confidence()));
+            return Map.entry(InsightsPolicy.SCREENED_MODEL_PREFIX + classifier.name(), categoryOnly(prediction.category()));
+        }
+        log.debug("[INSIGHTS] '{}' ({}): {} says {} at {} — asking the model", document.getName(),
+                document.getId(), classifier.name(), prediction.category(), fmt(prediction.confidence()));
+        return null;
+    }
+
+    private static InsightResult categoryOnly(String category) {
+        return new InsightResult(category, null, List.of(), null, Map.of());
     }
 
     /** Is a local verdict final? In {@code prototype} and {@code learned} modes always; in {@code auto} mode when sure, or when no model call is left today. */
@@ -495,8 +585,9 @@ public class AiDocumentInsightService implements DocumentInsightService {
 
     // ── prompt ──────────────────────────────────────────────────────────────
 
+    /** The system prompt over the taxonomy as it is now — an extension's taxonomy may change between two documents. */
     String systemPrompt() {
-        return InsightPrompts.system(PROMPT_MARKER, aiProperties.getInsights().getCategories());
+        return InsightPrompts.system(PROMPT_MARKER, taxonomy.categories());
     }
 
     String userPrompt(Document document, String text) {

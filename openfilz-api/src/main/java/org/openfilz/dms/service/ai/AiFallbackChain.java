@@ -18,6 +18,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
@@ -63,20 +64,55 @@ import java.util.function.Function;
  * mechanism, so a restart (or a second replica) costs one failed call per pair before it relearns.
  * <p>
  * Chain entries are limited to the API-key providers OpenFilz already builds programmatically —
- * the same {@link UserChatClientResolver#buildChatModel} path BYOK uses. Ollama is deliberately
- * absent: it is local, has no quota to exhaust, and its model comes from Spring AI
- * auto-configuration rather than being built by hand.
+ * the same {@link UserChatClientResolver#buildChatModel} path BYOK uses — plus the managed
+ * {@value #OPENFILZ_CLOUD} provider: the OpenFilz AI gateway, an OpenAI-compatible endpoint
+ * addressed with {@code openfilz.ai.cloud.url} and the tenant key {@code openfilz.ai.cloud.api-key}
+ * (no key pool). It is a provider of its own for cooldowns and key rotation even though it is
+ * built as {@link AiProvider#OPENAI_COMPATIBLE}: it never shares a key or a base URL with a
+ * deployment's own OpenAI-compatible endpoint. Ollama is deliberately absent: it is local, has no
+ * quota to exhaust, and its model comes from Spring AI auto-configuration rather than being built
+ * by hand.
  */
 @Slf4j
 @Component
 @Lazy
 public class AiFallbackChain {
 
-    /** One {@code provider:model} entry of the configured chain. */
-    public record ChainEntry(AiProvider provider, String model) {}
+    /**
+     * One {@code provider:model} entry of the configured chain.
+     *
+     * @param provider the client type to build ({@link AiProvider#OPENAI_COMPATIBLE} for the managed provider)
+     * @param model    the model name, passed through as written (the gateway resolves {@code default} itself)
+     * @param name     the canonical provider token the entry was written with ({@code google},
+     *                 {@code openfilz-cloud}…): what groups entries per provider and keys the cooldowns
+     */
+    public record ChainEntry(AiProvider provider, String model, String name) {
+
+        public ChainEntry {
+            name = name == null || name.isBlank() ? canonicalProvider(provider.name()) : canonicalProvider(name);
+        }
+
+        /** A vendor entry, named after its {@link AiProvider}. */
+        public ChainEntry(AiProvider provider, String model) {
+            this(provider, model, null);
+        }
+
+        /** Whether this entry goes to the OpenFilz AI gateway rather than to a vendor the deployment holds a key for. */
+        public boolean managed() {
+            return OPENFILZ_CLOUD.equals(name);
+        }
+
+        /** The provider label stored on the {@link ResolvedChat}: the token for the managed provider, the enum name otherwise. */
+        String providerLabel() {
+            return managed() ? OPENFILZ_CLOUD : provider.name();
+        }
+    }
 
     /** Provider selector value Spring AI uses for a local Ollama install. */
     static final String OLLAMA = "ollama";
+
+    /** Provider token of the managed OpenFilz AI gateway ({@code openfilz.ai.cloud.*}). */
+    public static final String OPENFILZ_CLOUD = "openfilz-cloud";
 
     private final AiProperties aiProperties;
     private final UserChatClientResolver resolver;
@@ -220,13 +256,13 @@ public class AiFallbackChain {
         // Group the chain by provider, keeping each provider's first appearance as its priority
         // and the chain order of its own models. Key rotation is a per-provider decision, so a
         // provider has to be handled as a unit rather than entry by entry.
-        Map<AiProvider, List<String>> chainModels = modelsByProvider(parseChain());
-        Map<AiProvider, List<String>> usableKeys = usableKeysByProvider(chainModels, now);
+        Map<String, List<ChainEntry>> chainModels = entriesByProvider(parseChain());
+        Map<String, List<String>> usableKeys = usableKeysByProvider(chainModels, now);
 
-        chainModels.forEach((provider, providerModels) -> {
+        chainModels.forEach((provider, entries) -> {
             for (String apiKey : usableKeys.getOrDefault(provider, List.of())) {
-                for (String model : providerModels) {
-                    ResolvedChat candidate = candidate(provider, model, apiKey, seen, now);
+                for (ChainEntry entry : entries) {
+                    ResolvedChat candidate = candidate(entry, apiKey, seen, now);
                     if (candidate != null) {
                         out.add(candidate);
                     }
@@ -242,20 +278,19 @@ public class AiFallbackChain {
     }
 
     /** Build (or reuse) the candidate for one model on one key, or null when it is unusable. */
-    private ResolvedChat candidate(AiProvider provider, String model, String apiKey, Set<String> seen, Instant now) {
+    private ResolvedChat candidate(ChainEntry entry, String apiKey, Set<String> seen, Instant now) {
         String keyRef = AiKeyRef.of(apiKey);
-        String modelKey = cooldownKey(provider.name(), keyRef, model);
+        String modelKey = cooldownKey(entry.name(), keyRef, entry.model());
 
         if (!seen.add(modelKey)) return null;          // already the primary, or listed twice
         if (!isHealthy(modelKey, now)) return null;    // benched (usableKeys only checked the provider)
-        if (unusable.contains(providerKey(provider, keyRef))) return null;
+        if (unusable.contains(providerKey(entry.name(), keyRef))) return null;
 
         ResolvedChat cached = models.get(modelKey);
         if (cached != null) return cached;
 
         try {
-            ChatModel chatModel = resolver.buildChatModel(provider, apiKey, baseUrl(provider), model);
-            ResolvedChat built = new ResolvedChat(chatModel, provider.name(), model, keyRef);
+            ResolvedChat built = build(entry, apiKey, keyRef);
             models.put(modelKey, built);
             log.info("[AI-FALLBACK] Prepared fallback model {}", modelKey);
             return built;
@@ -263,18 +298,24 @@ public class AiFallbackChain {
             // A provider client that refuses to build must not take the whole chat request down:
             // the remaining candidates are still worth trying.
             log.warn("[AI-FALLBACK] Could not build fallback model {} — skipping it: {}", modelKey, e.toString());
-            unusable.add(providerKey(provider, keyRef));
+            unusable.add(providerKey(entry.name(), keyRef));
             return null;
         }
     }
 
-    /** Chain models grouped by provider, both kept in chain order (providers by first appearance). */
-    private Map<AiProvider, List<String>> modelsByProvider(List<ChainEntry> entries) {
-        Map<AiProvider, List<String>> grouped = new LinkedHashMap<>();
+    /** The client for one entry on one key: the vendor SDK, or the gateway for the managed provider. */
+    private ResolvedChat build(ChainEntry entry, String apiKey, String keyRef) {
+        ChatModel chatModel = resolver.buildChatModel(entry.provider(), apiKey, baseUrl(entry), entry.model());
+        return new ResolvedChat(chatModel, entry.providerLabel(), entry.model(), keyRef);
+    }
+
+    /** Chain entries grouped by provider token, both kept in chain order (providers by first appearance), duplicates dropped. */
+    private Map<String, List<ChainEntry>> entriesByProvider(List<ChainEntry> entries) {
+        Map<String, List<ChainEntry>> grouped = new LinkedHashMap<>();
         for (ChainEntry entry : entries) {
-            List<String> models = grouped.computeIfAbsent(entry.provider(), p -> new ArrayList<>());
-            if (!models.contains(entry.model())) {
-                models.add(entry.model());
+            List<ChainEntry> models = grouped.computeIfAbsent(entry.name(), p -> new ArrayList<>());
+            if (models.stream().noneMatch(m -> m.model().equals(entry.model()))) {
+                models.add(entry);
             }
         }
         return grouped;
@@ -286,15 +327,15 @@ public class AiFallbackChain {
      * Filtering here (rather than per model) is what makes key rotation provider-wide — a key
      * disappears from the list only once the provider has nothing left to offer on it.
      */
-    private Map<AiProvider, List<String>> usableKeysByProvider(Map<AiProvider, List<String>> chainModels, Instant now) {
-        Map<AiProvider, List<String>> usable = new LinkedHashMap<>();
-        chainModels.forEach((provider, providerModels) -> {
+    private Map<String, List<String>> usableKeysByProvider(Map<String, List<ChainEntry>> chainModels, Instant now) {
+        Map<String, List<String>> usable = new LinkedHashMap<>();
+        chainModels.forEach((provider, entries) -> {
             List<String> keys = new ArrayList<>();
-            for (String apiKey : keyPool(provider)) {
+            for (String apiKey : keyPool(entries.getFirst())) {
                 String keyRef = AiKeyRef.of(apiKey);
                 if (unusable.contains(providerKey(provider, keyRef))) continue;
-                boolean anyModelHealthy = providerModels.stream()
-                        .anyMatch(model -> isHealthy(cooldownKey(provider.name(), keyRef, model), now));
+                boolean anyModelHealthy = entries.stream()
+                        .anyMatch(entry -> isHealthy(cooldownKey(provider, keyRef, entry.model()), now));
                 if (anyModelHealthy) {
                     keys.add(apiKey);
                 } else {
@@ -308,14 +349,24 @@ public class AiFallbackChain {
     }
 
     /**
-     * The keys to try for a provider: its configured pool, or the single server API key when no
-     * pool is set (so an existing single-key deployment keeps working untouched).
+     * The keys to try for an entry's provider: the tenant key alone for the managed provider,
+     * else its configured pool, or the single server API key when no pool is set (so an existing
+     * single-key deployment keeps working untouched).
      */
-    private List<String> keyPool(AiProvider provider) {
-        return keyPool(aiProperties.getFallback(), provider, environment);
+    private List<String> keyPool(ChainEntry entry) {
+        return keyPool(aiProperties, entry, environment);
     }
 
-    /** Bean-free form, shared with the startup validator (see {@link #parseChain}). */
+    /** Bean-free form of {@link #keyPool(ChainEntry)}, shared with the startup validator. */
+    public static List<String> keyPool(AiProperties aiProperties, ChainEntry entry, Environment environment) {
+        if (entry.managed()) {
+            AiProperties.Cloud cloud = aiProperties.getCloud();
+            return cloud.isConfigured() ? List.of(cloud.getApiKey().trim()) : List.of();
+        }
+        return keyPool(aiProperties.getFallback(), entry.provider(), environment);
+    }
+
+    /** Bean-free form for a vendor provider, shared with the startup validator and BYOK (see {@link #parseChain}). */
     public static List<String> keyPool(AiProperties.Fallback fallback, AiProvider provider, Environment environment) {
         List<String> configured = fallback.getKeys().get(provider);
         List<String> pool = configured == null ? List.of() : configured.stream()
@@ -425,13 +476,14 @@ public class AiFallbackChain {
                 onRejected.accept(entry + " (expected 'provider:model')");
                 continue;
             }
-            AiProvider provider = provider(entry.substring(0, separator).trim());
+            String token = canonicalProvider(entry.substring(0, separator));
+            AiProvider provider = provider(token);
             if (provider == null) {
                 onRejected.accept(entry + " (unknown provider — expected google, anthropic, "
-                        + "openai or openai-compatible)");
+                        + "openai, openai-compatible or " + OPENFILZ_CLOUD + ")");
                 continue;
             }
-            entries.add(new ChainEntry(provider, entry.substring(separator + 1).trim()));
+            entries.add(new ChainEntry(provider, entry.substring(separator + 1).trim(), token));
         }
         return entries;
     }
@@ -447,8 +499,8 @@ public class AiFallbackChain {
                 + ':' + (model == null ? "" : model.trim().toLowerCase(Locale.ROOT));
     }
 
-    private static String providerKey(AiProvider provider, String keyRef) {
-        return canonicalProvider(provider.name()) + ':' + keyRef;
+    private static String providerKey(String provider, String keyRef) {
+        return canonicalProvider(provider) + ':' + keyRef;
     }
 
     static String canonicalProvider(String provider) {
@@ -459,18 +511,23 @@ public class AiFallbackChain {
             case "anthropic", "claude" -> "anthropic";
             case "openai" -> "openai";
             case "openai_compatible", "openai-compatible" -> "openai-compatible";
+            case "openfilz_cloud", "openfilz-cloud" -> OPENFILZ_CLOUD;
             case "ollama" -> "ollama";
             default -> normalised;
         };
     }
 
-    /** Map a chain entry's provider token onto the enum, or null when it names nothing we can build. */
+    /**
+     * Map a chain entry's provider token onto the client type to build, or null when it names
+     * nothing we can build. The managed provider is an OpenAI-compatible client pointed at the
+     * gateway; what makes it its own provider (key, base URL, cooldowns) is the entry's name.
+     */
     static AiProvider provider(String token) {
         return switch (canonicalProvider(token)) {
             case "google" -> AiProvider.GOOGLE;
             case "anthropic" -> AiProvider.ANTHROPIC;
             case "openai" -> AiProvider.OPENAI;
-            case "openai-compatible" -> AiProvider.OPENAI_COMPATIBLE;
+            case "openai-compatible", OPENFILZ_CLOUD -> AiProvider.OPENAI_COMPATIBLE;
             default -> null;
         };
     }
@@ -493,44 +550,49 @@ public class AiFallbackChain {
     /**
      * A deployment-configured {@code provider:model} (e.g. {@code openfilz.ai.insights.model}),
      * built with the provider's server key (the fallback key pool, else
-     * {@code spring.ai.<provider>.api-key}) and cached. Empty when unset, unparseable, without a
-     * key, or when the client refuses to build; callers then use the chat model.
+     * {@code spring.ai.<provider>.api-key}; the tenant key for {@value #OPENFILZ_CLOUD}) and
+     * cached. Empty when unset, unparseable, without a key, or when the client refuses to build;
+     * callers then use the chat model.
      */
-    public java.util.Optional<ResolvedChat> configuredModel(String providerModel) {
+    public Optional<ResolvedChat> configuredModel(String providerModel) {
         if (providerModel == null || providerModel.isBlank()) {
-            return java.util.Optional.empty();
+            return Optional.empty();
         }
         List<ChainEntry> entries = parseChain(List.of(providerModel.trim()),
                 rejected -> log.warn("[AI] configured model ignored: {}", rejected));
         if (entries.isEmpty()) {
-            return java.util.Optional.empty();
+            return Optional.empty();
         }
         ChainEntry entry = entries.getFirst();
-        List<String> keys = keyPool(entry.provider());
+        List<String> keys = keyPool(entry);
         if (keys.isEmpty()) {
-            log.warn("[AI] configured model {} has no API key for {}", providerModel, entry.provider());
-            return java.util.Optional.empty();
+            log.warn("[AI] configured model {} has no API key for {}{}", providerModel, entry.name(),
+                    entry.managed() ? " — set OPENFILZ_AI_CLOUD_API_KEY" : "");
+            return Optional.empty();
         }
         String apiKey = keys.getFirst();
         String keyRef = AiKeyRef.of(apiKey);
-        String modelKey = cooldownKey(entry.provider().name(), keyRef, entry.model());
+        String modelKey = cooldownKey(entry.name(), keyRef, entry.model());
         ResolvedChat cached = models.get(modelKey);
         if (cached != null) {
-            return java.util.Optional.of(cached);
+            return Optional.of(cached);
         }
         try {
-            ChatModel chatModel = resolver.buildChatModel(entry.provider(), apiKey, baseUrl(entry.provider()), entry.model());
-            ResolvedChat built = new ResolvedChat(chatModel, entry.provider().name(), entry.model(), keyRef);
+            ResolvedChat built = build(entry, apiKey, keyRef);
             models.put(modelKey, built);
-            return java.util.Optional.of(built);
+            return Optional.of(built);
         } catch (Exception e) {
             log.warn("[AI] configured model {} could not be built: {}", providerModel, e.toString());
-            return java.util.Optional.empty();
+            return Optional.empty();
         }
     }
 
-    private String baseUrl(AiProvider provider) {
-        return provider == AiProvider.OPENAI_COMPATIBLE
+    /** The endpoint of an OpenAI-compatible entry: the gateway for the managed provider, the deployment's own otherwise. */
+    private String baseUrl(ChainEntry entry) {
+        if (entry.managed()) {
+            return aiProperties.getCloud().getUrl();
+        }
+        return entry.provider() == AiProvider.OPENAI_COMPATIBLE
                 ? environment.getProperty("spring.ai.openai.base-url")
                 : null;
     }

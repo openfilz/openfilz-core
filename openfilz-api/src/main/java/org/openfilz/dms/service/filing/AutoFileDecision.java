@@ -53,9 +53,27 @@ public final class AutoFileDecision {
      */
     public static Optional<Vote> vote(Collection<Neighbour> neighbours, String documentCategory, double minShare,
                                       double minSimilarity, double minRelativeSimilarity) {
+        return vote(neighbours, documentCategory, minShare, minSimilarity, minRelativeSimilarity, Map.of());
+    }
+
+    /** Folder weights outside this range are clamped: feedback nudges the vote, it never silences or fixes it. */
+    static final double MIN_FOLDER_WEIGHT = 0.1;
+    static final double MAX_FOLDER_WEIGHT = 3.0;
+
+    /**
+     * The vote with per-folder weights from the feedback seam: each neighbour's similarity counts
+     * {@code weights.get(folderId)} times (absent = 1, clamped to [{@value #MIN_FOLDER_WEIGHT},
+     * {@value #MAX_FOLDER_WEIGHT}]) towards its folder's share and the total. A folder the user
+     * keeps undoing filings into pulls less, one they keep filing into pulls more — while the
+     * similarity guards ({@code minSimilarity}, {@code minRelativeSimilarity}) still read the raw
+     * similarities, so a weight never makes a distant neighbour close.
+     */
+    public static Optional<Vote> vote(Collection<Neighbour> neighbours, String documentCategory, double minShare,
+                                      double minSimilarity, double minRelativeSimilarity, Map<UUID, Double> weights) {
         if (neighbours == null || neighbours.isEmpty()) {
             return Optional.empty();
         }
+        Map<UUID, Double> folderWeights = weights == null ? Map.of() : weights;
         List<Neighbour> eligible = new ArrayList<>();
         double bestSimilarity = 0;
         for (Neighbour neighbour : neighbours) {
@@ -66,21 +84,22 @@ public final class AutoFileDecision {
             bestSimilarity = Math.max(bestSimilarity, neighbour.similarity());
         }
         double floor = bestSimilarity * Math.max(0, Math.min(1, minRelativeSimilarity));
-        Map<UUID, double[]> weights = new LinkedHashMap<>();   // [sum, best, count]
+        Map<UUID, double[]> tally = new LinkedHashMap<>();   // [sum, best, count]
         double total = 0;
         for (Neighbour neighbour : eligible) {
             if (neighbour.similarity() < floor) continue;
-            double[] w = weights.computeIfAbsent(neighbour.folderId(), k -> new double[3]);
-            w[0] += neighbour.similarity();
+            double[] w = tally.computeIfAbsent(neighbour.folderId(), k -> new double[3]);
+            double weighted = neighbour.similarity() * folderWeight(folderWeights, neighbour.folderId());
+            w[0] += weighted;
             w[1] = Math.max(w[1], neighbour.similarity());
             w[2] += 1;
-            total += neighbour.similarity();
+            total += weighted;
         }
         if (total <= 0) {
             return Optional.empty();
         }
         Map.Entry<UUID, double[]> best = null;
-        for (Map.Entry<UUID, double[]> entry : weights.entrySet()) {
+        for (Map.Entry<UUID, double[]> entry : tally.entrySet()) {
             if (best == null || entry.getValue()[0] > best.getValue()[0]) {
                 best = entry;
             }
@@ -88,6 +107,14 @@ public final class AutoFileDecision {
         double share = best.getValue()[0] / total;
         Vote result = new Vote(best.getKey(), share, best.getValue()[1], (int) best.getValue()[2], neighbours.size());
         return share >= minShare && best.getValue()[1] >= minSimilarity ? Optional.of(result) : Optional.empty();
+    }
+
+    static double folderWeight(Map<UUID, Double> weights, UUID folderId) {
+        Double weight = folderId == null ? null : weights.get(folderId);
+        if (weight == null || weight.isNaN()) {
+            return 1.0;
+        }
+        return Math.max(MIN_FOLDER_WEIGHT, Math.min(MAX_FOLDER_WEIGHT, weight));
     }
 
     private static boolean sameCategory(String a, String b) {

@@ -181,6 +181,8 @@ ai:
     active: false
     defaultForUsers: false
     allowNewFolders: true
+    # offer each user an Inbox folder whose content is filed anywhere in their library
+    inboxEnabled: false
     # Documents filed at once; each waits for its document's insight, so raise with insights.concurrency
     concurrency: 8
     # How long past the uploader's token expiry a filing queued while it was valid may still

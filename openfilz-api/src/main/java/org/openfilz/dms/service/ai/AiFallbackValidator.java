@@ -63,10 +63,24 @@ public class AiFallbackValidator implements ApplicationRunner {
         List<AiFallbackChain.ChainEntry> entries =
                 AiFallbackChain.parseChain(fallback.getChain(), rejected -> problems.add("unusable entry '" + rejected + "'"));
 
-        Set<AiProvider> providers = new LinkedHashSet<>();
-        entries.forEach(entry -> providers.add(entry.provider()));
-
-        for (AiProvider provider : providers) {
+        // One check per provider token: the managed provider is checked against its own tenant
+        // key and gateway URL, never against the OpenAI key or base URL it merely borrows the
+        // client type of.
+        Set<String> providers = new LinkedHashSet<>();
+        for (AiFallbackChain.ChainEntry entry : entries) {
+            if (!providers.add(entry.name())) {
+                continue;
+            }
+            if (entry.managed()) {
+                if (!aiProperties.getCloud().isConfigured()) {
+                    problems.add("no API key for %s — set OPENFILZ_AI_CLOUD_API_KEY".formatted(AiFallbackChain.OPENFILZ_CLOUD));
+                }
+                if (isBlank(aiProperties.getCloud().getUrl())) {
+                    problems.add("%s needs a gateway URL — set OPENFILZ_AI_CLOUD_URL".formatted(AiFallbackChain.OPENFILZ_CLOUD));
+                }
+                continue;
+            }
+            AiProvider provider = entry.provider();
             if (AiFallbackChain.keyPool(fallback, provider, environment).isEmpty()) {
                 problems.add("no API key for %s — set %s (or %s)"
                         .formatted(provider, poolVariable(provider), singleKeyVariable(provider)));
@@ -100,7 +114,7 @@ public class AiFallbackValidator implements ApplicationRunner {
     /** Readable chain summary for the startup log; models only, never keys. */
     private String describe(List<AiFallbackChain.ChainEntry> entries) {
         return entries.stream()
-                .map(entry -> entry.provider() + ":" + entry.model())
+                .map(entry -> entry.name() + ":" + entry.model())
                 .reduce((a, b) -> a + ", " + b)
                 .orElse("");
     }

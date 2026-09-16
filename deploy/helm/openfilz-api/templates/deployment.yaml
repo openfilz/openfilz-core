@@ -232,6 +232,10 @@ spec:
               value: {{ .Values.ai.insights.active | quote }}
             - name: OPENFILZ_AI_INSIGHTS_MODEL
               value: {{ .Values.ai.insights.model | quote }}
+            - name: OPENFILZ_AI_CLOUD_URL
+              value: {{ .Values.ai.cloud.url | quote }}
+            - name: OPENFILZ_AI_CLOUD_API_KEY
+              value: {{ .Values.ai.cloud.apiKey | quote }}
             - name: OPENFILZ_AI_INSIGHTS_DAILY_LIMIT
               value: {{ .Values.ai.insights.dailyLimit | quote }}
             - name: OPENFILZ_AI_INSIGHTS_CONCURRENCY
@@ -254,6 +258,8 @@ spec:
               value: {{ .Values.ai.autoFile.defaultForUsers | quote }}
             - name: OPENFILZ_AI_AUTO_FILE_NEW_FOLDERS
               value: {{ .Values.ai.autoFile.allowNewFolders | quote }}
+            - name: OPENFILZ_AI_AUTO_FILE_INBOX_ENABLED
+              value: {{ .Values.ai.autoFile.inboxEnabled | quote }}
             - name: OPENFILZ_AI_INSIGHTS_CATEGORIES
               value: {{ join "," .Values.ai.insights.categories | quote }}
             - name: OPENFILZ_AI_INSIGHTS_CLASSIFIER
