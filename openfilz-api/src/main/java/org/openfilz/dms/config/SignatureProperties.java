@@ -111,7 +111,7 @@ public class SignatureProperties {
         private String fromName = "OpenFilz e-Sign";
         /** Product name used in subjects / bodies (EE white-label overrides this). */
         private String productName = "OpenFilz";
-        /** Optional logo URL rendered at the top of the HTML emails. */
+        /** Logo URL rendered in the HTML emails; blank = the hosted OpenFilz logo. */
         private String logoUrl = "";
     }
 }
