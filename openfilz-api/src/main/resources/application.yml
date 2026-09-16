@@ -177,7 +177,7 @@ openfilz:
       from: ${OPENFILZ_SIGNATURE_MAIL_FROM:no-reply@openfilz.com}
       from-name: ${OPENFILZ_SIGNATURE_MAIL_FROM_NAME:OpenFilz e-Sign}
       product-name: ${OPENFILZ_SIGNATURE_PRODUCT_NAME:OpenFilz}
-      logo-url: ${OPENFILZ_SIGNATURE_LOGO_URL:}
+      logo-url: ${OPENFILZ_SIGNATURE_LOGO_URL:}   # empty = hosted OpenFilz logo
 
   # Workflows (statuses + transitions + tasks) — see docs/workflows.md
   workflows:
@@ -192,7 +192,7 @@ openfilz:
       from: ${OPENFILZ_WORKFLOWS_MAIL_FROM:no-reply@openfilz.com}
       from-name: ${OPENFILZ_WORKFLOWS_MAIL_FROM_NAME:OpenFilz Workflows}
       product-name: ${OPENFILZ_WORKFLOWS_PRODUCT_NAME:OpenFilz}
-      logo-url: ${OPENFILZ_WORKFLOWS_LOGO_URL:}
+      logo-url: ${OPENFILZ_WORKFLOWS_LOGO_URL:}   # empty = hosted OpenFilz logo
 
   # PDF tools (merge / split / rotate / organize pages) — see docs/pdf-tools.md
   pdf-tools:

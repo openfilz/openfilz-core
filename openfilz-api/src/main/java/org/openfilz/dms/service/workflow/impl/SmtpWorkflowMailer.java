@@ -6,9 +6,9 @@ import org.openfilz.dms.config.WorkflowProperties;
 import org.openfilz.dms.entity.WorkflowInstance;
 import org.openfilz.dms.entity.WorkflowTask;
 import org.openfilz.dms.service.workflow.WorkflowMailer;
+import org.openfilz.dms.utils.EmailLayout;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
-import org.springframework.web.util.HtmlUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -17,7 +17,7 @@ import java.util.Locale;
 /**
  * JavaMail implementation of {@link WorkflowMailer}. Fire-and-forget on the bounded-elastic
  * scheduler; failures are logged and never reach the engine. HTML assembled in Java from the
- * localised bundle ({@link WorkflowMailTexts}), same layout as the e-Sign mails.
+ * localised bundle ({@link WorkflowMailTexts}), inside the shared branded shell {@link EmailLayout}.
  */
 @Slf4j
 public class SmtpWorkflowMailer implements WorkflowMailer {
@@ -35,11 +35,11 @@ public class SmtpWorkflowMailer implements WorkflowMailer {
         Locale loc = WorkflowMailTexts.localeOf(i.getLocale());
         String subject = t(loc, "task.subject", i.getDocumentName(), task.getStateLabel());
         String body = layout(loc, t(loc, "task.title"),
-                p(t(loc, "task.body", esc(i.getDocumentName()), esc(i.getDefinitionName()), esc(task.getStateLabel()), esc(i.getStartedBy())))
+                EmailLayout.lead(t(loc, "task.body", esc(i.getDocumentName()), esc(i.getDefinitionName()), esc(task.getStateLabel()), esc(i.getStartedBy())))
                         + quote(previousComment)
-                        + (task.getDueAt() == null ? "" : p(t(loc, "task.due", task.getDueAt().toLocalDate())))
-                        + button(link, t(loc, "task.button"))
-                        + small(t(loc, "linkFallback") + "<br><a href=\"" + link + "\">" + link + "</a>"));
+                        + (task.getDueAt() == null ? "" : EmailLayout.callout("&#9200; " + t(loc, "task.due", task.getDueAt().toLocalDate()), false))
+                        + EmailLayout.button(link, t(loc, "task.button"))
+                        + EmailLayout.linkFallback(t(loc, "linkFallback"), link));
         send(toEmail, subject, body);
     }
 
@@ -48,9 +48,9 @@ public class SmtpWorkflowMailer implements WorkflowMailer {
         Locale loc = WorkflowMailTexts.localeOf(i.getLocale());
         String subject = t(loc, "overdue.subject", i.getDocumentName(), task.getStateLabel());
         String body = layout(loc, t(loc, "overdue.title"),
-                p(t(loc, "overdue.body", esc(i.getDocumentName()), esc(task.getStateLabel()),
-                        task.getDueAt() == null ? "-" : task.getDueAt().toLocalDate()))
-                        + button(link, t(loc, "task.button")));
+                EmailLayout.callout(t(loc, "overdue.body", esc(i.getDocumentName()), esc(task.getStateLabel()),
+                        task.getDueAt() == null ? "-" : task.getDueAt().toLocalDate()), true)
+                        + EmailLayout.button(link, t(loc, "task.button")));
         send(toEmail, subject, body);
     }
 
@@ -59,8 +59,8 @@ public class SmtpWorkflowMailer implements WorkflowMailer {
         Locale loc = WorkflowMailTexts.localeOf(i.getLocale());
         String subject = t(loc, "completed.subject", i.getDocumentName(), i.getCurrentStateLabel());
         String body = layout(loc, t(loc, "completed.title"),
-                p(t(loc, "completed.body", esc(i.getDocumentName()), esc(i.getDefinitionName()), esc(i.getCurrentStateLabel())))
-                        + button(link, t(loc, "completed.button")));
+                EmailLayout.lead(t(loc, "completed.body", esc(i.getDocumentName()), esc(i.getDefinitionName()), esc(i.getCurrentStateLabel())))
+                        + EmailLayout.button(link, t(loc, "completed.button")));
         send(toEmail, subject, body);
     }
 
@@ -69,9 +69,9 @@ public class SmtpWorkflowMailer implements WorkflowMailer {
         Locale loc = WorkflowMailTexts.localeOf(i.getLocale());
         String subject = t(loc, "cancelled.subject", i.getDocumentName());
         String body = layout(loc, t(loc, "cancelled.title"),
-                p(t(loc, "cancelled.body", esc(i.getDocumentName()), esc(i.getDefinitionName()), esc(actorEmail)))
+                EmailLayout.lead(t(loc, "cancelled.body", esc(i.getDocumentName()), esc(i.getDefinitionName()), esc(actorEmail)))
                         + quote(comment)
-                        + button(link, t(loc, "completed.button")));
+                        + EmailLayout.button(link, t(loc, "completed.button")));
         send(toEmail, subject, body);
     }
 
@@ -80,8 +80,8 @@ public class SmtpWorkflowMailer implements WorkflowMailer {
         Locale loc = WorkflowMailTexts.localeOf(i.getLocale());
         String subject = t(loc, "reached.subject", i.getDocumentName(), stateLabel);
         String body = layout(loc, t(loc, "reached.title"),
-                p(t(loc, "reached.body", esc(i.getDocumentName()), esc(i.getDefinitionName()), esc(stateLabel)))
-                        + button(link, t(loc, "completed.button")));
+                EmailLayout.lead(t(loc, "reached.body", esc(i.getDocumentName()), esc(i.getDefinitionName()), esc(stateLabel)))
+                        + EmailLayout.button(link, t(loc, "completed.button")));
         send(toEmail, subject, body);
     }
 
@@ -109,40 +109,17 @@ public class SmtpWorkflowMailer implements WorkflowMailer {
     }
 
     private static String esc(String s) {
-        return s == null ? "" : HtmlUtils.htmlEscape(s);
-    }
-
-    private static String p(String inner) {
-        return "<p style=\"margin:0 0 14px\">" + inner + "</p>";
-    }
-
-    private static String small(String inner) {
-        return "<p style=\"margin:10px 0 0;font-size:12px;color:#667085\">" + inner + "</p>";
+        return EmailLayout.esc(s);
     }
 
     private static String quote(String text) {
         if (text == null || text.isBlank()) return "";
-        return "<blockquote style=\"margin:0 0 14px;padding:10px 14px;border-left:3px solid #d0d5dd;color:#344054\">"
-                + esc(text).replace("\n", "<br>") + "</blockquote>";
-    }
-
-    private static String button(String href, String label) {
-        return "<p style=\"margin:22px 0\"><a href=\"" + href + "\" style=\"background:#1f6feb;color:#fff;"
-                + "padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block\">"
-                + label + "</a></p>";
+        return EmailLayout.quote(esc(text).replace("\n", "<br>"));
     }
 
     private String layout(Locale loc, String title, String content) {
-        String dir = WorkflowMailTexts.isRtl(loc) ? "rtl" : "ltr";
-        String logo = props.getMail().getLogoUrl() == null || props.getMail().getLogoUrl().isBlank() ? ""
-                : "<img src=\"" + props.getMail().getLogoUrl() + "\" alt=\"\" style=\"max-height:40px;margin-bottom:16px\">";
-        return "<!doctype html><html dir=\"" + dir + "\"><body style=\"margin:0;background:#f4f6f8;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#101828\">"
-                + "<div style=\"max-width:560px;margin:24px auto;background:#fff;border-radius:12px;padding:28px;border:1px solid #e4e7ec\">"
-                + logo
-                + "<h2 style=\"margin:0 0 16px;font-size:20px\">" + title + "</h2>"
-                + content
-                + "<hr style=\"border:none;border-top:1px solid #e4e7ec;margin:24px 0 12px\">"
-                + small(t(loc, "footer", esc(props.getMail().getProductName())))
-                + "</div></body></html>";
+        WorkflowProperties.Mail mail = props.getMail();
+        return EmailLayout.page(loc.getLanguage(), WorkflowMailTexts.isRtl(loc), title, content,
+                t(loc, "footer", esc(mail.getProductName())), mail.getProductName(), mail.getLogoUrl());
     }
 }
