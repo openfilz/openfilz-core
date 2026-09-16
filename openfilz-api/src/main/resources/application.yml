@@ -133,6 +133,11 @@ piped:
   buffer:
     size: 8192
 
+management:
+  health:
+    mail:
+      enabled: false
+      
 openfilz:
   common:
     # URL that OnlyOffice DocumentServer uses to reach OpenFilz API
