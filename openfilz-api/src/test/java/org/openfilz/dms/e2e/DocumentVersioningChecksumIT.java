@@ -19,6 +19,7 @@ import org.springframework.test.context.TestConstructor;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.testcontainers.containers.MinIOContainer;
+import org.testcontainers.utility.DockerImageName;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -37,7 +38,7 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 public class DocumentVersioningChecksumIT extends TestContainersBaseConfig {
 
     @Container
-    static MinIOContainer minio = new MinIOContainer("minio/minio:latest");
+    static MinIOContainer minio = new MinIOContainer(DockerImageName.parse("quay.io/minio/minio:latest").asCompatibleSubstituteFor("minio/minio"));
 
     public DocumentVersioningChecksumIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
         super(webTestClient, customJacksonJsonEncoder);
