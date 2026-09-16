@@ -10,6 +10,7 @@ import org.openfilz.dms.repository.DocumentDAO;
 import org.openfilz.dms.dto.Checksum;
 import org.openfilz.dms.service.AuditService;
 import org.openfilz.dms.service.ChecksumService;
+import org.openfilz.dms.service.DocumentIntegrityService;
 import org.openfilz.dms.service.MetadataPostProcessor;
 import org.openfilz.dms.service.StorageService;
 import org.openfilz.dms.utils.ContentInfo;
@@ -31,10 +32,13 @@ import static org.openfilz.dms.service.ChecksumService.HASH_SHA256_KEY;
 @ConditionalOnProperty(name = "openfilz.calculate-checksum", havingValue = "true")
 public class ChecksumSaveDocumentServiceImpl extends SaveDocumentServiceImpl {
     private final ChecksumService checksumService;
+    /** C2 — the append-only ledger the JSONB fingerprint stopped being the reference for. */
+    private final DocumentIntegrityService documentIntegrityService;
 
-    public ChecksumSaveDocumentServiceImpl(StorageService storageService, ObjectMapper objectMapper, AuditService auditService, JsonUtils jsonUtils, DocumentDAO documentDAO, MetadataPostProcessor metadataPostProcessor, TransactionalOperator tx, QuotaProperties quotaProperties, ChecksumService checksumService) {
+    public ChecksumSaveDocumentServiceImpl(StorageService storageService, ObjectMapper objectMapper, AuditService auditService, JsonUtils jsonUtils, DocumentDAO documentDAO, MetadataPostProcessor metadataPostProcessor, TransactionalOperator tx, QuotaProperties quotaProperties, ChecksumService checksumService, DocumentIntegrityService documentIntegrityService) {
         super(storageService, objectMapper, auditService, jsonUtils, documentDAO, metadataPostProcessor, tx, quotaProperties);
         this.checksumService = checksumService;
+        this.documentIntegrityService = documentIntegrityService;
     }
 
 
@@ -42,7 +46,13 @@ public class ChecksumSaveDocumentServiceImpl extends SaveDocumentServiceImpl {
     public Mono<UploadResponse> doSaveFile(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, Mono<String> storagePathMono) {
         return storagePathMono
                 .flatMap(storagePath -> checksumService.calculateChecksum(storagePath, metadata))
-                .flatMap(checksum -> saveDocumentInDatabase(filePart, contentLength, parentFolderId, checksum.metadataWithChecksum(), originalFilename, checksum.storagePath()))
+                // The ledger entry is written inside the same transaction as the document row: a
+                // document that exists without its fingerprint recorded would be exactly the gap
+                // C2 closes.
+                .flatMap(checksum -> saveDocumentInDatabase(filePart, contentLength, parentFolderId, checksum.metadataWithChecksum(), originalFilename, checksum.storagePath())
+                        .flatMap(savedDoc -> documentIntegrityService
+                                .record(savedDoc.getId(), savedDoc.getStoragePath(), null, checksum.hash())
+                                .thenReturn(savedDoc)))
                 .flatMap(savedDoc -> logUploadAction(savedDoc, parentFolderId, metadata).thenReturn(savedDoc))
                 .as(tx::transactional)
                 .flatMap(savedDoc -> Mono.just(new UploadResponse(savedDoc.getId(), savedDoc.getName(), savedDoc.getContentType(), savedDoc.getSize()))
@@ -56,12 +66,14 @@ public class ChecksumSaveDocumentServiceImpl extends SaveDocumentServiceImpl {
             Map<String, Object> metadataMap = metadata != null ? jsonUtils.toMap(metadata) : null;
             Map<String, Object> metadataWithChecksum = FileUtils.getMetadataWithChecksum(metadataMap, contentInfo.checksum());
             document.setMetadata(jsonUtils.toJson(metadataWithChecksum));
-            return super.replaceFileContentAndSave(newFilePart, contentInfo, document, newStoragePath, oldStoragePath);
+            return super.replaceFileContentAndSave(newFilePart, contentInfo, document, newStoragePath, oldStoragePath)
+                    .flatMap(saved -> recordIntegrity(saved, contentInfo.checksum()));
         }
         return checksumService.calculateChecksum(newStoragePath, metadata != null ? jsonUtils.toMap(metadata) : null)
                 .flatMap(checksum -> {
                     document.setMetadata(jsonUtils.toJson(checksum.metadataWithChecksum()));
-                    return super.replaceFileContentAndSave(newFilePart, contentInfo, document, newStoragePath, oldStoragePath);
+                    return super.replaceFileContentAndSave(newFilePart, contentInfo, document, newStoragePath, oldStoragePath)
+                            .flatMap(saved -> recordIntegrity(saved, checksum.hash()));
                 });
     }
 
@@ -144,6 +156,19 @@ public class ChecksumSaveDocumentServiceImpl extends SaveDocumentServiceImpl {
     }
 
     private record ChecksumInfo(boolean isSame, String newValue) {}
+
+    /**
+     * Appends the ledger entry for a content change. Every replacement adds a row rather than
+     * amending one — the sequence of fingerprints is the evidence, not the last value.
+     * <p>
+     * {@code protected} because editions that override {@code doSaveFile} wholesale must still
+     * call it: a subclass that reimplements the save pipeline and forgets this leaves its uploads
+     * with no integrity record at all, which is exactly the gap C2 exists to close.
+     */
+    protected Mono<Document> recordIntegrity(Document saved, String hash) {
+        return documentIntegrityService.record(saved.getId(), saved.getStoragePath(), null, hash)
+                .thenReturn(saved);
+    }
 
     protected String getChecksum(Document document) {
         Json metadata = document.getMetadata();

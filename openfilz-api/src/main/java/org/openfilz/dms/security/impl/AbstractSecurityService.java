@@ -8,6 +8,7 @@ import org.openfilz.dms.config.ThumbnailProperties;
 import org.openfilz.dms.enums.Role;
 import org.openfilz.dms.config.AutorizationMode;
 import org.openfilz.dms.security.SecurityService;
+import org.openfilz.dms.security.WormPolicy;
 import org.openfilz.dms.utils.FileConstants;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
@@ -56,12 +57,26 @@ public abstract class AbstractSecurityService implements SecurityService {
     protected final AutorizationMode autorizationMode;
     protected final OnlyOfficeProperties onlyOfficeProperties;
     protected final ThumbnailProperties thumbnailProperties;
+    /** WORM perimeter. Permissive by default; see {@link #isWormForbidden}. */
+    protected final WormPolicy wormPolicy;
 
     public boolean authorize(Authentication auth, AuthorizationContext context) {
         ServerHttpRequest request = context.getExchange().getRequest();
         HttpMethod method = request.getMethod();
         String fullPath = request.getPath().value();
         int idx = getRootContextPathIndex(fullPath);
+        // WORM comes first, before any role or edition-specific rule. It is a prohibition, not a
+        // permission: whatever an edition would otherwise authorise below — including everything
+        // its isCustomAccessAuthorized branch grants — a write-once perimeter refuses. Placing it
+        // anywhere lower would let each edition's own write paths escape it, which is precisely
+        // how the mode used to be unusable outside the Community service.
+        if (idx >= 0) {
+            String wormPath = getContextPath(fullPath, idx);
+            if (wormPolicy.covers(method, wormPath) && isWormForbidden(method, wormPath)) {
+                log.debug("WORM perimeter refuses {} {}", method, fullPath);
+                return false;
+            }
+        }
         // AI endpoints: accessible to READER, CONTRIBUTOR, and CLEANER (for delete)
         if (idx >= 0 && getContextPath(fullPath, idx).startsWith(RestApiVersion.ENDPOINT_AI)) {
             return isAuthorized((JwtAuthenticationToken) auth, of(Role.READER.toString(), Role.CONTRIBUTOR.toString(), Role.CLEANER.toString()));
@@ -252,7 +267,7 @@ public abstract class AbstractSecurityService implements SecurityService {
 
     /**
      * POST /documents/{id}/versions/{versionId}/restore — a content write, CONTRIBUTOR only.
-     * Not whitelisted in WORM mode (WormSecurityServiceImpl overrides isInsertOrUpdateAccess).
+     * Not whitelisted in WORM mode (see {@link #isWormCreation}).
      */
     protected final boolean isVersionRestore(String path) {
         return path.startsWith(RestApiVersion.ENDPOINT_DOCUMENTS + FileConstants.SLASH)
@@ -335,6 +350,40 @@ public abstract class AbstractSecurityService implements SecurityService {
                 ||
                 (method.equals(HttpMethod.PUT) && pathStartsWith(path, RestApiVersion.ENDPOINT_FAVORITES))
                 ;
+    }
+
+    /**
+     * The WORM prohibition, applied to a request the perimeter covers. Reads pass — including the
+     * POST-based searches and the favourite toggle, which touch no document content. Everything
+     * else passes only if it <em>creates</em> rather than overwrites.
+     * <p>
+     * Note this is stricter than the rule the former WORM security service carried, on one point:
+     * the OnlyOffice save callback used to slip through, because its branch sat below the write
+     * check. Persisting an edit is exactly what the mode promises not to do.
+     */
+    protected boolean isWormForbidden(HttpMethod method, String path) {
+        if (method.equals(HttpMethod.GET) || method.equals(HttpMethod.HEAD) || method.equals(HttpMethod.OPTIONS)) {
+            return false;
+        }
+        if (isQueryOrSearch(method, path)) {
+            return false;
+        }
+        return !isWormCreation(method, path);
+    }
+
+    /**
+     * The writes a write-once perimeter still admits: new documents and new folders. Copies are
+     * included — they write a new object and leave the source untouched. PDF tools are included
+     * for the same reason, and the service refuses their in-place variant under WORM.
+     */
+    protected boolean isWormCreation(HttpMethod method, String path) {
+        return method.equals(HttpMethod.POST) && (
+                pathStartsWith(path, "/files/copy",
+                        "/documents/upload",
+                        "/documents/upload-multiple",
+                        RestApiVersion.ENDPOINT_PDF) ||
+                        path.equals(RestApiVersion.ENDPOINT_FOLDERS) ||
+                        path.equals("/folders/copy"));
     }
 
     protected boolean pathStartsWith(String path, String... contextPaths) {

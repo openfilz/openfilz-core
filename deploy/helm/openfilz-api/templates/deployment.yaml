@@ -135,6 +135,12 @@ spec:
               value: {{ .Values.features.softDelete | quote }}
             - name: OPENFILZ_CALCULATECHECKSUM
               value: {{ .Values.features.checksum | quote }}
+            - name: OPENFILZ_SECURITY_WORM_MODE
+              value: {{ .Values.features.wormMode | quote }}
+            {{- with .Values.features.wormRetention }}
+            - name: OPENFILZ_SECURITY_WORM_RETENTION
+              value: {{ . | quote }}
+            {{- end }}
             - name: ONLYOFFICE_ENABLED
               value: {{ include "openfilz-api.onlyofficeEnabled" . | quote }}
             {{- if eq (include "openfilz-api.onlyofficeEnabled" .) "true" }}

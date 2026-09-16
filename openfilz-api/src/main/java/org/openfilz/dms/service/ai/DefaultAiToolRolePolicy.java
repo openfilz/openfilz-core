@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.SignatureProperties;
 import org.openfilz.dms.enums.Role;
 import org.openfilz.dms.security.SecurityService;
+import org.openfilz.dms.security.WormPolicy;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
@@ -45,6 +46,12 @@ public class DefaultAiToolRolePolicy implements AiToolRolePolicy {
     private final Optional<SecurityService> securityService;
     private final SignatureProperties signatureProperties;
 
+    /**
+     * The WORM perimeter, consulted here because tool calls never reach
+     * {@code AbstractSecurityService.authorize} where the prohibition normally applies.
+     */
+    private final WormPolicy wormPolicy;
+
     @Override
     public boolean isAllowed(Authentication authentication, ToolCapability capability) {
         // No authenticated caller means the tools were not built through an authenticated
@@ -54,6 +61,15 @@ public class DefaultAiToolRolePolicy implements AiToolRolePolicy {
         // decision to make. It is NOT "a user with no roles".
         if (authentication == null) {
             return true;
+        }
+        if (wormPolicy.isEnforced() && capability.isMutating()) {
+            // A tool call bypasses the HTTP security chain entirely — it runs in-process on a tool
+            // thread with no request to match — so the WORM prohibition has to be re-applied here
+            // or a write-once deployment would still be writable through /mcp and the chat
+            // assistant. Capability-grained rather than tool-grained: the creations REST still
+            // admits under WORM (upload, new folder) are refused here too. Fail closed.
+            log.debug("Tool capability {} refused: this deployment is in WORM mode", capability);
+            return false;
         }
         if (securityService.isEmpty()) {
             return true;
