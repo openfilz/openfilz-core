@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[3a9275d5e807990](https://github.com/openfilz/openfilz-core/commit/3a9275d5e807990) maven-release-bot[bot] *2026-09-16 14:30:40*
+[07d7d8771b93c7b](https://github.com/openfilz/openfilz-core/commit/07d7d8771b93c7b) maven-release-bot[bot] *2026-09-16 20:17:30*
 
 
-## v1.3.19
+## v1.3.20
 ### No issue
 
-**[maven-release-plugin] prepare release v1.3.19**
+**[maven-release-plugin] prepare release v1.3.20**
 
 
-[dbcc32af270fa87](https://github.com/openfilz/openfilz-core/commit/dbcc32af270fa87) maven-release-bot[bot] *2026-09-16 14:30:37*
+[ebae7b5f5e31f4d](https://github.com/openfilz/openfilz-core/commit/ebae7b5f5e31f4d) maven-release-bot[bot] *2026-09-16 20:17:27*
 
-**Merge pull request #243 from openfilz/develop**
+**Merge pull request #247 from openfilz/develop**
 
- * Add branded email layout and fix MinIO image source
+ * Implement smart filing features, Inbox, search facets, and cloud provider
 
-[de592ee848fdfc7](https://github.com/openfilz/openfilz-core/commit/de592ee848fdfc7) Yann Demel *2026-09-16 14:26:34*
+[ec2bcdafa387995](https://github.com/openfilz/openfilz-core/commit/ec2bcdafa387995) Yann Demel *2026-09-16 20:13:14*
 
 
