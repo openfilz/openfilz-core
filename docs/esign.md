@@ -147,7 +147,7 @@ goes through relaxed binding.
 | `openfilz.signature.mail.from` | `OPENFILZ_SIGNATURE_MAIL_FROM` | `no-reply@openfilz.com` | `From` address of every e-Sign e-mail. |
 | `openfilz.signature.mail.from-name` | `OPENFILZ_SIGNATURE_MAIL_FROM_NAME` | `OpenFilz e-Sign` | Display name in the `From` header. |
 | `openfilz.signature.mail.product-name` | `OPENFILZ_SIGNATURE_PRODUCT_NAME` | `OpenFilz` | Product name used in subjects and bodies (white-labelling). |
-| `openfilz.signature.mail.logo-url` | `OPENFILZ_SIGNATURE_LOGO_URL` | *(empty)* | Optional logo rendered at the top of the HTML e-mails. |
+| `openfilz.signature.mail.logo-url` | `OPENFILZ_SIGNATURE_LOGO_URL` | *(empty)* | Logo rendered in the header and footer of the HTML e-mails (absolute URL, ideally a ~135×104 PNG). Empty = the hosted OpenFilz logo. |
 | `spring.mail.host` | `SMTP_HOST` | *(empty)* | **Empty ⇒ no mail is sent at all** (`LoggingSignatureMailer`). |
 | `spring.mail.port` | `SMTP_PORT` | `587` | |
 | `spring.mail.username` | `SMTP_USER` | *(empty)* | |

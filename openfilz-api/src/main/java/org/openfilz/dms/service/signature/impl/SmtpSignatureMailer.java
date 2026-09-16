@@ -6,10 +6,10 @@ import org.openfilz.dms.config.SignatureProperties;
 import org.openfilz.dms.entity.SignatureEnvelope;
 import org.openfilz.dms.entity.SignatureRecipient;
 import org.openfilz.dms.service.signature.SignatureMailer;
+import org.openfilz.dms.utils.EmailLayout;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
-import org.springframework.web.util.HtmlUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -19,7 +19,7 @@ import java.util.Locale;
  * JavaMail implementation of {@link SignatureMailer}. Every send is fire-and-forget on the
  * bounded-elastic scheduler; failures are logged and never propagate to the signing flow.
  * HTML is assembled in Java (no template engine) from the localised bundle — see
- * {@link SignatureMailTexts}.
+ * {@link SignatureMailTexts} — inside the shared branded shell {@link EmailLayout}.
  */
 @Slf4j
 public class SmtpSignatureMailer implements SignatureMailer {
@@ -37,11 +37,11 @@ public class SmtpSignatureMailer implements SignatureMailer {
         Locale loc = locale(env, r);
         String subject = t(loc, "request.subject", initiator(env), env.getTitle());
         String body = layout(loc, t(loc, "request.title"),
-                p(t(loc, "request.body", initiator(env), esc(env.getTitle()), esc(documentName)))
-                        + messageBlock(loc, env)
-                        + button(link, t(loc, "request.button"))
-                        + small(t(loc, "request.expires", env.getExpiresAt() == null ? "-" : env.getExpiresAt().toLocalDate()))
-                        + small(t(loc, "request.linkFallback") + "<br><a href=\"" + link + "\">" + link + "</a>"));
+                EmailLayout.lead(t(loc, "request.body", initiator(env), esc(env.getTitle()), esc(documentName)))
+                        + messageBlock(env)
+                        + EmailLayout.button(link, t(loc, "request.button"))
+                        + expires(loc, env)
+                        + EmailLayout.linkFallback(t(loc, "request.linkFallback"), link));
         send(r.getRecipientEmail(), subject, body, null, null);
     }
 
@@ -50,9 +50,9 @@ public class SmtpSignatureMailer implements SignatureMailer {
         Locale loc = locale(env, r);
         String subject = t(loc, "reminder.subject", env.getTitle());
         String body = layout(loc, t(loc, "reminder.title"),
-                p(t(loc, "reminder.body", initiator(env), esc(env.getTitle()), esc(documentName)))
-                        + button(link, t(loc, "request.button"))
-                        + small(t(loc, "request.expires", env.getExpiresAt() == null ? "-" : env.getExpiresAt().toLocalDate())));
+                EmailLayout.lead(t(loc, "reminder.body", initiator(env), esc(env.getTitle()), esc(documentName)))
+                        + EmailLayout.button(link, t(loc, "request.button"))
+                        + expires(loc, env));
         send(r.getRecipientEmail(), subject, body, null, null);
     }
 
@@ -61,9 +61,9 @@ public class SmtpSignatureMailer implements SignatureMailer {
         Locale loc = locale(env, r);
         String subject = t(loc, "otp.subject", code);
         String body = layout(loc, t(loc, "otp.title"),
-                p(t(loc, "otp.body", esc(env.getTitle())))
-                        + "<p style=\"font-size:28px;letter-spacing:6px;font-weight:700;text-align:center\">" + esc(code) + "</p>"
-                        + small(t(loc, "otp.valid", validMinutes)));
+                EmailLayout.paragraph(t(loc, "otp.body", esc(env.getTitle())))
+                        + EmailLayout.code(code)
+                        + EmailLayout.note(t(loc, "otp.valid", validMinutes)));
         send(r.getRecipientEmail(), subject, body, null, null);
     }
 
@@ -73,8 +73,8 @@ public class SmtpSignatureMailer implements SignatureMailer {
         Locale loc = SignatureMailTexts.localeOf(localeCode != null ? localeCode : env.getLocale());
         String subject = t(loc, "completed.subject", env.getTitle());
         String body = layout(loc, t(loc, "completed.title"),
-                p(t(loc, "completed.body", esc(env.getTitle())))
-                        + small(t(loc, "completed.attachment", esc(fileName))));
+                EmailLayout.lead(t(loc, "completed.body", esc(env.getTitle())))
+                        + EmailLayout.callout("&#128206; " + t(loc, "completed.attachment", esc(fileName)), false));
         send(toEmail, subject, body, signedPdf, fileName);
     }
 
@@ -85,8 +85,8 @@ public class SmtpSignatureMailer implements SignatureMailer {
         String reason = decliner.getDeclineReason() == null || decliner.getDeclineReason().isBlank()
                 ? t(loc, "declined.noReason") : esc(decliner.getDeclineReason());
         String body = layout(loc, t(loc, "declined.title"),
-                p(t(loc, "declined.body", esc(decliner.getRecipientEmail()), esc(env.getTitle())))
-                        + p("<i>" + reason + "</i>"));
+                EmailLayout.lead(t(loc, "declined.body", esc(decliner.getRecipientEmail()), esc(env.getTitle())))
+                        + EmailLayout.quote(reason));
         send(env.getInitiatorEmail(), subject, body, null, null);
     }
 
@@ -125,40 +125,22 @@ public class SmtpSignatureMailer implements SignatureMailer {
     }
 
     private static String esc(String s) {
-        return s == null ? "" : HtmlUtils.htmlEscape(s);
+        return EmailLayout.esc(s);
     }
 
-    private static String p(String inner) {
-        return "<p style=\"margin:0 0 14px\">" + inner + "</p>";
+    private String expires(Locale loc, SignatureEnvelope env) {
+        return EmailLayout.note("&#9200; " + t(loc, "request.expires",
+                env.getExpiresAt() == null ? "-" : env.getExpiresAt().toLocalDate()));
     }
 
-    private static String small(String inner) {
-        return "<p style=\"margin:10px 0 0;font-size:12px;color:#667085\">" + inner + "</p>";
-    }
-
-    private static String button(String href, String label) {
-        return "<p style=\"margin:22px 0\"><a href=\"" + href + "\" style=\"background:#1f6feb;color:#fff;"
-                + "padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block\">"
-                + label + "</a></p>";
-    }
-
-    private String messageBlock(Locale loc, SignatureEnvelope env) {
+    private static String messageBlock(SignatureEnvelope env) {
         if (env.getMessage() == null || env.getMessage().isBlank()) return "";
-        return "<blockquote style=\"margin:0 0 14px;padding:10px 14px;border-left:3px solid #d0d5dd;color:#344054\">"
-                + esc(env.getMessage()).replace("\n", "<br>") + "</blockquote>";
+        return EmailLayout.quote(esc(env.getMessage()).replace("\n", "<br>"));
     }
 
     private String layout(Locale loc, String title, String content) {
-        String dir = SignatureMailTexts.isRtl(loc) ? "rtl" : "ltr";
-        String logo = props.getMail().getLogoUrl() == null || props.getMail().getLogoUrl().isBlank() ? ""
-                : "<img src=\"" + props.getMail().getLogoUrl() + "\" alt=\"\" style=\"max-height:40px;margin-bottom:16px\">";
-        return "<!doctype html><html dir=\"" + dir + "\"><body style=\"margin:0;background:#f4f6f8;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#101828\">"
-                + "<div style=\"max-width:560px;margin:24px auto;background:#fff;border-radius:12px;padding:28px;border:1px solid #e4e7ec\">"
-                + logo
-                + "<h2 style=\"margin:0 0 16px;font-size:20px\">" + title + "</h2>"
-                + content
-                + "<hr style=\"border:none;border-top:1px solid #e4e7ec;margin:24px 0 12px\">"
-                + small(t(loc, "footer", esc(props.getMail().getProductName())))
-                + "</div></body></html>";
+        SignatureProperties.Mail mail = props.getMail();
+        return EmailLayout.page(loc.getLanguage(), SignatureMailTexts.isRtl(loc), title, content,
+                t(loc, "footer", esc(mail.getProductName())), mail.getProductName(), mail.getLogoUrl());
     }
 }
