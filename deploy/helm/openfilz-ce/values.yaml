@@ -144,7 +144,7 @@ backup:
   retentionDays: 30
   podSecurityContext: {}       # job pods (pg_dump + mc upload)
   images:
-    mc: minio/mc:latest
+    mc: quay.io/minio/mc:latest
   s3:
     endpoint: https://s3.fr-par.scw.cloud
     bucket: ""
