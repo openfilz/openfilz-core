@@ -14,7 +14,7 @@ services:
   # MinIO S3-Compatible Object Storage
   # =============================================================================
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:latest
     container_name: openfilz-minio
     restart: unless-stopped
     environment:
@@ -39,7 +39,7 @@ services:
   # MinIO Bucket Initialization
   # =============================================================================
   minio-init:
-    image: minio/mc:latest
+    image: quay.io/minio/mc:latest
     container_name: openfilz-minio-init
     depends_on:
       minio:
