@@ -10,8 +10,17 @@ public record Settings(Integer emptyBinInterval, Integer fileQuotaMB, Integer us
                         * {@code openfilz.ai.chat.active}): the frontend shows the chat button and the
                         * "Organise with AI" action. A deployment running the automatic AI features
                         * without a chat model turns this off while {@code aiActive} stays true.
+                        * Also false when the chat is switched on but the server has no chat model.
                         */
                        boolean aiChatActive,
+                       /**
+                        * Why the chat is unavailable while the AI feature is on: {@code "DISABLED"}
+                        * ({@code openfilz.ai.chat.active=false}) or {@code "NO_MODEL"} (chat enabled but
+                        * no chat model configured, e.g. {@code OPENFILZ_AI_MODEL=openfilz-cloud:default},
+                        * which serves insights and smart filing only). {@code null} when the chat works
+                        * or when the AI feature itself is off.
+                        */
+                       String aiChatUnavailableReason,
                        boolean aiUserSettingsEnabled,
                        /** True when tier-2 document insights (AI category / summary at upload) are on: the frontend shows the Insights section and category facets. */
                        boolean aiInsightsActive,

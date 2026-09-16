@@ -183,6 +183,18 @@ spec:
             # reorganisation / MCP and drops only the chat (docs/ai-overview.md §6).
             - name: OPENFILZ_AI_CHAT_ACTIVE
               value: {{ .Values.ai.chat.active | quote }}
+            # The one-pair setup (provider:model + its key); the key always comes from a Secret.
+            {{- with .Values.ai.model }}
+            - name: OPENFILZ_AI_MODEL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if or .Values.ai.existingSecret .Values.ai.apiKey }}
+            - name: OPENFILZ_AI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.ai.existingSecret | default (printf "%s-ai" (include "openfilz-api.fullname" .)) }}
+                  key: api-key
+            {{- end }}
             - name: OLLAMA_BASE_URL
               value: {{ .Values.ai.ollama.baseUrl | quote }}
             - name: OLLAMA_CHAT_ENABLED
@@ -203,39 +215,57 @@ spec:
               value: {{ .Values.ai.transformers.embedding.tokenizerUri | quote }}
             - name: TRANSFORMERS_EMBEDDING_CACHE_DIR
               value: {{ .Values.ai.transformers.embedding.cacheDir | quote }}
+            # Vendor keys / models / the insights model are rendered only when set: an empty value would
+            # shadow what ai.model + ai.apiKey derive (application.yml falls back only when unset).
+            {{- with .Values.ai.openai.apiKey }}
             - name: OPENAI_API_KEY
-              value: {{ .Values.ai.openai.apiKey | quote }}
+              value: {{ . | quote }}
+            {{- end }}
             - name: OPENAI_BASE_URL
               value: {{ .Values.ai.openai.baseUrl | quote }}
             - name: OPENAI_CHAT_ENABLED
               value: {{ .Values.ai.openai.chat.enabled | quote }}
+            {{- with .Values.ai.openai.chat.model }}
             - name: OPENAI_CHAT_MODEL
-              value: {{ .Values.ai.openai.chat.model | quote }}
+              value: {{ . | quote }}
+            {{- end }}
             - name: OPENAI_EMBEDDING_ENABLED
               value: {{ .Values.ai.openai.embedding.enabled | quote }}
             - name: OPENAI_EMBEDDING_MODEL
               value: {{ .Values.ai.openai.embedding.model | quote }}
+            {{- with .Values.ai.anthropic.apiKey }}
             - name: ANTHROPIC_API_KEY
-              value: {{ .Values.ai.anthropic.apiKey | quote }}
+              value: {{ . | quote }}
+            {{- end }}
             - name: ANTHROPIC_CHAT_ENABLED
               value: {{ .Values.ai.anthropic.chat.enabled | quote }}
+            {{- with .Values.ai.anthropic.chat.model }}
             - name: ANTHROPIC_CHAT_MODEL
-              value: {{ .Values.ai.anthropic.chat.model | quote }}
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.ai.google.apiKey }}
             - name: GOOGLE_API_KEY
-              value: {{ .Values.ai.google.apiKey | quote }}
+              value: {{ . | quote }}
+            {{- end }}
             - name: GOOGLE_CHAT_ENABLED
               value: {{ .Values.ai.google.chat.enabled | quote }}
+            {{- with .Values.ai.google.chat.model }}
             - name: GOOGLE_CHAT_MODEL
-              value: {{ .Values.ai.google.chat.model | quote }}
+              value: {{ . | quote }}
+            {{- end }}
             # Document insights (AI category / summary at upload) and smart filing on upload
             - name: OPENFILZ_AI_INSIGHTS_ACTIVE
               value: {{ .Values.ai.insights.active | quote }}
+            {{- with .Values.ai.insights.model }}
             - name: OPENFILZ_AI_INSIGHTS_MODEL
-              value: {{ .Values.ai.insights.model | quote }}
+              value: {{ . | quote }}
+            {{- end }}
             - name: OPENFILZ_AI_CLOUD_URL
               value: {{ .Values.ai.cloud.url | quote }}
+            {{- with .Values.ai.cloud.apiKey }}
             - name: OPENFILZ_AI_CLOUD_API_KEY
-              value: {{ .Values.ai.cloud.apiKey | quote }}
+              value: {{ . | quote }}
+            {{- end }}
             - name: OPENFILZ_AI_INSIGHTS_DAILY_LIMIT
               value: {{ .Values.ai.insights.dailyLimit | quote }}
             - name: OPENFILZ_AI_INSIGHTS_CONCURRENCY

@@ -825,8 +825,9 @@ bean must exist. So the chain now names it too:
 |---|---|
 | 1 | an explicit `spring.ai.model.chat` |
 | 2 | `<PROVIDER>_CHAT_ENABLED` (Ollama > Anthropic > Google > OpenAI) |
-| 3 | **the fallback chain's first entry** |
-| 4 | Ollama (stock local install) |
+| 3 | `OPENFILZ_AI_MODEL` (`provider:model`, with `OPENFILZ_AI_API_KEY`) — see below |
+| 4 | **the fallback chain's first entry** (its first non-`openfilz-cloud` entry) |
+| 5 | Ollama (stock local install) — or `none` when `OPENFILZ_AI_MODEL` is `openfilz-cloud:…` |
 
 `AI_FALLBACK_CHAIN=google:gemini-3.6-flash,anthropic:claude-haiku-4-5` is therefore a complete
 chat configuration on its own. Existing deployments that set switches are unaffected — they keep
@@ -846,6 +847,21 @@ Spring's own precedence resolves it: an explicit `<PROVIDER>_CHAT_MODEL` wins, t
 the value when that is unset, and the hard-coded default applies when there is no chain either.
 The `openfilz-internal.*` namespace sits outside the `@ConfigurationProperties` prefixes on
 purpose, so it can never be mistaken for user-facing configuration.
+
+**The one-pair setup (`OPENFILZ_AI_MODEL` + `OPENFILZ_AI_API_KEY`)** uses the same technique. A
+vendor provider (`google|gemini|google-genai`, `anthropic|claude`, `openai|openai-compatible`,
+`ollama`) contributes `openfilz-internal.ai.chat-model.<selector>` and
+`openfilz-internal.ai.api-key.<selector>`, consulted after the vendor variable
+(`api-key: ${GOOGLE_API_KEY:${openfilz-internal.ai.api-key.google-genai:disabled}}`), so the chain,
+the insights model and the runtime-rebuilt primary — which all read `spring.ai.<provider>.api-key` —
+get the key too. `openfilz-cloud` contributes `openfilz-internal.ai.insights-model` and
+`openfilz-internal.ai.cloud-api-key` instead and leaves the chat selector at `none`. The pair never
+implies `openfilz.ai.active`, and an unusable value is ignored (the post-processor has no logger)
+and reported by `AiFallbackValidator` at startup. Deployment targets must pass the vendor keys and
+models **only when set** (bare Compose keys, `with` blocks in Helm): an empty environment variable is
+a value, and would shadow the derived one. With no chat model, `UserChatClientResolver.hasDefaultChatModel()`
+is false and `Settings` reports `aiChatActive=false`, `aiChatUnavailableReason=NO_MODEL`; a native
+image's compiled-in Ollama bean is ignored under a runtime selector of `none`.
 
 Since chain[0] then *is* the primary, the two are the same candidate and get de-duplicated.
 

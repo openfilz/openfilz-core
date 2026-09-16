@@ -29,7 +29,7 @@ live elsewhere and are linked from each section:
 - [3. Folder reorganisation](#3-folder-reorganisation)
 - [4. Auto-filing on upload](#4-auto-filing-on-upload)
 - [5. Document insights — the layer features 3 and 4 stand on](#5-document-insights--the-layer-features-3-and-4-stand-on)
-- [6. Running OpenFilz without an LLM](#6-running-openfilz-without-an-llm)
+- [6. Running OpenFilz without an LLM](#6-running-openfilz-without-an-llm) — incl. [6.4 Choosing the model: two variables](#64-choosing-the-model-two-variables)
 - [7. What the UI does in each profile](#7-what-the-ui-does-in-each-profile)
 - [8. Picking a profile for a customer](#8-picking-a-profile-for-a-customer)
 
@@ -59,6 +59,11 @@ tools are served over `/mcp` even on a deployment with no model at all.
 
 \*\* It needs *categories* to exist, which come either from the classifier (embeddings), from a
 model, or from users correcting them by hand.
+
+> **Where a model is needed, it takes two variables.** Bring your own model and key:
+> `OPENFILZ_AI_MODEL=provider:model` (`google:gemini-3.6-flash`, `anthropic:claude-haiku-4-5`,
+> `openai:gpt-4o-mini`, `ollama:qwen2.5`) and `OPENFILZ_AI_API_KEY`, next to `OPENFILZ_AI_ACTIVE=true`.
+> Precedence, the managed `openfilz-cloud` option and what the UI is told: [§6.4](#64-choosing-the-model-two-variables).
 
 ---
 
@@ -437,7 +442,7 @@ itself.**
 
 | | **A · No AI** | **B · Bring your own agent** | **C · Light AI (no LLM)** | **D · Full AI, local** | **E · Full AI, cloud** |
 |---|---|---|---|---|---|
-| Switches | `AI_ACTIVE=false` | `AI_ACTIVE=false`<br/>`MCP_ACTIVE=true` | `AI_ACTIVE=true`<br/>`AI_CHAT_ACTIVE=false`<br/>`TRANSFORMERS_EMBEDDING_ENABLED=true`<br/>`INSIGHTS_CLASSIFIER=learned` | `AI_ACTIVE=true`<br/>`OLLAMA_CHAT_ENABLED=true`<br/>`OLLAMA_EMBEDDING_ENABLED=true` | `AI_ACTIVE=true`<br/>`ANTHROPIC/OPENAI/GOOGLE_CHAT_ENABLED=true`<br/>+ an embedding provider |
+| Switches | `AI_ACTIVE=false` | `AI_ACTIVE=false`<br/>`MCP_ACTIVE=true` | `AI_ACTIVE=true`<br/>`AI_CHAT_ACTIVE=false`<br/>`TRANSFORMERS_EMBEDDING_ENABLED=true`<br/>`INSIGHTS_CLASSIFIER=learned` | `AI_ACTIVE=true`<br/>`OPENFILZ_AI_MODEL=ollama:<model>`<br/>`OLLAMA_EMBEDDING_ENABLED=true` | `AI_ACTIVE=true`<br/>`OPENFILZ_AI_MODEL=<provider>:<model>`<br/>`OPENFILZ_AI_API_KEY=…`<br/>+ an embedding provider |
 | Extra services to run | — | — | — (embeddings run **inside** the API) | **Ollama** — and a GPU to be usable | — |
 | pgvector image required | no | no | **yes** | **yes** | **yes** |
 | Document text leaves the premises | never | yes — the agent's model reads it | **never** | never | yes |
@@ -493,6 +498,7 @@ is what makes profile C expressible rather than merely almost-expressible:
 | Embeddings, semantic retrieval, insights, smart filing, by-kind reorganisation | work | **work** |
 | `POST /mcp` and every tool on it | works | **works** |
 | `Settings.aiActive` | true | **still true** |
+| `Settings.aiChatUnavailableReason` | `null` (or `NO_MODEL`, see [§6.4](#64-choosing-the-model-two-variables)) | **`DISABLED`** |
 
 With the `prototype` or `learned` classifier, nothing in that bottom half ever calls a chat model.
 So the two switches together give a deployment with **no LLM at all**:
@@ -518,7 +524,64 @@ embeddings for everything automatic, a cheap cloud model for the chat a user exp
 often the better product. The switch is there for when a chat model is genuinely unavailable or
 unwanted — no budget, no egress, no GPU.
 
-### 6.4 Recipes
+### 6.4 Choosing the model: two variables
+
+OpenFilz has no model of its own to sell you: the default, in the Community and the Enterprise
+edition alike, is **bring your own model and key**. One pair of variables configures it:
+
+```bash
+OPENFILZ_AI_ACTIVE=true                         # still the master switch — the pair never implies it
+OPENFILZ_AI_MODEL=google:gemini-3.6-flash       # provider:model
+OPENFILZ_AI_API_KEY=AIza-…                      # that provider's key
+```
+
+| `OPENFILZ_AI_MODEL` provider | Aliases | What it configures | Key |
+|---|---|---|---|
+| `google` | `gemini`, `google-genai` | the chat model (Gemini Developer API) | required |
+| `anthropic` | `claude` | the chat model | required |
+| `openai` | `openai-compatible` | the chat model; any OpenAI-compatible server through `OPENAI_BASE_URL` | required |
+| `ollama` | — | the chat model on your Ollama (`ollama:qwen2.5:1.5b` keeps the tag) | none |
+| `openfilz-cloud` | `openfilz_cloud` | **document insights + smart filing only** — never the chat | the tenant key |
+
+A vendor model becomes the **chat model**, and also the model document insights and smart filing
+use unless `OPENFILZ_AI_INSIGHTS_MODEL` names another one. Embeddings are not affected: they keep
+their own provider (§1).
+
+**Precedence.** The pair is the simplest layer, not the strongest:
+
+| Decides | Wins first … | … then | … then | … last |
+|---|---|---|---|---|
+| the chat **provider** | `SPRING_AI_MODEL_CHAT` | a `<PROVIDER>_CHAT_ENABLED` switch | `OPENFILZ_AI_MODEL` | the first `AI_FALLBACK_CHAIN` entry, then Ollama |
+| a provider's **key** / **model** | `GOOGLE_API_KEY`, `GOOGLE_CHAT_MODEL`, … | `OPENFILZ_AI_API_KEY` / `OPENFILZ_AI_MODEL` | the chain's first entry (model only) | the built-in default |
+| the **insights model** / **gateway key** | `OPENFILZ_AI_INSIGHTS_MODEL` / `OPENFILZ_AI_CLOUD_API_KEY` | `OPENFILZ_AI_MODEL=openfilz-cloud:…` / `OPENFILZ_AI_API_KEY` | — | the chat model / none |
+
+So existing deployments that set switches and vendor variables behave exactly as before. When the
+pair names the primary, a fallback chain still supplies the *fallbacks* — it just no longer names
+the primary. A malformed value (`gemini-3.6-flash`, `mistral:small`, `google:`) is ignored with a
+startup warning naming the problem.
+
+**`openfilz-cloud` — the managed model.** `OPENFILZ_AI_MODEL=openfilz-cloud:default` with the tenant
+key sends the insight and smart-filing prompts to the OpenFilz AI gateway (only those: the gateway
+refuses tools and streaming, so it can never be the chat model). It is an **Enterprise addon
+(CLOUD_AI) that is not commercially available yet**. With it, the chat has **no model** — OpenFilz
+does not fall back to an Ollama nobody deployed — unless a `<PROVIDER>_CHAT_ENABLED` switch or a
+fallback chain with a vendor entry names one.
+
+**What the web app is told.** `GET /api/v1/settings` reports why the chat is missing, so the UI can
+say so instead of offering a chat that fails on its first message:
+
+| `aiChatActive` | `aiChatUnavailableReason` | Meaning |
+|---|---|---|
+| `true` | `null` | the chat works |
+| `false` | `"DISABLED"` | `OPENFILZ_AI_CHAT_ACTIVE=false` (§6.3) |
+| `false` | `"NO_MODEL"` | the chat is on but the server has no chat model — e.g. `openfilz-cloud` alone, or `SPRING_AI_MODEL_CHAT=none` |
+| `false` | `null` | the AI feature itself is off — the whole AI section is hidden |
+
+`aiUserSettingsEnabled` (the per-user key page) follows `aiChatActive` in every case. When per-user keys are
+enabled (`AI_USER_SETTINGS_ENABLED=true`) the server never reports `NO_MODEL`: each user can bring their own
+key, so the chat stays offered even without a server model.
+
+### 6.5 Recipes
 
 ```bash
 # A — No AI. This is the default; nothing to set.
@@ -542,21 +605,27 @@ OPENFILZ_AI_AUTO_FILE_ACTIVE=true                   # stages 1 + 1b decide; no m
 
 # D — Full AI on your own hardware (add the ollama service; a GPU makes it usable).
 OPENFILZ_AI_ACTIVE=true
-OLLAMA_CHAT_ENABLED=true
+OPENFILZ_AI_MODEL=ollama:qwen2.5
 OLLAMA_EMBEDDING_ENABLED=true
 
 # E — Full AI with a cloud model and local embeddings (a good default for a small VPS).
 OPENFILZ_AI_ACTIVE=true
-ANTHROPIC_CHAT_ENABLED=true
-ANTHROPIC_API_KEY=sk-ant-…
+OPENFILZ_AI_MODEL=anthropic:claude-haiku-4-5        # bring your own model …
+OPENFILZ_AI_API_KEY=sk-ant-…                        # … and key (§6.4)
 TRANSFORMERS_EMBEDDING_ENABLED=true
 OPENFILZ_AI_INSIGHTS_ACTIVE=true
 OPENFILZ_AI_INSIGHTS_CLASSIFIER=auto                # local when confident, the model otherwise
+
+# C + the managed model (EE CLOUD_AI addon, not commercially available yet): on top of profile C,
+#     the gateway writes the full insights and backs smart-filing stage 2; the chat stays off.
+OPENFILZ_AI_MODEL=openfilz-cloud:default
+OPENFILZ_AI_API_KEY=<tenant key>
+OPENFILZ_AI_INSIGHTS_CLASSIFIER=auto
 ```
 
 Every variable, with its defaults: [admin guide → AI Document Chat](admin-guide.md#ai-document-chat).
 
-### 6.5 Moving between profiles
+### 6.6 Moving between profiles
 
 - **A → B**: flip one switch. Nothing to migrate.
 - **A/B → C/D/E**: PostgreSQL must be a pgvector image (**never** swap `postgres:*-alpine` for the
@@ -589,7 +658,9 @@ so an out-of-date frontend cannot call a feature into existence.
 | Settings → **AI maintenance** (re-embed / re-enrich) | `aiActive` + CONTRIBUTOR | hidden | hidden | shown | shown |
 | Settings → **Connect your AI tool** (MCP) | `mcpActive` — *independent of every AI flag* | hidden | **shown** | if enabled | if enabled |
 
-The chat rows follow `aiChatActive`, everything else follows its own flag — which is exactly what
+The chat rows follow `aiChatActive` — false also when the chat is on but the server has no chat
+model, with `aiChatUnavailableReason` saying which (`DISABLED` / `NO_MODEL`, [§6.4](#64-choosing-the-model-two-variables)) —
+everything else follows its own flag — which is exactly what
 lets profile C keep insights, filing and maintenance while dropping the assistant ([§6.3](#63-the-chat-kill-switch)).
 
 Two consequences worth remembering when demoing:

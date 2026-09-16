@@ -6,6 +6,8 @@ import org.openfilz.dms.config.McpProperties;
 import org.openfilz.dms.config.QuotaProperties;
 import org.openfilz.dms.config.RecycleBinProperties;
 import org.openfilz.dms.dto.response.Settings;
+import org.openfilz.dms.service.ai.UserChatClientResolver;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -13,6 +15,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * {@code aiActive} is the contract openfilz-web gates its chat UI on — the frontend has no AI
@@ -40,10 +44,24 @@ class SettingsServiceImplTest {
 
     private Settings getSettings(boolean aiActive, boolean aiUserSettingsEnabled, boolean chatActive,
                                  McpProperties mcpProperties, CommonProperties commonProperties) {
+        return getSettings(aiActive, aiUserSettingsEnabled, chatActive, null, mcpProperties, commonProperties);
+    }
+
+    /** {@code hasChatModel} null = no resolver wired (plain construction), else the resolver's verdict. */
+    private Settings getSettings(boolean aiActive, boolean aiUserSettingsEnabled, boolean chatActive, Boolean hasChatModel,
+                                 McpProperties mcpProperties, CommonProperties commonProperties) {
         org.openfilz.dms.config.AiProperties aiProperties = new org.openfilz.dms.config.AiProperties();
         aiProperties.getChat().setActive(chatActive);
         SettingsServiceImpl service = new SettingsServiceImpl(new RecycleBinProperties(), new QuotaProperties(), aiProperties,
                 mcpProperties, commonProperties, java.util.List.of(), java.util.List.of());
+        if (hasChatModel != null) {
+            UserChatClientResolver resolver = mock(UserChatClientResolver.class);
+            when(resolver.hasDefaultChatModel()).thenReturn(hasChatModel);
+            @SuppressWarnings("unchecked")
+            ObjectProvider<UserChatClientResolver> provider = mock(ObjectProvider.class);
+            when(provider.getIfAvailable()).thenReturn(resolver);
+            ReflectionTestUtils.setField(service, "chatResolverProvider", provider);
+        }
         ReflectionTestUtils.setField(service, "softDelete", false);
         ReflectionTestUtils.setField(service, "thumbnailActive", false);
         ReflectionTestUtils.setField(service, "aiActive", aiActive);
@@ -99,6 +117,53 @@ class SettingsServiceImplTest {
     void aiUserSettings_isFalseWhenTheChatIsSwitchedOff() {
         assertFalse(getSettings(true, true, false).aiUserSettingsEnabled());
         assertTrue(getSettings(true, true, true).aiUserSettingsEnabled());
+    }
+
+    @Test
+    void aiChatUnavailableReason_isNullWhenTheChatWorks() {
+        Settings settings = getSettings(true, true, true, true, new McpProperties(), new CommonProperties());
+        assertTrue(settings.aiChatActive());
+        assertNull(settings.aiChatUnavailableReason());
+        assertTrue(settings.aiUserSettingsEnabled());
+    }
+
+    @Test
+    void aiChatUnavailableReason_isDisabledWhenTheKillSwitchIsOff() {
+        Settings settings = getSettings(true, true, false, true, new McpProperties(), new CommonProperties());
+        assertFalse(settings.aiChatActive());
+        assertEquals("DISABLED", settings.aiChatUnavailableReason());
+    }
+
+    /**
+     * Chat on but no chat model (e.g. OPENFILZ_AI_MODEL=openfilz-cloud:default, which serves insights
+     * only): the chat must be hidden instead of failing on its first message — and BYOK with it.
+     */
+    @Test
+    void aiChatUnavailableReason_isNoModelWhenTheServerHasNoChatModel() {
+        Settings settings = getSettings(true, false, true, false, new McpProperties(), new CommonProperties());
+        assertTrue(settings.aiActive());
+        assertFalse(settings.aiChatActive());
+        assertEquals("NO_MODEL", settings.aiChatUnavailableReason());
+        assertFalse(settings.aiUserSettingsEnabled());
+    }
+
+    /**
+     * Per-user BYOK with no server model is a valid deployment: each user brings their own key, so
+     * the chat and the key page stay offered.
+     */
+    @Test
+    void aiChatUnavailableReason_isNullWithoutAServerModelWhenUsersBringTheirOwnKey() {
+        Settings settings = getSettings(true, true, true, false, new McpProperties(), new CommonProperties());
+        assertTrue(settings.aiChatActive());
+        assertNull(settings.aiChatUnavailableReason());
+        assertTrue(settings.aiUserSettingsEnabled());
+    }
+
+    /** With the whole AI feature off the section is hidden: no reason to report. */
+    @Test
+    void aiChatUnavailableReason_isNullWhenAiIsInactive() {
+        assertNull(getSettings(false, true, false, false, new McpProperties(), new CommonProperties()).aiChatUnavailableReason());
+        assertNull(getSettings(false, true, true, false, new McpProperties(), new CommonProperties()).aiChatUnavailableReason());
     }
 
     /**

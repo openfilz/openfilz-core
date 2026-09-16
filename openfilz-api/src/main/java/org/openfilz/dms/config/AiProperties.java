@@ -35,6 +35,27 @@ public class AiProperties {
     private boolean active = false;
 
     /**
+     * The deployment's model as one {@code provider:model} value ({@code OPENFILZ_AI_MODEL}), e.g.
+     * {@code google:gemini-3.6-flash}, {@code anthropic:claude-haiku-4-5}, {@code openai:gpt-4o-mini},
+     * {@code ollama:qwen2.5} or {@code openfilz-cloud:default}. A vendor provider names the chat
+     * model (which insights and smart filing use too unless {@code insights.model} is set);
+     * {@code openfilz-cloud} names the insights / smart-filing model only and leaves chat off.
+     * <p>
+     * Translated at environment preparation by {@link AiModelProviderEnvironmentPostProcessor}
+     * (precedence: explicit selector &gt; {@code <PROVIDER>_CHAT_ENABLED} &gt; this &gt; the fallback
+     * chain's first entry &gt; Ollama); bound here for the startup warning on an unusable value. It
+     * never implies {@link #active}: {@code OPENFILZ_AI_ACTIVE} stays the master switch.
+     */
+    private String model = "";
+
+    /**
+     * The API key of {@link #model}'s provider ({@code OPENFILZ_AI_API_KEY}); the gateway tenant key
+     * for {@code openfilz-cloud}; ignored for Ollama. A vendor-specific variable
+     * ({@code GOOGLE_API_KEY}, {@code OPENFILZ_AI_CLOUD_API_KEY}, ...) wins over it.
+     */
+    private String apiKey = "";
+
+    /**
      * Longest answer accepted from the JSON-contract calls (tier-2 insights, smart filing stage 2),
      * passed as {@code maxTokens}. The contract itself fits in a few hundred tokens; the cap exists
      * because a small local model at temperature 0 otherwise loops on it until its context shifts
