@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[07d7d8771b93c7b](https://github.com/openfilz/openfilz-core/commit/07d7d8771b93c7b) maven-release-bot[bot] *2026-09-16 20:17:30*
+[51abbdeb5cf3c49](https://github.com/openfilz/openfilz-core/commit/51abbdeb5cf3c49) maven-release-bot[bot] *2026-09-17 00:23:46*
 
 
-## v1.3.20
+## v1.3.21
 ### No issue
 
-**[maven-release-plugin] prepare release v1.3.20**
+**[maven-release-plugin] prepare release v1.3.21**
 
 
-[ebae7b5f5e31f4d](https://github.com/openfilz/openfilz-core/commit/ebae7b5f5e31f4d) maven-release-bot[bot] *2026-09-16 20:17:27*
+[bf2c14d8ac3ae51](https://github.com/openfilz/openfilz-core/commit/bf2c14d8ac3ae51) maven-release-bot[bot] *2026-09-17 00:23:43*
 
-**Merge pull request #247 from openfilz/develop**
+**Merge pull request #250 from openfilz/develop**
 
- * Implement smart filing features, Inbox, search facets, and cloud provider
+ * release: WORM composable, registre d&#x27;intégrité append-only, rétention COMPLIANCE
 
-[ec2bcdafa387995](https://github.com/openfilz/openfilz-core/commit/ec2bcdafa387995) Yann Demel *2026-09-16 20:13:14*
+[0da2dbf9115776e](https://github.com/openfilz/openfilz-core/commit/0da2dbf9115776e) Yann Demel *2026-09-17 00:19:57*
 
 
