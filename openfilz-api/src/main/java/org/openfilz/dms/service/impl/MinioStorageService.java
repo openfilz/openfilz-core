@@ -4,6 +4,8 @@ import io.minio.*;
 import io.minio.errors.ErrorResponseException;
 import io.minio.messages.Item;
 import io.minio.messages.ObjectLockConfiguration;
+import io.minio.messages.Retention;
+import io.minio.messages.RetentionMode;
 import io.minio.messages.VersioningConfiguration;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -32,9 +34,12 @@ import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.time.Period;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.springframework.http.MediaType.APPLICATION_OCTET_STREAM_VALUE;
@@ -55,12 +60,32 @@ public class MinioStorageService implements StorageService {
     @Value("${openfilz.security.worm-mode:false}")
     private Boolean wormMode;
 
+    /**
+     * How long each object written under WORM stays immutable
+     * ({@code openfilz.security.worm-retention}, ISO-8601, e.g. {@code P10Y}). Mandatory when WORM
+     * is on — see {@link #init()}.
+     */
+    @Value("${openfilz.security.worm-retention:#{null}}")
+    private Optional<Period> wormRetention = Optional.empty();
+
     public MinioStorageService(MinioProperties minioProperties) {
         this.minioProperties = minioProperties;
     }
 
     @PostConstruct
     public void init() {
+        // Runs before the client is built: a misconfigured WORM deployment must fail the boot
+        // rather than start and silently write objects that nothing protects.
+        if (Boolean.TRUE.equals(wormMode)) {
+            Period retention = wormRetention == null ? null : wormRetention.orElse(null);
+            if (retention == null || retention.isZero() || retention.isNegative()) {
+                throw new IllegalStateException("Bad configuration : when openfilz.security.worm-mode is true "
+                        + "and storage.type is minio, openfilz.security.worm-retention must be a positive "
+                        + "ISO-8601 period (e.g. P10Y). Without it the objects would carry no object-lock at "
+                        + "all, leaving only the API to refuse writes.");
+            }
+            log.info("WORM storage: every object is written with COMPLIANCE retention for {}", retention);
+        }
         this.minioClient = MinioClient.builder()
                 .endpoint(minioProperties.getEndpoint())
                 .credentials(minioProperties.getAccessKey(), minioProperties.getSecretKey())
@@ -103,6 +128,29 @@ public class MinioStorageService implements StorageService {
             log.error("Error ensuring bucket '{}' exists", minioProperties.getBucketName(), e);
             System.exit(-1);
         }
+    }
+
+    /**
+     * The object-lock to stamp on a write, or {@code null} outside WORM.
+     * <p>
+     * {@code COMPLIANCE} rather than {@code GOVERNANCE}: governance mode can be bypassed by a
+     * principal holding {@code s3:BypassGovernanceRetention}, which is precisely the privileged
+     * insider a write-once archive exists to defend against. Compliance mode binds the storage
+     * provider itself until the date passes.
+     * <p>
+     * Deliberately NOT a legal hold. A legal hold never expires, so setting one on every write —
+     * the previous behaviour — made end-of-retention disposal impossible. The legal hold stays
+     * available for what it is meant for: an explicit, per-document evidentiary freeze.
+     */
+    Retention objectLock() {
+        if (!Boolean.TRUE.equals(wormMode)) {
+            return null;
+        }
+        Period retention = wormRetention == null ? null : wormRetention.orElse(null);
+        if (retention == null) {
+            return null;
+        }
+        return new Retention(RetentionMode.COMPLIANCE, ZonedDateTime.now().plus(retention));
     }
 
     @Override
@@ -159,7 +207,7 @@ public class MinioStorageService implements StorageService {
                     PutObjectArgs args = PutObjectArgs.builder()
                             .bucket(minioProperties.getBucketName())
                             .object(objectName)
-                            .legalHold(wormMode)
+                            .retention(objectLock())
                             .stream(pipedInputStream, -1, PutObjectArgs.MIN_MULTIPART_SIZE)
                             .contentType(contentType != null ? contentType : APPLICATION_OCTET_STREAM_VALUE)
                             .build();
@@ -228,7 +276,7 @@ public class MinioStorageService implements StorageService {
                         CopyObjectArgs.builder()
                                 .bucket(minioProperties.getBucketName())
                                 .object(destinationObjectName)
-                                .legalHold(wormMode)
+                                .retention(objectLock())
                                 .source(CopySource.builder().bucket(minioProperties.getBucketName()).object(sourceStoragePath).build())
                                 .build());
                 log.info("File copied from {} to {} in MinIO bucket '{}'", sourceStoragePath, destinationObjectName, minioProperties.getBucketName());
@@ -429,7 +477,7 @@ public class MinioStorageService implements StorageService {
                         minioClient.putObject(PutObjectArgs.builder()
                                 .bucket(minioProperties.getBucketName())
                                 .object(destPath)
-                                .legalHold(wormMode)
+                                .retention(objectLock())
                                 .stream(emptyStream, 0, -1)
                                 .build());
                     }
@@ -566,7 +614,7 @@ public class MinioStorageService implements StorageService {
                         CopyObjectArgs.builder()
                                 .bucket(minioProperties.getBucketName())
                                 .object(storagePath)
-                                .legalHold(wormMode)
+                                .retention(objectLock())
                                 .source(CopySource.builder()
                                         .bucket(minioProperties.getBucketName())
                                         .object(storagePath)

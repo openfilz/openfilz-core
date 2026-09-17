@@ -73,6 +73,8 @@ services:
 
       # Security configuration (no-auth by default for development)
       OPENFILZ_SECURITY_NO_AUTH: ${OPENFILZ_SECURITY_NO_AUTH:-true}
+      OPENFILZ_SECURITY_WORM_MODE: ${OPENFILZ_SECURITY_WORM_MODE:-false}
+      OPENFILZ_SECURITY_WORM_RETENTION: ${OPENFILZ_SECURITY_WORM_RETENTION:-}
 
       # CORS configuration
       OPENFILZ_SECURITY_CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:4200,http://localhost:80}

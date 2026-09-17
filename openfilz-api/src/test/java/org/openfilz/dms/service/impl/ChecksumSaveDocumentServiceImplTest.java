@@ -45,6 +45,7 @@ class ChecksumSaveDocumentServiceImplTest {
     @Mock private TransactionalOperator tx;
     @Mock private QuotaProperties quotaProperties;
     @Mock private ChecksumService checksumService;
+    @Mock private org.openfilz.dms.service.DocumentIntegrityService integrityService;
 
     private ChecksumSaveDocumentServiceImpl service;
 
@@ -52,7 +53,8 @@ class ChecksumSaveDocumentServiceImplTest {
     void setUp() {
         service = new ChecksumSaveDocumentServiceImpl(
                 storageService, objectMapper, auditService, jsonUtils,
-                documentDAO, metadataPostProcessor, tx, quotaProperties, checksumService);
+                documentDAO, metadataPostProcessor, tx, quotaProperties, checksumService,
+                integrityService);
     }
 
     @Test
