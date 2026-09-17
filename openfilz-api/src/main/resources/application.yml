@@ -358,6 +358,10 @@ openfilz:
       local-concurrency: ${OPENFILZ_AI_INSIGHTS_LOCAL_CONCURRENCY:8}
       daily-limit: ${OPENFILZ_AI_INSIGHTS_DAILY_LIMIT:2000}
       categories: ${OPENFILZ_AI_INSIGHTS_CATEGORIES:invoice,quote,contract,report,letter,cv,presentation,spreadsheet,form,id-document,receipt,minutes,specification,manual,other}
+      # category-labels:           # display names per language on top of the built-in ones; the web app shows the
+      #   "[purchase-order]":      # user's language, else English, else the key. Bracket keys holding a hyphen,
+      #     en: "Purchase order"   # else Spring's relaxed binding strips it.
+      #     fr: "Bon de commande"
       # Who names the category. llm: the chat model answers the whole insight (default). prototype:
       # the embedding model alone — one short description per category is embedded once and the
       # nearest one wins; no model call, category only (no summary, keywords or entities).

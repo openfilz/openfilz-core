@@ -1,5 +1,7 @@
 package org.openfilz.dms.service.insight;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -26,17 +28,30 @@ public interface CategoryTaxonomy {
      * @param description what a document of that kind looks like, in the languages the deployment
      *                    handles; empty when nobody described it
      * @param examples    typical file names or phrases; empty when none
+     * @param labels      display name per language ({@link CategoryLabels#LANGUAGES}), English the fallback;
+     *                    empty when nobody named the kind (it then shows as its key)
      */
-    record Category(String key, String description, List<String> examples) {
+    record Category(String key, String description, List<String> examples, Map<String, String> labels) {
 
         public Category {
             key = normalise(key);
             description = description == null ? "" : description.trim();
             examples = examples == null ? List.of() : List.copyOf(examples.stream().filter(e -> e != null && !e.isBlank()).toList());
+            labels = Collections.unmodifiableMap(CategoryLabels.normalise(labels));
+        }
+
+        /** A kind named by the built-in labels (none for a kind OpenFilz does not ship). */
+        public Category(String key, String description, List<String> examples) {
+            this(key, description, examples, CategoryLabels.builtIn(key));
         }
 
         public Category(String key, String description) {
             this(key, description, List.of());
+        }
+
+        /** The display name in {@code language}, else the English one, else the key. */
+        public String label(String language) {
+            return CategoryLabels.resolve(labels, language, key);
         }
     }
 
@@ -85,6 +100,16 @@ public interface CategoryTaxonomy {
     /** The keys of {@link #categories()}, in the same order. */
     default List<String> keys() {
         return categories().stream().map(Category::key).toList();
+    }
+
+    /**
+     * The display name of every enabled kind in {@code language} (English when the kind has no
+     * label in it, the key when it has none at all), in {@link #categories()} order.
+     */
+    default Map<String, String> labels(String language) {
+        Map<String, String> labels = new LinkedHashMap<>();
+        categories().forEach(category -> labels.put(category.key(), category.label(language)));
+        return labels;
     }
 
     /** The category a user or a model named, normalised like the stored value; empty when the taxonomy has no such kind. */

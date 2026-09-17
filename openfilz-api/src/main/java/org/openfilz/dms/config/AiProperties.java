@@ -344,6 +344,12 @@ public class AiProperties {
         private List<String> categories = new ArrayList<>(List.of(
                 "invoice", "quote", "contract", "report", "letter", "cv", "presentation", "spreadsheet",
                 "form", "id-document", "receipt", "minutes", "specification", "manual", "other"));
+        /**
+         * Display name per category and language ({@code category → language → label}), on top of the
+         * labels shipped for the built-in kinds — what the web app shows instead of the key. A kind with
+         * no label in the user's language shows its English label, and its key when it has none.
+         */
+        private Map<String, Map<String, String>> categoryLabels = new LinkedHashMap<>();
         /** Who names the category: the chat model, the prototype classifier, or the classifier first and the model when unsure. */
         private Classifier classifier = new Classifier();
 

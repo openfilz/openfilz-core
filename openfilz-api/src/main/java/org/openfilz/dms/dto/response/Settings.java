@@ -26,6 +26,12 @@ public record Settings(Integer emptyBinInterval, Integer fileQuotaMB, Integer us
                        boolean aiInsightsActive,
                        /** The closed category list of tier-2 insights (openfilz.ai.insights.categories) — the details panel offers it when a user corrects a document's kind. */
                        java.util.List<String> aiInsightsCategories,
+                       /**
+                        * The display name of each of {@code aiInsightsCategories} ({@code key → label}), in the
+                        * caller's language ({@code Accept-Language}, else the stored preference): the label in
+                        * that language, else the English one, else the key. Empty when insights are off.
+                        */
+                       java.util.Map<String, String> aiInsightsCategoryLabels,
                        /** True when smart filing on upload is on: the upload area shows the "Let OpenFilz choose the folder" switch. */
                        boolean aiAutoFileActive,
                        boolean signatureActive,
