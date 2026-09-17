@@ -47,6 +47,21 @@ class PropertiesCategoryTaxonomyTest {
     }
 
     @Test
+    @DisplayName("built-in kinds are named in every shipped language; a configured label adds to them; an unnamed kind shows its key")
+    void labels() {
+        List<Category> categories = PropertiesCategoryTaxonomy.build(List.of("invoice", "Purchase_Order", "payslip"), null,
+                Map.of("purchase-order", Map.of("EN", "Purchase order", "fr", "Bon de commande"),
+                        "invoice", Map.of("fr", "Facture fournisseur")));
+        CategoryTaxonomy taxonomy = () -> categories;
+
+        assertThat(taxonomy.labels("fr")).containsExactly(
+                Map.entry("invoice", "Facture fournisseur"), Map.entry("purchase-order", "Bon de commande"),
+                Map.entry("payslip", "payslip"), Map.entry(InsightResult.OTHER, "Autre"));
+        assertThat(taxonomy.labels("de")).containsEntry("invoice", "Rechnung").containsEntry("purchase-order", "Purchase order");
+        assertThat(taxonomy.find("invoice").orElseThrow().labels()).hasSize(CategoryLabels.LANGUAGES.size());
+    }
+
+    @Test
     @DisplayName("find() normalises what the user typed and answers empty for a kind the taxonomy has not")
     void findNormalises() {
         CategoryTaxonomy taxonomy = PropertiesCategoryTaxonomy.of(List.of("invoice", "id-document"), null);

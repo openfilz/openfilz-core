@@ -15,6 +15,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.graphql.client.ClientGraphQlResponse;
 import org.springframework.graphql.client.HttpGraphQlClient;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.http.codec.json.JacksonJsonEncoder;
@@ -64,6 +65,8 @@ class DocumentInsightsTier2IT extends TestContainersBaseConfig {
         registry.add("openfilz.ai.active", () -> true);
         registry.add("openfilz.ai.insights.active", () -> true);
         registry.add("openfilz.ai.insights.concurrency", () -> 2);
+        // A deployment label on top of the built-in ones (bracket key: the hyphen survives the binding)
+        registry.add("openfilz.ai.insights.category-labels[id-document].de", () -> "Personalausweis");
         registry.add("spring.ai.openai.api-key", () -> "test-dummy-key");
         registry.add("spring.ai.model.chat", () -> "none");
         registry.add("spring.ai.model.embedding", () -> "none");
@@ -101,6 +104,35 @@ class DocumentInsightsTier2IT extends TestContainersBaseConfig {
                 .exchange().expectStatus().isOk().expectBody(Settings.class).returnResult().getResponseBody();
         assertThat(settings).isNotNull();
         assertThat(settings.aiInsightsActive()).isTrue();
+    }
+
+    @Test
+    @DisplayName("the settings name every kind in the Accept-Language language, English when it is not supported, a deployment label winning")
+    void settingsLabelTheKindsInTheCallersLanguage() {
+        Map<String, String> french = categoryLabels("fr-FR,fr;q=0.9,en;q=0.8");
+        assertThat(french.keySet()).containsExactlyElementsOf(settingsFor(null).aiInsightsCategories());
+        assertThat(french).containsEntry("invoice", "Facture").containsEntry("id-document", "Pièce d’identité")
+                .containsEntry("other", "Autre");
+
+        assertThat(categoryLabels("de-CH, de;q=0.9")).containsEntry("id-document", "Personalausweis").containsEntry("invoice", "Rechnung");
+        assertThat(categoryLabels("ja-JP")).containsEntry("invoice", "Invoice").containsEntry("id-document", "ID document");
+        assertThat(settingsFor(null).aiInsightsCategoryLabels()).containsEntry("invoice", "Invoice");
+    }
+
+    private Map<String, String> categoryLabels(String acceptLanguage) {
+        return settingsFor(acceptLanguage).aiInsightsCategoryLabels();
+    }
+
+    private Settings settingsFor(String acceptLanguage) {
+        Settings settings = getWebTestClient().get().uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_SETTINGS)
+                .headers(headers -> {
+                    if (acceptLanguage != null) {
+                        headers.set(HttpHeaders.ACCEPT_LANGUAGE, acceptLanguage);
+                    }
+                })
+                .exchange().expectStatus().isOk().expectBody(Settings.class).returnResult().getResponseBody();
+        assertThat(settings).isNotNull();
+        return settings;
     }
 
     @Test
