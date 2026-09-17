@@ -9,7 +9,9 @@ import org.openfilz.dms.dto.response.Settings;
 import org.openfilz.dms.enums.SignatureAuthMethod;
 import org.openfilz.dms.service.SettingsService;
 import org.openfilz.dms.service.ai.UserChatClientResolver;
+import org.openfilz.dms.service.insight.CategoryLabels;
 import org.openfilz.dms.service.insight.CategoryTaxonomy;
+import org.openfilz.dms.service.insight.PropertiesCategoryTaxonomy;
 import org.openfilz.dms.service.signature.SignatureOtpSender;
 import org.openfilz.dms.service.signature.SignatureReminderSender;
 import org.springframework.beans.factory.ObjectProvider;
@@ -21,6 +23,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -167,7 +170,7 @@ public class SettingsServiceImpl implements SettingsService {
     }
 
     @Override
-    public Mono<Settings> getSettings() {
+    public Mono<Settings> getSettings(String... languages) {
         Integer emptyBinInterval = null;
         if(softDelete && recycleBinProperties.isEnabled()) {
             String autoCleanupInterval = recycleBinProperties.getAutoCleanupInterval();
@@ -185,6 +188,7 @@ public class SettingsServiceImpl implements SettingsService {
         }
        String chatUnavailable = chatUnavailableReason();
        boolean chatActive = Boolean.TRUE.equals(aiActive) && chatUnavailable == null;
+       boolean insightsActive = Boolean.TRUE.equals(aiActive) && Boolean.TRUE.equals(aiInsightsActive);
        return Mono.just(Settings.builder()
                .emptyBinInterval(emptyBinInterval)
                .fileQuotaMB(quotaProperties.getFileUpload())
@@ -197,9 +201,9 @@ public class SettingsServiceImpl implements SettingsService {
                .aiChatUnavailableReason(chatUnavailable)
                // BYOK only ever overrides the *chat* model, so it follows the chat availability too.
                .aiUserSettingsEnabled(chatActive && Boolean.TRUE.equals(aiUserSettingsEnabled))
-               .aiInsightsActive(Boolean.TRUE.equals(aiActive) && Boolean.TRUE.equals(aiInsightsActive))
-               .aiInsightsCategories(Boolean.TRUE.equals(aiActive) && Boolean.TRUE.equals(aiInsightsActive)
-                       ? insightCategories() : List.of())
+               .aiInsightsActive(insightsActive)
+               .aiInsightsCategories(insightsActive ? insightCategories() : List.of())
+               .aiInsightsCategoryLabels(insightsActive ? insightCategoryLabels(CategoryLabels.resolveLanguage(languages)) : Map.of())
                .aiAutoFileActive(Boolean.TRUE.equals(aiActive) && Boolean.TRUE.equals(aiAutoFileActive))
                .signatureActive(Boolean.TRUE.equals(signatureActive))
                .workflowsActive(Boolean.TRUE.equals(workflowsActive))
@@ -254,8 +258,18 @@ public class SettingsServiceImpl implements SettingsService {
      * ({@code other} last), the raw property list when no taxonomy bean is wired (plain construction).
      */
     protected List<String> insightCategories() {
+        return taxonomy().keys();
+    }
+
+    /** The display name of each of {@link #insightCategories()} in {@code language} (else English, else the key). */
+    protected Map<String, String> insightCategoryLabels(String language) {
+        return taxonomy().labels(language);
+    }
+
+    /** The wired taxonomy; the properties read directly when none is (plain construction in tests). */
+    private CategoryTaxonomy taxonomy() {
         CategoryTaxonomy taxonomy = categoryTaxonomyProvider == null ? null : categoryTaxonomyProvider.getIfAvailable();
-        return taxonomy != null ? taxonomy.keys() : List.copyOf(aiProperties.getInsights().getCategories());
+        return taxonomy != null ? taxonomy : new PropertiesCategoryTaxonomy(aiProperties);
     }
 
     /**

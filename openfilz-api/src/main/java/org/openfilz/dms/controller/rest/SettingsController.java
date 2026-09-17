@@ -8,7 +8,9 @@ import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.response.Settings;
 import org.openfilz.dms.service.SettingsService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
@@ -34,11 +36,12 @@ public class SettingsController {
     @GetMapping
     @Operation(
             summary = "Get user's settings",
-            description = "Retrieve user's settings : global settings and user's preferences"
+            description = "Retrieve user's settings : global settings and user's preferences. The category labels "
+                    + "(aiInsightsCategoryLabels) are in the Accept-Language language, English when it is not supported."
     )
-    public Mono<Settings> getSettings() {
+    public Mono<Settings> getSettings(@RequestHeader(value = HttpHeaders.ACCEPT_LANGUAGE, required = false) String acceptLanguage) {
         log.info("Fetching user settings");
-        return settingsService.getSettings()
+        return settingsService.getSettings(acceptLanguage)
                 .doOnSuccess(stats -> log.debug("Successfully retrieved dashboard statistics"))
                 .doOnError(error -> log.error("Error retrieving dashboard statistics", error));
     }
