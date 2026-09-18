@@ -6,7 +6,15 @@ import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.response.DocumentInfo;
 import org.openfilz.dms.dto.response.DocumentVersionInfo;
 import org.openfilz.dms.dto.response.RestoreVersionResponse;
+import org.openfilz.dms.dto.request.CreateFolderRequest;
+import org.openfilz.dms.dto.request.MoveRequest;
+import org.openfilz.dms.dto.response.FolderResponse;
 import org.openfilz.dms.dto.response.UploadResponse;
+import org.openfilz.dms.entity.Document;
+import org.openfilz.dms.repository.DocumentRepository;
+import org.openfilz.dms.service.SaveDocumentService;
+import org.openfilz.dms.utils.ContentInfo;
+import org.openfilz.dms.utils.PathFilePart;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.io.ClassPathResource;
@@ -23,6 +31,9 @@ import org.testcontainers.utility.DockerImageName;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 
@@ -40,8 +51,14 @@ public class DocumentVersioningChecksumIT extends TestContainersBaseConfig {
     @Container
     static MinIOContainer minio = new MinIOContainer(DockerImageName.parse("quay.io/minio/minio:latest").asCompatibleSubstituteFor("minio/minio"));
 
-    public DocumentVersioningChecksumIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
+    private final DocumentRepository documentRepository;
+    private final SaveDocumentService saveDocumentService;
+
+    public DocumentVersioningChecksumIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder,
+                                        DocumentRepository documentRepository, SaveDocumentService saveDocumentService) {
         super(webTestClient, customJacksonJsonEncoder);
+        this.documentRepository = documentRepository;
+        this.saveDocumentService = saveDocumentService;
     }
 
     @DynamicPropertySource
@@ -95,6 +112,70 @@ public class DocumentVersioningChecksumIT extends TestContainersBaseConfig {
 
         Assertions.assertEquals(originalChecksum, getChecksum(id),
                 "Stored checksum must equal the restored version's checksum");
+    }
+
+    /**
+     * A content replacement loads the document, uploads to storage, then saves. A move committed
+     * in between (smart filing moving a fresh upload while the OCR service replaces its content)
+     * used to be reverted by that save, which wrote back the whole row as it was when loaded.
+     */
+    @Test
+    void whenMoveLandsDuringReplace_thenReplaceKeepsTheMove() throws IOException {
+        UUID source = createFolder("replace-race-source-" + UUID.randomUUID());
+        UUID target = createFolder("replace-race-target-" + UUID.randomUUID());
+        MultipartBodyBuilder upload = newFileBuilder();
+        upload.part("parentFolderId", source.toString());
+        UUID id = uploadDocument(upload).id();
+        String originalChecksum = getChecksum(id);
+
+        // The replace's snapshot, taken before the move. Read from the DB: a snapshot that is
+        // stale on purpose has no API surface — it is the race itself.
+        Document loadedByReplace = documentRepository.findById(id).block();
+        Assertions.assertNotNull(loadedByReplace);
+
+        getWebTestClient().post()
+                .uri(RestApiVersion.API_PREFIX + "/files/move")
+                .body(BodyInserters.fromValue(new MoveRequest(List.of(id), target, false)))
+                .exchange()
+                .expectStatus().isOk();
+
+        Path newContent = Files.createTempFile("replace-race", ".txt");
+        try {
+            Files.writeString(newContent, "content produced while the document was being moved");
+            saveDocumentService.saveAndReplaceDocument(
+                    new PathFilePart("file", loadedByReplace.getName(), newContent),
+                    new ContentInfo(Files.size(newContent), null),
+                    loadedByReplace, loadedByReplace.getStoragePath()).block();
+        } finally {
+            Files.deleteIfExists(newContent);
+        }
+
+        DocumentInfo info = getInfo(id);
+        Assertions.assertEquals(target, info.parentId(), "the replace must not undo the move");
+        Assertions.assertNotEquals(originalChecksum, info.metadata().get("sha256"),
+                "the replace itself must still land (new checksum)");
+    }
+
+    private UUID createFolder(String name) {
+        FolderResponse folder = getWebTestClient().post()
+                .uri(RestApiVersion.API_PREFIX + "/folders")
+                .body(BodyInserters.fromValue(new CreateFolderRequest(name, null)))
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(FolderResponse.class)
+                .returnResult().getResponseBody();
+        return folder.id();
+    }
+
+    private DocumentInfo getInfo(UUID id) {
+        return getWebTestClient().get().uri(uri ->
+                        uri.path(RestApiVersion.API_PREFIX + "/documents/{id}/info")
+                                .queryParam("withMetadata", true)
+                                .build(id))
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(DocumentInfo.class)
+                .returnResult().getResponseBody();
     }
 
     private String getChecksum(UUID id) {
