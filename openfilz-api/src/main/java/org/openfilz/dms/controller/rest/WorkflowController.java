@@ -189,8 +189,20 @@ public class WorkflowController implements UserInfoService {
     private Mono<WorkflowService.Actor> actor(String acceptLanguage) {
         requireActive();
         return getAuthenticationMono()
-                .map(auth -> new WorkflowService.Actor(emailOf(auth), roles.of(auth), auth, acceptLanguage))
+                .map(auth -> new WorkflowService.Actor(emailOf(auth), roles.of(auth), auth, primaryLanguage(acceptLanguage)))
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not authenticated")));
+    }
+
+    /**
+     * The first language tag of an {@code Accept-Language} header ("fr-FR,fr;q=0.9,en;q=0.8" → "fr-FR").
+     * A browser sends the whole list, which overflowed {@code workflow_instance.locale} (8 chars) and
+     * failed every start from the web app; the mails only ever read the primary language anyway.
+     */
+    static String primaryLanguage(String acceptLanguage) {
+        if (acceptLanguage == null || acceptLanguage.isBlank()) return null;
+        String tag = acceptLanguage.split("[,;]")[0].trim();
+        if (tag.isEmpty() || "*".equals(tag)) return null;
+        return tag.length() <= 8 ? tag : tag.substring(0, 8);
     }
 
     private String emailOf(org.springframework.security.core.Authentication auth) {
