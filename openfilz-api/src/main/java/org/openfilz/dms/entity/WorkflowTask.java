@@ -67,6 +67,10 @@ public class WorkflowTask implements Persistable<UUID> {
     @Column("comment")
     private String comment;
 
+    /** Set on the tasks of one parallel review round (one task per reviewer); null otherwise. */
+    @Column("review_group")
+    private UUID reviewGroup;
+
     @Override
     public boolean isNew() {
         return isNew;

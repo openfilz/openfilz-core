@@ -19,13 +19,13 @@ designer, the monitor and *My tasks* are the same in both editions.
 |---|---|
 | **Workflow definition** | A named, versioned list of **statuses** (`START`, `STEP`, `END`), each with its assignees, its outgoing transitions, an optional due delay and optional *on-enter* actions. Stored as one JSON document (`spec`, see [§3](#3-the-definition-spec-json)); edited in the *Designer*. Deactivating a definition hides it from the *Start workflow* dialog without touching running instances. |
 | **Instance** | One document going through one definition. `RUNNING → COMPLETED \| CANCELLED`. The definition's spec is **snapshotted** at start, so editing a definition never breaks what is already running. A document has **at most one running instance** (`409` otherwise). |
-| **Task** | "The document *X* is in status *S* and waits for one of *these people*". Created every time an instance enters a status that has assignees; closed when one candidate picks a transition. Candidates are e-mail addresses and/or a realm role (any user holding the role sees the task). Any candidate may act — first come, first served. |
+| **Task** | "The document *X* is in status *S* and waits for one of *these people*". Created every time an instance enters a status that has assignees; closed when one candidate picks a transition. Candidates are e-mail addresses and/or a realm role (any user holding the role sees the task). Any candidate may act — first come, first served — except on a **parallel review** status, which gives each reviewer a task of their own ([§3](#parallel-review)). |
 | **Transition** | A labelled button (`Approve`, `Reject`, `Send back`, …) that moves the instance to a target status. A transition may **require a comment** (typical for *Reject*). |
 | **Decision comment** | The optional/required note the actor leaves when taking a transition. Stored on the history entry, shown in the timeline and to the next assignee. |
 | **Actions (on enter)** | What OpenFilz does when the document reaches a status: `MOVE_TO_FOLDER`, `SET_METADATA`, `NOTIFY`. They run as the actor who took the transition (audit attribution) and **never block** the transition: a failed action is recorded in the history (`ACTION_FAILED`) and surfaced in the monitor. |
 | **Trigger folders** | Optional: a definition may name folders in which every new upload starts the workflow automatically (hot folder). Definitions with a `CHOSEN_AT_START` assignee cannot be triggered that way (nobody is there to choose). |
 | **Due date & reminders** | A status may carry `dueInDays`. The task gets a `dueAt`; the hourly sweeper mails an overdue reminder once, and the monitor / *My tasks* flag overdue tasks. |
-| **History** | Append-only trail per instance (`STARTED`, `TRANSITIONED`, `ACTION_APPLIED`, `ACTION_FAILED`, `REASSIGNED`, `REMINDED`, `COMPLETED`, `CANCELLED`), plus `WORKFLOW_*` entries in the tamper-evident audit log. |
+| **History** | Append-only trail per instance (`STARTED`, `TRANSITIONED`, `REVIEWED` (a parallel-review vote), `ACTION_APPLIED`, `ACTION_FAILED`, `REASSIGNED`, `REMINDED`, `COMPLETED`, `CANCELLED`), plus `WORKFLOW_*` entries in the tamper-evident audit log. |
 
 ---
 
@@ -97,10 +97,46 @@ approval*. The approver finds it under **Workflows → My tasks** (and in their 
 | `transitions[]` | `key` unique inside the state, `label` ≤ 60 chars, `to` must exist, `style` ∈ `primary \| success \| danger \| neutral`, `requireComment` default `false`. |
 | `onEnter[]` | `MOVE_TO_FOLDER {folderId}`, `SET_METADATA {entries: {k: v}}` (≤ 20 keys, keys must not start with `_`), `NOTIFY {emails}`. |
 | `dueInDays` | 1..365. |
+| `review` | Optional, `STEP` only — makes the status a **parallel review** (below): `rule` ∈ `ALL \| FIRST_REJECTION \| QUORUM`, `approveTransition` = the key of one of the status' transitions, `quorum` 1..20 for `QUORUM` (≤ the number of `emails` for `USERS`). Assignees must be `USERS` or `CHOSEN_AT_START`. Codes: `REVIEW_NOT_ON_STEP`, `REVIEW_NEEDS_PEOPLE`, `BAD_REVIEW_RULE`, `REVIEW_NO_APPROVE`, `BAD_QUORUM`, `QUORUM_TOO_HIGH`. |
+
+### Parallel review
+
+A plain status waits for **one** decision: every candidate sees the task, the first one to act
+closes it. A status with a `review` block waits for **each reviewer**: entering it creates one
+task per reviewer (their only candidate is themselves), so each one votes with one of the
+status' transitions and leaves their own comment, and everyone involved sees the others' votes.
+
+```jsonc
+{
+  "key": "in_review", "label": "In review", "kind": "STEP",
+  "assignees": { "type": "CHOSEN_AT_START", "label": "Reviewers" },
+  "review": { "rule": "ALL", "approveTransition": "approve" },
+  "transitions": [
+    { "key": "approve", "label": "Approve",         "to": "approved", "style": "success" },
+    { "key": "changes", "label": "Request changes", "to": "draft",    "style": "neutral", "requireComment": true }
+  ]
+}
+```
+
+`approveTransition` is the approval; every other transition is a rejection of some kind. The rule
+turns the votes into the one transition the document takes (`WorkflowReviewDecider`):
+
+| `rule` | Designer label | Outcome |
+|---|---|---|
+| `ALL` | *Everyone reviews* | Waits for every reviewer. Unanimous approval → approve; otherwise the rejection voted. With the approval as the only transition it simply collects everyone's comments. |
+| `FIRST_REJECTION` | *First rejection decides* | The first vote that is not the approval moves the document at once; approval needs everyone. |
+| `QUORUM` | *N approvals are enough* | `quorum` approvals → approve at once; as soon as that many approvals can no longer be reached → the rejection voted. |
+
+When several kinds of rejection were voted, the one listed **first on the status** wins, so the
+designer's order decides (e.g. *Reject* above *Request changes*). Once decided, the reviews still
+open are closed as `CANCELLED`, a `TRANSITIONED` entry records the outcome (`details`: `review`,
+`approvals`, `votes`, `reviewers`; actor = the last voter) and the reviewers' comments are handed
+to whoever acts next as the previous comment. A document sent back to the same status starts a
+**new round**: earlier votes no longer count.
 
 Definitions also carry `name` (unique, ≤ 100), `description`, `active`, `triggerFolderIds` and
 the bookkeeping columns. The web *Designer* offers templates (*Simple approval*, *Review then
-archive*, *Two-step approval*) that produce this JSON — nobody has to write it by hand.
+archive*, *Two-step approval*, *Parallel review*) that produce this JSON — nobody has to write it by hand.
 
 ---
 
@@ -122,11 +158,14 @@ archive*, *Two-step approval*) that produce this JSON — nobody has to write it
    without a comment is `400`. The task is closed, a `TRANSITIONED` history entry (with the
    comment) is written, the `WorkflowCommentBridge` seam is told, and step 2 repeats for the
    target state. Everything up to the target state's task is one transaction; notifications
-   and actions run after it.
+   and actions run after it. On a parallel review the task is one reviewer's vote: it is closed,
+   a `REVIEWED` entry (+ `WORKFLOW_REVIEWED` audit) records it, and the document moves only once
+   the rule decides. Completions lock the instance row, so two reviewers voting at the same
+   moment are serialised and the last vote always sees all the others.
 4. **Reassign** — `POST /workflows/tasks/{id}/reassign {emails}` by the initiator or a current
    candidate (audit + `REASSIGNED`).
 5. **Cancel** — `POST /workflows/instances/{id}/cancel` by the initiator (or anyone
-   `WorkflowAccessPolicy.canManage` allows). Open task closed as `CANCELLED`.
+   `WorkflowAccessPolicy.canManage` allows). Open tasks (all of a review round) closed as `CANCELLED`.
 6. **Sweeper** — `openfilz.workflows.sweep.cron` (hourly): open tasks past `dueAt` and not yet
    reminded get one reminder (`REMINDED`, `remindedAt`).
 
@@ -143,7 +182,7 @@ first, so the trigger sees the final folder.
 |---|---|
 | `workflow_definition` | `id`, `name` (unique, case-insensitive), `description`, `active`, `spec JSONB`, `trigger_folder_ids JSONB`, `version`, `created_by`, `created_at`, `updated_at` |
 | `workflow_instance` | `id`, `definition_id`, `definition_name`, `definition_version`, `spec JSONB` (snapshot), `document_id`, `document_name`, `status` (`RUNNING\|COMPLETED\|CANCELLED`), `current_state_key`, `current_state_label`, `started_by`, `assignments JSONB`, `locale`, `started_at`, `updated_at`, `completed_at`. Partial unique index on `document_id WHERE status = 'RUNNING'`. |
-| `workflow_task` | `id`, `instance_id`, `state_key`, `state_label`, `candidate_role`, `status` (`OPEN\|DONE\|CANCELLED`), `due_at`, `reminded_at`, `created_at`, `completed_at`, `completed_by`, `transition_key`, `comment` |
+| `workflow_task` | `id`, `instance_id`, `state_key`, `state_label`, `candidate_role`, `status` (`OPEN\|DONE\|CANCELLED`), `due_at`, `reminded_at`, `created_at`, `completed_at`, `completed_by`, `transition_key`, `comment`, `review_group` (`V1_14`: shared by the tasks of one parallel review round, null otherwise) |
 | `workflow_task_candidate` | `task_id`, `email` (lower-cased) — one row per candidate, indexed on `email` for *My tasks* |
 | `workflow_event` | `id`, `instance_id`, `event_type`, `from_state`, `to_state`, `transition_key`, `actor`, `comment`, `details JSONB`, `created_at` |
 
@@ -182,7 +221,7 @@ candidate** (`READER` is enough — an approver does not have to be a contributo
 ### Tasks
 | Method | Path | Notes |
 |---|---|---|
-| `GET` | `/tasks/mine` | Open tasks I can act on (e-mail or role), oldest first, with the document, the instance, the available transitions and the previous decision comment. |
+| `GET` | `/tasks/mine` | Open tasks I can act on (e-mail or role), oldest first, with the document, the instance, the available transitions and the previous decision comment. A parallel-review task also carries `review` = the round's progress (`rule`, `quorum`, `approveTransition`, `total`, `approvals`, `votes[] {reviewer, transitionKey, comment, at}`, `pending[]`); an instance's `currentTask` during a review is the caller's own review when they have one. |
 | `GET` | `/tasks/mine/count` | `{count, overdue}` — the sidebar badge. |
 | `POST` | `/tasks/{id}/complete` | `{transitionKey, comment?}` → the updated instance. `403` not a candidate, `409` already done, `400` comment required. |
 | `POST` | `/tasks/{id}/reassign` | `{emails}` |
@@ -258,8 +297,7 @@ Also on the EE side: a user/team picker in the designer and the start dialog (th
 e-mails), webhook events on every transition, and later SLA escalation / delegation.
 
 Follow-ups not in this version: AI/MCP tools (`startWorkflow`, `listMyTasks`, `completeTask`),
-parallel approvals (N of M), conditions on metadata, and per-folder default workflows in the
-upload dialog.
+conditions on metadata, and per-folder default workflows in the upload dialog.
 
 ---
 

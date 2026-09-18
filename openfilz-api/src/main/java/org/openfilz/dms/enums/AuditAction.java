@@ -41,6 +41,7 @@ public enum AuditAction {
     // Workflows (statuses + transitions + tasks) — see docs/workflows.md
     WORKFLOW_STARTED,
     WORKFLOW_TRANSITIONED,
+    WORKFLOW_REVIEWED,
     WORKFLOW_COMPLETED,
     WORKFLOW_CANCELLED,
     WORKFLOW_TASK_REASSIGNED,

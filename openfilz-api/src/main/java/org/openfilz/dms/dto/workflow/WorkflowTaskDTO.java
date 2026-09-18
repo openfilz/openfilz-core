@@ -35,5 +35,7 @@ public record WorkflowTaskDTO(UUID id,
                               String previousComment,
                               String previousActor,
                               /** True when the caller is one of the candidates (by e-mail or role). */
-                              boolean mine) {
+                              boolean mine,
+                              /** The round this task votes in when its status is a parallel review; null otherwise. */
+                              WorkflowReviewProgressDTO review) {
 }
