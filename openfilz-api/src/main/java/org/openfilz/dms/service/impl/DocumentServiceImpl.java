@@ -459,7 +459,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
             documentToMove.setParentId(request.targetFolderId());
             documentToMove.setUpdatedAt(OffsetDateTime.now());
             documentToMove.setUpdatedBy(username);
-            return documentDAO.update(documentToMove);
+            return documentDAO.updateParent(documentToMove);
         });
     }
 

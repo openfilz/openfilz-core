@@ -4,11 +4,13 @@ import org.junit.jupiter.api.Test;
 import org.openfilz.dms.dto.workflow.WorkflowAction;
 import org.openfilz.dms.dto.workflow.WorkflowAssignment;
 import org.openfilz.dms.dto.workflow.WorkflowProblem;
+import org.openfilz.dms.dto.workflow.WorkflowReview;
 import org.openfilz.dms.dto.workflow.WorkflowSpec;
 import org.openfilz.dms.dto.workflow.WorkflowState;
 import org.openfilz.dms.dto.workflow.WorkflowTransition;
 import org.openfilz.dms.enums.WorkflowActionType;
 import org.openfilz.dms.enums.WorkflowAssigneeType;
+import org.openfilz.dms.enums.WorkflowReviewRule;
 import org.openfilz.dms.enums.WorkflowStateKind;
 import org.openfilz.dms.enums.WorkflowTransitionStyle;
 
@@ -112,6 +114,42 @@ class WorkflowSpecValidatorTest {
         assertThat(WorkflowSpecValidator.validate(spec, 30, List.of())).isEmpty();
         assertThat(WorkflowSpecValidator.validate(spec, 30, List.of(UUID.randomUUID())).stream().map(WorkflowProblem::code))
                 .contains("TRIGGER_NEEDS_FIXED_ASSIGNEES");
+    }
+
+    private static WorkflowSpec review(WorkflowStateKind kind, WorkflowAssignment reviewers, WorkflowReview review) {
+        return new WorkflowSpec(List.of(
+                state("s", WorkflowStateKind.START, null, List.of(to("go", "r"))),
+                new WorkflowState("r", "r", kind, null, reviewers, null, List.of(to("approve", "e"), to("changes", "s")), List.of(), review),
+                state("e", WorkflowStateKind.END, null, List.of())));
+    }
+
+    @Test
+    void a_parallel_review_needs_named_reviewers_a_rule_and_an_approval() {
+        WorkflowAssignment people = new WorkflowAssignment(WorkflowAssigneeType.USERS, List.of("a@x.com", "b@x.com"), null, null);
+        WorkflowAssignment chosen = new WorkflowAssignment(WorkflowAssigneeType.CHOSEN_AT_START, null, null, "Reviewers");
+        assertThat(codes(review(WorkflowStateKind.STEP, people, new WorkflowReview(WorkflowReviewRule.ALL, null, "approve")))).isEmpty();
+        assertThat(codes(review(WorkflowStateKind.STEP, chosen, new WorkflowReview(WorkflowReviewRule.QUORUM, 5, "approve")))).isEmpty();
+
+        assertThat(codes(review(WorkflowStateKind.STEP, WorkflowAssignment.initiator(), new WorkflowReview(WorkflowReviewRule.ALL, null, "approve"))))
+                .containsExactly("REVIEW_NEEDS_PEOPLE");
+        assertThat(codes(review(WorkflowStateKind.STEP, new WorkflowAssignment(WorkflowAssigneeType.ROLE, null, "CONTRIBUTOR", null),
+                new WorkflowReview(WorkflowReviewRule.ALL, null, "approve")))).containsExactly("REVIEW_NEEDS_PEOPLE");
+        assertThat(codes(review(WorkflowStateKind.STEP, people, new WorkflowReview(null, null, "nope"))))
+                .containsExactlyInAnyOrder("BAD_REVIEW_RULE", "REVIEW_NO_APPROVE");
+        assertThat(codes(review(WorkflowStateKind.STEP, people, new WorkflowReview(WorkflowReviewRule.QUORUM, null, "approve"))))
+                .containsExactly("BAD_QUORUM");
+        assertThat(codes(review(WorkflowStateKind.STEP, chosen, new WorkflowReview(WorkflowReviewRule.QUORUM, 21, "approve"))))
+                .containsExactly("BAD_QUORUM");
+        assertThat(codes(review(WorkflowStateKind.STEP, people, new WorkflowReview(WorkflowReviewRule.QUORUM, 3, "approve"))))
+                .containsExactly("QUORUM_TOO_HIGH");
+
+        WorkflowSpec onStart = new WorkflowSpec(List.of(
+                new WorkflowState("s", "s", WorkflowStateKind.START, null, people, null, List.of(to("go", "e")), List.of(),
+                        new WorkflowReview(WorkflowReviewRule.ALL, null, "go")),
+                state("e", WorkflowStateKind.END, null, List.of())));
+        List<WorkflowProblem> problems = WorkflowSpecValidator.validate(onStart, 30, List.of());
+        assertThat(problems).extracting(WorkflowProblem::code).containsExactly("REVIEW_NOT_ON_STEP");
+        assertThat(problems.getFirst().path()).isEqualTo("states[0].review");
     }
 
     @Test

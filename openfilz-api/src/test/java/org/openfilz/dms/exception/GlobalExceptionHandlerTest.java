@@ -1,5 +1,7 @@
 package org.openfilz.dms.exception;
 
+import io.modelcontextprotocol.spec.McpError;
+import io.modelcontextprotocol.spec.McpSchema;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
@@ -9,6 +11,7 @@ import org.springframework.web.bind.support.WebExchangeBindException;
 import reactor.test.StepVerifier;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -185,6 +188,25 @@ class GlobalExceptionHandlerTest {
                     assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
                     assertEquals(400, response.getBody().status());
                     assertTrue(response.getBody().message().contains("Virus detected"));
+                    return true;
+                })
+                .verifyComplete();
+    }
+
+    @Test
+    void handleMcpError_unknownMethod_returnsJsonRpcError() {
+        McpError ex = McpError.builder(McpSchema.ErrorCodes.METHOD_NOT_FOUND)
+                .message("Missing handler for request type: server/discover").build();
+
+        StepVerifier.create(handler.handleMcpError(ex))
+                .expectNextMatches(response -> {
+                    assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+                    Map<String, Object> body = response.getBody();
+                    assertEquals("2.0", body.get("jsonrpc"));
+                    assertTrue(body.containsKey("id"));
+                    assertEquals(Map.of("code", McpSchema.ErrorCodes.METHOD_NOT_FOUND,
+                                    "message", "Missing handler for request type: server/discover"),
+                            body.get("error"));
                     return true;
                 })
                 .verifyComplete();

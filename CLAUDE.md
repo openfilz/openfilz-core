@@ -323,7 +323,12 @@ tasks), `workflow_event` (timeline). Engine `WorkflowServiceImpl`: every mutatio
 notifications / mails / on-enter actions are queued in a `SideEffects` bag and run **after the commit
 under the actor's Authentication** (audit names the real person; a failed action is an `ACTION_FAILED`
 event, never a failed transition). Task completion is a conditional `UPDATE … WHERE status='OPEN'`
-(two racing candidates → 409). Hot folders: `WorkflowTriggerService.afterUpload` is called by
+(two racing candidates → 409). **Parallel review** (`WorkflowState.review` = `WorkflowReview {rule ALL|FIRST_REJECTION|QUORUM,
+quorum, approveTransition}`, STEP with USERS/CHOSEN_AT_START only): one task per reviewer sharing `workflow_task.review_group`
+(`V1_14`), each vote = a `REVIEWED` event + `WORKFLOW_REVIEWED` audit (**mirrored in the EE `AuditAction`**), the pure
+`WorkflowReviewDecider` turns the round's votes into one transition (remaining reviews → CANCELLED); `complete` locks the
+instance row (`SELECT … FOR UPDATE`) first so concurrent votes serialise; tasks carry `review` progress
+(`WorkflowReviewProgressDTO`). Hot folders: `WorkflowTriggerService.afterUpload` is called by
 `DocumentController` / `TusController` after smart filing and takes the START status' first transition.
 Runtime toggle `openfilz.workflows.active` (controllers always mapped, 404 per request; sweeper
 `WorkflowReminderSweeper` self-guards; `Settings.workflowsActive` / `workflowDesignerRoleRequired`).

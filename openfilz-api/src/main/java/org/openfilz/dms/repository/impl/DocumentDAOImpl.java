@@ -1,5 +1,6 @@
 package org.openfilz.dms.repository.impl;
 
+import io.r2dbc.postgresql.codec.Json;
 import io.r2dbc.spi.Readable;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.PostConstruct;
@@ -381,6 +382,42 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
     @Override
     public Mono<Document> update(Document document) {
         return documentRepository.save(document);
+    }
+
+    @Override
+    public Mono<Document> updateContent(Document document, Json metadataPatch) {
+        String metadataClause = metadataPatch == null ? ""
+                : ", metadata = coalesce(metadata, '{}'::jsonb) || :metadataPatch";
+        DatabaseClient.GenericExecuteSpec query = databaseClient.sql("update documents set storage_path = :storagePath"
+                        + ", content_type = :contentType, size = :size, updated_at = :updatedAt, updated_by = :updatedBy"
+                        + metadataClause + " where id = :id")
+                .bind(ID, document.getId())
+                .bind("storagePath", document.getStoragePath())
+                .bind("updatedAt", document.getUpdatedAt());
+        query = bindNullable(query, "contentType", document.getContentType(), String.class);
+        query = bindNullable(query, "size", document.getSize(), Long.class);
+        query = bindNullable(query, "updatedBy", document.getUpdatedBy(), String.class);
+        if (metadataPatch != null) {
+            query = query.bind("metadataPatch", metadataPatch);
+        }
+        return query.fetch().rowsUpdated()
+                .then(documentRepository.findById(document.getId()));
+    }
+
+    @Override
+    public Mono<Document> updateParent(Document document) {
+        DatabaseClient.GenericExecuteSpec query = databaseClient.sql(
+                        "update documents set parent_id = :parentId, updated_at = :updatedAt, updated_by = :updatedBy where id = :id")
+                .bind(ID, document.getId())
+                .bind("updatedAt", document.getUpdatedAt());
+        query = bindNullable(query, "parentId", document.getParentId(), UUID.class);
+        query = bindNullable(query, "updatedBy", document.getUpdatedBy(), String.class);
+        return query.fetch().rowsUpdated()
+                .then(documentRepository.findById(document.getId()));
+    }
+
+    private static DatabaseClient.GenericExecuteSpec bindNullable(DatabaseClient.GenericExecuteSpec query, String name, Object value, Class<?> type) {
+        return value != null ? query.bind(name, value) : query.bindNull(name, type);
     }
 
     @Override

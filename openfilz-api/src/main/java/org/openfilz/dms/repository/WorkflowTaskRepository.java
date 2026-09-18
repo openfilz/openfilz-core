@@ -16,6 +16,12 @@ public interface WorkflowTaskRepository extends ReactiveCrudRepository<WorkflowT
 
     Flux<WorkflowTask> findAllByInstanceIdOrderByCreatedAtAsc(UUID instanceId);
 
+    Flux<WorkflowTask> findAllByInstanceIdAndStatus(UUID instanceId, WorkflowTaskStatus status);
+
+    /** The tasks of one parallel review round, in the order the reviewers voted (open ones last). */
+    @Query("SELECT * FROM workflow_task WHERE review_group = :group ORDER BY completed_at NULLS LAST, created_at, id")
+    Flux<WorkflowTask> findReviewRound(UUID group);
+
     /** Open tasks past their due date that were never reminded (the sweeper's input). */
     @Query("SELECT * FROM workflow_task WHERE status = 'OPEN' AND due_at IS NOT NULL AND due_at < :now AND reminded_at IS NULL "
             + "ORDER BY due_at LIMIT 500")

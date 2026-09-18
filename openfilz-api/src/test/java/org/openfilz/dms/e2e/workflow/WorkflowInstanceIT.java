@@ -166,6 +166,20 @@ class WorkflowInstanceIT extends AbstractWorkflowIT {
     }
 
     @Test
+    void a_browser_accept_language_list_does_not_break_the_start() {
+        String contributor = getAccessToken(CONTRIBUTOR);
+        WorkflowDefinitionDTO def = createDefinition(contributor, definition(unique("Locale"), approvalSpec(users(ADMIN_EMAIL), List.of())));
+        UUID doc = upload(contributor, null);
+        // What Chrome sends: the whole preference list, far longer than the 8-char locale column.
+        getWebTestClient().post().uri(INST)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + contributor)
+                .header(HttpHeaders.ACCEPT_LANGUAGE, "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7")
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .bodyValue(new StartWorkflowRequest(def.id(), doc, null, "submit", null))
+                .exchange().expectStatus().isCreated();
+    }
+
+    @Test
     void rejection_comment_reaches_the_timeline_and_the_initiator_task() {
         String contributor = getAccessToken(CONTRIBUTOR);
         String admin = getAccessToken(ADMIN);

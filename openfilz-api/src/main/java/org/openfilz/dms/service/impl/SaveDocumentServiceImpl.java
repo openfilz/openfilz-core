@@ -1,5 +1,6 @@
 package org.openfilz.dms.service.impl;
 
+import io.r2dbc.postgresql.codec.Json;
 import tools.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.config.QuotaProperties;
@@ -185,7 +186,9 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
                     document.setUpdatedAt(OffsetDateTime.now());
                     document.setUpdatedBy(username);
                     document.setSize(contentInfo.length());
-                    return documentDAO.update(document);
+                    // Content columns only: `document` was loaded before the storage upload, and a
+                    // full-row save would revert a move/rename committed meanwhile.
+                    return documentDAO.updateContent(document, contentMetadataPatch(document));
                 })
                 .flatMap(savedDoc -> {
                     // 3. Delete old file content from storage
@@ -197,9 +200,17 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
                 .flatMap(updatedDoc -> storageService.getLatestVersionId(updatedDoc.getStoragePath())
                         .map(versionId -> new ReplaceAudit(newFilePart.filename(), versionId))
                         .defaultIfEmpty(new ReplaceAudit(newFilePart.filename()))
-                        .flatMap(details -> auditService.logAction(REPLACE_DOCUMENT_CONTENT, FILE, updatedDoc.getId(), details)))
-                .as(tx::transactional)
-                .thenReturn(document);
+                        .flatMap(details -> auditService.logAction(REPLACE_DOCUMENT_CONTENT, FILE, updatedDoc.getId(), details))
+                        .thenReturn(updatedDoc))
+                .as(tx::transactional);
 
+    }
+
+    /**
+     * The metadata keys a content replacement changes, merged into the stored metadata (the
+     * rest of the stored metadata is left as it is). None in the base service.
+     */
+    protected Json contentMetadataPatch(Document document) {
+        return null;
     }
 }

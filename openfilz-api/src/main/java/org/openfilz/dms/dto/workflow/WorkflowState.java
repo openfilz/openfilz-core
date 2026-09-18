@@ -15,15 +15,26 @@ public record WorkflowState(String key,
                             WorkflowAssignment assignees,
                             Integer dueInDays,
                             List<WorkflowTransition> transitions,
-                            List<WorkflowAction> onEnter) {
+                            List<WorkflowAction> onEnter,
+                            /** Null for an ordinary status; set, the status is a parallel review (STEP only). */
+                            WorkflowReview review) {
 
     public WorkflowState {
         transitions = transitions == null ? List.of() : List.copyOf(transitions);
         onEnter = onEnter == null ? List.of() : List.copyOf(onEnter);
     }
 
+    public WorkflowState(String key, String label, WorkflowStateKind kind, String color, WorkflowAssignment assignees,
+                         Integer dueInDays, List<WorkflowTransition> transitions, List<WorkflowAction> onEnter) {
+        this(key, label, kind, color, assignees, dueInDays, transitions, onEnter, null);
+    }
+
     public boolean isEnd() {
         return kind == WorkflowStateKind.END;
+    }
+
+    public boolean hasReview() {
+        return review != null;
     }
 
     public Optional<WorkflowTransition> transition(String transitionKey) {

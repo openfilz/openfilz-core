@@ -1,5 +1,7 @@
 package org.openfilz.dms.exception;
 
+import io.modelcontextprotocol.spec.McpError;
+import io.modelcontextprotocol.spec.McpSchema;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -11,6 +13,8 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -126,6 +130,34 @@ public class GlobalExceptionHandler {
         }
         String msg = ex.getReason() != null ? ex.getReason() : (status != null ? status.getReasonPhrase() : "Error");
         return Mono.just(ResponseEntity.status(ex.getStatusCode()).body(new ErrorResponse(ex.getStatusCode().value(), msg)));
+    }
+
+    /**
+     * MCP SDK 2.0.0's stateless handler turns a failing request handler into a JSON-RPC error
+     * response, but not an unknown method: {@code DefaultMcpStatelessServerHandler} answers it with
+     * {@code Mono.error(McpError)}, which escapes {@code WebFluxStatelessServerTransport} and lands
+     * here. Clients probe optional methods (Claude Code sends {@code server/discover} before
+     * {@code initialize}) and fall back on the error, so this is routine — answer with the JSON-RPC
+     * error instead of a 500 + stack trace. The request id is gone by now (the body was consumed),
+     * hence {@code id: null}, as JSON-RPC allows when it cannot be determined.
+     */
+    @ExceptionHandler(McpError.class)
+    public Mono<ResponseEntity<Map<String, Object>>> handleMcpError(McpError ex) {
+        McpSchema.JSONRPCResponse.JSONRPCError error = ex.getJsonRpcError();
+        int code = error.code() != null ? error.code() : McpSchema.ErrorCodes.INTERNAL_ERROR;
+        if (code == McpSchema.ErrorCodes.METHOD_NOT_FOUND) {
+            log.debug("MCP: {}", error.message());
+        } else {
+            log.warn("MCP error {}: {}", code, error.message());
+        }
+        Map<String, Object> jsonRpcError = new LinkedHashMap<>();
+        jsonRpcError.put("code", code);
+        jsonRpcError.put("message", error.message());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("jsonrpc", McpSchema.JSONRPC_VERSION);
+        body.put("id", null);
+        body.put("error", jsonRpcError);
+        return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body));
     }
 
     @ExceptionHandler(Throwable.class)

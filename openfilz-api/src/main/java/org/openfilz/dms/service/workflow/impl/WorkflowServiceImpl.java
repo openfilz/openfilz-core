@@ -20,6 +20,8 @@ import org.openfilz.dms.dto.workflow.WorkflowInstanceDTO;
 import org.openfilz.dms.dto.workflow.WorkflowInstanceDetailDTO;
 import org.openfilz.dms.dto.workflow.WorkflowInstanceScope;
 import org.openfilz.dms.dto.workflow.WorkflowInstancePage;
+import org.openfilz.dms.dto.workflow.WorkflowReview;
+import org.openfilz.dms.dto.workflow.WorkflowReviewProgressDTO;
 import org.openfilz.dms.dto.workflow.WorkflowSpec;
 import org.openfilz.dms.dto.workflow.WorkflowState;
 import org.openfilz.dms.dto.workflow.WorkflowSummaryDTO;
@@ -36,6 +38,7 @@ import org.openfilz.dms.enums.WorkflowActionType;
 import org.openfilz.dms.enums.WorkflowAssigneeType;
 import org.openfilz.dms.enums.WorkflowEventType;
 import org.openfilz.dms.enums.WorkflowInstanceStatus;
+import org.openfilz.dms.enums.WorkflowReviewRule;
 import org.openfilz.dms.enums.WorkflowTaskStatus;
 import org.openfilz.dms.repository.WorkflowDefinitionRepository;
 import org.openfilz.dms.repository.WorkflowEventRepository;
@@ -47,6 +50,7 @@ import org.openfilz.dms.service.workflow.WorkflowAccessPolicy;
 import org.openfilz.dms.service.workflow.WorkflowCommentBridge;
 import org.openfilz.dms.service.workflow.WorkflowMailer;
 import org.openfilz.dms.service.workflow.WorkflowNotifier;
+import org.openfilz.dms.service.workflow.WorkflowReviewDecider;
 import org.openfilz.dms.service.workflow.WorkflowService;
 import org.openfilz.dms.service.workflow.WorkflowSpecValidator;
 import org.openfilz.dms.utils.WorkflowJson;
@@ -69,6 +73,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -145,7 +150,7 @@ public class WorkflowServiceImpl implements WorkflowService {
                 })
                 .as(tx::transactional)
                 .flatMap(instance -> effects.run(actor.authentication()).thenReturn(instance))
-                .flatMap(this::toDto);
+                .flatMap(i -> toDto(i, actor));
     }
 
     private Mono<WorkflowInstance> startInstance(WorkflowDefinition def, Document doc, StartWorkflowRequest request,
@@ -209,6 +214,11 @@ public class WorkflowServiceImpl implements WorkflowService {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid e-mail address '" + e + "' for '" + s.label() + "'");
                 }
             }
+            if (s.hasReview() && s.review().rule() == WorkflowReviewRule.QUORUM && s.review().quorum() != null
+                    && clean.size() < s.review().quorum()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Please name at least " + s.review().quorum() + " reviewers for '" + s.label() + "'");
+            }
             out.put(s.key(), clean);
         }
         return out;
@@ -217,10 +227,11 @@ public class WorkflowServiceImpl implements WorkflowService {
     // ── entering a status ───────────────────────────────────────────────
 
     /**
-     * Moves the instance into {@code state}: END → completed; otherwise an OPEN task for the
-     * resolved candidates. Queues the notifications and the on-enter actions.
+     * Moves the instance into {@code state}: END → completed; a parallel review → one OPEN task per
+     * reviewer; otherwise one OPEN task for the resolved candidates. Queues the notifications and
+     * the on-enter actions.
      *
-     * @return the open task (empty for an END status)
+     * @return the open task (the first one of a review round; empty for an END status)
      */
     private Mono<WorkflowTask> enterState(WorkflowInstance instance, WorkflowSpec spec, WorkflowState state, String actorEmail,
                                           String previousComment, String previousActor, Map<String, List<String>> assignments,
@@ -253,27 +264,61 @@ public class WorkflowServiceImpl implements WorkflowService {
                     .then(Mono.empty());
         }
         Candidates candidates = resolveCandidates(state.effectiveAssignees(), instance, assignments);
-        WorkflowTask task = WorkflowTask.builder()
-                .id(UUID.randomUUID()).isNew(true)
-                .instanceId(instance.getId())
-                .stateKey(state.key()).stateLabel(state.label())
-                .candidateRole(candidates.role())
-                .status(WorkflowTaskStatus.OPEN)
-                .dueAt(state.dueInDays() == null ? null : now.plusDays(state.dueInDays()))
-                .createdAt(now)
-                .build();
+        if (state.hasReview()) {
+            return enterReview(instance, state, candidates.emails(), actorEmail, previousComment, effects, now);
+        }
+        WorkflowTask task = newTask(instance, state, candidates.role(), null, now);
         if (!quiet) {
-            String link = link("workflows?tab=tasks&task=" + task.getId());
-            effects.add(() -> notifier.taskAssigned(instance, task, candidates.emails()));
-            // No e-mail to someone about a task they just handed to themselves; the bell still tells them.
-            List<String> toMail = candidates.emails().stream().filter(e -> !e.equalsIgnoreCase(actorEmail)).toList();
-            effects.add(() -> Mono.fromRunnable(() -> toMail
-                    .forEach(to -> mailer.sendTaskAssigned(instance, task, to, link, previousComment))));
+            announce(instance, task, candidates.emails(), actorEmail, previousComment, effects);
         }
         return instances.save(instance)
                 .then(tasks.save(task))
                 .doOnNext(saved -> task.setNew(false))
                 .flatMap(saved -> insertCandidates(saved.getId(), candidates.emails()).thenReturn(saved));
+    }
+
+    /**
+     * A parallel review round: one task per reviewer, all sharing a {@code review_group}, each with
+     * that reviewer as its only candidate — so every reviewer votes (and comments) on their own,
+     * and {@link #vote} counts the votes of this round only.
+     */
+    private Mono<WorkflowTask> enterReview(WorkflowInstance instance, WorkflowState state, List<String> reviewers, String actorEmail,
+                                           String previousComment, SideEffects effects, OffsetDateTime now) {
+        UUID group = UUID.randomUUID();
+        List<Map.Entry<String, WorkflowTask>> round = reviewers.stream()
+                .map(reviewer -> Map.entry(reviewer, newTask(instance, state, null, group, now)))
+                .toList();
+        round.forEach(e -> announce(instance, e.getValue(), List.of(e.getKey()), actorEmail, previousComment, effects));
+        return instances.save(instance)
+                .thenMany(Flux.fromIterable(round).concatMap(e -> tasks.save(e.getValue())
+                        .doOnNext(saved -> e.getValue().setNew(false))
+                        .flatMap(saved -> insertCandidates(saved.getId(), List.of(e.getKey())).thenReturn(saved))))
+                // collectList, never next(): next() cancels the stream after the first save.
+                .collectList()
+                .flatMap(saved -> Mono.justOrEmpty(saved.stream().findFirst()));
+    }
+
+    private static WorkflowTask newTask(WorkflowInstance instance, WorkflowState state, String role, UUID reviewGroup, OffsetDateTime now) {
+        return WorkflowTask.builder()
+                .id(UUID.randomUUID()).isNew(true)
+                .instanceId(instance.getId())
+                .stateKey(state.key()).stateLabel(state.label())
+                .candidateRole(role)
+                .status(WorkflowTaskStatus.OPEN)
+                .dueAt(state.dueInDays() == null ? null : now.plusDays(state.dueInDays()))
+                .createdAt(now)
+                .reviewGroup(reviewGroup)
+                .build();
+    }
+
+    /** Bell + mail for a new task. No e-mail to someone about a task they just handed to themselves; the bell still tells them. */
+    private void announce(WorkflowInstance instance, WorkflowTask task, List<String> emails, String actorEmail,
+                          String previousComment, SideEffects effects) {
+        String link = link("workflows?tab=tasks&task=" + task.getId());
+        effects.add(() -> notifier.taskAssigned(instance, task, emails));
+        List<String> toMail = emails.stream().filter(e -> !e.equalsIgnoreCase(actorEmail)).toList();
+        effects.add(() -> Mono.fromRunnable(() -> toMail
+                .forEach(to -> mailer.sendTaskAssigned(instance, task, to, link, previousComment))));
     }
 
     private record Candidates(List<String> emails, String role) {}
@@ -366,7 +411,12 @@ public class WorkflowServiceImpl implements WorkflowService {
     @Override
     public Mono<WorkflowInstanceDTO> complete(UUID taskId, CompleteTaskRequest request, Actor actor) {
         SideEffects effects = new SideEffects();
-        return openTask(taskId)
+        // The instance row is locked before the task is (re-)read: the reviewers of a parallel review
+        // close different tasks, and only this lock lets the last vote see every other one.
+        return tasks.findById(taskId)
+                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found")))
+                .flatMap(t -> lockInstance(t.getInstanceId()))
+                .then(Mono.defer(() -> openTask(taskId)))
                 .flatMap(task -> runningInstance(task.getInstanceId()).map(i -> Map.entry(task, i)))
                 .flatMap(e -> requireCandidate(e.getKey(), actor).thenReturn(e))
                 .flatMap(e -> {
@@ -382,38 +432,99 @@ public class WorkflowServiceImpl implements WorkflowService {
                         return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST, "A comment is required for '" + transition.label() + "'"));
                     }
                     Map<String, List<String>> assignments = WorkflowJson.toAssignments(instance.getAssignments());
-                    return applyTransition(instance, spec, task, state, transition, request.comment(), actor, assignments, effects)
+                    Mono<WorkflowInstance> step = task.getReviewGroup() != null && state.hasReview()
+                            ? vote(instance, spec, task, state, transition, request.comment(), actor, assignments, effects)
+                            : applyTransition(instance, spec, task, state, transition, request.comment(), actor, assignments, effects);
+                    return step
                             .flatMap(i -> isBlank(request.comment()) ? Mono.just(i)
                                     : Mono.just(i).doOnNext(x -> effects.add(() ->
                                     commentBridge.decisionCommented(i, task, transition.label(), actor.email(), request.comment().trim()))));
                 })
                 .as(tx::transactional)
                 .flatMap(instance -> effects.run(actor.authentication()).thenReturn(instance))
-                .flatMap(this::toDto);
+                .flatMap(i -> toDto(i, actor));
     }
 
     /** Closes {@code task} with {@code transition} and enters the target status. Returns the instance. */
     private Mono<WorkflowInstance> applyTransition(WorkflowInstance instance, WorkflowSpec spec, WorkflowTask task, WorkflowState from,
                                                    WorkflowTransition transition, String comment, Actor actor,
                                                    Map<String, List<String>> assignments, SideEffects effects) {
-        WorkflowState target = spec.state(transition.to())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Target status vanished from the snapshot"));
         String cleanComment = isBlank(comment) ? null : comment.trim();
-        OffsetDateTime now = OffsetDateTime.now();
-        // Conditional close: two candidates racing on the same task — the second one gets a 409.
+        return closeTask(task, transition, cleanComment, actor.email())
+                .then(Mono.defer(() -> moveTo(instance, spec, from, transition, actor.email(), cleanComment, null, cleanComment, assignments, effects)));
+    }
+
+    /**
+     * One reviewer's vote: closes their task and records it; once {@link WorkflowReviewDecider} says
+     * the round is decided, cancels the reviews still open and moves the document on.
+     */
+    private Mono<WorkflowInstance> vote(WorkflowInstance instance, WorkflowSpec spec, WorkflowTask task, WorkflowState state,
+                                        WorkflowTransition transition, String comment, Actor actor,
+                                        Map<String, List<String>> assignments, SideEffects effects) {
+        String cleanComment = isBlank(comment) ? null : comment.trim();
+        WorkflowReview review = state.review();
+        return closeTask(task, transition, cleanComment, actor.email())
+                .then(event(instance, WorkflowEventType.REVIEWED, state.key(), null, transition.key(), actor.email(), cleanComment,
+                        Map.of("group", task.getReviewGroup().toString())))
+                .then(auditService.logAction(AuditAction.WORKFLOW_REVIEWED, DocumentType.FILE, instance.getDocumentId(),
+                        new WorkflowAudit(instance.getId(), instance.getDefinitionName(), state.key(), null, transition.key(), cleanComment)))
+                .then(tasks.findReviewRound(task.getReviewGroup()).collectList())
+                .flatMap(round -> {
+                    List<WorkflowTask> voted = round.stream().filter(t -> t.getStatus() == WorkflowTaskStatus.DONE).toList();
+                    int pending = (int) round.stream().filter(t -> t.getStatus() == WorkflowTaskStatus.OPEN).count();
+                    Optional<WorkflowTransition> outcome = WorkflowReviewDecider.decide(review, state.transitions(),
+                            voted.stream().map(WorkflowTask::getTransitionKey).toList(), pending);
+                    if (outcome.isEmpty()) {
+                        instance.setUpdatedAt(OffsetDateTime.now());
+                        return instances.save(instance);
+                    }
+                    long approvals = voted.stream().filter(t -> review.approveTransition().equals(t.getTransitionKey())).count();
+                    Map<String, Object> details = Map.of("review", review.rule().name(), "approvals", approvals,
+                            "votes", voted.size(), "reviewers", round.size(), "group", task.getReviewGroup().toString());
+                    return db.sql("UPDATE workflow_task SET status = 'CANCELLED', completed_at = :now WHERE review_group = :g AND status = 'OPEN'")
+                            .bind("now", OffsetDateTime.now()).bind("g", task.getReviewGroup())
+                            .fetch().rowsUpdated()
+                            .then(Mono.defer(() -> moveTo(instance, spec, state, outcome.get(), actor.email(), null, details,
+                                    reviewDigest(voted), assignments, effects)));
+                });
+    }
+
+    /** The reviewers' comments, one per line: what whoever acts next reads as the "previous comment". */
+    private static String reviewDigest(List<WorkflowTask> voted) {
+        String digest = String.join("\n", voted.stream().filter(t -> t.getComment() != null)
+                .map(t -> t.getCompletedBy() + ": " + t.getComment()).toList());
+        if (digest.isEmpty()) return null;
+        return digest.length() <= 2000 ? digest : digest.substring(0, 1999) + "…";
+    }
+
+    /** Conditional close: two candidates racing on the same task — the second one gets a 409. */
+    private Mono<Void> closeTask(WorkflowTask task, WorkflowTransition transition, String cleanComment, String actorEmail) {
         DatabaseClient.GenericExecuteSpec close = db.sql("UPDATE workflow_task SET status = 'DONE', completed_at = :now, completed_by = :by, "
                         + "transition_key = :tk, comment = :c WHERE id = :id AND status = 'OPEN'")
-                .bind("now", now).bind("by", actor.email()).bind("tk", transition.key()).bind("id", task.getId());
+                .bind("now", OffsetDateTime.now()).bind("by", actorEmail).bind("tk", transition.key()).bind("id", task.getId());
         close = cleanComment == null ? close.bindNull("c", String.class) : close.bind("c", cleanComment);
         return close.fetch().rowsUpdated()
                 .flatMap(n -> n == 0
                         ? Mono.error(new ResponseStatusException(HttpStatus.CONFLICT, "This task was just completed by someone else"))
-                        : Mono.empty())
-                .then(event(instance, WorkflowEventType.TRANSITIONED, from.key(), target.key(), transition.key(), actor.email(), cleanComment, null))
+                        : Mono.empty());
+    }
+
+    /** Records the transition out of {@code from} and enters its target status. Returns the instance. */
+    private Mono<WorkflowInstance> moveTo(WorkflowInstance instance, WorkflowSpec spec, WorkflowState from, WorkflowTransition transition,
+                                          String actorEmail, String comment, Map<String, Object> details, String previousComment,
+                                          Map<String, List<String>> assignments, SideEffects effects) {
+        WorkflowState target = spec.state(transition.to())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Target status vanished from the snapshot"));
+        return event(instance, WorkflowEventType.TRANSITIONED, from.key(), target.key(), transition.key(), actorEmail, comment, details)
                 .then(auditService.logAction(AuditAction.WORKFLOW_TRANSITIONED, DocumentType.FILE, instance.getDocumentId(),
-                        new WorkflowAudit(instance.getId(), instance.getDefinitionName(), from.key(), target.key(), transition.key(), cleanComment)))
-                .then(Mono.defer(() -> enterState(instance, spec, target, actor.email(), cleanComment, actor.email(), assignments, effects)))
+                        new WorkflowAudit(instance.getId(), instance.getDefinitionName(), from.key(), target.key(), transition.key(), comment)))
+                .then(Mono.defer(() -> enterState(instance, spec, target, actorEmail, previousComment, actorEmail, assignments, effects)))
                 .then(Mono.just(instance));
+    }
+
+    private Mono<Void> lockInstance(UUID instanceId) {
+        return db.sql("SELECT id FROM workflow_instance WHERE id = :id FOR UPDATE").bind("id", instanceId)
+                .fetch().all().then();
     }
 
     private Mono<Void> requireCandidate(WorkflowTask task, Actor actor) {
@@ -468,7 +579,7 @@ public class WorkflowServiceImpl implements WorkflowService {
                 })
                 .as(tx::transactional)
                 .flatMap(instance -> effects.run(actor.authentication()).thenReturn(instance))
-                .flatMap(this::toDto);
+                .flatMap(i -> toDto(i, actor));
     }
 
     @Override
@@ -479,14 +590,16 @@ public class WorkflowServiceImpl implements WorkflowService {
                 .flatMap(instance -> accessPolicy.canManage(instance, actor.email())
                         .flatMap(ok -> ok ? Mono.just(instance)
                                 : Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the initiator may cancel this workflow"))))
-                .flatMap(instance -> tasks.findFirstByInstanceIdAndStatus(instanceId, WorkflowTaskStatus.OPEN)
-                        .flatMap(task -> loadCandidates(task.getId()).flatMap(candidates -> {
+                // Every open task: a parallel review has one per reviewer.
+                .flatMap(instance -> tasks.findAllByInstanceIdAndStatus(instanceId, WorkflowTaskStatus.OPEN)
+                        .concatMap(task -> loadCandidates(task.getId()).flatMap(candidates -> {
                             task.setStatus(WorkflowTaskStatus.CANCELLED);
                             task.setCompletedAt(OffsetDateTime.now());
                             task.setCompletedBy(actor.email());
                             return tasks.save(task).thenReturn(candidates);
                         }))
-                        .defaultIfEmpty(List.of())
+                        .collectList()
+                        .map(lists -> lists.stream().flatMap(List::stream).distinct().toList())
                         .flatMap(candidates -> {
                             OffsetDateTime now = OffsetDateTime.now();
                             instance.setStatus(WorkflowInstanceStatus.CANCELLED);
@@ -508,7 +621,7 @@ public class WorkflowServiceImpl implements WorkflowService {
                         }))
                 .as(tx::transactional)
                 .flatMap(instance -> effects.run(actor.authentication()).thenReturn(instance))
-                .flatMap(this::toDto);
+                .flatMap(i -> toDto(i, actor));
     }
 
     // ── reads ─────────────────────────────────────────────────────────────
@@ -732,30 +845,63 @@ public class WorkflowServiceImpl implements WorkflowService {
         return s == null || s.isBlank();
     }
 
-    private Mono<WorkflowInstanceDTO> toDto(WorkflowInstance i) {
-        return toDto(i, null);
-    }
-
     private Mono<WorkflowInstanceDTO> toDto(WorkflowInstance i, Actor actor) {
         WorkflowSpec spec = WorkflowJson.toSpec(i.getSpec());
         String color = spec.state(i.getCurrentStateKey()).map(WorkflowState::color).orElse(null);
         Mono<WorkflowTaskDTO> current = i.getStatus() != WorkflowInstanceStatus.RUNNING ? Mono.empty()
-                : tasks.findFirstByInstanceIdAndStatus(i.getId(), WorkflowTaskStatus.OPEN).flatMap(t -> toDto(t, i, actor));
+                : currentTask(i, actor).flatMap(t -> toDto(t, i, actor));
         return current.map(java.util.Optional::of).defaultIfEmpty(java.util.Optional.empty())
                 .map(task -> new WorkflowInstanceDTO(i.getId(), i.getDefinitionId(), i.getDefinitionName(), i.getDefinitionVersion(),
                         i.getDocumentId(), i.getDocumentName(), i.getStatus(), i.getCurrentStateKey(), i.getCurrentStateLabel(), color,
                         i.getStartedBy(), i.getStartedAt(), i.getUpdatedAt(), i.getCompletedAt(), task.orElse(null)));
     }
 
+    /**
+     * The open task an instance shows: its only one, or — during a parallel review — the caller's
+     * own review when they have one, so the vote buttons offered are theirs.
+     */
+    private Mono<WorkflowTask> currentTask(WorkflowInstance i, Actor actor) {
+        return tasks.findAllByInstanceIdAndStatus(i.getId(), WorkflowTaskStatus.OPEN)
+                .sort(Comparator.comparing(WorkflowTask::getCreatedAt).thenComparing(WorkflowTask::getId))
+                .collectList()
+                .flatMap(open -> {
+                    if (open.isEmpty()) return Mono.empty();
+                    if (open.size() == 1 || actor == null) return Mono.just(open.getFirst());
+                    return Flux.fromIterable(open).filterWhen(t -> isCandidate(t, actor)).next()
+                            .defaultIfEmpty(open.getFirst());
+                });
+    }
+
+    /** The round a review task belongs to: the votes cast so far and the reviewers still expected. */
+    private Mono<Optional<WorkflowReviewProgressDTO>> reviewProgress(WorkflowTask t, WorkflowState state) {
+        if (t.getReviewGroup() == null || state == null || !state.hasReview()) {
+            return Mono.just(Optional.empty());
+        }
+        WorkflowReview review = state.review();
+        return tasks.findReviewRound(t.getReviewGroup())
+                .concatMap(rt -> rt.getStatus() == WorkflowTaskStatus.OPEN
+                        ? loadCandidates(rt.getId()).map(c -> Map.entry(rt, c))
+                        : Mono.just(Map.entry(rt, List.<String>of())))
+                .collectList()
+                .map(round -> {
+                    List<WorkflowReviewProgressDTO.Vote> votes = round.stream().map(Map.Entry::getKey)
+                            .filter(rt -> rt.getStatus() == WorkflowTaskStatus.DONE)
+                            .map(rt -> new WorkflowReviewProgressDTO.Vote(rt.getCompletedBy(), rt.getTransitionKey(), rt.getComment(), rt.getCompletedAt()))
+                            .toList();
+                    List<String> pending = round.stream().flatMap(e -> e.getValue().stream()).distinct().toList();
+                    int approvals = (int) votes.stream().filter(v -> review.approveTransition().equals(v.transitionKey())).count();
+                    return Optional.of(new WorkflowReviewProgressDTO(review.rule(), review.quorum(), review.approveTransition(),
+                            round.size(), approvals, votes, pending));
+                });
+    }
+
     private Mono<WorkflowTaskDTO> toDto(WorkflowTask t, WorkflowInstance i, Actor actor) {
         WorkflowSpec spec = WorkflowJson.toSpec(i.getSpec());
         WorkflowState state = spec.state(t.getStateKey()).orElse(null);
         Mono<List<String>> candidates = loadCandidates(t.getId());
-        Mono<WorkflowEvent> previous = events.findAllByInstanceIdOrderByCreatedAtAsc(i.getId())
-                .filter(e -> (e.getEventType() == WorkflowEventType.TRANSITIONED || e.getEventType() == WorkflowEventType.STARTED)
-                        && t.getStateKey().equals(e.getToState()) && !e.getCreatedAt().isAfter(t.getCreatedAt().plusSeconds(1)))
-                .last(WorkflowEvent.builder().build());
-        return Mono.zip(candidates, previous).map(z -> {
+        Mono<WorkflowEvent> previous = events.findAllByInstanceIdOrderByCreatedAtAsc(i.getId()).collectList()
+                .map(history -> previousDecision(history, t));
+        return Mono.zip(candidates, previous, reviewProgress(t, state)).map(z -> {
             List<String> cands = z.getT1();
             WorkflowEvent prev = z.getT2();
             boolean mine = actor != null && (cands.contains(actor.email().toLowerCase())
@@ -765,8 +911,29 @@ public class WorkflowServiceImpl implements WorkflowService {
                     t.getStateKey(), t.getStateLabel(), state == null ? null : state.color(), t.getStatus(), cands, t.getCandidateRole(),
                     i.getStartedBy(), t.getCreatedAt(), t.getDueAt(), overdue, t.getCompletedAt(), t.getCompletedBy(), t.getTransitionKey(),
                     t.getComment(), state == null ? List.of() : state.transitions(),
-                    prev.getComment(), prev.getActor(), mine);
+                    prev.getComment(), prev.getActor(), mine, z.getT3().orElse(null));
         });
+    }
+
+    /**
+     * The entry that moved the document into the task's status. When a parallel review decided it,
+     * that entry carries no comment of its own: its "comment" is the reviewers' comments of the round.
+     */
+    private static WorkflowEvent previousDecision(List<WorkflowEvent> history, WorkflowTask t) {
+        WorkflowEvent prev = history.stream()
+                .filter(e -> (e.getEventType() == WorkflowEventType.TRANSITIONED || e.getEventType() == WorkflowEventType.STARTED)
+                        && t.getStateKey().equals(e.getToState()) && !e.getCreatedAt().isAfter(t.getCreatedAt().plusSeconds(1)))
+                .reduce((a, b) -> b)
+                .orElse(WorkflowEvent.builder().build());
+        Map<String, Object> details = WorkflowJson.toMap(prev.getDetails());
+        Object group = details == null ? null : details.get("group");
+        if (group == null || prev.getComment() != null) return prev;
+        String digest = String.join("\n", history.stream()
+                .filter(e -> e.getEventType() == WorkflowEventType.REVIEWED && e.getComment() != null)
+                .filter(e -> group.equals(Optional.ofNullable(WorkflowJson.toMap(e.getDetails())).map(d -> d.get("group")).orElse(null)))
+                .map(e -> e.getActor() + ": " + e.getComment())
+                .toList());
+        return digest.isEmpty() ? prev : WorkflowEvent.builder().actor(prev.getActor()).comment(digest).build();
     }
 
     private WorkflowEventDTO toDto(WorkflowEvent e) {

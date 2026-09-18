@@ -3,10 +3,12 @@ package org.openfilz.dms.service.workflow;
 import org.openfilz.dms.dto.workflow.WorkflowAction;
 import org.openfilz.dms.dto.workflow.WorkflowAssignment;
 import org.openfilz.dms.dto.workflow.WorkflowProblem;
+import org.openfilz.dms.dto.workflow.WorkflowReview;
 import org.openfilz.dms.dto.workflow.WorkflowSpec;
 import org.openfilz.dms.dto.workflow.WorkflowState;
 import org.openfilz.dms.dto.workflow.WorkflowTransition;
 import org.openfilz.dms.enums.WorkflowAssigneeType;
+import org.openfilz.dms.enums.WorkflowReviewRule;
 import org.openfilz.dms.enums.WorkflowStateKind;
 
 import java.util.ArrayDeque;
@@ -33,6 +35,7 @@ public final class WorkflowSpecValidator {
     public static final int MAX_TRANSITION_LABEL = 60;
     public static final int MAX_METADATA_ENTRIES = 20;
     public static final int MAX_DUE_DAYS = 365;
+    public static final int MAX_QUORUM = 20;
 
     private WorkflowSpecValidator() {}
 
@@ -116,6 +119,9 @@ public final class WorkflowSpecValidator {
             for (int j = 0; j < s.onEnter().size(); j++) {
                 validateAction(s.onEnter().get(j), p + ".onEnter[" + j + "]", problems);
             }
+            if (s.hasReview()) {
+                validateReview(s, p + ".review", problems);
+            }
         }
         if (starts != 1) {
             problems.add(new WorkflowProblem("states", "ONE_START", "Exactly one status must be the START"));
@@ -173,6 +179,40 @@ public final class WorkflowSpecValidator {
             case INITIATOR -> { /* nothing to check */ }
         }
         return false;
+    }
+
+    /**
+     * A parallel review needs a STEP whose reviewers are named people (one task each — a role or
+     * "the initiator" cannot be split into reviewers), a rule, and an approval among its transitions.
+     */
+    private static void validateReview(WorkflowState s, String p, List<WorkflowProblem> problems) {
+        WorkflowReview r = s.review();
+        if (s.kind() != WorkflowStateKind.STEP) {
+            problems.add(new WorkflowProblem(p, "REVIEW_NOT_ON_STEP", "Only an intermediate status can be a parallel review"));
+            return;
+        }
+        WorkflowAssigneeType type = s.effectiveAssignees().type();
+        if (type != WorkflowAssigneeType.USERS && type != WorkflowAssigneeType.CHOSEN_AT_START) {
+            problems.add(new WorkflowProblem(p, "REVIEW_NEEDS_PEOPLE",
+                    "A parallel review needs named reviewers (e-mail addresses, or chosen at start)"));
+        }
+        if (r.rule() == null) {
+            problems.add(new WorkflowProblem(p + ".rule", "BAD_REVIEW_RULE", "Choose how the reviews are combined"));
+        }
+        if (r.approveTransition() == null || s.transition(r.approveTransition()).isEmpty()) {
+            problems.add(new WorkflowProblem(p + ".approveTransition", "REVIEW_NO_APPROVE",
+                    "Choose which transition counts as approval"));
+        }
+        if (r.rule() == WorkflowReviewRule.QUORUM) {
+            if (r.quorum() == null || r.quorum() < 1 || r.quorum() > MAX_QUORUM) {
+                problems.add(WorkflowProblem.of(p + ".quorum", "BAD_QUORUM",
+                        "The number of approvals must be between 1 and " + MAX_QUORUM, MAX_QUORUM));
+            } else if (type == WorkflowAssigneeType.USERS && r.quorum() > s.effectiveAssignees().emails().size()) {
+                problems.add(WorkflowProblem.of(p + ".quorum", "QUORUM_TOO_HIGH",
+                        "More approvals required than reviewers named (" + s.effectiveAssignees().emails().size() + ")",
+                        s.effectiveAssignees().emails().size()));
+            }
+        }
     }
 
     private static void validateAction(WorkflowAction a, String p, List<WorkflowProblem> problems) {

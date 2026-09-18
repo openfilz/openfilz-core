@@ -170,6 +170,13 @@ public class ChecksumSaveDocumentServiceImpl extends SaveDocumentServiceImpl {
                 .thenReturn(saved);
     }
 
+    /** A content replacement changes one metadata key: the fingerprint set on {@code document} above. */
+    @Override
+    protected Json contentMetadataPatch(Document document) {
+        String checksum = getChecksum(document);
+        return checksum != null ? jsonUtils.toJson(Map.of(HASH_SHA256_KEY, checksum)) : null;
+    }
+
     protected String getChecksum(Document document) {
         Json metadata = document.getMetadata();
         if(metadata != null) {

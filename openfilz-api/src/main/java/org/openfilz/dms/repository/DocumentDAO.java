@@ -1,5 +1,6 @@
 package org.openfilz.dms.repository;
 
+import io.r2dbc.postgresql.codec.Json;
 import jakarta.annotation.Nonnull;
 import org.openfilz.dms.dto.request.SearchByMetadataRequest;
 import org.openfilz.dms.dto.response.AncestorInfo;
@@ -39,6 +40,24 @@ public interface DocumentDAO {
     Mono<Document> findById(UUID documentId, AccessType accessType);
 
     Mono<Document> update(Document document);
+
+    /**
+     * Records a content replacement by writing <b>only</b> the content columns (storage path,
+     * content type, size, updated at/by) and merging {@code metadataPatch} (may be {@code null})
+     * into the stored metadata — never the whole row. A replacement loads the document, then
+     * spends a while in storage before saving: a full-row save would put back whatever the
+     * document looked like when it was loaded, silently undoing a move, rename or metadata
+     * change committed meanwhile (an OCR replace reverting the smart-filing move of a fresh
+     * upload is how this was found). Returns the row as stored after the update.
+     */
+    Mono<Document> updateContent(Document document, Json metadataPatch);
+
+    /**
+     * Moves a document by writing <b>only</b> its parent and updated at/by columns — the
+     * mirror of {@link #updateContent}: a move must not put back a stale storage path, size
+     * or checksum when a content replacement lands between its load and its save.
+     */
+    Mono<Document> updateParent(Document document);
 
     Mono<Void> delete(Document document);
 
