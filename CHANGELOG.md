@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[075a879db9dde3b](https://github.com/openfilz/openfilz-core/commit/075a879db9dde3b) maven-release-bot[bot] *2026-09-17 19:58:46*
+[9c05861ec8268f1](https://github.com/openfilz/openfilz-core/commit/9c05861ec8268f1) maven-release-bot[bot] *2026-09-18 15:46:04*
 
 
-## v1.3.22
+## v1.3.23
 ### No issue
 
-**[maven-release-plugin] prepare release v1.3.22**
+**[maven-release-plugin] prepare release v1.3.23**
 
 
-[9e84e2e80cc0899](https://github.com/openfilz/openfilz-core/commit/9e84e2e80cc0899) maven-release-bot[bot] *2026-09-17 19:58:43*
+[48ce1b39038b92e](https://github.com/openfilz/openfilz-core/commit/48ce1b39038b92e) maven-release-bot[bot] *2026-09-18 15:46:00*
 
-**Merge pull request #252 from openfilz/develop**
+**Merge pull request #255 from openfilz/develop**
 
- * Add multilingual support for insights taxonomy display names
+ * Implement parallel review steps and fix content replacement issues
 
-[834abff2ea7ec4b](https://github.com/openfilz/openfilz-core/commit/834abff2ea7ec4b) Yann Demel *2026-09-17 19:54:35*
+[24044265325022f](https://github.com/openfilz/openfilz-core/commit/24044265325022f) Yann Demel *2026-09-18 15:41:56*
 
 
