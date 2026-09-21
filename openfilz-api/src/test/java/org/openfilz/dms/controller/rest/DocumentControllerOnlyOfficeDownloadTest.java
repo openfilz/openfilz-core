@@ -7,6 +7,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.openfilz.dms.dto.response.DownloadableVersion;
 import org.openfilz.dms.entity.Document;
+import org.openfilz.dms.enums.AuditAction;
 import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.service.DocumentService;
 import org.openfilz.dms.service.DocumentVersionService;
@@ -24,6 +25,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
@@ -111,7 +113,7 @@ class DocumentControllerOnlyOfficeDownloadTest {
                 .id(documentId).name("doc.txt").type(DocumentType.FILE).contentType("text/plain").build();
         when(documentService.findDocumentToDownloadById(documentId)).thenReturn(Mono.just(document));
         doReturn(Mono.just(new ByteArrayResource("body".getBytes())))
-                .when(documentService).downloadDocument(any(Document.class));
+                .when(documentService).downloadDocument(any(Document.class), eq(AuditAction.OPEN_DOCUMENT));
 
         StepVerifier.create(controller.downloadForOnlyOffice(documentId, "tok", null))
                 .expectNextMatches(r -> r.getStatusCode() == HttpStatus.OK)
