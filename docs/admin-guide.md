@@ -1005,6 +1005,34 @@ openfilz:
 > `acknowledgeSignatureLoss=true` (`409 PDF_SIGNED` otherwise), and never while an e-Sign envelope
 > is active on them. See [PDF Tools](pdf-tools.md) for the API and design.
 
+### ZIP Extraction (Unzip)
+
+`POST /api/v1/files/{fileId}/unzip` extracts a ZIP document server-side (the web apps' **Unzip**
+action). The archive is read once — opened in place on local storage, streamed once to a temporary
+file on MinIO/S3 — and planned from its central directory before anything is written: entry count,
+expanded size and compression ratio are checked up front (and again while inflating), `..` / absolute
+entries are refused, `__MACOSX/` and `.DS_Store` are ignored, and the user quota is checked once for
+the whole archive. Files are then stored several at a time, each one an ordinary upload (audit
+`UPLOAD_DOCUMENT`, checksum, thumbnail, indexing; in EE ownership, inherited shares, antivirus scan),
+each folder an ordinary folder creation. Always on; `CONTRIBUTOR` only; allowed under WORM mode
+(it only creates documents).
+
+```yaml
+openfilz:
+  unzip:
+    max-entries: 10000                  # files + folders in one archive — 413 ZIP_TOO_MANY_ENTRIES
+    max-uncompressed-bytes: 4294967296  # whole archive, expanded (4 GB) — 413 ZIP_TOO_LARGE
+    max-compression-ratio: 200          # per entry larger than ratio-threshold-bytes — 413 ZIP_BOMB
+    ratio-threshold-bytes: 1048576      # smaller entries are exempt (1 MB)
+    parallelism: 8                      # entries inflated + stored at once, per operation
+```
+
+These are plain defaults (no dedicated variables); override them through Spring's relaxed binding,
+e.g. `OPENFILZ_UNZIP_PARALLELISM=16`. Each concurrent entry holds a database connection while its
+row is written, so keep `parallelism` below `spring.r2dbc.pool.max-size` (10 by default). Measured on
+2 000 small files: ~5 s on local storage at 8; on MinIO ~11 s at 8 and ~5 s at 16 (storage-bound —
+raise the pool with it).
+
 ### Workflows
 
 Statuses, transitions and tasks on documents — *Draft → Pending approval → Approved | Rejected* —

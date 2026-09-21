@@ -201,6 +201,7 @@ The OpenFilz API provides a comprehensive RESTful interface for all document and
 
 -   **`POST /v1/files/move`**: Move a set of files to a different folder.
 -   **`POST /v1/files/copy`**: Copy a set of files to a different folder.
+-   **`POST /v1/files/{fileId}/unzip`**: Extract a ZIP file server-side — into the folder containing it (default), `targetFolderId`, the root (`targetRoot`), or a new folder (`newFolderName`). Existing folders are merged; clashing file names are skipped and listed in the response.
 -   **`PUT /v1/files/{fileId}/rename`**: Rename an existing file.
 -   **`DELETE /v1/files`**: Delete a set of files.
 

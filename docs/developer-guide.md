@@ -206,6 +206,7 @@ The Swagger UI provides interactive documentation where you can try out every en
 |--------|------|-------------|
 | `POST` | `/files/move` | Move files |
 | `POST` | `/files/copy` | Copy files |
+| `POST` | `/files/{fileId}/unzip` | Extract a ZIP file server-side (into its folder, a chosen folder, the root, or a new folder) |
 | `PUT` | `/files/{fileId}/rename` | Rename a file |
 | `DELETE` | `/files` | Delete files |
 

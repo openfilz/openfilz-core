@@ -311,6 +311,21 @@ resolution, the split-mode and page-selection vocabulary, in-place vs. new-docum
 `PdfToolsDisabledIT`; the MCP suites include the PDF tools in their advertised-set assertions
 (`McpProtocolIT.argumentsFor`).
 
+### ZIP extraction (unzip)
+`POST /api/v1/files/{fileId}/unzip` (`FileController` → `UnzipServiceImpl`, body `UnzipRequest`
+{`targetFolderId`, `targetRoot`, `newFolderName`, `allowDuplicateFileNames`} — none = the ZIP's own folder;
+`UnzipResponse` counts + per-entry `skipped` with a `SkipReason`). Built for throughput: the ZIP is read once
+(`Resource.isFile()` → opened in place, else one temp copy), `ZipExtractionPlan` plans everything from the central
+directory (normalised paths, zip-slip / drive-letter / control-char refusal, implicit folders, `__MACOSX` and
+`.DS_Store` ignored, `openfilz.unzip.*` limits → `UnzipException` 413/422) and the user quota is checked **once**;
+folders are created level by level through `DocumentService.createFolder` (existing ones merged), files are inflated
+`parallelism` at a time straight from `ZipFile` random access through `SaveDocumentService.doSaveFile` with an
+`InputStreamFilePart` (sized; `MinioStorageService.saveFile` turns it into one `PutObject` of known length, no pipe),
+guarded by `SizeLimitedInputStream` against lying central directories. Name clashes are resolved against one listing per
+pre-existing folder. Audit = one `UPLOAD_DOCUMENT` per file + `CREATE_FOLDER` per folder (EE webhooks / desktop sync feed
+see them; no new `AuditAction`). Security: `/files/**` POST = CONTRIBUTOR; `isWormCreation` admits it (`isUnzip`).
+Tests: `ZipExtractionPlanTest`, `e2e/UnzipIT` (local) + `UnzipMinioIT`.
+
 ### Workflows (statuses / transitions / tasks)
 See `docs/workflows.md`. A native state machine per document, no external engine. Definition = JSON
 `WorkflowSpec` (`dto/workflow/*`: states with `kind` START/STEP/END, `assignees` INITIATOR/USERS/ROLE/
@@ -426,6 +441,7 @@ GET    /api/v1/settings
 GET    /api/v1/suggestions
 GET    /api/v1/pdf/{id}/info          PDF tools (see docs/pdf-tools.md)
 POST   /api/v1/pdf/merge | /split | /organize | /rotate
+POST   /api/v1/files/{id}/unzip        ZIP extraction (see §8 ZIP extraction)
 GET    /api/v1/workflows/definitions | /instances | /tasks/mine   Workflows (see docs/workflows.md)
 POST   /api/v1/workflows/instances | /tasks/{id}/complete | /tasks/{id}/reassign | /instances/{id}/cancel
 ```

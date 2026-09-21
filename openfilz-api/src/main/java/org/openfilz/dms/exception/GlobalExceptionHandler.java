@@ -94,6 +94,12 @@ public class GlobalExceptionHandler {
         return Mono.just(ResponseEntity.status(ex.getStatus()).body(new ErrorResponse(ex.getStatus().value(), ex.getMessage())));
     }
 
+    @ExceptionHandler(UnzipException.class)
+    public Mono<ResponseEntity<ErrorResponse>> handleUnzip(UnzipException ex) {
+        log.warn("Unzip refused ({}): {}", ex.getStatus(), ex.getMessage());
+        return Mono.just(ResponseEntity.status(ex.getStatus()).body(new ErrorResponse(ex.getStatus().value(), ex.getMessage())));
+    }
+
     @ExceptionHandler(WorkflowValidationException.class)
     public Mono<ResponseEntity<WorkflowValidationException.Body>> handleWorkflowValidation(WorkflowValidationException ex) {
         log.debug("Workflow definition rejected: {}", ex.getMessage());
