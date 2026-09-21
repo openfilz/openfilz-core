@@ -62,5 +62,10 @@ public record Settings(Integer emptyBinInterval, Integer fileQuotaMB, Integer us
                        /** Keycloak realm URL the MCP host authenticates against (null when MCP is off). */
                        String mcpAuthorizationServerUrl,
                        /** Keycloak client id to enter in hosts that cannot self-register, e.g. Claude Desktop (null when MCP is off). */
-                       String mcpClientId) {
+                       String mcpClientId,
+                       /**
+                        * Settings an edition built on this API adds for its own frontend (key → value), filled by
+                        * {@code SettingsServiceImpl#extensions()} — empty here. A frontend reads only the keys it knows.
+                        */
+                       java.util.Map<String, Object> extensions) {
 }
