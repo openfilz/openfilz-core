@@ -2,8 +2,8 @@ package org.openfilz.dms.controller.rest;
 
 public interface ApiDescription {
 
-    String ALLOW_DUPLICATE_FILE_NAME_PARAM_DESCRIPTION = "when true : if a file with the same name already exists in the target parent folder, " +
-            "a 409 error is raised. When false : the file will be stored (but no existing file with same name will be overwritten)";
+    String ALLOW_DUPLICATE_FILE_NAME_PARAM_DESCRIPTION = "When true, the file is stored even if a document of the same name already exists " +
+            "in the target folder (nothing is overwritten). When false (default), a 409 is returned.";
 
     String UPLOAD_MULTIPLE_DESCRIPTION = """
             Paste the JSON array here\
