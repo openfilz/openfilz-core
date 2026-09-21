@@ -220,8 +220,16 @@ public class SettingsServiceImpl implements SettingsService {
                .mcpMode(mcpProperties.isActive() ? mcpProperties.getMode().name() : null)
                .mcpAuthorizationServerUrl(mcpProperties.isActive() ? mcpProperties.getAuthorizationServerUrl() : null)
                .mcpClientId(mcpProperties.isActive() ? mcpProperties.getClientId() : null)
+               .extensions(extensions())
                .build());
 
+    }
+
+    /**
+     * {@link Settings#extensions()}: what a subclass adds to the settings for its own frontend. None here.
+     */
+    protected Map<String, Object> extensions() {
+        return Map.of();
     }
 
     /**

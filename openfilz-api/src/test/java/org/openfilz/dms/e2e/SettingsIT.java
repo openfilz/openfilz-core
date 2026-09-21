@@ -56,6 +56,9 @@ public class SettingsIT {
             Assertions.assertNotNull(settings);
             Assertions.assertNull(settings.emptyBinInterval(),
                     "emptyBinInterval should be null when soft-delete is disabled");
+            // The seam an edition fills for its own frontend: always there, empty in this API.
+            Assertions.assertNotNull(settings.extensions());
+            Assertions.assertTrue(settings.extensions().isEmpty(), "extensions: " + settings.extensions());
             log.info("Test passed: emptyBinInterval is null when soft-delete is disabled");
         }
     }
