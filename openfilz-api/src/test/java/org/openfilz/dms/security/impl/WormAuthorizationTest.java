@@ -108,6 +108,7 @@ class WormAuthorizationTest {
         assertTrue(authorize(service, contributor, HttpMethod.POST, "/api/v1/folders"));
         assertTrue(authorize(service, contributor, HttpMethod.POST, "/api/v1/folders/copy"));
         assertTrue(authorize(service, contributor, HttpMethod.POST, "/api/v1/pdf/merge"));
+        assertTrue(authorize(service, contributor, HttpMethod.POST, "/api/v1/files/1/unzip"));
     }
 
     @Test
@@ -131,6 +132,8 @@ class WormAuthorizationTest {
                 "/api/v1/documents/1/metadata"));
         assertTrue(authorize(service, user(Role.CONTRIBUTOR.toString()), HttpMethod.POST,
                 "/api/v1/documents/1/versions/2/restore"));
+        assertTrue(authorize(service, user(Role.CONTRIBUTOR.toString()), HttpMethod.POST, "/api/v1/files/1/unzip"));
+        assertFalse(authorize(service, user(Role.READER.toString()), HttpMethod.POST, "/api/v1/files/1/unzip"));
     }
 
     // ------------------------------------------------------- WORM on, edition with custom writes

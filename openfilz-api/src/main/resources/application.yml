@@ -207,6 +207,15 @@ openfilz:
     max-outputs: ${OPENFILZ_PDF_TOOLS_MAX_OUTPUTS:200}                  # documents one split may produce
     max-concurrent-operations: ${OPENFILZ_PDF_TOOLS_MAX_CONCURRENT:2}   # simultaneous PDFBox compositions per instance
 
+  # Server-side ZIP extraction (POST /files/{id}/unzip) — archive-bomb guards + throughput.
+  # Plain defaults: override through relaxed binding (e.g. OPENFILZ_UNZIP_MAXENTRIES) if ever needed.
+  unzip:
+    max-entries: 10000                  # files + folders in one archive
+    max-uncompressed-bytes: 4294967296  # whole archive, expanded (4 GB)
+    max-compression-ratio: 200          # per entry larger than ratio-threshold-bytes
+    ratio-threshold-bytes: 1048576      # smaller entries are exempt (1 MB)
+    parallelism: 8                      # entries inflated + stored concurrently, per operation (< r2dbc pool max-size)
+
   # Quota Configuration
   quota:
     # Maximum file size for each uploaded file in megabytes (MB)
