@@ -761,6 +761,29 @@ query {
 }
 ```
 
+#### Position of a Document in a Listing
+
+`listFolderPosition` / `listAllFolderPosition` return the 0-based index of a document in exactly
+the listing the request describes (same filters, same sort; `pageNumber` / `pageSize` are ignored),
+or `null` when the listing does not contain it. With `countAllFolder`, a client can page through a
+filtered listing starting from a given document without loading it all. The web file viewer uses
+them to step through every image of a folder:
+
+```graphql
+query {
+  count(request: { id: "<folder id>", contentTypes: ["image/%"] })
+  listFolderPosition(
+    request: { id: "<folder id>", contentTypes: ["image/%"],
+               pageInfo: { pageNumber: 1, pageSize: 1, sortBy: "name", sortOrder: ASC } },
+    documentId: "<image id>"
+  )
+}
+```
+
+`listAllFolderPosition` + `countAllFolder` do the same across all folders, and across the
+favorites with `favorite: true`. Listings break sort ties by id, so the index always matches the
+pages returned by `listFolder` / `listAllFolder` for the same request.
+
 #### Full-Text Search (requires OpenSearch)
 
 ```graphql
