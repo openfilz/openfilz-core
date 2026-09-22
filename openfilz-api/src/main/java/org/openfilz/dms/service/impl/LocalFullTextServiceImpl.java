@@ -18,6 +18,7 @@ import reactor.core.scheduler.Schedulers;
 import reactor.util.retry.Retry;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -59,6 +60,11 @@ public class LocalFullTextServiceImpl implements FullTextService {
     private final IndexService indexService;
     private final TikaService tikaService;
     private final StorageService storageService;
+
+    /** Text extraction, indexing and the embedding it feeds are heavy: bounded per instance. */
+    @Autowired
+    @org.springframework.beans.factory.annotation.Qualifier(org.openfilz.dms.config.PostProcessingConfig.POST_PROCESSING_QUEUE)
+    private org.openfilz.dms.utils.BoundedTaskQueue postProcessingQueue;
 
     // @Lazy injection point: the embedding service bean is always defined now (the AI toggle
     // is runtime-only for native images) but must not be CREATED unless AI is actually active
@@ -110,45 +116,53 @@ public class LocalFullTextServiceImpl implements FullTextService {
     }
 
     private void indexFileWithTextExtraction(Document document) {
+        // Queued: a burst of uploads (unzip, bulk upload) extracts a few files at a time instead of
+        // all at once. Everything — temp file included — is created only once a slot frees up.
+        postProcessingQueue.run(withIndexRetry(Mono.defer(() -> textExtractionPipeline(document)), document,
+                "Retrying indexFile for document {}, attempt {}", "indexFile error for {} : {}"));
+    }
+
+    private Mono<Void> textExtractionPipeline(Document document) {
+        final Path tempFile;
         try {
-            Path tempFile = Files.createTempFile("upload-opf", ".tmp");
-
-            // When AI embedding is active, collect the Tika-extracted text to reuse it
-            // for vector embedding — avoids a second Tika pass on the same file.
-            final boolean shareWithAi = aiActive && documentEmbeddingService != null;
-            final StringBuilder collectedText = shareWithAi ? new StringBuilder() : null;
-
-            Flux<String> tikaFlux = tikaService.processResource(tempFile, storageService.loadFile(document.getStoragePath()),
-                    metadata -> saveFileMetadata(document, metadata));
-
-            // If sharing with AI, tap into the stream to collect text (lightweight — just appending strings)
-            if (shareWithAi) {
-                tikaFlux = tikaFlux.doOnNext(collectedText::append);
-            }
-
-            subscribeAndRetryOnError(indexService.indexDocMetadataMono(document)
-                    .then(tikaFlux.as(flux -> indexService.indexDocumentStream(flux, document.getId())))
-                    .then(Mono.fromRunnable(() -> {
-                        try {
-                            Files.deleteIfExists(tempFile);
-                            log.debug("Cleaned up stable temp file [{}].", tempFile);
-                        } catch (Exception e) {
-                            log.error("Failed to clean up stable temp file [{}].", tempFile, e);
-                        }
-                        // After OpenSearch indexing completes, trigger AI embedding with the collected text
-                        if (shareWithAi && collectedText.length() > 0) {
-                            log.debug("[AI-EMBED] Sharing Tika-extracted text with AI embedding for '{}' ({} chars)",
-                                    document.getName(), collectedText.length());
-                            documentEmbeddingService.embedFromText(document, collectedText.toString()).subscribe();
-                            enqueueInsights(document, collectedText);
-                        }
-                    })),
-                    document,
-                    "Retrying indexFile for document {}, attempt {}", "indexFile error for {} : {}"
-            );
+            tempFile = Files.createTempFile("upload-opf", ".tmp");
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            return Mono.error(new UncheckedIOException(e));
         }
+
+        // When AI embedding is active, collect the Tika-extracted text to reuse it
+        // for vector embedding — avoids a second Tika pass on the same file.
+        final boolean shareWithAi = aiActive && documentEmbeddingService != null;
+        final StringBuilder collectedText = shareWithAi ? new StringBuilder() : null;
+
+        Flux<String> tikaFlux = tikaService.processResource(tempFile, storageService.loadFile(document.getStoragePath()),
+                metadata -> saveFileMetadata(document, metadata));
+
+        // If sharing with AI, tap into the stream to collect text (lightweight — just appending strings)
+        if (shareWithAi) {
+            tikaFlux = tikaFlux.doOnNext(collectedText::append);
+        }
+
+        return indexService.indexDocMetadataMono(document)
+                .then(tikaFlux.as(flux -> indexService.indexDocumentStream(flux, document.getId())))
+                .then(Mono.<Void>fromRunnable(() -> {
+                    // After OpenSearch indexing completes, trigger AI embedding with the collected text
+                    if (shareWithAi && collectedText.length() > 0) {
+                        log.debug("[AI-EMBED] Sharing Tika-extracted text with AI embedding for '{}' ({} chars)",
+                                document.getName(), collectedText.length());
+                        // Queued too (not awaited here: a task must never wait on its own queue).
+                        postProcessingQueue.run(documentEmbeddingService.embedFromText(document, collectedText.toString()));
+                        enqueueInsights(document, collectedText);
+                    }
+                }))
+                .doFinally(_ -> {
+                    try {
+                        Files.deleteIfExists(tempFile);
+                        log.debug("Cleaned up stable temp file [{}].", tempFile);
+                    } catch (Exception e) {
+                        log.error("Failed to clean up stable temp file [{}].", tempFile, e);
+                    }
+                });
     }
 
     /** Tier-2 insight: hand the text head to the enrichment queue (returns at once; off = no-op). */
@@ -195,13 +209,16 @@ public class LocalFullTextServiceImpl implements FullTextService {
     }
 
     private void subscribeAndRetryOnError(Mono<Void> indexProcessMono, Document document, String warningMessage, String errorMessage) {
-        indexProcessMono.retryWhen(Retry.backoff(3, Duration.ofMillis(100))
+        withIndexRetry(indexProcessMono, document, warningMessage, errorMessage).subscribe(null, _ -> { });
+    }
+
+    private Mono<Void> withIndexRetry(Mono<Void> indexProcessMono, Document document, String warningMessage, String errorMessage) {
+        return indexProcessMono.retryWhen(Retry.backoff(3, Duration.ofMillis(100))
                         .filter(this::isRetryableException)
                         .doBeforeRetry(signal -> log.warn(warningMessage,
                                 document.getId(), signal.totalRetries() + 1)))
                 .doOnError(err -> log.error(errorMessage, document.getId(), err.getMessage()))
-                .subscribeOn(Schedulers.boundedElastic())
-                .subscribe();
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     private boolean isRetryableException(Throwable throwable) {
