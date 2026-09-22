@@ -60,6 +60,26 @@ public class DocumentQueryController {
     }
 
     @QueryMapping
+    public Mono<Long> countAllFolder(@Argument ListFolderRequest request,
+                                     DataFetchingEnvironment environment) {
+        return allDocumentQueryService.count(request, environment);
+    }
+
+    @QueryMapping
+    public Mono<Long> listFolderPosition(@Argument @NotNull ListFolderRequest request,
+                                         @Argument @NotNull UUID documentId,
+                                         DataFetchingEnvironment environment) {
+        return documentService.position(request, documentId, environment);
+    }
+
+    @QueryMapping
+    public Mono<Long> listAllFolderPosition(@Argument @NotNull ListFolderRequest request,
+                                            @Argument @NotNull UUID documentId,
+                                            DataFetchingEnvironment environment) {
+        return allDocumentQueryService.position(request, documentId, environment);
+    }
+
+    @QueryMapping
     public Flux<FullDocumentInfo> listFavorites(@Argument @NotNull FavoriteRequest request,
                                              DataFetchingEnvironment environment) {
         return allDocumentQueryService.findAll(request.toListFolderRequest(), environment);
