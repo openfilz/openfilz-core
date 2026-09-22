@@ -135,7 +135,7 @@ public class JavaSdkSamplesIT extends SdkSamplesBaseConfig {
     void downloadFile() throws ApiException, IOException {
         DocumentControllerApi documentApi = new DocumentControllerApi(createClient());
 
-        File downloaded = documentApi.downloadDocument(fileId);
+        File downloaded = documentApi.downloadDocument(fileId, false);
 
         assertNotNull(downloaded);
         assertTrue(downloaded.exists());

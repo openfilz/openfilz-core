@@ -151,7 +151,7 @@ import org.springframework.core.io.Resource;
 
 DocumentControllerApi documentApi = new DocumentControllerApi(apiClient);
 
-Mono<Resource> resource = documentApi.downloadDocument(documentId);
+Mono<Resource> resource = documentApi.downloadDocument(documentId, false);
 
 resource.flatMap(res -> {
     // Process the reactive Resource (e.g., write to file)
@@ -345,7 +345,7 @@ public class MyDocumentController {
 
     @GetMapping("/{id}/download")
     public Mono<Resource> downloadDocument(@PathVariable UUID id) {
-        return openfilzApi.downloadDocument(id);
+        return openfilzApi.downloadDocument(id, false);
     }
 }
 ```
