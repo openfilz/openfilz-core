@@ -1,9 +1,11 @@
 package org.openfilz.dms.service.impl;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.entity.Document;
+import org.openfilz.dms.config.PostProcessingConfig;
 import org.openfilz.dms.service.ThumbnailService;
+import org.openfilz.dms.utils.BoundedTaskQueue;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -17,11 +19,19 @@ import java.util.UUID;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 @ConditionalOnProperty(name = "openfilz.thumbnail.active", havingValue = "true")
 public class ThumbnailPostProcessor {
 
     private final ThumbnailService thumbnailService;
+
+    /** Rendering (PDFBox, Gotenberg, image scaling) is heavy: bounded with the other post-processing. */
+    private final BoundedTaskQueue postProcessingQueue;
+
+    public ThumbnailPostProcessor(ThumbnailService thumbnailService,
+                                  @Qualifier(PostProcessingConfig.POST_PROCESSING_QUEUE) BoundedTaskQueue postProcessingQueue) {
+        this.thumbnailService = thumbnailService;
+        this.postProcessingQueue = postProcessingQueue;
+    }
 
     /**
      * Called after document upload or content replacement.
@@ -51,11 +61,10 @@ public class ThumbnailPostProcessor {
 
         log.debug("Triggering thumbnail generation for document: {}", document.getId());
 
-        // Fire-and-forget async generation
-        thumbnailService.generateThumbnail(document)
+        // Fire-and-forget async generation, queued so a burst of uploads renders a few at a time
+        postProcessingQueue.run(thumbnailService.generateThumbnail(document)
             .doOnSuccess(v -> log.info("Thumbnail generation completed for document: {}", document.getId()))
-            .doOnError(e -> log.error("Thumbnail generation failed for document: {}", document.getId(), e))
-            .subscribe();
+            .doOnError(e -> log.error("Thumbnail generation failed for document: {}", document.getId(), e)));
     }
 
     /**
