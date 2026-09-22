@@ -292,11 +292,12 @@ public class DocumentController {
     }
 
     @GetMapping("/{documentId}/download")
-    @Operation(summary = "Download a document", description = "Downloads a single file document. "
-            + "Pass open=true when the content is fetched to be viewed in the app: the access is then audited as OPEN_DOCUMENT instead of DOWNLOAD_DOCUMENT.")
+    @Operation(summary = "Download a document", description = "Downloads a single file document.")
     public Mono<ResponseEntity<Resource>> downloadDocument(
             @PathVariable UUID documentId,
-            @RequestParam(name = "open", defaultValue = "false") boolean open) {
+            // open=true: the web app fetches the content to show it, audited as OPEN_DOCUMENT instead of
+            // DOWNLOAD_DOCUMENT. Hidden from OpenAPI so the generated SDKs keep downloadDocument(id).
+            @Parameter(hidden = true) @RequestParam(name = "open", defaultValue = "false") boolean open) {
         AuditAction action = open ? AuditAction.OPEN_DOCUMENT : AuditAction.DOWNLOAD_DOCUMENT;
         return documentService.findDocumentToDownloadById(documentId) // First get metadata like name
                 .flatMap(docInfo -> documentService.downloadDocument(docInfo, action)
