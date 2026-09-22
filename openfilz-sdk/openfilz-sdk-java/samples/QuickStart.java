@@ -93,7 +93,7 @@ public class QuickStart {
 
         // ──── 7. Download the file ───────────────────────────────────────
         // Stream-based reading — avoids loading entire file into memory
-        File downloaded = documentApi.downloadDocument(fileId);
+        File downloaded = documentApi.downloadDocument(fileId, false);
         try (BufferedReader reader = new BufferedReader(new FileReader(downloaded))) {
             String line;
             while ((line = reader.readLine()) != null) {
