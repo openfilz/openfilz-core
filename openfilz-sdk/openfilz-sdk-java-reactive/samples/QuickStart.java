@@ -103,7 +103,7 @@ public class QuickStart {
                     UUID fileId = (UUID) ids[1];
 
                     // Download the file
-                    return documentApi.downloadDocument(fileId, false)
+                    return documentApi.downloadDocument(fileId)
                             .doOnNext(file -> System.out.println("Downloaded: " + file.getName()))
                             .thenReturn(new Object[]{folderId, fileId});
                 })
