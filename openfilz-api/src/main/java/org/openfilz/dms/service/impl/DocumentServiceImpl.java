@@ -301,11 +301,11 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
 
 
     @Override
-    public Mono<? extends Resource> downloadDocument(Document doc) {
+    public Mono<? extends Resource> downloadDocument(Document doc, AuditAction action) {
         return (doc.getType() == FILE ?
                 storageService.loadFile(doc.getStoragePath())
                 : zipFolder(documentDAO.getChildren(doc.getId())))
-                .flatMap(r -> auditService.logAction(AuditAction.DOWNLOAD_DOCUMENT, FILE, doc.getId())
+                .flatMap(r -> auditService.logAction(action, FILE, doc.getId())
                         .thenReturn(r));
     }
 

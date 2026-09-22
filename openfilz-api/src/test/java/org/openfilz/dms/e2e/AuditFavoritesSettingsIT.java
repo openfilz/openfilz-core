@@ -3,6 +3,7 @@ package org.openfilz.dms.e2e;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.openfilz.dms.config.RestApiVersion;
+import org.openfilz.dms.dto.audit.AuditLog;
 import org.openfilz.dms.dto.request.CreateFolderRequest;
 import org.openfilz.dms.dto.request.SearchByAuditLogRequest;
 import org.openfilz.dms.dto.response.FolderResponse;
@@ -20,8 +21,10 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 
 /**
@@ -80,6 +83,33 @@ public class AuditFavoritesSettingsIT extends TestContainersBaseConfig {
                 .uri(RestApiVersion.API_PREFIX + "/audit/{id}", file.id())
                 .exchange()
                 .expectStatus().isOk();
+    }
+
+    @Test
+    void whenDownloadWithOpenFlag_thenAuditedAsOpenNotDownload() {
+        UploadResponse file = uploadDocument(newFileBuilder());
+
+        getWebTestClient().get()
+                .uri(uriBuilder -> uriBuilder
+                        .path(RestApiVersion.API_PREFIX + "/documents/{id}/download")
+                        .queryParam("open", "true")
+                        .build(file.id()))
+                .exchange()
+                .expectStatus().isOk();
+        getWebTestClient().get()
+                .uri(RestApiVersion.API_PREFIX + "/documents/{id}/download", file.id())
+                .exchange()
+                .expectStatus().isOk();
+
+        List<AuditAction> actions = getWebTestClient().get()
+                .uri(RestApiVersion.API_PREFIX + "/audit/{id}", file.id())
+                .exchange()
+                .expectStatus().isOk()
+                .expectBodyList(AuditLog.class)
+                .returnResult().getResponseBody()
+                .stream().map(AuditLog::action).toList();
+
+        assertThat(actions).containsOnlyOnce(AuditAction.OPEN_DOCUMENT, AuditAction.DOWNLOAD_DOCUMENT);
     }
 
     // ==================== Audit Search ====================

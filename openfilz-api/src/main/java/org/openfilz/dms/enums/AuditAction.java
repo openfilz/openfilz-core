@@ -18,6 +18,7 @@ public enum AuditAction {
     REPLACE_DOCUMENT_METADATA,
     UPDATE_DOCUMENT_METADATA,
     DOWNLOAD_DOCUMENT,
+    OPEN_DOCUMENT, // Content fetched to be viewed in the app (viewer, OnlyOffice), not saved as a file
     DELETE_DOCUMENT_METADATA,
     // Recycle bin actions
     RESTORE_FILE, // Restore file from recycle bin
