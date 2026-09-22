@@ -149,7 +149,7 @@ import org.openfilz.sdk.api.DocumentControllerApi;
 
 DocumentControllerApi documentApi = new DocumentControllerApi(client);
 
-File downloaded = documentApi.downloadDocument(documentId, false);
+File downloaded = documentApi.downloadDocument(documentId);
 // File is saved to a temp location, move it as needed
 Files.copy(downloaded.toPath(), Path.of("/desired/path/document.pdf"));
 ```
