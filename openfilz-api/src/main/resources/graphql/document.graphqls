@@ -13,6 +13,12 @@ type Query {
     count(request: ListFolderRequest): Long
     listFavorites(request: FavoriteRequest!): [FolderElementInfo]
     countFavorites(request: FavoriteRequest): Long
+    "Count the documents across all folders (listAllFolder's filters; favorite: true counts the favorites)"
+    countAllFolder(request: ListFolderRequest): Long
+    "0-based index of a document in the listFolder listing the request describes (same filters and sort, paging ignored); null when the listing does not contain it"
+    listFolderPosition(request: ListFolderRequest!, documentId: UUID!): Long
+    "0-based index of a document in the listAllFolder listing the request describes (same filters and sort, paging ignored); null when the listing does not contain it"
+    listAllFolderPosition(request: ListFolderRequest!, documentId: UUID!): Long
 }
 
 type FolderElementInfo {

@@ -138,6 +138,10 @@ type Query {
   count(request: ListFolderRequest): Long
   listFavorites(request: FavoriteRequest!): [FolderElementInfo]
   countFavorites(request: FavoriteRequest): Long
+  listAllFolder(request: ListFolderRequest!): [FolderElementInfo]
+  countAllFolder(request: ListFolderRequest): Long
+  listFolderPosition(request: ListFolderRequest!, documentId: UUID!): Long
+  listAllFolderPosition(request: ListFolderRequest!, documentId: UUID!): Long
 }
 ```
 
