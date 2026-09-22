@@ -13,9 +13,12 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 import static org.openfilz.dms.utils.SqlUtils.FROM_DOCUMENTS;
 import static org.openfilz.dms.utils.SqlUtils.SPACE;
@@ -29,6 +32,10 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
     public static final String CASE_FOLDER = ", CASE WHEN type = 'FOLDER' THEN 0 ELSE 1 END as d_type";
     protected static final String D_TYPE = "d_type";
     protected static final String CASE_FAVORITE = ", CASE WHEN uf.doc_id IS NOT NULL THEN TRUE ELSE FALSE END as favorite";
+    /** {@link #D_TYPE} spelled out: a window's ORDER BY cannot see the select list's aliases. */
+    private static final String TYPE_ORDER = "CASE WHEN d.type = 'FOLDER' THEN 0 ELSE 1 END";
+    private static final String POSITION = "pos";
+    private static final String POSITION_DOCUMENT_ID = "positionDocumentId";
 
     protected final ListFolderCriteria criteria;
 
@@ -72,6 +79,33 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
         return getDocuments(sqlQuery, sqlFields);
     }
 
+    /**
+     * 0-based index of {@code documentId} in the listing {@code filter} describes (same filters,
+     * same order as {@link #get}, paging ignored), or empty when the listing does not contain it.
+     * Lets a client page through a filtered listing (e.g. only the images of a folder) starting
+     * from a given document.
+     */
+    public Mono<Long> position(ListFolderRequest filter, UUID documentId, DataFetchingEnvironment environment) {
+        if(filter.pageInfo() == null) {
+            throw new IllegalArgumentException("page info is required");
+        }
+        criteria.checkFilter(filter);
+        StringBuilder listing = new StringBuilder(SqlUtils.SELECT).append(prefix).append("id, ROW_NUMBER() OVER (ORDER BY ");
+        appendOrderTerms(listing, filter, TYPE_ORDER);
+        listing.append(") - 1 AS ").append(POSITION).append(fromClause);
+        appendRemainingFromClause(false, filter.favorite(), listing);
+        applyFilter(filter, prefix, listing);
+        // A document may appear on several rows of the joined listing (e.g. shared twice): keep its first
+        StringBuilder query = new StringBuilder("SELECT MIN(" + POSITION + ") AS " + POSITION + " FROM (")
+                .append(listing).append(") listing WHERE listing.id = :" + POSITION_DOCUMENT_ID);
+        log.debug("GraphQL - SQL query : {}", query);
+        return prepareQuery(environment, filter, query)
+                .bind(POSITION_DOCUMENT_ID, documentId)
+                .map(row -> Optional.ofNullable(row.get(POSITION, Long.class)))
+                .one()
+                .flatMap(Mono::justOrEmpty);
+    }
+
     private  Flux<FullDocumentInfo> getDocuments(DatabaseClient.GenericExecuteSpec sqlQuery, List<String> newFieldsList) {
         return sqlQuery.map(mapFullDocumentInfo(newFieldsList)).all();
     }
@@ -105,11 +139,19 @@ public class ListFolderDataFetcher extends AbstractListDataFetcher<FullDocumentI
     }
 
     public void applySort(StringBuilder query, ListFolderRequest request) {
-        prepareSort(query).append(D_TYPE);
+        appendOrderTerms(prepareSort(query), request, D_TYPE);
+    }
+
+    /** Folders first, then the requested sort, then the id so that ties keep one stable order. */
+    private void appendOrderTerms(StringBuilder query, ListFolderRequest request, String typeTerm) {
+        query.append(typeTerm);
         if(request.pageInfo().sortBy() != null) {
             query.append(", ");
             appendSort(query, request);
         }
+        // Without it, documents with an equal name / date could swap between two page requests
+        // (showing one twice and skipping another), and position() could disagree with the pages.
+        query.append(", ").append(prefix == null ? "id" : prefix + "id");
     }
 
     public StringBuilder prepareSort(StringBuilder query) {

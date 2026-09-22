@@ -325,6 +325,11 @@ guarded by `SizeLimitedInputStream` against lying central directories. Name clas
 pre-existing folder. Audit = one `UPLOAD_DOCUMENT` per file + `CREATE_FOLDER` per folder (EE webhooks / desktop sync feed
 see them; no new `AuditAction`). Security: `/files/**` POST = CONTRIBUTOR; `isWormCreation` admits it (`isUnzip`).
 Tests: `ZipExtractionPlanTest`, `e2e/UnzipIT` (local) + `UnzipMinioIT`.
+**Bounded post-processing.** Each saved file's heavy background work — Tika text extraction + indexing, thumbnails,
+embeddings — goes through the shared `BoundedTaskQueue` bean `postProcessingQueue` (`PostProcessingConfig`,
+`openfilz.post-processing.concurrency`, 0 = CPUs, min 2; FIFO, unbounded in memory). Before it, an unzip of ~150 files
+started all of it at once and starved the API (and could OOM it). New fire-and-forget heavy work after a save should
+`postProcessingQueue.run(...)` too; a task must never wait on another task of the same queue (deadlock).
 
 ### Workflows (statuses / transitions / tasks)
 See `docs/workflows.md`. A native state machine per document, no external engine. Definition = JSON

@@ -1,5 +1,7 @@
 package org.openfilz.dms.service.impl;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -9,7 +11,9 @@ import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.service.IndexService;
 import org.openfilz.dms.service.StorageService;
+import org.openfilz.dms.utils.BoundedTaskQueue;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.test.util.ReflectionTestUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -34,6 +38,19 @@ class LocalFullTextServiceImplTest {
 
     @InjectMocks
     private LocalFullTextServiceImpl service;
+
+    /** Real queue: the text-extraction pipeline runs through it (field-injected in the app). */
+    private final BoundedTaskQueue postProcessingQueue = new BoundedTaskQueue("test", 2);
+
+    @BeforeEach
+    void injectQueue() {
+        ReflectionTestUtils.setField(service, "postProcessingQueue", postProcessingQueue);
+    }
+
+    @AfterEach
+    void stopQueue() {
+        postProcessingQueue.dispose();
+    }
 
     @Test
     void indexDocument_withFolder_callsIndexDocMetadata() {

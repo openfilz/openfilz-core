@@ -38,4 +38,9 @@ public class AllFoldersDocumentQueryService implements DocumentQueryService {
     public Mono<Long> count(ListFolderRequest request, DataFetchingEnvironment environment) {
         return listFolderCountDataFetcher.get(request, environment);
     }
+
+    @Override
+    public Mono<Long> position(ListFolderRequest request, UUID documentId, DataFetchingEnvironment environment) {
+        return listFolderDataFetcher.position(request, documentId, environment);
+    }
 }

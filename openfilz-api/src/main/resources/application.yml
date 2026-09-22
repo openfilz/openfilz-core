@@ -207,6 +207,12 @@ openfilz:
     max-outputs: ${OPENFILZ_PDF_TOOLS_MAX_OUTPUTS:200}                  # documents one split may produce
     max-concurrent-operations: ${OPENFILZ_PDF_TOOLS_MAX_CONCURRENT:2}   # simultaneous PDFBox compositions per instance
 
+  # Heavy background work after an upload (text extraction + indexing, thumbnails, embeddings)
+  # runs at most this many documents at a time; the rest wait in memory. 0 = number of CPUs (min 2).
+  # Plain default: override through relaxed binding (OPENFILZ_POSTPROCESSING_CONCURRENCY) if ever needed.
+  post-processing:
+    concurrency: 0
+
   # Server-side ZIP extraction (POST /files/{id}/unzip) — archive-bomb guards + throughput.
   # Plain defaults: override through relaxed binding (e.g. OPENFILZ_UNZIP_MAXENTRIES) if ever needed.
   unzip:

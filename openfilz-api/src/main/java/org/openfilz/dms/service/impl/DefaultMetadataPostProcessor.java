@@ -3,12 +3,15 @@ package org.openfilz.dms.service.impl;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.MetadataPostProcessingCondition;
+import org.openfilz.dms.config.PostProcessingConfig;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.service.DocumentEmbeddingService;
 import org.openfilz.dms.service.FullTextService;
 import org.openfilz.dms.service.MetadataPostProcessor;
+import org.openfilz.dms.utils.BoundedTaskQueue;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Lazy;
@@ -35,6 +38,11 @@ public class DefaultMetadataPostProcessor implements MetadataPostProcessor {
     @Autowired(required = false)
     @Lazy
     protected DocumentEmbeddingService documentEmbeddingService;
+
+    /** Embedding is CPU-heavy: bounded with the rest of the post-processing. */
+    @Autowired
+    @Qualifier(PostProcessingConfig.POST_PROCESSING_QUEUE)
+    protected BoundedTaskQueue postProcessingQueue;
 
     @Value("${openfilz.thumbnail.active:false}")
     private boolean thumbnailsProperty;
@@ -69,7 +77,7 @@ public class DefaultMetadataPostProcessor implements MetadataPostProcessor {
         // is triggered from LocalFullTextServiceImpl after Tika extraction to share the work)
         if(aiActive && !fullText && document.getType() == DocumentType.FILE) {
             log.debug("[AI-EMBED] Triggering standalone embedding for '{}' (no full-text active)", document.getName());
-            documentEmbeddingService.embedDocument(document).subscribe();
+            postProcessingQueue.run(documentEmbeddingService.embedDocument(document));
         }
     }
 
