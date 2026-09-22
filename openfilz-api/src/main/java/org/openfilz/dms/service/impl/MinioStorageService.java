@@ -14,6 +14,7 @@ import org.openfilz.dms.dto.response.DocumentVersionInfo;
 import org.openfilz.dms.exception.StorageException;
 import org.openfilz.dms.service.StorageService;
 import org.openfilz.dms.utils.FileUtils;
+import org.openfilz.dms.utils.InputStreamFilePart;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
@@ -166,7 +167,33 @@ public class MinioStorageService implements StorageService {
     @Override
     public Mono<String> saveFile(FilePart filePart) {
         String objectName = getUniqueStorageFileName(filePart.filename());
+        if (filePart instanceof InputStreamFilePart sized) {
+            return uploadSizedStream(objectName, sized);
+        }
         return uploadToObject(objectName, filePart);
+    }
+
+    /**
+     * Uploads content of known length straight from its stream: a single PutObject, no pipe, no
+     * extra writer thread and no multipart buffering (used by server-side ZIP extraction).
+     */
+    private Mono<String> uploadSizedStream(String objectName, InputStreamFilePart filePart) {
+        return Mono.fromCallable(() -> {
+                    String contentType = FileUtils.getContentType(filePart);
+                    try (InputStream in = filePart.openStream()) {
+                        minioClient.putObject(PutObjectArgs.builder()
+                                .bucket(minioProperties.getBucketName())
+                                .object(objectName)
+                                .retention(objectLock())
+                                .stream(in, filePart.contentLength(), -1)
+                                .contentType(contentType != null ? contentType : APPLICATION_OCTET_STREAM_VALUE)
+                                .build());
+                    }
+                    log.debug("Uploaded {} ({} bytes) to MinIO bucket {}", objectName, filePart.contentLength(), minioProperties.getBucketName());
+                    return objectName;
+                })
+                .subscribeOn(Schedulers.boundedElastic())
+                .doOnError(e -> log.error("Failed to upload {} to MinIO", objectName, e));
     }
 
     /**

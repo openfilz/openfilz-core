@@ -206,6 +206,7 @@ The Swagger UI provides interactive documentation where you can try out every en
 |--------|------|-------------|
 | `POST` | `/files/move` | Move files |
 | `POST` | `/files/copy` | Copy files |
+| `POST` | `/files/{fileId}/unzip` | Extract a ZIP file server-side (into its folder, a chosen folder, the root, or a new folder) |
 | `PUT` | `/files/{fileId}/rename` | Rename a file |
 | `DELETE` | `/files` | Delete files |
 
@@ -997,7 +998,7 @@ This section provides a complete, step-by-step example of setting up machine-to-
 | Error | Cause | Fix |
 |-------|-------|-----|
 | `UserQuotaExceededException` | Per-user storage quota exceeded | Delete files or request quota increase |
-| Duplicate filename | File with same name exists in target folder | Rename the file or use the `allowDuplicates` parameter |
+| Duplicate filename | File with same name exists in target folder | Rename the file or pass `allowDuplicateFileNames=true` (stores it alongside the existing one; nothing is overwritten) |
 | Parent not found | Target folder UUID doesn't exist | Verify folder ID; use `null` for root |
 
 ---

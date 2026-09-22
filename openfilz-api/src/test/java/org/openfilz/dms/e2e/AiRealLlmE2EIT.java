@@ -1,13 +1,16 @@
 package org.openfilz.dms.e2e;
 
 import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.AiChatRequest;
+import org.openfilz.dms.dto.request.DeleteRequest;
 import org.openfilz.dms.dto.request.ListFolderRequest;
 import org.openfilz.dms.dto.request.PageCriteria;
 import org.openfilz.dms.dto.response.AiChatResponse;
+import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.enums.SortOrder;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -18,6 +21,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.graphql.client.ClientGraphQlResponse;
 import org.springframework.graphql.client.HttpGraphQlClient;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.http.codec.json.JacksonJsonEncoder;
@@ -30,11 +34,12 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.function.BooleanSupplier;
+import java.util.function.IntPredicate;
 
 import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 
@@ -76,7 +81,13 @@ public class AiRealLlmE2EIT extends TestContainersBaseConfig {
             }
             """.trim();
 
+    /** How long the fire-and-forget embedding of an upload (or its removal) may take to land. */
+    private static final Duration EMBEDDING_TIMEOUT = Duration.ofSeconds(60);
+
     private HttpGraphQlClient graphQlClient;
+
+    /** Files this test uploaded, deleted afterwards so they can't leak into another test's RAG context. */
+    private final List<UUID> uploadedIds = new ArrayList<>();
 
     @Autowired
     protected VectorStore vectorStore;
@@ -115,6 +126,28 @@ public class AiRealLlmE2EIT extends TestContainersBaseConfig {
         registry.add("openfilz.ai.chat.excluded-tools", () -> "getDocumentActivity");
     }
 
+    /**
+     * Every chat request runs a RAG search over the whole vector store, so a file left behind by one
+     * test is "related content" in the next one's prompt. It happened on CI: the codeword file of
+     * {@link #toolCalling_readDocumentContent_surfacesTheStoredText} out-ranked the file the
+     * queryDocuments test had just uploaded, and at temperature 0 the model read it back on every
+     * attempt. Delete through the API (a hard delete in the tests, which drops the chunks) and wait
+     * for the chunks to go, since that removal runs off the request thread too.
+     */
+    @AfterEach
+    void deleteUploadedFiles() {
+        if (uploadedIds.isEmpty()) {
+            return;
+        }
+        getWebTestClient().method(HttpMethod.DELETE)
+                .uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_FILES)
+                .body(BodyInserters.fromValue(new DeleteRequest(List.copyOf(uploadedIds))))
+                .exchange()
+                .expectStatus().isNoContent();
+        uploadedIds.forEach(id -> awaitChunks(id, false));
+        uploadedIds.clear();
+    }
+
     // ========================= Embeddings (deterministic) =========================
 
     @Test
@@ -143,14 +176,21 @@ public class AiRealLlmE2EIT extends TestContainersBaseConfig {
     @Test
     void vectorStore_retrievesTheTopicallyMatchingDocument() {
         String marker = "zeta" + UUID.randomUUID().toString().substring(0, 8);
-        vectorStore.add(List.of(
+        List<Document> seeded = List.of(
                 new Document(marker + " The quarterly revenue report shows growth in the EMEA region."),
-                new Document(marker + " A recipe for sourdough bread using a rye starter.")));
+                new Document(marker + " A recipe for sourdough bread using a rye starter."));
+        vectorStore.add(seeded);
 
-        List<Document> hits = vectorStore.similaritySearch(SearchRequest.builder()
-                .query("How did sales perform in Europe?")
-                .topK(1)
-                .build());
+        List<Document> hits;
+        try {
+            hits = vectorStore.similaritySearch(SearchRequest.builder()
+                    .query("How did sales perform in Europe?")
+                    .topK(1)
+                    .build());
+        } finally {
+            // Not tied to a document, so nothing else would ever remove them from later chats' RAG context
+            vectorStore.delete(seeded.stream().map(Document::getId).toList());
+        }
 
         Assertions.assertNotNull(hits);
         Assertions.assertFalse(hits.isEmpty(), "Similarity search must return the seeded documents");
@@ -198,7 +238,7 @@ public class AiRealLlmE2EIT extends TestContainersBaseConfig {
         String folderName = "aimade" + UUID.randomUUID().toString().substring(0, 8);
 
         eventually("the assistant creates folder " + folderName,
-                () -> {
+                attempt -> {
                     chat("Create a folder named exactly " + folderName + " at the root.", null);
                     return folderExists(folderName);
                 });
@@ -207,14 +247,21 @@ public class AiRealLlmE2EIT extends TestContainersBaseConfig {
     @Test
     void toolCalling_queryDocuments_findsAnUploadedFile() {
         String stem = "aiquery" + UUID.randomUUID().toString().substring(0, 8);
-        uploadTextFile(stem + ".txt", "Nothing of consequence.");
+        UUID fileId = uploadTextFile(stem + ".txt", "Nothing of consequence.");
+        // At temperature 0 the same prompt yields the same answer, so a retry must rephrase to be a new sample
+        List<String> prompts = List.of(
+                "Search the documents for a file whose name contains '" + stem + "' and tell me its name.",
+                "Use the document search to find the file with '" + stem + "' in its name. What is it called?",
+                "Is there a document whose name includes '" + stem + "'? Look it up and give me its full name.");
 
-        eventually("the assistant reports " + stem,
-                () -> {
-                    String answer = textOf(chat("Search the documents for a file whose name contains '"
-                            + stem + "' and tell me its name.", null));
+        eventually("the assistant finds and names " + stem,
+                attempt -> {
+                    String answer = textOf(chat(prompts.get(attempt - 1), null));
                     log.info("[AI-E2E] queryDocuments answer: {}", answer);
-                    return answer.contains(stem);
+                    // The id is only there when the answer names a document the lookup actually returned
+                    // (the response turns known names into [[doc:<id>:...]] links). The bare stem is not
+                    // enough: "None of the documents contain '<stem>'" echoes it back.
+                    return answer.contains(fileId.toString());
                 });
     }
 
@@ -225,7 +272,7 @@ public class AiRealLlmE2EIT extends TestContainersBaseConfig {
         uploadTextFile(fileName, "The agreed codeword is " + codeword + ".");
 
         eventually("the assistant reads " + fileName,
-                () -> {
+                attempt -> {
                     String answer = textOf(chat("Read the file named " + fileName
                             + " and tell me the codeword it contains.", null));
                     log.info("[AI-E2E] readDocumentContent answer: {}", answer);
@@ -239,9 +286,9 @@ public class AiRealLlmE2EIT extends TestContainersBaseConfig {
      * Retries a generation-dependent expectation. A small model is sampled, not deterministic: one
      * refusal to call a tool is noise, three in a row is a defect.
      */
-    private void eventually(String what, BooleanSupplier expectation) {
+    private void eventually(String what, IntPredicate expectation) {
         for (int attempt = 1; attempt <= LLM_ATTEMPTS; attempt++) {
-            if (expectation.getAsBoolean()) {
+            if (expectation.test(attempt)) {
                 return;
             }
             log.warn("[AI-E2E] attempt {}/{} did not satisfy: {}", attempt, LLM_ATTEMPTS, what);
@@ -304,13 +351,48 @@ public class AiRealLlmE2EIT extends TestContainersBaseConfig {
                 .orElse(null);
     }
 
-    /** Uploads a file whose name and body the test controls, so the model has something to find. */
-    private void uploadTextFile(String fileName, String content) {
+    /**
+     * Uploads a file whose name and body the test controls, so the model has something to find, and
+     * waits for its embedding: the upload embeds off the request thread, and a chat sent right away
+     * runs its RAG search before the new chunks exist.
+     */
+    private UUID uploadTextFile(String fileName, String content) {
         MultipartBodyBuilder builder = new MultipartBodyBuilder();
         builder.part("file", new ByteArrayResource(content.getBytes(StandardCharsets.UTF_8)))
                 .filename(fileName)
                 .contentType(MediaType.TEXT_PLAIN);
-        uploadDocument(builder);
+        UploadResponse uploaded = uploadDocument(builder);
+        Assertions.assertNotNull(uploaded);
+        uploadedIds.add(uploaded.id());
+        awaitChunks(uploaded.id(), true);
+        return uploaded.id();
+    }
+
+    /** Waits until the document has chunks in the vector store ({@code present}) or has none left. */
+    private void awaitChunks(UUID documentId, boolean present) {
+        long deadline = System.nanoTime() + EMBEDDING_TIMEOUT.toNanos();
+        while (chunksOf(documentId).isEmpty() == present) {
+            if (System.nanoTime() > deadline) {
+                throw new AssertionError("The chunks of " + documentId + " were "
+                        + (present ? "never stored" : "never removed") + " within " + EMBEDDING_TIMEOUT);
+            }
+            try {
+                Thread.sleep(250);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError("Interrupted while waiting for the chunks of " + documentId, e);
+            }
+        }
+    }
+
+    /** Every chunk tagged with the document, whatever its similarity to the query. */
+    private List<Document> chunksOf(UUID documentId) {
+        return vectorStore.similaritySearch(SearchRequest.builder()
+                .query("anything")
+                .topK(1000)
+                .similarityThreshold(0.0)
+                .filterExpression("document_id == '" + documentId + "'")
+                .build());
     }
 
     /** Checks the folder through the read API rather than the tool that created it. */

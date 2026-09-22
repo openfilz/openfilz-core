@@ -2,6 +2,7 @@ package org.openfilz.dms.service;
 
 import org.openfilz.dms.dto.request.*;
 import org.openfilz.dms.dto.response.*;
+import org.openfilz.dms.enums.AuditAction;
 import org.openfilz.dms.enums.DocumentTemplateType;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.utils.ContentInfo;
@@ -56,7 +57,12 @@ public interface DocumentService {
 
     Mono<Void> deleteDocumentMetadata(UUID documentId, DeleteMetadataRequest request);
 
-    Mono<? extends Resource> downloadDocument(Document document);
+    default Mono<? extends Resource> downloadDocument(Document document) {
+        return downloadDocument(document, AuditAction.DOWNLOAD_DOCUMENT);
+    }
+
+    /** Loads the content and audits it as {@code action}: DOWNLOAD_DOCUMENT or OPEN_DOCUMENT. */
+    Mono<? extends Resource> downloadDocument(Document document, AuditAction action);
 
     Mono<Resource> downloadMultipleDocumentsAsZip(List<UUID> documentIds); // Complex: zipping
 

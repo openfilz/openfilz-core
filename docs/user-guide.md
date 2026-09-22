@@ -222,8 +222,24 @@ Select one or more items, then use the toolbar or context menu:
 | **Delete** | Move items to the recycle bin (soft delete) |
 | **Add to Favorites** | Star an item for quick access |
 | **View Properties** | Open the metadata and audit panel |
+| **Unzip** | Extract a ZIP file (see below) |
 
 All operations are tracked in the audit trail.
+
+### Unzipping a ZIP File
+
+**Unzip** appears in the context menu and the toolbar when a single ZIP file is selected (requires the
+`CONTRIBUTOR` role). Choose where to extract it:
+
+- **Current folder** — the folder that contains the ZIP file;
+- **New folder** — a folder created next to the ZIP file (its name defaults to the archive's name);
+- **Another folder** — any folder you can write to, picked from the folder tree.
+
+The extraction runs on the server: the archive is not downloaded to your browser. The folder tree of
+the archive is recreated; folders that already exist are merged, and files whose name already exists
+are skipped — the summary tells you how many files and folders were extracted and how many entries
+were skipped. Every extracted file is an ordinary upload: it appears in the audit trail, is indexed
+for search and counts towards your storage quota.
 
 ---
 

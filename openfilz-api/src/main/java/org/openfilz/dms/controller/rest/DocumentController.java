@@ -16,6 +16,7 @@ import org.openfilz.dms.converter.CustomJsonPart;
 import org.openfilz.dms.dto.request.*;
 import org.openfilz.dms.dto.response.*;
 import org.openfilz.dms.entity.Document;
+import org.openfilz.dms.enums.AuditAction;
 import org.openfilz.dms.dto.response.DocumentIntegrityRecord;
 import org.openfilz.dms.service.DocumentIntegrityService;
 import org.openfilz.dms.service.DocumentService;
@@ -292,9 +293,14 @@ public class DocumentController {
 
     @GetMapping("/{documentId}/download")
     @Operation(summary = "Download a document", description = "Downloads a single file document.")
-    public Mono<ResponseEntity<Resource>> downloadDocument(@PathVariable UUID documentId) {
+    public Mono<ResponseEntity<Resource>> downloadDocument(
+            @PathVariable UUID documentId,
+            // open=true: the web app fetches the content to show it, audited as OPEN_DOCUMENT instead of
+            // DOWNLOAD_DOCUMENT. Hidden from OpenAPI so the generated SDKs keep downloadDocument(id).
+            @Parameter(hidden = true) @RequestParam(name = "open", defaultValue = "false") boolean open) {
+        AuditAction action = open ? AuditAction.OPEN_DOCUMENT : AuditAction.DOWNLOAD_DOCUMENT;
         return documentService.findDocumentToDownloadById(documentId) // First get metadata like name
-                .flatMap(docInfo -> documentService.downloadDocument(docInfo)
+                .flatMap(docInfo -> documentService.downloadDocument(docInfo, action)
                         .map(resource -> sendDownloadResponse(docInfo, resource))
                 );
     }
@@ -342,7 +348,8 @@ public class DocumentController {
         }
 
         return documentService.findDocumentToDownloadById(documentId)
-                .flatMap(docInfo -> documentService.downloadDocument(docInfo)
+                // OnlyOffice fetches the file to display it in the editor: an open, not a download
+                .flatMap(docInfo -> documentService.downloadDocument(docInfo, AuditAction.OPEN_DOCUMENT)
                         .map(resource -> sendOnlyOfficeDownloadResponse(docInfo, resource))
                 )
                 .defaultIfEmpty(ResponseEntity.notFound().build());

@@ -373,7 +373,7 @@ public abstract class AbstractSecurityService implements SecurityService {
 
     /**
      * The writes a write-once perimeter still admits: new documents and new folders. Copies are
-     * included — they write a new object and leave the source untouched. PDF tools are included
+     * included — they write a new object and leave the source untouched, and so is ZIP extraction. PDF tools are included
      * for the same reason, and the service refuses their in-place variant under WORM.
      */
     protected boolean isWormCreation(HttpMethod method, String path) {
@@ -383,7 +383,13 @@ public abstract class AbstractSecurityService implements SecurityService {
                         "/documents/upload-multiple",
                         RestApiVersion.ENDPOINT_PDF) ||
                         path.equals(RestApiVersion.ENDPOINT_FOLDERS) ||
-                        path.equals("/folders/copy"));
+                        path.equals("/folders/copy") ||
+                        isUnzip(path));
+    }
+
+    /** POST /files/{id}/unzip — extraction only creates new documents, the ZIP is left untouched. */
+    protected boolean isUnzip(String path) {
+        return path.startsWith(RestApiVersion.ENDPOINT_FILES + "/") && path.endsWith("/unzip");
     }
 
     protected boolean pathStartsWith(String path, String... contextPaths) {

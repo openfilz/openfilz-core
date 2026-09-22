@@ -116,7 +116,7 @@ class DocumentControllerTest {
 
         when(documentService.findDocumentToDownloadById(documentId)).thenReturn(Mono.error(new DocumentNotFoundException(documentId)));
 
-        StepVerifier.create(documentController.downloadDocument(documentId))
+        StepVerifier.create(documentController.downloadDocument(documentId, false))
                 .expectError(DocumentNotFoundException.class)
                 .verify();
     }
