@@ -61,9 +61,10 @@ public class WorkflowController implements UserInfoService {
     // ── definitions ───────────────────────────────────────────────────────
 
     @GetMapping(value = "/definitions", produces = MediaType.APPLICATION_JSON_VALUE)
-    @Operation(summary = "List workflow definitions")
-    public Flux<WorkflowDefinitionDTO> listDefinitions(@RequestParam(required = false) Boolean active) {
-        return actor().flatMapMany(a -> definitionService.list(active, a));
+    @Operation(summary = "List the workflow definitions the caller may see (mine = created by the caller)")
+    public Flux<WorkflowDefinitionDTO> listDefinitions(@RequestParam(required = false) Boolean active,
+                                                       @RequestParam(required = false, defaultValue = "false") boolean mine) {
+        return actor().flatMapMany(a -> definitionService.list(active, mine, a));
     }
 
     @GetMapping(value = "/definitions/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -107,7 +108,10 @@ public class WorkflowController implements UserInfoService {
     @Operation(summary = "Start a workflow on a document (409 when one is already running)")
     public Mono<WorkflowInstanceDTO> start(@Valid @RequestBody StartWorkflowRequest req,
                                            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
-        return actor(acceptLanguage).flatMap(a -> workflowService.start(req, a));
+        // A definition the caller cannot see is not startable from here (404); hot folders start
+        // through WorkflowTriggerService, which does not ask.
+        return actor(acceptLanguage).flatMap(a -> definitionService.requireVisible(req.definitionId(), a)
+                .then(Mono.defer(() -> workflowService.start(req, a))));
     }
 
     @GetMapping(value = "/instances", produces = MediaType.APPLICATION_JSON_VALUE)

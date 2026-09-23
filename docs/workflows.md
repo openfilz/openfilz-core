@@ -202,9 +202,9 @@ candidate** (`READER` is enough — an approver does not have to be a contributo
 ### Definitions
 | Method | Path | Notes |
 |---|---|---|
-| `GET` | `/definitions?active=` | All definitions, with `runningCount`. |
+| `GET` | `/definitions?active=&mine=` | The definitions the caller may see (`WorkflowAccessPolicy.visibleDefinitions`; core: all), with `runningCount` and `canEdit`. `mine=true` = created by the caller. |
 | `POST` | `/definitions` | `{name, description?, active?, spec, triggerFolderIds?}` → `201`; `400` with the list of problems when invalid; `409` on a duplicate name. |
-| `GET` | `/definitions/{id}` | |
+| `GET` | `/definitions/{id}` | `404` for a definition the caller may not see, as for one that does not exist — likewise `PUT`, `DELETE` and starting it. |
 | `PUT` | `/definitions/{id}` | Same body; bumps `version`. Running instances keep their snapshot. |
 | `DELETE` | `/definitions/{id}` | `409` while instances are running. |
 | `POST` | `/definitions/validate` | Dry run → `{problems: [{path, code, message}]}` (the designer calls it on save). |
@@ -238,6 +238,11 @@ candidate** (`READER` is enough — an approver does not have to be a contributo
   (core: the document is an active file), `canView(instance, email)` (core: everyone),
   `canManage(instance, email)` (core: the initiator). The EE policy answers from its
   ownership/share model.
+* **Definition access** too: `visibleDefinitions(email, roles)` is the test the catalogue, the
+  start dialog and every definition id handed to the API go through (core: every definition is
+  visible; an invisible one answers `404`), `canEditDefinition(definition, email, roles)` decides
+  who may change a visible one (core: everyone). A hot folder is not asked — an upload into it
+  starts its workflow whoever uploads, as the designer set it up.
 * **Task completion** is bound to the candidate list, never to the document's permissions: an
   approver may be someone who cannot otherwise see the file. Actions (`MOVE_TO_FOLDER`,
   `SET_METADATA`) run through the normal `DocumentService` under the actor's `Authentication`,
@@ -288,7 +293,7 @@ so the enterprise fork only mirrors the descriptor entries and the route.
 |---|---|---|
 | `WorkflowNotifier` | `NoopWorkflowNotifier` | In-app notifications (`WORKFLOW_TASK_ASSIGNED`, `WORKFLOW_TASK_OVERDUE`, `WORKFLOW_COMPLETED`, `WORKFLOW_CANCELLED`) through the bell / SSE |
 | `WorkflowMailer` | `SmtpWorkflowMailer` / `LoggingWorkflowMailer` (`workflow-mail/messages_*.properties`) | unchanged |
-| `WorkflowAccessPolicy` | active file / everyone / initiator | ownership & share model; monitor scoped to what the user may see |
+| `WorkflowAccessPolicy` | active file / everyone / initiator; every definition visible and editable | ownership & share model; monitor scoped to what the user may see; definitions scoped to the user's own and their teams', changed by their author or an admin |
 | `WorkflowCommentBridge` | no-op | echoes each decision comment into the document's threaded comments (replies, @mentions) |
 | `WorkflowActorResolver` | synthetic `JwtAuthenticationToken` from the stored e-mail (sweeper, auto-start) | resolves the `users` row |
 | `AbstractSecurityService.isWorkflowAuthorized` | roles above | richer role model |
