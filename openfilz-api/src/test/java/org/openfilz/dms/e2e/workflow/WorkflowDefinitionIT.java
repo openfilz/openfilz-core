@@ -22,7 +22,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 
-/** Definitions: CRUD, validation answers, name uniqueness, delete guard, settings flag. */
+/** Definitions: CRUD, the {@code mine} filter, validation answers, name uniqueness, delete guard, settings flag. */
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestConstructor(autowireMode = ALL)
@@ -54,8 +54,10 @@ class WorkflowDefinitionIT extends AbstractWorkflowIT {
         assertThat(created.spec().states()).extracting(WorkflowState::key).containsExactly("draft", "pending", "approved", "rejected");
         assertThat(created.runningCount()).isZero();
 
+        // Listed as the author: an edition may scope the catalogue (the Enterprise Edition does), and
+        // this class also runs there — who else sees it is that edition's test, not this one.
         List<WorkflowDefinitionDTO> all = getWebTestClient().get().uri(DEF)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + getAccessToken(READER))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .exchange().expectStatus().isOk()
                 .expectBodyList(WorkflowDefinitionDTO.class).returnResult().getResponseBody();
         assertThat(all).extracting(WorkflowDefinitionDTO::id).contains(created.id());
@@ -80,6 +82,21 @@ class WorkflowDefinitionIT extends AbstractWorkflowIT {
         getWebTestClient().get().uri(DEF + "/" + created.id())
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .exchange().expectStatus().isNotFound();
+    }
+
+    @Test
+    void mine_lists_only_the_definitions_the_caller_created() {
+        String contributor = getAccessToken(CONTRIBUTOR);
+        String admin = getAccessToken(ADMIN);
+        WorkflowDefinitionDTO contributors = createDefinition(contributor, definition(unique("Mine"), approvalSpec(users(ADMIN_EMAIL), List.of())));
+        WorkflowDefinitionDTO admins = createDefinition(admin, definition(unique("Not mine"), approvalSpec(users(ADMIN_EMAIL), List.of())));
+
+        List<WorkflowDefinitionDTO> mine = getWebTestClient().get().uri(u -> u.path(DEF).queryParam("mine", true).build())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + contributor)
+                .exchange().expectStatus().isOk()
+                .expectBodyList(WorkflowDefinitionDTO.class).returnResult().getResponseBody();
+        assertThat(mine).extracting(WorkflowDefinitionDTO::id).contains(contributors.id()).doesNotContain(admins.id());
+        assertThat(mine).extracting(WorkflowDefinitionDTO::createdBy).containsOnly(CONTRIBUTOR_EMAIL);
     }
 
     @Test

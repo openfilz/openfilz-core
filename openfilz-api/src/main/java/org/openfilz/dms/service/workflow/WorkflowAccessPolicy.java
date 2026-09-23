@@ -8,6 +8,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 /**
  * Document-access seam. Core has no per-document permissions: anyone may start a workflow on
@@ -50,12 +51,27 @@ public interface WorkflowAccessPolicy {
     /**
      * May this user change that definition — edit it, activate/deactivate it, delete it?
      * <p>
-     * Reading and starting are deliberately not asked about: a workflow is designed to be used by
-     * the team, so the catalogue stays shared. It is the <em>changes</em> that need an owner, or
-     * one designer silently rewrites another's workflow. Core has no notion of ownership and
-     * allows everyone; the Enterprise Edition answers "its author, or an admin".
+     * Only asked about a definition {@link #visibleDefinitions} already lets the user see: seeing a
+     * workflow is enough to start it, the <em>changes</em> need an owner, or one designer silently
+     * rewrites another's workflow. Core has no notion of ownership and allows everyone; the
+     * Enterprise Edition answers "its author, or an admin".
      */
     default Mono<Boolean> canEditDefinition(WorkflowDefinition definition, String userEmail, List<String> roles) {
         return Mono.just(true);
+    }
+
+    /**
+     * Which definitions this user sees: the designer's catalogue, the start dialog, and every
+     * definition id the API is handed (read, change, start) — one it cannot see answers 404, as if
+     * it did not exist. Core has no notion of whom a definition is meant for, so everyone sees the
+     * whole catalogue; an edition that scopes it answers with the test to apply.
+     * <p>
+     * Resolved once per request and then applied to each definition, so a listing costs one lookup
+     * whatever the size of the catalogue. Hot folders are not asked: an upload into one starts its
+     * workflow whoever uploads, as its designer configured it — the folder's own permissions decide
+     * who may upload there ({@link #canUseFolder}).
+     */
+    default Mono<Predicate<WorkflowDefinition>> visibleDefinitions(String userEmail, List<String> roles) {
+        return Mono.just(definition -> true);
     }
 }
