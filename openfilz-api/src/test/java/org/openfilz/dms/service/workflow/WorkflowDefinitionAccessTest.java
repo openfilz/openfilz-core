@@ -26,6 +26,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.reactive.TransactionalOperator;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -42,8 +43,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Who may change a definition, and which folders it may point at — the API's own checks, not the
- * designer's UI.
+ * Who may see a definition, who may change it, and which folders it may point at — the API's own
+ * checks, not the designer's UI.
  * <p>
  * A definition may only point at folders its author can write into — the API's own check, not the
  * designer's folder picker. Core allows every folder ({@code canUseFolder} defaults to true); this
@@ -75,6 +76,7 @@ class WorkflowDefinitionAccessTest {
         when(accessPolicy.canUseFolder(eq(ALLOWED), anyString())).thenReturn(Mono.just(true));
         when(accessPolicy.canUseFolder(eq(REFUSED), anyString())).thenReturn(Mono.just(false));
         when(accessPolicy.canEditDefinition(any(), anyString(), any())).thenReturn(Mono.just(true));
+        when(accessPolicy.visibleDefinitions(anyString(), any())).thenReturn(Mono.just(d -> true));
         // The happy path is assembled even when the folder check refuses (the operators are built
         // eagerly, subscribed lazily), so these have to answer in every case.
         when(repo.findByNameIgnoreCase(anyString())).thenReturn(Mono.empty());
@@ -197,5 +199,59 @@ class WorkflowDefinitionAccessTest {
         StepVerifier.create(service.create(request(null, List.of()), ACTOR)).expectNextCount(1).verifyComplete();
 
         verify(accessPolicy, never()).canUseFolder(any(), anyString());
+    }
+
+    private static WorkflowDefinition definitionBy(String author, String name) {
+        return WorkflowDefinition.builder().id(UUID.randomUUID()).name(name).createdBy(author).version(1)
+                .spec(WorkflowJson.toJson(spec(null))).build();
+    }
+
+    @Test
+    @DisplayName("the catalogue lists only what the policy lets the caller see; mine = the caller's own")
+    void listingKeepsToTheVisibleDefinitions() {
+        WorkflowDefinition own = definitionBy("Alice@Example.com", "Own");
+        WorkflowDefinition teammate = definitionBy("carol@example.com", "Teammate");
+        WorkflowDefinition stranger = definitionBy("bob@example.com", "Stranger");
+        when(repo.findAllByOrderByNameAsc()).thenReturn(Flux.just(own, stranger, teammate));
+        when(accessPolicy.visibleDefinitions(eq(USER), any()))
+                .thenReturn(Mono.just(d -> !"bob@example.com".equals(d.getCreatedBy())));
+
+        StepVerifier.create(service.list(null, false, ACTOR).map(dto -> dto.name()).collectList())
+                .assertNext(names -> assertThat(names).containsExactly("Own", "Teammate"))
+                .verifyComplete();
+        // the author match is case-insensitive, like every other identity match
+        StepVerifier.create(service.list(null, true, ACTOR).map(dto -> dto.name()).collectList())
+                .assertNext(names -> assertThat(names).containsExactly("Own"))
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("a definition the caller cannot see answers 404 everywhere, and nothing is written")
+    void anInvisibleDefinitionDoesNotExistForTheCaller() {
+        when(repo.findById(DEFINITION)).thenReturn(Mono.just(definitionBy("bob@example.com", "Approval")));
+        when(accessPolicy.visibleDefinitions(eq(USER), any())).thenReturn(Mono.just(d -> false));
+
+        StepVerifier.create(service.get(DEFINITION, ACTOR)).verifyErrorSatisfies(this::isNotFound);
+        StepVerifier.create(service.requireVisible(DEFINITION, ACTOR)).verifyErrorSatisfies(this::isNotFound);
+        StepVerifier.create(service.update(DEFINITION, request(null, List.of()), ACTOR)).verifyErrorSatisfies(this::isNotFound);
+        StepVerifier.create(service.delete(DEFINITION, ACTOR)).verifyErrorSatisfies(this::isNotFound);
+
+        verify(repo, never()).save(any());
+        verify(repo, never()).delete(any());
+        // 404 before the ownership question: a 403 would confirm the id is real
+        verify(accessPolicy, never()).canEditDefinition(any(), anyString(), any());
+    }
+
+    @Test
+    @DisplayName("a visible definition passes the start guard")
+    void aVisibleDefinitionMayBeStarted() {
+        when(repo.findById(DEFINITION)).thenReturn(Mono.just(definitionBy("carol@example.com", "Approval")));
+
+        StepVerifier.create(service.requireVisible(DEFINITION, ACTOR)).verifyComplete();
+    }
+
+    private void isNotFound(Throwable e) {
+        assertThat(e).isInstanceOf(ResponseStatusException.class);
+        assertThat(((ResponseStatusException) e).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 }

@@ -49,14 +49,17 @@ public class WorkflowDefinitionServiceImpl implements WorkflowDefinitionService 
     private final TransactionalOperator tx;
 
     @Override
-    public Flux<WorkflowDefinitionDTO> list(Boolean active, WorkflowService.Actor actor) {
-        Flux<WorkflowDefinition> all = active == null ? repo.findAllByOrderByNameAsc() : repo.findAllByActiveOrderByNameAsc(active);
-        return all.concatMap(d -> toDto(d, actor));
+    public Flux<WorkflowDefinitionDTO> list(Boolean active, boolean mine, WorkflowService.Actor actor) {
+        return accessPolicy.visibleDefinitions(actor.email(), actor.roles())
+                .flatMapMany(visible -> (active == null ? repo.findAllByOrderByNameAsc() : repo.findAllByActiveOrderByNameAsc(active))
+                        .filter(visible)
+                        .filter(d -> !mine || isAuthor(d, actor.email())))
+                .concatMap(d -> toDto(d, actor));
     }
 
     @Override
     public Mono<WorkflowDefinitionDTO> get(UUID id, WorkflowService.Actor actor) {
-        return find(id).flatMap(d -> toDto(d, actor));
+        return findVisible(id, actor).flatMap(d -> toDto(d, actor));
     }
 
     @Override
@@ -91,7 +94,7 @@ public class WorkflowDefinitionServiceImpl implements WorkflowDefinitionService 
         String userEmail = actor.email();
         requireValid(request);
         return requireUsableFolders(request, userEmail)
-                .then(Mono.defer(() -> find(id)))
+                .then(Mono.defer(() -> findVisible(id, actor)))
                 .flatMap(d -> requireOwnership(d, actor))
                 .flatMap(d -> requireUniqueName(request.name().trim(), id).thenReturn(d))
                 .flatMap(d -> {
@@ -113,7 +116,7 @@ public class WorkflowDefinitionServiceImpl implements WorkflowDefinitionService 
 
     @Override
     public Mono<Void> delete(UUID id, WorkflowService.Actor actor) {
-        return find(id)
+        return findVisible(id, actor)
                 .flatMap(d -> requireOwnership(d, actor))
                 .flatMap(d -> instances.countByDefinitionIdAndStatus(id, WorkflowInstanceStatus.RUNNING)
                         .flatMap(running -> running > 0
@@ -122,6 +125,11 @@ public class WorkflowDefinitionServiceImpl implements WorkflowDefinitionService 
                                 : repo.delete(d)))
                 .then(auditService.logAction(AuditAction.WORKFLOW_DEFINITION_DELETED, DocumentType.FILE, id))
                 .as(tx::transactional);
+    }
+
+    @Override
+    public Mono<Void> requireVisible(UUID id, WorkflowService.Actor actor) {
+        return findVisible(id, actor).then();
     }
 
     @Override
@@ -187,7 +195,7 @@ public class WorkflowDefinitionServiceImpl implements WorkflowDefinitionService 
 
     /**
      * Changing a definition needs more than the designer role: 403 when the policy says this caller
-     * is not its owner. Reading and starting stay open — the catalogue is shared on purpose.
+     * is not its owner. Seeing it — and so starting it — is {@link #findVisible}'s business.
      */
     private Mono<WorkflowDefinition> requireOwnership(WorkflowDefinition d, WorkflowService.Actor actor) {
         return accessPolicy.canEditDefinition(d, actor.email(), actor.roles())
@@ -196,9 +204,18 @@ public class WorkflowDefinitionServiceImpl implements WorkflowDefinitionService 
                                 "This workflow belongs to " + d.getCreatedBy() + " — only its author can change it")));
     }
 
-    private Mono<WorkflowDefinition> find(UUID id) {
+    /**
+     * A definition the caller may not see is answered exactly like one that does not exist: a 403
+     * would confirm that the id is real.
+     */
+    private Mono<WorkflowDefinition> findVisible(UUID id, WorkflowService.Actor actor) {
         return repo.findById(id)
+                .filterWhen(d -> accessPolicy.visibleDefinitions(actor.email(), actor.roles()).map(visible -> visible.test(d)))
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Workflow definition not found")));
+    }
+
+    private static boolean isAuthor(WorkflowDefinition d, String userEmail) {
+        return d.getCreatedBy() != null && d.getCreatedBy().equalsIgnoreCase(userEmail);
     }
 
     private Mono<WorkflowDefinitionDTO> toDto(WorkflowDefinition d, WorkflowService.Actor actor) {
