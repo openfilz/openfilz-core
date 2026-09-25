@@ -44,7 +44,7 @@ import static org.awaitility.Awaitility.await;
 public class MinioIT extends LocalStorageIT {
 
     @Container
-    static MinIOContainer minio = new MinIOContainer(DockerImageName.parse("chainguard/minio:latest").asCompatibleSubstituteFor("minio/minio"));
+    static MinIOContainer minio = new MinIOContainer(DockerImageName.parse("ghcr.io/openfilz/minio:RELEASE.2026-09-22T19-25-18Z").asCompatibleSubstituteFor("minio/minio"));
 
     public MinioIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
         super(webTestClient, customJacksonJsonEncoder);

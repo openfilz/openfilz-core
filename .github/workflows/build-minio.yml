@@ -1,7 +1,7 @@
 name: Build & Push MinIO image
 
-# ghcr.io/openfilz/minio — built from source because MinIO no longer publishes images.
-# See deploy/docker/minio/Dockerfile.
+# ghcr.io/openfilz/minio (linux/amd64 + linux/arm64) — built from source because MinIO no
+# longer publishes images. See deploy/docker/minio/Dockerfile.
 on:
   push:
     branches: ["main", "develop"]
@@ -21,11 +21,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Login to GHCR
         run: |
-          docker login ghcr.io \
-            -u ${{ github.actor }} \
-            -p ${{ secrets.GITHUB_TOKEN }}
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Extract MinIO release from Dockerfile
         id: version
@@ -33,16 +37,14 @@ jobs:
           MINIO_REF=$(grep -oP '^ARG MINIO_REF=\K\S+' deploy/docker/minio/Dockerfile)
           echo "minio_ref=$MINIO_REF" >> "$GITHUB_OUTPUT"
 
-      - name: Build image
+      - name: Build amd64 image for the smoke test
         run: |
-          docker build \
-            -t ghcr.io/openfilz/minio:${{ steps.version.outputs.minio_ref }} \
-            -t ghcr.io/openfilz/minio:latest \
-            deploy/docker/minio
+          docker buildx build --platform linux/amd64 --load \
+            -t minio-smoke:local deploy/docker/minio
 
       - name: Smoke test
         run: |
-          IMAGE=ghcr.io/openfilz/minio:${{ steps.version.outputs.minio_ref }}
+          IMAGE=minio-smoke:local
           docker run --rm "$IMAGE" --version
           docker run --rm --entrypoint mc "$IMAGE" --version
           docker run -d --name minio-smoke -e MINIO_ROOT_USER=smoke -e MINIO_ROOT_PASSWORD=smoke-secret "$IMAGE" server /data
@@ -51,7 +53,14 @@ jobs:
           docker exec minio-smoke curl -fsS http://localhost:9000/minio/health/live
           docker rm -f minio-smoke
 
-      - name: Push image
+      - name: Build and push multi-arch image
         run: |
-          docker push ghcr.io/openfilz/minio:${{ steps.version.outputs.minio_ref }}
-          docker push ghcr.io/openfilz/minio:latest
+          docker buildx build --platform linux/amd64,linux/arm64 --push \
+            -t ghcr.io/openfilz/minio:${{ steps.version.outputs.minio_ref }} \
+            -t ghcr.io/openfilz/minio:latest \
+            deploy/docker/minio
+
+      - name: Check the arm64 image runs
+        run: |
+          docker run --rm --platform linux/arm64 ghcr.io/openfilz/minio:${{ steps.version.outputs.minio_ref }} --version
+          docker buildx imagetools inspect ghcr.io/openfilz/minio:${{ steps.version.outputs.minio_ref }}
