@@ -224,7 +224,7 @@ public class DocumentController {
                 case DUPLICATE_NAME -> HttpStatus.CONFLICT;
                 case OPERATION_FORBIDDEN -> HttpStatus.FORBIDDEN;
                 case FILE_SIZE_EXCEEDED -> HttpStatus.CONTENT_TOO_LARGE;
-                case USER_QUOTA_EXCEEDED -> HttpStatus.INSUFFICIENT_STORAGE;
+                case USER_QUOTA_EXCEEDED, INSTANCE_QUOTA_EXCEEDED -> HttpStatus.INSUFFICIENT_STORAGE;
                 default -> HttpStatus.INTERNAL_SERVER_ERROR;
             };
         }

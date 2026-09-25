@@ -36,14 +36,20 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(FileSizeExceededException.class)
     public Mono<ResponseEntity<ErrorResponse>> handleFileSizeExceeded(FileSizeExceededException ex) {
         log.warn("File size exceeded: {}", ex.getMessage());
-        return Mono.just(ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE).body(new ErrorResponse(HttpStatus.CONTENT_TOO_LARGE.value(), ex.getMessage())));
+        return Mono.just(ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE).body(new ErrorResponse(HttpStatus.CONTENT_TOO_LARGE.value(), ex.getMessage(), ex.getError())));
     }
 
     @ExceptionHandler(UserQuotaExceededException.class)
     public Mono<ResponseEntity<ErrorResponse>> handleUserQuotaExceeded(UserQuotaExceededException ex) {
         log.warn("User quota exceeded: {}", ex.getMessage());
         // HTTP 507 Insufficient Storage is appropriate for quota exceeded scenarios
-        return Mono.just(ResponseEntity.status(HttpStatus.INSUFFICIENT_STORAGE).body(new ErrorResponse(HttpStatus.INSUFFICIENT_STORAGE.value(), ex.getMessage())));
+        return Mono.just(ResponseEntity.status(HttpStatus.INSUFFICIENT_STORAGE).body(new ErrorResponse(HttpStatus.INSUFFICIENT_STORAGE.value(), ex.getMessage(), ex.getError())));
+    }
+
+    @ExceptionHandler(InstanceQuotaExceededException.class)
+    public Mono<ResponseEntity<ErrorResponse>> handleInstanceQuotaExceeded(InstanceQuotaExceededException ex) {
+        log.warn("Instance quota exceeded: {}", ex.getMessage());
+        return Mono.just(ResponseEntity.status(HttpStatus.INSUFFICIENT_STORAGE).body(new ErrorResponse(HttpStatus.INSUFFICIENT_STORAGE.value(), ex.getMessage(), ex.getError())));
     }
 
     @ExceptionHandler(OperationForbiddenException.class)
@@ -178,7 +184,15 @@ public class GlobalExceptionHandler {
         return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ErrorResponse(HttpStatus.BAD_REQUEST.value(), ex.getMessage())));
     }
 
-    // Simple ErrorResponse record
-    public record ErrorResponse(int status, String message) {
+    /**
+     * Error body. {@code error} is the machine-readable code of an {@link AbstractOpenFilzException}
+     * ({@link OpenFilzException} constants, e.g. {@code UserQuotaExceeded}) when one applies — a client
+     * branches on it instead of parsing the message; absent otherwise.
+     */
+    public record ErrorResponse(int status, String message,
+                                @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String error) {
+        public ErrorResponse(int status, String message) {
+            this(status, message, null);
+        }
     }
 }

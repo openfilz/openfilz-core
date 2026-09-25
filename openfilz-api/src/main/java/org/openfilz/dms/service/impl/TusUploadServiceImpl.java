@@ -4,7 +4,7 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.openfilz.dms.config.QuotaProperties;
+import org.openfilz.dms.service.quota.StorageQuotaService;
 import org.openfilz.dms.config.TusProperties;
 import org.openfilz.dms.dto.TusUploadMetadata;
 import org.openfilz.dms.dto.audit.UploadAudit;
@@ -61,7 +61,7 @@ import static org.openfilz.dms.enums.DocumentType.FOLDER;
 public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
 
     private final TusProperties tusProperties;
-    private final QuotaProperties quotaProperties;
+    private final StorageQuotaService storageQuotaService;
     private final StorageService storageService;
     private final DocumentDAO documentDAO;
     private final AuditService auditService;
@@ -73,8 +73,7 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
     @Override
     public Mono<Void> validateUploadCreation(Long uploadLength, String filename, UUID parentFolderId, Boolean allowDuplicateFileNames) {
         String effectiveFilename = filename != null ? filename : "upload";
-        return validateFileUploadQuota(uploadLength, effectiveFilename)
-                .then(validateUserQuota(uploadLength))
+        return storageQuotaService.checkUpload(effectiveFilename, uploadLength)
                 .then(validateParentFolder(parentFolderId))
                 .then(validateDuplicateName(effectiveFilename, parentFolderId, allowDuplicateFileNames));
     }
@@ -154,8 +153,14 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
 
                     String dataPath = storageService.getTusDataPath(uploadId);
 
+                    // Never accept a byte past the declared Upload-Length: that length is what the
+                    // quotas were checked against at creation. The stream fails as soon as it would
+                    // overflow, before the offset is recorded, so the extra bytes are never counted.
+                    long remaining = meta.length() - meta.offset();
+                    Flux<DataBuffer> bounded = limitTo(data, remaining, meta.length());
+
                     // Write chunk using StorageService
-                    return storageService.appendData(dataPath, data, meta.offset())
+                    return storageService.appendData(dataPath, bounded, meta.offset())
                             .flatMap(newOffset -> {
                                 // Update metadata with new offset
                                 TusUploadMetadata updatedMeta = meta.withOffset(newOffset);
@@ -163,6 +168,19 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
                                         .thenReturn(newOffset);
                             });
                 });
+    }
+
+    /** Passes {@code data} through, failing once more than {@code remaining} bytes went by. */
+    static Flux<DataBuffer> limitTo(Flux<DataBuffer> data, long remaining, long uploadLength) {
+        java.util.concurrent.atomic.AtomicLong seen = new java.util.concurrent.atomic.AtomicLong();
+        return data.handle((buffer, sink) -> {
+            if (seen.addAndGet(buffer.readableByteCount()) > remaining) {
+                org.springframework.core.io.buffer.DataBufferUtils.release(buffer);
+                sink.error(new TusUploadLengthExceededException(uploadLength));
+            } else {
+                sink.next(buffer);
+            }
+        });
     }
 
     @Override
@@ -179,38 +197,11 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
                     UUID parentFolderId = request.parentFolderId();
 
                     // Validate and create document
-                    return validateFileUploadQuota(meta.length(), filename)
-                            .then(validateUserQuota(meta.length()))
+                    return storageQuotaService.checkUpload(filename, meta.length())
                             .then(validateParentFolder(parentFolderId))
                             .then(validateDuplicateName(filename, parentFolderId, request.allowDuplicateFileNames()))
                             .then(moveToStorageAndCreateDocument(uploadId, meta, request));
                 });
-    }
-
-    private Mono<Void> validateFileUploadQuota(Long fileSize, String filename) {
-        if (!quotaProperties.isFileUploadQuotaEnabled()) {
-            return Mono.empty();
-        }
-        Long maxSize = quotaProperties.getFileUploadQuotaInBytes();
-        if (fileSize > maxSize) {
-            return Mono.error(new FileSizeExceededException(filename, fileSize, maxSize));
-        }
-        return Mono.empty();
-    }
-
-    private Mono<Void> validateUserQuota(Long fileSize) {
-        if (!quotaProperties.isUserQuotaEnabled()) {
-            return Mono.empty();
-        }
-        Long maxQuota = quotaProperties.getUserQuotaInBytes();
-        return getConnectedUserEmail()
-                .flatMap(username -> documentDAO.getTotalStorageByUser(username)
-                        .flatMap(currentUsage -> {
-                            if (currentUsage + fileSize > maxQuota) {
-                                return Mono.error(new UserQuotaExceededException(username, currentUsage, fileSize, maxQuota));
-                            }
-                            return Mono.empty();
-                        }));
     }
 
     private Mono<Void> validateParentFolder(UUID parentFolderId) {

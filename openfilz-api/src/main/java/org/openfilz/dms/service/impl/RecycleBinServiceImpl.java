@@ -2,14 +2,13 @@ package org.openfilz.dms.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.openfilz.dms.config.QuotaProperties;
+import org.openfilz.dms.service.quota.StorageQuotaService;
 import org.openfilz.dms.dto.response.FolderElementInfo;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.AuditAction;
 import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.enums.OpenSearchDocumentKey;
 import org.openfilz.dms.exception.DocumentNotFoundException;
-import org.openfilz.dms.exception.UserQuotaExceededException;
 import org.openfilz.dms.repository.DocumentDAO;
 import org.openfilz.dms.repository.DocumentRepository;
 import org.openfilz.dms.repository.impl.DocumentSoftDeleteDAO;
@@ -45,7 +44,7 @@ public class RecycleBinServiceImpl implements RecycleBinService, UserInfoService
     private final StorageService storageService;
     private final AuditService auditService;
     private final TransactionalOperator tx;
-    private final QuotaProperties quotaProperties;
+    private final StorageQuotaService storageQuotaService;
 
     @Override
     public Flux<FolderElementInfo> listDeletedItems() {
@@ -54,26 +53,11 @@ public class RecycleBinServiceImpl implements RecycleBinService, UserInfoService
 
     @Override
     public Mono<Void> restoreItems(List<UUID> documentIds) {
-        Mono<Void> quotaCheck = Mono.empty();
-
-        if (quotaProperties.isUserQuotaEnabled()) {
-            Long maxQuota = quotaProperties.getUserQuotaInBytes();
-            quotaCheck = getConnectedUserEmail()
-                    .flatMap(username -> Mono.zip(
-                            documentDAO.getTotalStorageByUser(username),
-                            Flux.fromIterable(documentIds)
-                                    .flatMap(documentSoftDeleteDAO::getTotalSizeToRestore)
-                                    .reduce(0L, Long::sum)
-                    ).flatMap(tuple -> {
-                        long currentUsage = tuple.getT1();
-                        long restoreSize = tuple.getT2();
-                        if (currentUsage + restoreSize > maxQuota) {
-                            return Mono.error(new UserQuotaExceededException(
-                                    username, currentUsage, restoreSize, maxQuota));
-                        }
-                        return Mono.empty();
-                    }));
-        }
+        // Restoring brings files back into the caller's (and the instance's) usage.
+        Mono<Void> quotaCheck = Flux.fromIterable(documentIds)
+                .flatMap(documentSoftDeleteDAO::getTotalSizeToRestore)
+                .reduce(0L, Long::sum)
+                .flatMap(storageQuotaService::checkStorage);
 
         return quotaCheck.then(Flux.fromIterable(documentIds)
                 .flatMap(docId -> documentRepository.findById(docId) // Find even if deleted

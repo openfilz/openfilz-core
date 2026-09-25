@@ -32,6 +32,16 @@ public class QuotaProperties {
      */
     private Integer user = 0;
 
+    /**
+     * Maximum total storage of the whole instance in megabytes (MB): the sum of every user's
+     * active files. When an upload would take the instance past it, the upload is refused with
+     * HTTP 507 whatever the user's own quota.
+     * - If 0: No instance-wide limit (default behavior)
+     * - If > 0: Maximum total storage in MB for the instance
+     * - If < 0: Invalid configuration (throws error at startup)
+     */
+    private Integer total = 0;
+
     @PostConstruct
     public void validate() {
         if (fileUpload < 0) {
@@ -41,6 +51,11 @@ public class QuotaProperties {
         if (user < 0) {
             throw new IllegalArgumentException(
                     "openfilz.quota.user must be >= 0 (0 means no limit, > 0 means max total storage per user in MB). Current value: " + user);
+        }
+
+        if (total != null && total < 0) {
+            throw new IllegalArgumentException(
+                    "openfilz.quota.total must be >= 0 (0 means no limit, > 0 means max total storage of the instance in MB). Current value: " + total);
         }
 
         if (fileUpload == 0) {
@@ -53,6 +68,12 @@ public class QuotaProperties {
             log.info("User storage quota is disabled (no total storage limit per user)");
         } else {
             log.info("User storage quota is set to {} MB per user", user);
+        }
+
+        if (total == null || total == 0) {
+            log.info("Instance storage quota is disabled (no total storage limit for the instance)");
+        } else {
+            log.info("Instance storage quota is set to {} MB", total);
         }
     }
 
@@ -74,6 +95,23 @@ public class QuotaProperties {
             return null;
         }
         return user * 1024L * 1024L;
+    }
+
+    /**
+     * Returns the instance-wide quota in bytes, or null if quota is disabled (0).
+     */
+    public Long getTotalQuotaInBytes() {
+        if (total == null || total == 0) {
+            return null;
+        }
+        return total * 1024L * 1024L;
+    }
+
+    /**
+     * Checks if instance-wide quota enforcement is enabled.
+     */
+    public boolean isTotalQuotaEnabled() {
+        return total != null && total > 0;
     }
 
     /**

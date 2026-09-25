@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.openfilz.dms.config.QuotaProperties;
+import org.openfilz.dms.service.quota.StorageQuotaService;
 import org.openfilz.dms.dto.Checksum;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.DocumentType;
@@ -43,7 +43,7 @@ class ChecksumSaveDocumentServiceImplTest {
     @Mock private DocumentDAO documentDAO;
     @Mock private MetadataPostProcessor metadataPostProcessor;
     @Mock private TransactionalOperator tx;
-    @Mock private QuotaProperties quotaProperties;
+    @Mock private StorageQuotaService storageQuotaService;
     @Mock private ChecksumService checksumService;
     @Mock private org.openfilz.dms.service.DocumentIntegrityService integrityService;
 
@@ -53,7 +53,7 @@ class ChecksumSaveDocumentServiceImplTest {
     void setUp() {
         service = new ChecksumSaveDocumentServiceImpl(
                 storageService, objectMapper, auditService, jsonUtils,
-                documentDAO, metadataPostProcessor, tx, quotaProperties, checksumService,
+                documentDAO, metadataPostProcessor, tx, storageQuotaService, checksumService,
                 integrityService);
     }
 

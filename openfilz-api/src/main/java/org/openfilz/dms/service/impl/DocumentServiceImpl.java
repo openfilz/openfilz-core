@@ -18,14 +18,12 @@ import org.openfilz.dms.enums.AuditAction;
 import org.openfilz.dms.enums.DocumentTemplateType;
 import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.enums.OpenSearchDocumentKey;
-import org.openfilz.dms.config.QuotaProperties;
 import org.openfilz.dms.exception.DocumentNotFoundException;
 import org.openfilz.dms.exception.DuplicateNameException;
-import org.openfilz.dms.exception.FileSizeExceededException;
 import org.openfilz.dms.exception.OperationForbiddenException;
 import org.openfilz.dms.exception.StorageException;
-import org.openfilz.dms.exception.UserQuotaExceededException;
 import org.openfilz.dms.repository.DocumentDAO;
+import org.openfilz.dms.service.quota.StorageQuotaService;
 import org.openfilz.dms.service.*;
 import org.openfilz.dms.utils.BlankDocumentGenerator;
 import org.openfilz.dms.utils.ContentInfo;
@@ -76,7 +74,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
     protected final MetadataPostProcessor metadataPostProcessor;
     protected final DocumentDeleteService documentDeleteService;
     protected final BlankDocumentGenerator blankDocumentGenerator;
-    protected final QuotaProperties quotaProperties;
+    protected final StorageQuotaService storageQuotaService;
 
     /**
      * Validates that the file size does not exceed the configured file upload quota.
@@ -85,45 +83,26 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
      * @return Mono.empty() if valid, Mono.error(FileSizeExceededException) if quota exceeded
      */
     protected Mono<Void> validateFileSize(Long contentLength, String filename) {
-        if (!quotaProperties.isFileUploadQuotaEnabled() || contentLength == null) {
-            return Mono.empty();
-        }
-        Long maxSize = quotaProperties.getFileUploadQuotaInBytes();
-        if (contentLength > maxSize) {
-            return Mono.error(new FileSizeExceededException(filename, contentLength, maxSize));
-        }
-        return Mono.empty();
+        return storageQuotaService.checkFileSize(filename, contentLength);
     }
 
     /**
-     * Validates that the user's total storage plus the new file does not exceed the user quota.
+     * Validates that the user's storage (and the instance's) plus the new file stays within quota.
      * @param newFileSize the size of the new file in bytes
-     * @return Mono.empty() if valid, Mono.error(UserQuotaExceededException) if quota exceeded
+     * @return Mono.empty() if valid, Mono.error(UserQuotaExceededException / InstanceQuotaExceededException) otherwise
      */
     protected Mono<Void> validateUserQuota(Long newFileSize) {
-        if (!quotaProperties.isUserQuotaEnabled() || newFileSize == null) {
-            return Mono.empty();
-        }
-        Long maxQuota = quotaProperties.getUserQuotaInBytes();
-        return getConnectedUserEmail()
-                .flatMap(username -> documentDAO.getTotalStorageByUser(username)
-                        .flatMap(currentUsage -> {
-                            if (currentUsage + newFileSize > maxQuota) {
-                                return Mono.error(new UserQuotaExceededException(username, currentUsage, newFileSize, maxQuota));
-                            }
-                            return Mono.empty();
-                        }));
+        return storageQuotaService.checkStorage(newFileSize);
     }
 
     /**
-     * Validates both file size quota and user quota.
+     * Validates both file size quota and storage quotas.
      * @param contentLength the size of the file in bytes
      * @param filename the name of the file (for error message)
      * @return Mono.empty() if valid, Mono.error if any quota exceeded
      */
     protected Mono<Void> validateQuotas(Long contentLength, String filename) {
-        return validateFileSize(contentLength, filename)
-                .then(validateUserQuota(contentLength));
+        return storageQuotaService.checkUpload(filename, contentLength);
     }
 
     @Override
@@ -704,29 +683,13 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
     }
 
     /**
-     * Validates user quota for content replacement.
-     * Checks if the net change (newSize - oldSize) would cause the user to exceed quota.
+     * Validates storage quotas for content replacement: only the growth (newSize - oldSize) counts.
      */
     private Mono<Void> validateUserQuotaForReplace(Long newFileSize, Long oldFileSize) {
-        if (!quotaProperties.isUserQuotaEnabled() || newFileSize == null) {
+        if (newFileSize == null) {
             return Mono.empty();
         }
-        // Calculate the net change in storage
-        long netChange = newFileSize - (oldFileSize != null ? oldFileSize : 0L);
-        if (netChange <= 0) {
-            // File is same size or smaller, no quota concern
-            return Mono.empty();
-        }
-        // Only validate if the new file is larger than the old one
-        Long maxQuota = quotaProperties.getUserQuotaInBytes();
-        return getConnectedUserEmail()
-                .flatMap(username -> documentDAO.getTotalStorageByUser(username)
-                        .flatMap(currentUsage -> {
-                            if (currentUsage + netChange > maxQuota) {
-                                return Mono.error(new UserQuotaExceededException(username, currentUsage, netChange, maxQuota));
-                            }
-                            return Mono.empty();
-                        }));
+        return storageQuotaService.checkStorage(newFileSize - (oldFileSize != null ? oldFileSize : 0L));
     }
 
 

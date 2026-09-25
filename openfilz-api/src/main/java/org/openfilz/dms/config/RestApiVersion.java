@@ -25,4 +25,8 @@ public interface RestApiVersion {
     String ENDPOINT_PUBLIC_SIGNATURES = "/public/signatures";
     String ENDPOINT_PDF = "/pdf";
     String ENDPOINT_WORKFLOWS = "/workflows";
+    /** The caller's own storage quota. */
+    String ENDPOINT_QUOTAS = "/quotas";
+    /** Storage quota administration (ADMIN). */
+    String ENDPOINT_ADMIN_QUOTAS = "/admin/quotas";
 }

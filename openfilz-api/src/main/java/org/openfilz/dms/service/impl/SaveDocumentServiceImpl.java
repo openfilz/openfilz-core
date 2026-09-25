@@ -3,19 +3,17 @@ package org.openfilz.dms.service.impl;
 import io.r2dbc.postgresql.codec.Json;
 import tools.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
-import org.openfilz.dms.config.QuotaProperties;
 import org.openfilz.dms.dto.audit.ReplaceAudit;
 import org.openfilz.dms.dto.audit.UploadAudit;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.AuditAction;
-import org.openfilz.dms.exception.FileSizeExceededException;
-import org.openfilz.dms.exception.UserQuotaExceededException;
 import org.openfilz.dms.repository.DocumentDAO;
 import org.openfilz.dms.service.AuditService;
 import org.openfilz.dms.service.MetadataPostProcessor;
 import org.openfilz.dms.service.SaveDocumentService;
 import org.openfilz.dms.service.StorageService;
+import org.openfilz.dms.service.quota.StorageQuotaService;
 import org.openfilz.dms.utils.FileUtils;
 import org.openfilz.dms.utils.ContentInfo;
 import org.openfilz.dms.utils.JsonUtils;
@@ -46,7 +44,7 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
     protected final DocumentDAO documentDAO;
     protected final MetadataPostProcessor metadataPostProcessor;
     protected final TransactionalOperator tx;
-    protected final QuotaProperties quotaProperties;
+    protected final StorageQuotaService storageQuotaService;
 
 
    public Mono<UploadResponse> doSaveFile(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, Mono<String> storagePathMono) {
@@ -76,7 +74,10 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
     protected Mono<Document> replaceFileContentAndSave(FilePart newFilePart, ContentInfo contentInfo, Document document, String newStoragePath, String oldStoragePath) {
         boolean quotaAlreadyChecked = contentInfo != null && contentInfo.length() != null;
         String checksum = contentInfo != null ? contentInfo.checksum() : null;
-        return storedFileLength(newStoragePath, newFilePart.filename(), quotaAlreadyChecked)
+        long oldSize = document.getSize() != null ? document.getSize() : 0L;
+        return storedFileLength(newStoragePath, newFilePart.filename(), quotaAlreadyChecked, oldSize,
+                        // In place (bucket versioning): the object is the document itself, never delete it.
+                        !newStoragePath.equals(oldStoragePath))
                 .flatMap(fileLength -> replaceDocumentInDB(newFilePart, newStoragePath, oldStoragePath, new ContentInfo(fileLength, checksum), document))
                 .doOnSuccess(this::postProcessDocument);
     }
@@ -90,7 +91,7 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
 
 
     protected Mono<Document> saveDocumentInDatabase(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, String storagePath) {
-        return storedFileLength(storagePath, originalFilename, contentLength != null)
+        return storedFileLength(storagePath, originalFilename, contentLength != null, 0L, true)
                 .flatMap(fileLength -> saveDocumentInDB(filePart, storagePath, fileLength, parentFolderId, metadata, originalFilename));
     }
 
@@ -102,56 +103,23 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
      * what the caller already did when it had one; without it, the quotas are checked here,
      * against the real length.
      */
-    private Mono<Long> storedFileLength(String storagePath, String filename, boolean quotaAlreadyChecked) {
+    private Mono<Long> storedFileLength(String storagePath, String filename, boolean quotaAlreadyChecked, long replacedBytes, boolean deleteOnRefusal) {
         return storageService.getFileLength(storagePath)
                 .flatMap(fileLength -> quotaAlreadyChecked
                         ? Mono.just(fileLength)
-                        : validateFileSizeAfterStorage(fileLength, filename, storagePath).thenReturn(fileLength));
+                        : validateQuotasAfterStorage(fileLength, replacedBytes, filename, storagePath, deleteOnRefusal).thenReturn(fileLength));
     }
 
     /**
-     * Validates file size and user quota after storage when Content-Length header was not available.
-     * If any quota is exceeded, deletes the stored file and returns an error.
+     * Validates the file size and storage quotas after storage, when the length was not known
+     * before (no Content-Length). {@code replacedBytes} is the size of the content being replaced
+     * (0 for a new document): only the growth counts against the storage quotas. When a quota is
+     * exceeded, the stored file is deleted before the error goes out.
      */
-    private Mono<Void> validateFileSizeAfterStorage(Long fileLength, String filename, String storagePath) {
-        return validateFileUploadQuota(fileLength, filename, storagePath)
-                .then(validateUserQuotaAfterStorage(fileLength, storagePath));
-    }
-
-    /**
-     * Validates file upload quota (single file size limit).
-     */
-    private Mono<Void> validateFileUploadQuota(Long fileLength, String filename, String storagePath) {
-        if (!quotaProperties.isFileUploadQuotaEnabled()) {
-            return Mono.empty();
-        }
-        Long maxSize = quotaProperties.getFileUploadQuotaInBytes();
-        if (fileLength > maxSize) {
-            // Delete the file that was already stored, then return error
-            return storageService.deleteFile(storagePath)
-                    .then(Mono.error(new FileSizeExceededException(filename, fileLength, maxSize)));
-        }
-        return Mono.empty();
-    }
-
-    /**
-     * Validates user quota after storage when Content-Length was not available.
-     */
-    private Mono<Void> validateUserQuotaAfterStorage(Long fileLength, String storagePath) {
-        if (!quotaProperties.isUserQuotaEnabled()) {
-            return Mono.empty();
-        }
-        Long maxQuota = quotaProperties.getUserQuotaInBytes();
-        return getConnectedUserEmail()
-                .flatMap(username -> documentDAO.getTotalStorageByUser(username)
-                        .flatMap(currentUsage -> {
-                            if (currentUsage + fileLength > maxQuota) {
-                                // Delete the file that was already stored, then return error
-                                return storageService.deleteFile(storagePath)
-                                        .then(Mono.error(new UserQuotaExceededException(username, currentUsage, fileLength, maxQuota)));
-                            }
-                            return Mono.empty();
-                        }));
+    private Mono<Void> validateQuotasAfterStorage(Long fileLength, long replacedBytes, String filename, String storagePath, boolean deleteOnRefusal) {
+        return storageQuotaService.checkFileSize(filename, fileLength)
+                .then(storageQuotaService.checkStorage(fileLength - replacedBytes))
+                .onErrorResume(e -> deleteOnRefusal ? storageService.deleteFile(storagePath).then(Mono.error(e)) : Mono.error(e));
     }
 
     private Mono<Document> saveDocumentInDB(FilePart filePart, String storagePath, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename) {

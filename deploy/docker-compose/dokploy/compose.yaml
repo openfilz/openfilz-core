@@ -221,6 +221,14 @@ services:
       # Quotas (MB)
       OPENFILZ_QUOTA_FILE_UPLOAD: ${OPENFILZ_QUOTA_FILE_UPLOAD:-1024}
       OPENFILZ_QUOTA_USER: ${OPENFILZ_QUOTA_USER:-2048}
+      OPENFILZ_QUOTA_TOTAL: ${OPENFILZ_QUOTA_TOTAL:-0}
+
+      # Resumable uploads (TUS) — sizes in bytes, periods in milliseconds
+      TUS_ENABLED: ${TUS_ENABLED:-true}
+      TUS_MAX_UPLOAD_SIZE: ${TUS_MAX_UPLOAD_SIZE:-10737418240}
+      TUS_CHUNK_SIZE: ${TUS_CHUNK_SIZE:-52428800}
+      TUS_UPLOAD_EXPIRATION: ${TUS_UPLOAD_EXPIRATION:-86400000}
+      TUS_CLEANUP_INTERVAL: ${TUS_CLEANUP_INTERVAL:-3600000}
 
       # Workflows (optional - set OPENFILZ_WORKFLOWS_ACTIVE=true to enable)
       # Master switch over the Workflows menu, /api/v1/workflows/** and the overdue-task
