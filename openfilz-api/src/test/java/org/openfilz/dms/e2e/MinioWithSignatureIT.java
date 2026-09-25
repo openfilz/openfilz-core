@@ -33,7 +33,7 @@ import java.util.UUID;
 public class MinioWithSignatureIT extends AbstractStorageWithSignatureIT {
 
     @Container
-    static MinIOContainer minio = new MinIOContainer(DockerImageName.parse("quay.io/minio/minio:latest").asCompatibleSubstituteFor("minio/minio"));
+    static MinIOContainer minio = new MinIOContainer(DockerImageName.parse("chainguard/minio:latest").asCompatibleSubstituteFor("minio/minio"));
 
     public MinioWithSignatureIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
         super(webTestClient, customJacksonJsonEncoder);

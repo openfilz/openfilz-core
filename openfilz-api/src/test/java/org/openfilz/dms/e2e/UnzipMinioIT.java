@@ -19,7 +19,7 @@ import org.testcontainers.utility.DockerImageName;
 public class UnzipMinioIT extends UnzipIT {
 
     @Container
-    static MinIOContainer minio = new MinIOContainer(DockerImageName.parse("quay.io/minio/minio:latest").asCompatibleSubstituteFor("minio/minio"));
+    static MinIOContainer minio = new MinIOContainer(DockerImageName.parse("chainguard/minio:latest").asCompatibleSubstituteFor("minio/minio"));
 
     public UnzipMinioIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
         super(webTestClient, customJacksonJsonEncoder);
