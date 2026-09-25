@@ -54,7 +54,7 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 public class MinioChecksumVersioningIT extends TestContainersBaseConfig {
 
     @Container
-    static MinIOContainer minio = new MinIOContainer(DockerImageName.parse("quay.io/minio/minio:latest").asCompatibleSubstituteFor("minio/minio"));
+    static MinIOContainer minio = new MinIOContainer(DockerImageName.parse("chainguard/minio:latest").asCompatibleSubstituteFor("minio/minio"));
 
     @Autowired
     private DatabaseClient databaseClient;

@@ -13,8 +13,13 @@ services:
   # =============================================================================
   # MinIO S3-Compatible Object Storage
   # =============================================================================
+  # MinIO no longer publishes images (quay.io/minio/* and Docker Hub minio/* are gone):
+  # chainguard/minio is built from the maintained chainguard-forks/minio source and ships
+  # minio + mc + sh. It runs as non-root by default; root keeps volumes written by the
+  # former (root) image usable.
   minio:
-    image: quay.io/minio/minio:latest
+    image: ${MINIO_IMAGE:-chainguard/minio:latest}
+    user: "0:0"
     container_name: openfilz-minio
     restart: unless-stopped
     environment:
@@ -39,7 +44,7 @@ services:
   # MinIO Bucket Initialization
   # =============================================================================
   minio-init:
-    image: quay.io/minio/mc:latest
+    image: ${MINIO_IMAGE:-chainguard/minio:latest}
     container_name: openfilz-minio-init
     depends_on:
       minio:

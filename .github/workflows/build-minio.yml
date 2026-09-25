@@ -1,0 +1,57 @@
+name: Build & Push MinIO image
+
+# ghcr.io/openfilz/minio — built from source because MinIO no longer publishes images.
+# See deploy/docker/minio/Dockerfile.
+on:
+  push:
+    branches: ["main", "develop"]
+    paths:
+      - "deploy/docker/minio/**"
+      - ".github/workflows/build-minio.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Login to GHCR
+        run: |
+          docker login ghcr.io \
+            -u ${{ github.actor }} \
+            -p ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract MinIO release from Dockerfile
+        id: version
+        run: |
+          MINIO_REF=$(grep -oP '^ARG MINIO_REF=\K\S+' deploy/docker/minio/Dockerfile)
+          echo "minio_ref=$MINIO_REF" >> "$GITHUB_OUTPUT"
+
+      - name: Build image
+        run: |
+          docker build \
+            -t ghcr.io/openfilz/minio:${{ steps.version.outputs.minio_ref }} \
+            -t ghcr.io/openfilz/minio:latest \
+            deploy/docker/minio
+
+      - name: Smoke test
+        run: |
+          IMAGE=ghcr.io/openfilz/minio:${{ steps.version.outputs.minio_ref }}
+          docker run --rm "$IMAGE" --version
+          docker run --rm --entrypoint mc "$IMAGE" --version
+          docker run -d --name minio-smoke -e MINIO_ROOT_USER=smoke -e MINIO_ROOT_PASSWORD=smoke-secret "$IMAGE" server /data
+          for i in $(seq 1 30); do docker exec minio-smoke mc ready local && break; sleep 2; done
+          docker exec minio-smoke sh -c 'mc alias set l http://localhost:9000 smoke smoke-secret && mc mb l/smoke-bucket && mc version enable l/smoke-bucket'
+          docker exec minio-smoke curl -fsS http://localhost:9000/minio/health/live
+          docker rm -f minio-smoke
+
+      - name: Push image
+        run: |
+          docker push ghcr.io/openfilz/minio:${{ steps.version.outputs.minio_ref }}
+          docker push ghcr.io/openfilz/minio:latest
