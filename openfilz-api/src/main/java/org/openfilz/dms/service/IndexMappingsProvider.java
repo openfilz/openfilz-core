@@ -49,6 +49,7 @@ public interface IndexMappingsProvider {
                 .properties(OpenSearchDocumentKey.name.toString(), p -> p.text(tx -> tx.fields("keyword", b -> b.keyword(builder -> builder))))
                 .properties(OpenSearchDocumentKey.name_suggest.toString(), p -> p.searchAsYouType(builder -> builder))
                 .properties(OpenSearchDocumentKey.extension.toString(), p -> p.keyword(k -> k))
+                .properties(OpenSearchDocumentKey.contentType.toString(), p -> p.keyword(k -> k))
                 .properties(OpenSearchDocumentKey.size.toString(), p -> p.long_(k -> k))
                 .properties(OpenSearchDocumentKey.parentId.toString(), p -> p.keyword(k -> k))
                 .properties(OpenSearchDocumentKey.createdAt.toString(), p -> p.date(k -> k))
@@ -59,6 +60,18 @@ public interface IndexMappingsProvider {
                 .properties(OpenSearchDocumentKey.metadata.toString(), p -> p.object(tx -> tx.dynamic(DynamicMapping.True)))
                 .properties(OpenSearchDocumentKey.active.toString(), p -> p.boolean_(b -> b))
                 .properties(insightProperties());
+    }
+
+    /**
+     * The fields put on an existing index at startup, additively (a put-mapping naming fields that
+     * already exist with the same type is a no-op): the insight fields and {@code contentType},
+     * all added after the first indexes were created.
+     */
+    default java.util.Map<String, org.opensearch.client.opensearch._types.mapping.Property> additiveProperties() {
+        java.util.Map<String, org.opensearch.client.opensearch._types.mapping.Property> properties = new java.util.LinkedHashMap<>(insightProperties());
+        properties.put(OpenSearchDocumentKey.contentType.toString(),
+                org.opensearch.client.opensearch._types.mapping.Property.of(p -> p.keyword(k -> k)));
+        return properties;
     }
 
     /**

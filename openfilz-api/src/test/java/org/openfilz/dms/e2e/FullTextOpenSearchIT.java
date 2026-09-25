@@ -540,4 +540,62 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
 
 
 
+
+    // ---------------------------------------------------------------- OpenSearch-only: snippets, legacy index entries, sort fields
+
+    @Override
+    protected List<String> sortFieldsWithoutOrderCheck() {
+        // extension / contentType are index fields; an unknown field is ignored instead of failing the query
+        List<String> fields = new ArrayList<>(super.sortFieldsWithoutOrderCheck());
+        fields.addAll(List.of("extension", "contentType", "notAField"));
+        return fields;
+    }
+
+    @Test
+    void searchReturnsAHighlightedContentSnippet() throws IOException {
+        String word = "qz" + UUID.randomUUID().toString().replaceAll("[^a-f]", "").substring(0, 8);
+        String filename = word + "-notes.txt";
+        Files.writeString(Paths.get("target/test-classes/" + filename),
+                "Meeting notes. The " + word + " contract covers the yearly maintenance of the servers.");
+        UploadResponse uploaded = uploadAs(filename, filename, org.springframework.http.MediaType.TEXT_PLAIN);
+        try {
+            awaitIndexed("the content extract should come back with the hit", () -> {
+                SearchPage page = search(word, List.of(), null);
+                Assertions.assertEquals(1, page.totalHits());
+                String snippet = (String) page.documents().getFirst().get("contentSnippet");
+                Assertions.assertNotNull(snippet);
+                Assertions.assertTrue(snippet.contains("<mark>" + word + "</mark>"), snippet);
+                Assertions.assertTrue(snippet.contains("maintenance"), snippet);
+            });
+        } finally {
+            getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/files")
+                    .body(BodyInserters.fromValue(new DeleteRequest(List.of(uploaded.id()))))
+                    .exchange()
+                    .expectStatus().isNoContent();
+        }
+    }
+
+    @Test
+    void contentTypeFilterMatchesEntriesIndexedWithoutContentType() {
+        SearchFixture fx = createSearchFixture();
+        try {
+            awaitSearchable(fx);
+            // An index entry written before contentType was indexed: only its extension tells its kind
+            awaitIndexed("contentType should be removed from the png entry", () -> {
+                openSearchAsyncClient.update(u -> u
+                        .index(DEFAULT_INDEX_NAME)
+                        .id(fx.png().id().toString())
+                        .script(sc -> sc.inline(in -> in.source("ctx._source.remove('contentType')")))
+                        .refresh(org.opensearch.client.opensearch._types.Refresh.True), Map.class).get();
+                Assertions.assertNull(search(fx.token(), List.of(filter("extension", "png")), null)
+                        .documents().getFirst().get("contentType"));
+            });
+            Assertions.assertEquals(List.of(fx.token() + " beta.png"),
+                    search(fx.token(), List.of(filter("contentType", "image/%")), null).names());
+            Assertions.assertEquals(List.of(fx.token() + " beta.png"),
+                    search(fx.token(), List.of(filter("contentType", "image/png")), null).names());
+        } finally {
+            deleteSearchFixture(fx);
+        }
+    }
 }

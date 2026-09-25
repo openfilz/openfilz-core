@@ -12,6 +12,8 @@ import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.e2e.util.PdfLoremGeneratorStreaming;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.http.MediaType;
 import org.springframework.graphql.client.ClientGraphQlResponse;
 import org.springframework.graphql.client.HttpGraphQlClient;
 import org.springframework.http.HttpMethod;
@@ -25,8 +27,11 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 
 import static org.awaitility.Awaitility.await;
@@ -245,6 +250,158 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
 
         waitFor(3000);
 
+    }
+
+    // ---------------------------------------------------------------- filters + sorts of searchDocuments
+
+    /** The four documents of a filter / sort scenario: a folder and three files, all named after {@code token}. */
+    protected record SearchFixture(String token, FolderResponse folder, UploadResponse pdf, UploadResponse png, UploadResponse txt) {
+        List<UUID> fileIds() {
+            return List.of(pdf.id(), png.id(), txt.id());
+        }
+    }
+
+    /** Names: "<token> folder", "<token> alpha.pdf" (131 KB), "<token> beta.png" (2.7 KB), "<token> gamma.txt" (74 B). */
+    protected SearchFixture createSearchFixture() {
+        String token = "qz" + UUID.randomUUID().toString().replaceAll("[^a-f]", "").substring(0, 6)
+                + UUID.randomUUID().toString().replaceAll("[^a-f]", "").substring(0, 4);
+        FolderResponse folder = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/folders")
+                .body(BodyInserters.fromValue(new CreateFolderRequest(token + " folder", null)))
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(FolderResponse.class)
+                .returnResult().getResponseBody();
+        UploadResponse pdf = uploadAs("pdf-example.pdf", token + " alpha.pdf", MediaType.APPLICATION_PDF);
+        UploadResponse png = uploadAs("test-image.png", token + " beta.png", MediaType.IMAGE_PNG);
+        UploadResponse txt = uploadAs("test.txt", token + " gamma.txt", MediaType.TEXT_PLAIN);
+        return new SearchFixture(token, folder, pdf, png, txt);
+    }
+
+    protected UploadResponse uploadAs(String resource, String filename, MediaType contentType) {
+        MultipartBodyBuilder builder = new MultipartBodyBuilder();
+        builder.part("file", new ClassPathResource(resource)).filename(filename).contentType(contentType);
+        return getUploadResponse(builder);
+    }
+
+    protected void deleteSearchFixture(SearchFixture fixture) {
+        getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/files")
+                .body(BodyInserters.fromValue(new DeleteRequest(fixture.fileIds())))
+                .exchange()
+                .expectStatus().isNoContent();
+        getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/folders")
+                .body(BodyInserters.fromValue(new DeleteRequest(List.of(fixture.folder().id()))))
+                .exchange()
+                .expectStatus().isNoContent();
+    }
+
+    /** One page of hits, as returned by the API. */
+    protected record SearchPage(long totalHits, List<Map<String, Object>> documents) {
+        List<String> names() {
+            return documents.stream().map(d -> (String) d.get("name")).toList();
+        }
+    }
+
+    private static final String SEARCH_DOCUMENTS = """
+            query search($query: String, $filters: [FilterInput!], $sort: SortInput) {
+              searchDocuments(query: $query, filters: $filters, sort: $sort, page: 1, size: 20) {
+                totalHits
+                documents { id name extension contentType size createdBy contentSnippet }
+              }
+            }""";
+
+    protected SearchPage search(String query, List<Map<String, String>> filters, Map<String, String> sort) {
+        ClientGraphQlResponse response = getGraphQlHttpClient()
+                .document(SEARCH_DOCUMENTS)
+                .variable("query", query)
+                .variable("filters", filters)
+                .variable("sort", sort)
+                .execute()
+                .block(Duration.ofSeconds(30));
+        Assertions.assertNotNull(response);
+        Assertions.assertTrue(response.getErrors().isEmpty(), () -> "GraphQL errors: " + response.getErrors());
+        Map<String, Object> result = response.field("searchDocuments").toEntity(new ParameterizedTypeReference<Map<String, Object>>() {});
+        Assertions.assertNotNull(result);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> documents = (List<Map<String, Object>>) result.get("documents");
+        return new SearchPage(((Number) result.get("totalHits")).longValue(), documents);
+    }
+
+    protected static Map<String, String> filter(String field, String value) {
+        return Map.of("field", field, "value", value);
+    }
+
+    protected static Map<String, String> sort(String field, String order) {
+        return Map.of("field", field, "order", order);
+    }
+
+    /** Waits until the four documents of the fixture are searchable (full-text indexing is asynchronous). */
+    protected void awaitSearchable(SearchFixture fixture) {
+        await().atMost(Duration.ofSeconds(45))
+                .pollInterval(Duration.ofMillis(500))
+                .untilAsserted(() -> Assertions.assertEquals(4, search(fixture.token(), List.of(), null).totalHits()));
+    }
+
+    @Test
+    void testSearchFilters() {
+        SearchFixture fx = createSearchFixture();
+        try {
+            awaitSearchable(fx);
+            String t = fx.token();
+
+            Assertions.assertEquals(List.of(t + " folder"), search(t, List.of(filter("type", "FOLDER")), null).names());
+            Assertions.assertEquals(3, search(t, List.of(filter("type", "FILE")), null).totalHits());
+
+            Assertions.assertEquals(List.of(t + " beta.png"), search(t, List.of(filter("contentType", "image/%")), null).names());
+            Assertions.assertEquals(
+                    Set.of(t + " alpha.pdf", t + " gamma.txt"),
+                    Set.copyOf(search(t, List.of(filter("contentType", "application/pdf, text/%")), null).names()));
+            Assertions.assertEquals(List.of(t + " beta.png"),
+                    search(t, List.of(filter("type", "FILE"), filter("contentType", "image/%")), null).names());
+
+            Assertions.assertEquals(4, search(t, List.of(filter("createdBy", getUsername())), null).totalHits());
+            Assertions.assertEquals(0, search(t, List.of(filter("createdBy", "nobody@example.com")), null).totalHits());
+
+            String yesterday = OffsetDateTime.now().minusDays(1).toString();
+            String tomorrow = OffsetDateTime.now().plusDays(1).toString();
+            Assertions.assertEquals(4, search(t, List.of(filter("updatedAtAfter", yesterday)), null).totalHits());
+            Assertions.assertEquals(0, search(t, List.of(filter("updatedAtAfter", tomorrow)), null).totalHits());
+            Assertions.assertEquals(4, search(t, List.of(filter("updatedAtBefore", tomorrow)), null).totalHits());
+            Assertions.assertEquals(4, search(t, List.of(filter("createdAtAfter", yesterday)), null).totalHits());
+            Assertions.assertEquals(0, search(t, List.of(filter("createdAtBefore", yesterday)), null).totalHits());
+        } finally {
+            deleteSearchFixture(fx);
+        }
+    }
+
+    @Test
+    void testSearchSorts() {
+        SearchFixture fx = createSearchFixture();
+        try {
+            awaitSearchable(fx);
+            String t = fx.token();
+            List<Map<String, String>> files = List.of(filter("type", "FILE"));
+            List<String> byName = List.of(t + " alpha.pdf", t + " beta.png", t + " gamma.txt");
+            List<String> bySize = List.of(t + " gamma.txt", t + " beta.png", t + " alpha.pdf");
+
+            Assertions.assertEquals(byName, search(t, files, sort("name", "ASC")).names());
+            Assertions.assertEquals(byName.reversed(), search(t, files, sort("name", "DESC")).names());
+            Assertions.assertEquals(bySize, search(t, files, sort("size", "ASC")).names());
+            Assertions.assertEquals(bySize.reversed(), search(t, files, sort("size", "DESC")).names());
+            // Uploaded in name order
+            Assertions.assertEquals(byName, search(t, files, sort("createdAt", "ASC")).names());
+            Assertions.assertEquals(byName.reversed(), search(t, files, sort("updatedAt", "DESC")).names());
+            // One owner, one type: the sort must be accepted and keep every hit
+            for (String field : sortFieldsWithoutOrderCheck()) {
+                Assertions.assertEquals(4, search(t, List.of(), sort(field, "ASC")).totalHits(), "sort on " + field);
+            }
+        } finally {
+            deleteSearchFixture(fx);
+        }
+    }
+
+    /** Sort fields both back ends accept, whose order the fixture cannot tell apart. */
+    protected List<String> sortFieldsWithoutOrderCheck() {
+        return List.of("type", "createdBy", "updatedBy");
     }
 
     protected String getUsername() {

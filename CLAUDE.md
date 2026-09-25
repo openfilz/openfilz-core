@@ -417,6 +417,23 @@ correction read; `PropertiesCategoryTaxonomy` in core). Also: the per-user Inbox
 - **DocumentSuggestionController** (`/api/v1/suggestions`) — autocomplete/search suggestions
 - Supports filter and sort inputs
 
+### Document search (`searchDocuments`)
+- Two back ends, one filter vocabulary: `DefaultDocumentSearchService` (database, `DocumentSearchUtil.toListFolderRequest`)
+  and `OpenSearchDocumentSearchService` (`openfilz.full-text.active=true`, `OpenSearchQueryService.addFilterClauses`).
+  Filters: `type` (FILE / FOLDER — in the index, folders are the entries without `extension`), `contentType` (one or several
+  comma-separated patterns, exact or prefix with `%`, like `ListFolderRequest.contentTypes`), `extension`, `createdBy`,
+  `updatedBy`, `parentId`, `size`, `createdAt|updatedAt` + `After|Before` (ISO date bounds), `metadata.<key>`, the insight
+  facets `category` / `language`. On OpenSearch any other field keeps the generic `<field>.keyword` term clause (EE fields).
+- The index stores `contentType` (keyword) since 2026-09; `DefaultIndexNameProvider` adds the mapping to older indexes at
+  startup (`IndexMappingsProvider.additiveProperties()`), but entries indexed before carry none: the `contentType` filter
+  also matches them by extension (`ContentTypeMapper.extensionsMatching`).
+- Sort (`OpenSearchService.SORT_FIELDS`): `name` (keyword sub-field), `type` (= extension), `extension`, `contentType`, `size`,
+  `createdAt`, `updatedAt`, `createdBy`, `updatedBy`; any other field is ignored (it would fail the query); no sort =
+  relevance. The id breaks ties so pages stay stable.
+- With a text query, the OpenSearch path highlights `content` and returns the extract as `contentSnippet` (matches in
+  `<mark>`, ~160 characters); the database path returns none.
+- Tests: `FullTextDefaultSearchIT` (database) — `FullTextOpenSearchIT` extends it, so every filter / sort test runs on both.
+
 ### Dashboard Statistics
 - **DashboardController** (`GET /api/v1/dashboard/statistics`)
 - Total files/folders, storage usage by content type, file type distribution
