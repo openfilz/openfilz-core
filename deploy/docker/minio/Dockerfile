@@ -8,31 +8,39 @@
 # root (volumes written by the old image stay usable), and also ships `mc`, `curl` and
 # `/bin/sh` so the same image serves the healthchecks and bucket-init / backup jobs.
 #
+# Multi-arch (linux/amd64 + linux/arm64): the Go build runs on the build platform and
+# cross-compiles; only the small runtime stage runs under emulation.
+#
 # Published by .github/workflows/build-minio.yml. Bump MINIO_REF to a newer fork tag
-# (git ls-remote --tags https://github.com/chainguard-forks/minio) to update.
+# (git ls-remote --tags https://github.com/chainguard-forks/minio) to update —
+# .github/workflows/check-minio-release.yml opens an issue when a newer tag exists — then
+# update the pinned ghcr.io/openfilz/minio:<MINIO_REF> references (tests, compose, charts).
 
 ARG MINIO_REF=RELEASE.2026-09-22T19-25-18Z
 ARG MC_REF=RELEASE.2025-08-13T08-35-41Z
 
-FROM golang:1.26-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
 ARG MINIO_REF
 ARG MC_REF
+ARG TARGETOS
+ARG TARGETARCH
 ENV CGO_ENABLED=0 GOTOOLCHAIN=auto
 RUN apk add --no-cache git
 WORKDIR /src
 
-# RELEASE.2026-09-22T19-25-18Z -> 2026-09-22T19:25:18Z (the version format gen-ldflags expects)
+# RELEASE.2026-09-22T19-25-18Z -> 2026-09-22T19:25:18Z (the version format gen-ldflags expects).
+# gen-ldflags runs on the build platform, hence GOOS/GOARCH only on `go build`.
 RUN git clone --depth 1 --branch "$MINIO_REF" https://github.com/chainguard-forks/minio.git minio \
  && cd minio \
  && VERSION=$(echo "$MINIO_REF" | sed -E 's/^RELEASE\.(.{10})T(..)-(..)-(..)Z$/\1T\2:\3:\4Z/') \
- && go build -tags kqueue -trimpath \
-      -ldflags "$(MINIO_RELEASE=RELEASE go run buildscripts/gen-ldflags.go "$VERSION")" -o /out/minio
+ && LDFLAGS="$(MINIO_RELEASE=RELEASE go run buildscripts/gen-ldflags.go "$VERSION")" \
+ && GOOS=$TARGETOS GOARCH=$TARGETARCH go build -tags kqueue -trimpath -ldflags "$LDFLAGS" -o /out/minio
 
 RUN git clone --depth 1 --branch "$MC_REF" https://github.com/minio/mc.git mc \
  && cd mc \
  && VERSION=$(echo "$MC_REF" | sed -E 's/^RELEASE\.(.{10})T(..)-(..)-(..)Z$/\1T\2:\3:\4Z/') \
- && go build -tags kqueue -trimpath \
-      -ldflags "$(MC_RELEASE=RELEASE go run buildscripts/gen-ldflags.go "$VERSION")" -o /out/mc
+ && LDFLAGS="$(MC_RELEASE=RELEASE go run buildscripts/gen-ldflags.go "$VERSION")" \
+ && GOOS=$TARGETOS GOARCH=$TARGETARCH go build -tags kqueue -trimpath -ldflags "$LDFLAGS" -o /out/mc
 
 FROM alpine:3.22
 ARG MINIO_REF
