@@ -13,8 +13,11 @@ services:
   # =============================================================================
   # MinIO S3-Compatible Object Storage
   # =============================================================================
+  # MinIO no longer publishes images (quay.io/minio/* and Docker Hub minio/* are gone):
+  # ghcr.io/openfilz/minio is built from source (deploy/docker/minio) — a drop-in for the
+  # former image (root, minio + mc + curl + sh), linux/amd64 + linux/arm64.
   minio:
-    image: quay.io/minio/minio:latest
+    image: ${MINIO_IMAGE:-ghcr.io/openfilz/minio:RELEASE.2026-09-22T19-25-18Z}
     container_name: openfilz-minio
     restart: unless-stopped
     environment:
@@ -39,7 +42,7 @@ services:
   # MinIO Bucket Initialization
   # =============================================================================
   minio-init:
-    image: quay.io/minio/mc:latest
+    image: ${MINIO_IMAGE:-ghcr.io/openfilz/minio:RELEASE.2026-09-22T19-25-18Z}
     container_name: openfilz-minio-init
     depends_on:
       minio:

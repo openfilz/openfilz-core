@@ -1,0 +1,40 @@
+name: Check MinIO release
+
+# Opens (once) an issue when chainguard-forks/minio has a newer release tag than the
+# MINIO_REF that deploy/docker/minio/Dockerfile builds ghcr.io/openfilz/minio from.
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Compare the pinned MinIO release with the latest fork tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CURRENT=$(grep -oP '^ARG MINIO_REF=\K\S+' deploy/docker/minio/Dockerfile)
+          LATEST=$(git ls-remote --tags --refs https://github.com/chainguard-forks/minio 'RELEASE.*' \
+            | awk -F/ '{print $3}' | sort | tail -n 1)
+          echo "pinned: $CURRENT — latest: $LATEST"
+          if [ -z "$LATEST" ] || [ "$LATEST" = "$CURRENT" ] || [ "$(printf '%s\n%s\n' "$CURRENT" "$LATEST" | sort | tail -n 1)" = "$CURRENT" ]; then
+            echo "Up to date"; exit 0
+          fi
+          TITLE="MinIO image: bump to $LATEST"
+          if gh issue list --state open --search "\"$TITLE\" in:title" --json number --jq '.[].number' | grep -q .; then
+            echo "Issue already open"; exit 0
+          fi
+          gh issue create --title "$TITLE" --body "chainguard-forks/minio published \`$LATEST\`; \`deploy/docker/minio/Dockerfile\` builds \`$CURRENT\`.
+
+          1. Bump \`ARG MINIO_REF\` in \`deploy/docker/minio/Dockerfile\` (the *Build & Push MinIO image* workflow publishes \`ghcr.io/openfilz/minio:$LATEST\` on merge).
+          2. Replace \`ghcr.io/openfilz/minio:$CURRENT\` with the new tag in openfilz-core (MinIO ITs, compose overlay, Helm values) and openfilz-enterprise (EE ITs, dokploy compose, customer compose template, k3s charts, migration script).
+
+          Release notes: https://github.com/chainguard-forks/minio/releases/tag/$LATEST"

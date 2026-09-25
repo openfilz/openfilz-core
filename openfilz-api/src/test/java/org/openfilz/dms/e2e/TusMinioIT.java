@@ -23,7 +23,7 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 public class TusMinioIT extends AbstractTusIT {
 
     @Container
-    static MinIOContainer minio = new MinIOContainer(DockerImageName.parse("quay.io/minio/minio:latest").asCompatibleSubstituteFor("minio/minio"));
+    static MinIOContainer minio = new MinIOContainer(DockerImageName.parse("ghcr.io/openfilz/minio:RELEASE.2026-09-22T19-25-18Z").asCompatibleSubstituteFor("minio/minio"));
 
     public TusMinioIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
         super(webTestClient, customJacksonJsonEncoder);

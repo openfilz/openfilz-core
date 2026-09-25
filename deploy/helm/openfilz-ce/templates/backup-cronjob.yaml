@@ -72,7 +72,7 @@ spec:
                 - name: backup
                   mountPath: /backup
           containers:
-            # quay.io/minio/mc ships a shell; entrypoint (mc) overridden below.
+            # The mc image must ship a shell (ghcr.io/openfilz/minio has sh + mc); entrypoint overridden below.
             - name: upload
               image: {{ .Values.backup.images.mc }}
               command: ["/bin/sh", "-c"]

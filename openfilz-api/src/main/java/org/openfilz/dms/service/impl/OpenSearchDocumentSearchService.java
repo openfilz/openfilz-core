@@ -37,6 +37,12 @@ import java.util.stream.Collectors;
 @ConditionalOnProperty(name = "openfilz.full-text.active", havingValue = "true")
 public class OpenSearchDocumentSearchService implements DocumentSearchService, OpenSearchService {
 
+    private static final String MARK = "<mark>";
+    private static final String MARK_END = "</mark>";
+    private static final String ELLIPSIS = "…";
+    /** Characters around the match in the content extract of a hit. */
+    private static final int SNIPPET_FRAGMENT_SIZE = 160;
+
 
     private final IndexNameProvider indexNameProvider;
     private final OpenSearchQueryService openSearchQueryService;
@@ -69,6 +75,17 @@ public class OpenSearchDocumentSearchService implements DocumentSearchService, O
 
                     // 6. Add Pagination
                     requestBuilder.from((page - 1) * size).size(size);
+
+                    // The best matching extract of the content, for the results list
+                    if (query != null && !query.isBlank()) {
+                        requestBuilder.highlight(h -> h
+                                .fields(CONTENT, f -> f
+                                        .preTags(MARK)
+                                        .postTags(MARK_END)
+                                        .fragmentSize(SNIPPET_FRAGMENT_SIZE)
+                                        .numberOfFragments(1)
+                                        .noMatchSize(0)));
+                    }
 
                     // 7. Execute the request asynchronously
                     SearchRequest searchRequest = requestBuilder
@@ -133,12 +150,27 @@ public class OpenSearchDocumentSearchService implements DocumentSearchService, O
         }
 
         List<DocumentSearchInfo> documents = response.hits().hits().stream()
-                .map(Hit::source)
+                .map(this::toDocumentSearchInfo)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
         long totalHits = response.hits().total() != null ? response.hits().total().value() : 0;
 
         return new DocumentSearchResult(totalHits, documents);
+    }
+
+    /** The hit's source, with the content extract the highlighter found (matches in {@code <mark>}). */
+    private DocumentSearchInfo toDocumentSearchInfo(Hit<DocumentSearchInfo> hit) {
+        DocumentSearchInfo source = hit.source();
+        if (source == null) {
+            return null;
+        }
+        if (hit.highlight() != null) {
+            List<String> fragments = hit.highlight().get(CONTENT);
+            if (fragments != null && !fragments.isEmpty() && !fragments.getFirst().isBlank()) {
+                return source.withContentSnippet(ELLIPSIS + fragments.getFirst().strip() + ELLIPSIS);
+            }
+        }
+        return source;
     }
 }
