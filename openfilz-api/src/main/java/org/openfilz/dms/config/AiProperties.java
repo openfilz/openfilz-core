@@ -2,6 +2,7 @@ package org.openfilz.dms.config;
 
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.DeprecatedConfigurationProperty;
 import org.springframework.context.annotation.Configuration;
 
 import org.openfilz.dms.enums.AiProvider;
@@ -573,14 +574,43 @@ public class AiProperties {
     @Data
     public static class EmbeddingConfig {
         /**
-         * Default chunk size in characters for text splitting.
+         * Target chunk size in <b>tokens</b> (not characters) for text splitting.
          */
         private int chunkSize = 1000;
 
+        /** Default of {@link #minChunkSizeChars}: the value the splitter has always received. */
+        public static final int DEFAULT_MIN_CHUNK_SIZE_CHARS = 200;
+
         /**
-         * Overlap between chunks in characters to preserve context.
+         * Minimum characters a chunk keeps before the splitter may cut it back to the last sentence
+         * boundary ({@code .}, {@code !}, {@code ?}, newline). Spring AI's {@code TokenTextSplitter}
+         * has <b>no overlap</b> between chunks: consecutive chunks never share text. Null = the
+         * deprecated {@link #getChunkOverlap() chunk-overlap} if set, else
+         * {@value #DEFAULT_MIN_CHUNK_SIZE_CHARS}.
          */
-        private int chunkOverlap = 200;
+        private Integer minChunkSizeChars;
+
+        /**
+         * Deprecated alias of {@link #minChunkSizeChars}: this value was always passed to the splitter
+         * as its minimum chunk size, never as an overlap (the splitter has none).
+         */
+        @Deprecated
+        private Integer chunkOverlap;
+
+        @Deprecated
+        @DeprecatedConfigurationProperty(replacement = "openfilz.ai.embedding.min-chunk-size-chars",
+                reason = "The token splitter has no overlap; the value was always its minimum chunk size in characters")
+        public Integer getChunkOverlap() {
+            return chunkOverlap;
+        }
+
+        /** The minimum chunk size the splitter gets: the new key, else the deprecated alias, else the default. */
+        public int resolveMinChunkSizeChars() {
+            if (minChunkSizeChars != null) {
+                return minChunkSizeChars;
+            }
+            return chunkOverlap != null ? chunkOverlap : DEFAULT_MIN_CHUNK_SIZE_CHARS;
+        }
 
         /**
          * Maximum number of similar chunks to retrieve for RAG context.

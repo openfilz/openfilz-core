@@ -181,6 +181,30 @@ public class DocumentEmbeddingServiceImpl implements DocumentEmbeddingService {
                 .then();
     }
 
+    /** Chunks shorter than this (after trimming) are dropped rather than embedded. */
+    static final int MIN_CHUNK_LENGTH_TO_EMBED = 5;
+    /** Hard cap on chunks per document. */
+    static final int MAX_NUM_CHUNKS = 10_000;
+    /** Where a chunk may be cut back to, so it ends on a sentence. */
+    static final List<Character> SENTENCE_BOUNDARIES = List.of('.', '!', '?', '\n');
+
+    /**
+     * The splitter every document is chunked with. Spring AI's {@code TokenTextSplitter} has no
+     * overlap: {@code chunk-size} is in tokens, and {@code min-chunk-size-chars} is the minimum a
+     * chunk keeps before being cut back to its last sentence boundary. A change applies to documents
+     * embedded afterwards — re-embed the library to apply it to what is already indexed.
+     */
+    static TokenTextSplitter newSplitter(AiProperties.EmbeddingConfig config) {
+        return TokenTextSplitter.builder()
+                .withChunkSize(config.getChunkSize())
+                .withMinChunkSizeChars(config.resolveMinChunkSizeChars())
+                .withMinChunkLengthToEmbed(MIN_CHUNK_LENGTH_TO_EMBED)
+                .withMaxNumChunks(MAX_NUM_CHUNKS)
+                .withKeepSeparator(true)
+                .withPunctuationMarks(SENTENCE_BOUNDARIES)
+                .build();
+    }
+
     /** Chunks the text, embeds the chunks and stores them in place of the document's previous ones; errors propagate. */
     private Mono<Integer> storeChunks(Document document, String extractedText) {
         log.info("[AI-EMBED] Embedding text for '{}' ({} chars)", document.getName(), extractedText.length());
@@ -188,15 +212,11 @@ public class DocumentEmbeddingServiceImpl implements DocumentEmbeddingService {
         return Mono.fromCallable(() -> {
             var aiDoc = new org.springframework.ai.document.Document(extractedText);
 
-            var splitter = new TokenTextSplitter(
-                    aiProperties.getEmbedding().getChunkSize(),
-                    aiProperties.getEmbedding().getChunkOverlap(),
-                    5, 10000, true,
-                    List.of('.', '!', '?', '\n')
-            );
+            var splitter = newSplitter(aiProperties.getEmbedding());
             List<org.springframework.ai.document.Document> chunks = splitter.apply(List.of(aiDoc));
-            log.debug("[AI-EMBED] Split into {} chunks (chunkSize={}, overlap={})",
-                    chunks.size(), aiProperties.getEmbedding().getChunkSize(), aiProperties.getEmbedding().getChunkOverlap());
+            log.debug("[AI-EMBED] Split into {} chunks (chunkSize={} tokens, minChunkSizeChars={})",
+                    chunks.size(), aiProperties.getEmbedding().getChunkSize(),
+                    aiProperties.getEmbedding().resolveMinChunkSizeChars());
 
             for (var chunk : chunks) {
                 chunk.getMetadata().putAll(Map.of(
