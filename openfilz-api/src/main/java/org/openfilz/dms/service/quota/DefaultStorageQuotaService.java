@@ -103,7 +103,7 @@ public class DefaultStorageQuotaService implements StorageQuotaService, UserInfo
      */
     protected Flux<UserStorageRow> chargedUsers() {
         Flux<UserStorageRow> creators = databaseClient.sql(USED_BY_CREATOR)
-                .map(row -> new UserStorageRow(row.get("username", String.class), null, longValue(row.get("used", Long.class))))
+                .map(row -> new UserStorageRow(row.get("username", String.class), null, longValue(row.get("used", Number.class))))
                 .all();
         Flux<UserStorageRow> overridden = databaseClient.sql(SELECT_OVERRIDES)
                 .map(row -> new UserStorageRow(row.get("username", String.class), null, 0L))
@@ -279,7 +279,7 @@ public class DefaultStorageQuotaService implements StorageQuotaService, UserInfo
     @Override
     public Mono<Long> instanceUsedBytes() {
         return databaseClient.sql(INSTANCE_USED)
-                .map(row -> longValue(row.get("used", Long.class)))
+                .map(row -> longValue(row.get("used", Number.class)))
                 .one()
                 .defaultIfEmpty(0L);
     }
