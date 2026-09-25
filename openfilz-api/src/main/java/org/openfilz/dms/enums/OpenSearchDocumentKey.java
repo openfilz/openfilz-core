@@ -19,5 +19,7 @@ public enum OpenSearchDocumentKey {
     /** Tier-2 document insight (text). */
     summary,
     /** Document insight (keyword): BCP-47 primary tag. */
-    language
+    language,
+    /** MIME type (keyword). Absent from documents indexed before it was added: filters fall back on {@link #extension}. */
+    contentType
 }

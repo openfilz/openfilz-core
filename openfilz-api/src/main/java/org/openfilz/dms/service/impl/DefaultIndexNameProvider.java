@@ -55,13 +55,14 @@ public class DefaultIndexNameProvider implements IndexNameProvider {
     }
 
     /**
-     * Add the document-insight fields to an index created before they existed. A put-mapping
-     * naming fields that already exist with the same type is a no-op, so this runs at every start.
+     * Add the fields that came after the index (document insights, {@code contentType}) to an index
+     * created before they existed. A put-mapping naming fields that already exist with the same type
+     * is a no-op, so this runs at every start.
      */
     protected Mono<Void> ensureInsightFields(String indexName) {
         PutMappingRequest request = PutMappingRequest.of(b -> b
                 .index(indexName)
-                .properties(indexMappingsProvider.insightProperties()));
+                .properties(indexMappingsProvider.additiveProperties()));
         return Mono.fromFuture(() -> {
                     try {
                         return openSearchAsyncClient.indices().putMapping(request);

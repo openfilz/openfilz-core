@@ -26,6 +26,11 @@ import java.util.stream.Collectors;
 public class DocumentSearchUtil {
     public static final String FILTER_TYPE = "type";
     public static final String FILTER_EXTENSION = "extension";
+    /**
+     * Content type(s), one or several comma-separated, each exact ({@code application/pdf}) or a
+     * prefix ending with {@code %} ({@code image/%}): the patterns of {@code ListFolderRequest.contentTypes}.
+     */
+    public static final String FILTER_CONTENT_TYPE = "contentType";
     public static final String FILTER_SIZE = "size";
     public static final String FILTER_PARENT_ID = "parentId";
     public static final String FILTER_CREATED_AT_BEFORE = "createdAtBefore";
@@ -152,7 +157,7 @@ public class DocumentSearchUtil {
         return new ListFolderRequest(toUuid(filters.get(FILTER_PARENT_ID)),
                 toDocumentType(filters),
                 ContentTypeMapper.getContentType(filters.get(DocumentSearchUtil.FILTER_EXTENSION)),
-                null,
+                toContentTypePatterns(filters.get(FILTER_CONTENT_TYPE)),
                 null,
                 query,
                 totMetadataMap(filters),
@@ -171,6 +176,19 @@ public class DocumentSearchUtil {
                 toKeys(filters.get(FILTER_CATEGORY)),
                 toKeys(filters.get(FILTER_LANGUAGE))
         );
+    }
+
+    /** The patterns of a {@link #FILTER_CONTENT_TYPE} value (comma-separated, trimmed), null when it names none. */
+    public static List<String> toContentTypePatterns(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        List<String> patterns = java.util.Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .distinct()
+                .toList();
+        return patterns.isEmpty() ? null : patterns;
     }
 
     /**
