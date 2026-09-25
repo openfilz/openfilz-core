@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.openfilz.dms.config.QuotaProperties;
+import org.openfilz.dms.service.quota.StorageQuotaService;
 import org.openfilz.dms.config.TusProperties;
 import org.openfilz.dms.exception.FileSizeExceededException;
 import org.openfilz.dms.repository.DocumentDAO;
@@ -29,7 +29,7 @@ import static org.mockito.Mockito.*;
 class TusUploadServiceImplTest {
 
     @Mock private TusProperties tusProperties;
-    @Mock private QuotaProperties quotaProperties;
+    @Mock private StorageQuotaService storageQuotaService;
     @Mock private StorageService storageService;
     @Mock private DocumentDAO documentDAO;
     @Mock private AuditService auditService;
@@ -42,7 +42,7 @@ class TusUploadServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new TusUploadServiceImpl(tusProperties, quotaProperties, storageService,
+        service = new TusUploadServiceImpl(tusProperties, storageQuotaService, storageService,
                 documentDAO, auditService, jsonUtils, metadataPostProcessor, tx, objectMapper);
     }
 
@@ -92,9 +92,8 @@ class TusUploadServiceImplTest {
     }
 
     @Test
-    void validateUploadCreation_allQuotasDisabled_completes() {
-        when(quotaProperties.isFileUploadQuotaEnabled()).thenReturn(false);
-        when(quotaProperties.isUserQuotaEnabled()).thenReturn(false);
+    void validateUploadCreation_quotasPass_completes() {
+        when(storageQuotaService.checkUpload("upload", 100L)).thenReturn(Mono.empty());
 
         // null filename -> "upload" fallback; null parent + allowDuplicates -> no DB checks.
         StepVerifier.create(service.validateUploadCreation(100L, null, null, true))
@@ -103,14 +102,33 @@ class TusUploadServiceImplTest {
     }
 
     @Test
-    void validateFileUploadQuota_overLimit_errors() {
-        when(quotaProperties.isFileUploadQuotaEnabled()).thenReturn(true);
-        when(quotaProperties.getFileUploadQuotaInBytes()).thenReturn(10L);
+    void validateUploadCreation_quotaRefused_errors() {
+        when(storageQuotaService.checkUpload("big.bin", 100L))
+                .thenReturn(Mono.error(new FileSizeExceededException("big.bin", 100L, 10L)));
 
-        Mono<Void> result = ReflectionTestUtils.invokeMethod(service, "validateFileUploadQuota", 100L, "big.bin");
-
-        StepVerifier.create(result)
+        StepVerifier.create(service.validateUploadCreation(100L, "big.bin", null, true))
                 .expectError(FileSizeExceededException.class)
+                .verify();
+    }
+
+    @Test
+    void limitTo_passesChunksWithinTheDeclaredLength() {
+        var factory = new org.springframework.core.io.buffer.DefaultDataBufferFactory();
+        reactor.core.publisher.Flux<org.springframework.core.io.buffer.DataBuffer> data = reactor.core.publisher.Flux.just(
+                factory.wrap(new byte[4]), factory.wrap(new byte[6]));
+
+        StepVerifier.create(TusUploadServiceImpl.limitTo(data, 10, 10)).expectNextCount(2).verifyComplete();
+    }
+
+    @Test
+    void limitTo_failsOnceTheDeclaredLengthIsExceeded() {
+        var factory = new org.springframework.core.io.buffer.DefaultDataBufferFactory();
+        reactor.core.publisher.Flux<org.springframework.core.io.buffer.DataBuffer> data = reactor.core.publisher.Flux.just(
+                factory.wrap(new byte[4]), factory.wrap(new byte[7]));
+
+        StepVerifier.create(TusUploadServiceImpl.limitTo(data, 10, 10))
+                .expectNextCount(1)
+                .expectError(org.openfilz.dms.exception.TusUploadLengthExceededException.class)
                 .verify();
     }
 }

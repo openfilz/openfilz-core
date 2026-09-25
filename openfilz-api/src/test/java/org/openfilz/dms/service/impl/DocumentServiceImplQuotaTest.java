@@ -16,6 +16,8 @@ import org.openfilz.dms.exception.StorageException;
 import org.openfilz.dms.exception.UserQuotaExceededException;
 import org.openfilz.dms.repository.DocumentDAO;
 import org.openfilz.dms.service.*;
+import org.openfilz.dms.service.quota.DefaultStorageQuotaService;
+import org.openfilz.dms.service.quota.StorageQuotaService;
 import org.openfilz.dms.utils.BlankDocumentGenerator;
 import org.openfilz.dms.utils.JsonUtils;
 import org.springframework.core.io.Resource;
@@ -52,24 +54,33 @@ class DocumentServiceImplQuotaTest {
     @Mock private BlankDocumentGenerator blankDocumentGenerator;
     @Mock private QuotaProperties quotaProperties;
 
-    @InjectMocks
     private DocumentServiceImpl service;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setUp() {
+        // The real quota service over mocked properties / DAO; no user override, no instance quota.
+        StorageQuotaService quotaService = new DefaultStorageQuotaService(quotaProperties, documentDAO, null) {
+            @Override
+            protected Mono<java.util.Optional<Long>> override(String username) {
+                return Mono.just(java.util.Optional.empty());
+            }
+        };
+        service = new DocumentServiceImpl(tx, storageService, objectMapper, auditService, jsonUtils, documentDAO,
+                saveDocumentService, metadataPostProcessor, documentDeleteService, blankDocumentGenerator, quotaService);
+    }
 
     @Test
     void validateFileSize_quotaDisabled_completes() {
-        when(quotaProperties.isFileUploadQuotaEnabled()).thenReturn(false);
         StepVerifier.create(service.validateFileSize(1000L, "f.bin")).verifyComplete();
     }
 
     @Test
     void validateFileSize_nullLength_completes() {
-        when(quotaProperties.isFileUploadQuotaEnabled()).thenReturn(true);
         StepVerifier.create(service.validateFileSize(null, "f.bin")).verifyComplete();
     }
 
     @Test
     void validateFileSize_overLimit_errors() {
-        when(quotaProperties.isFileUploadQuotaEnabled()).thenReturn(true);
         when(quotaProperties.getFileUploadQuotaInBytes()).thenReturn(10L);
 
         StepVerifier.create(service.validateFileSize(100L, "big.bin"))
@@ -79,7 +90,6 @@ class DocumentServiceImplQuotaTest {
 
     @Test
     void validateFileSize_underLimit_completes() {
-        when(quotaProperties.isFileUploadQuotaEnabled()).thenReturn(true);
         when(quotaProperties.getFileUploadQuotaInBytes()).thenReturn(1000L);
 
         StepVerifier.create(service.validateFileSize(100L, "ok.bin")).verifyComplete();
@@ -87,14 +97,12 @@ class DocumentServiceImplQuotaTest {
 
     @Test
     void validateUserQuota_disabled_completes() {
-        when(quotaProperties.isUserQuotaEnabled()).thenReturn(false);
         StepVerifier.create(service.validateUserQuota(100L)).verifyComplete();
     }
 
     @Test
     void validateUserQuota_overQuota_errors() {
         // No security context -> getConnectedUserEmail() resolves to anonymousUser.
-        when(quotaProperties.isUserQuotaEnabled()).thenReturn(true);
         when(quotaProperties.getUserQuotaInBytes()).thenReturn(10L);
         when(documentDAO.getTotalStorageByUser(anyString())).thenReturn(Mono.just(5L));
 
@@ -105,7 +113,6 @@ class DocumentServiceImplQuotaTest {
 
     @Test
     void validateUserQuota_withinQuota_completes() {
-        when(quotaProperties.isUserQuotaEnabled()).thenReturn(true);
         when(quotaProperties.getUserQuotaInBytes()).thenReturn(10_000L);
         when(documentDAO.getTotalStorageByUser(anyString())).thenReturn(Mono.just(5L));
 
@@ -114,8 +121,6 @@ class DocumentServiceImplQuotaTest {
 
     @Test
     void validateQuotas_combinesFileAndUserChecks() {
-        when(quotaProperties.isFileUploadQuotaEnabled()).thenReturn(false);
-        when(quotaProperties.isUserQuotaEnabled()).thenReturn(false);
 
         StepVerifier.create(service.validateQuotas(100L, "f.bin")).verifyComplete();
     }
@@ -135,20 +140,17 @@ class DocumentServiceImplQuotaTest {
 
     @Test
     void validateUserQuotaForReplace_disabled_completes() {
-        when(quotaProperties.isUserQuotaEnabled()).thenReturn(false);
         StepVerifier.create(replaceQuota(1000L, 0L)).verifyComplete();
     }
 
     @Test
     void validateUserQuotaForReplace_smallerOrEqualFile_completes() {
-        when(quotaProperties.isUserQuotaEnabled()).thenReturn(true);
         // net change <= 0 -> no quota concern
         StepVerifier.create(replaceQuota(50L, 100L)).verifyComplete();
     }
 
     @Test
     void validateUserQuotaForReplace_netIncreaseOverQuota_errors() {
-        when(quotaProperties.isUserQuotaEnabled()).thenReturn(true);
         when(quotaProperties.getUserQuotaInBytes()).thenReturn(10L);
         when(documentDAO.getTotalStorageByUser(anyString())).thenReturn(Mono.just(5L));
 
@@ -159,7 +161,6 @@ class DocumentServiceImplQuotaTest {
 
     @Test
     void validateUserQuotaForReplace_netIncreaseWithinQuota_completes() {
-        when(quotaProperties.isUserQuotaEnabled()).thenReturn(true);
         when(quotaProperties.getUserQuotaInBytes()).thenReturn(1_000_000L);
         when(documentDAO.getTotalStorageByUser(anyString())).thenReturn(Mono.just(0L));
 

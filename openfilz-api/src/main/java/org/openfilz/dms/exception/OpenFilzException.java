@@ -6,6 +6,7 @@ public interface OpenFilzException {
     String DOCUMENT_NOT_FOUND = "DocumentNotFound";
     String DUPLICATE_NAME = "DuplicateName";
     String FILE_SIZE_EXCEEDED = "FileSizeExceeded";
+    String INSTANCE_QUOTA_EXCEEDED = "InstanceQuotaExceeded";
     String OPENSEARCH = "OpenSearch";
     String OPERATION_FORBIDDEN = "OperationForbidden";
     String STORAGE = "Storage";

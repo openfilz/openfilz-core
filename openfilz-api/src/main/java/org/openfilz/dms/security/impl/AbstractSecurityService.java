@@ -77,6 +77,15 @@ public abstract class AbstractSecurityService implements SecurityService {
                 return false;
             }
         }
+        // Storage quotas: administration is the ADMIN role's (hook), the caller's own quota any user's.
+        // Above the DELETE check: removing a user override is a DELETE that is not a CLEANER's job.
+        if (idx >= 0 && isQuotaAdmin(getContextPath(fullPath, idx))) {
+            return isQuotaAdminAuthorized(auth);
+        }
+        if (idx >= 0 && pathStartsWith(getContextPath(fullPath, idx), RestApiVersion.ENDPOINT_QUOTAS) && method.equals(HttpMethod.GET)) {
+            return isAuthorized((JwtAuthenticationToken) auth, of(Role.READER.toString(), Role.CONTRIBUTOR.toString(),
+                    Role.CLEANER.toString(), Role.AUDITOR.toString(), Role.ADMIN.toString()));
+        }
         // AI endpoints: accessible to READER, CONTRIBUTOR, and CLEANER (for delete)
         if (idx >= 0 && getContextPath(fullPath, idx).startsWith(RestApiVersion.ENDPOINT_AI)) {
             return isAuthorized((JwtAuthenticationToken) auth, of(Role.READER.toString(), Role.CONTRIBUTOR.toString(), Role.CLEANER.toString()));
@@ -323,6 +332,18 @@ public abstract class AbstractSecurityService implements SecurityService {
         return path.startsWith(RestApiVersion.ENDPOINT_WORKFLOWS + "/definitions") && !path.endsWith("/validate");
     }
 
+    protected final boolean isQuotaAdmin(String path) {
+        return pathStartsWith(path, RestApiVersion.ENDPOINT_ADMIN_QUOTAS);
+    }
+
+    /**
+     * Who may administer storage quotas ({@code /admin/quotas/**}): the {@link Role#ADMIN} role.
+     * Editions with their own administration model override this.
+     */
+    protected boolean isQuotaAdminAuthorized(Authentication auth) {
+        return isAuthorized((JwtAuthenticationToken) auth, Role.ADMIN.toString());
+    }
+
     protected final boolean isAudit(String path) {
         return pathStartsWith(path, "/audit");
     }
@@ -366,6 +387,10 @@ public abstract class AbstractSecurityService implements SecurityService {
             return false;
         }
         if (isQueryOrSearch(method, path)) {
+            return false;
+        }
+        // Quota administration changes limits, never a document: outside the write-once promise.
+        if (isQuotaAdmin(path)) {
             return false;
         }
         return !isWormCreation(method, path);

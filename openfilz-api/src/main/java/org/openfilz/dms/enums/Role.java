@@ -6,5 +6,6 @@ public enum Role {
     READER, // Access only to read-only endpoints
     CLEANER, // Access to all "Delete" endpoints
     SIGN_REQUESTER, // May initiate e-Sign requests (envelopes, templates) — enforced only when openfilz.signature.require-requester-role=true
-    WORKFLOW_DESIGNER // May create / edit workflow definitions — enforced only when openfilz.workflows.require-designer-role=true
+    WORKFLOW_DESIGNER, // May create / edit workflow definitions — enforced only when openfilz.workflows.require-designer-role=true
+    ADMIN // Administers the instance: storage quotas (/admin/quotas)
 }

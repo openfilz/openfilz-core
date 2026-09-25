@@ -3,6 +3,7 @@ package org.openfilz.dms.controller.rest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.headers.Header;
+import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -17,10 +18,14 @@ import org.openfilz.dms.config.TusProperties;
 import org.openfilz.dms.dto.request.TusFinalizeRequest;
 import org.openfilz.dms.dto.response.TusUploadInfo;
 import org.openfilz.dms.dto.response.UploadResponse;
+import org.openfilz.dms.exception.*;
+import org.openfilz.dms.exception.GlobalExceptionHandler.ErrorResponse;
 import org.openfilz.dms.service.TusUploadService;
+import org.springframework.aot.hint.annotation.RegisterReflectionForBinding;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.web.bind.annotation.*;
@@ -51,6 +56,8 @@ import java.util.UUID;
  * - POST /api/v1/tus/{uploadId}/finalize - Complete upload and create Document
  */
 @Slf4j
+// The create / PATCH refusals return ResponseEntity<Object>, which AOT cannot see through: register the body type.
+@RegisterReflectionForBinding(ErrorResponse.class)
 @RestController
 @RequestMapping(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_TUS)
 @RequiredArgsConstructor
@@ -124,13 +131,18 @@ public class TusController {
                             @Header(name = "Location", description = "URL to upload chunks to", schema = @Schema(type = "string")),
                             @Header(name = "Tus-Resumable", description = "TUS protocol version", schema = @Schema(type = "string"))
                     }),
-            @ApiResponse(responseCode = "413", description = "Upload size exceeds maximum allowed or file quota exceeded"),
-            @ApiResponse(responseCode = "507", description = "User storage quota exceeded"),
-            @ApiResponse(responseCode = "404", description = "Parent folder not found"),
-            @ApiResponse(responseCode = "409", description = "Duplicate filename in target folder"),
-            @ApiResponse(responseCode = "400", description = "Missing required headers or filename")
+            @ApiResponse(responseCode = "413", description = "Upload size exceeds maximum allowed or file quota exceeded",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "507", description = "User or instance storage quota exceeded (error UserQuotaExceeded / InstanceQuotaExceeded)",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Parent folder not found",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Duplicate filename in target folder",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Missing required headers or filename",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    public Mono<ResponseEntity<Void>> createUpload(
+    public Mono<ResponseEntity<Object>> createUpload(
             @RequestHeader("Upload-Length") Long uploadLength,
             @RequestHeader(value = "Upload-Metadata", required = false) String metadata,
             ServerHttpRequest request) {
@@ -139,9 +151,8 @@ public class TusController {
 
         // Validate upload length against TUS max size
         if (uploadLength > tusProperties.getMaxUploadSize()) {
-            return Mono.just(ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE)
-                    .header("Tus-Resumable", TUS_VERSION)
-                    .build());
+            return Mono.just(tusError(HttpStatus.CONTENT_TOO_LARGE, OpenFilzException.FILE_SIZE_EXCEEDED,
+                    "Upload size " + uploadLength + " bytes exceeds the maximum of " + tusProperties.getMaxUploadSize() + " bytes"));
         }
 
         // Extract metadata values
@@ -150,9 +161,7 @@ public class TusController {
         // Filename is required for validation
         if (metadataValues.filename == null || metadataValues.filename.isBlank()) {
             log.warn("TUS upload creation rejected: filename is required in Upload-Metadata header");
-            return Mono.just(ResponseEntity.badRequest()
-                    .header("Tus-Resumable", TUS_VERSION)
-                    .build());
+            return Mono.just(tusError(HttpStatus.BAD_REQUEST, null, "filename is required in the Upload-Metadata header"));
         }
 
         // Validate all preconditions before creating the upload
@@ -168,27 +177,31 @@ public class TusController {
                     return ResponseEntity.created(URI.create(location))
                             .header("Tus-Resumable", TUS_VERSION)
                             .header("Upload-Offset", "0")
-                            .<Void>build();
+                            .build();
                 })
                 .onErrorResume(e -> {
                     log.warn("Failed to create upload: {}", e.getMessage());
-                    String errorType = e.getClass().getSimpleName();
-                    return switch (errorType) {
-                        case "FileSizeExceededException" -> Mono.just(ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE)
-                                .header("Tus-Resumable", TUS_VERSION)
-                                .build());
-                        case "UserQuotaExceededException" -> Mono.just(ResponseEntity.status(HttpStatus.INSUFFICIENT_STORAGE)
-                                .header("Tus-Resumable", TUS_VERSION)
-                                .build());
-                        case "DocumentNotFoundException" -> Mono.just(ResponseEntity.notFound()
-                                .header("Tus-Resumable", TUS_VERSION)
-                                .build());
-                        case "DuplicateNameException" -> Mono.just(ResponseEntity.status(HttpStatus.CONFLICT)
-                                .header("Tus-Resumable", TUS_VERSION)
-                                .build());
-                        default -> Mono.error(e);
+                    String code = e instanceof AbstractOpenFilzException ofe ? ofe.getError() : null;
+                    HttpStatus status = switch (e) {
+                        case FileSizeExceededException _ -> HttpStatus.CONTENT_TOO_LARGE;
+                        case UserQuotaExceededException _, InstanceQuotaExceededException _ -> HttpStatus.INSUFFICIENT_STORAGE;
+                        case DocumentNotFoundException _ -> HttpStatus.NOT_FOUND;
+                        case DuplicateNameException _ -> HttpStatus.CONFLICT;
+                        default -> null;
                     };
+                    return status == null ? Mono.error(e) : Mono.just(tusError(status, code, e.getMessage()));
                 });
+    }
+
+    /**
+     * A TUS error answer: the protocol header plus the same JSON body as every other endpoint, so a
+     * client (tus-js-client exposes it as {@code originalResponse.getBody()}) can show the reason.
+     */
+    private ResponseEntity<Object> tusError(HttpStatus status, String code, String message) {
+        return ResponseEntity.status(status)
+                .header("Tus-Resumable", TUS_VERSION)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new ErrorResponse(status.value(), message, code));
     }
 
     /**
@@ -298,9 +311,11 @@ public class TusController {
                             @Header(name = "Tus-Resumable", description = "TUS protocol version", schema = @Schema(type = "string"))
                     }),
             @ApiResponse(responseCode = "409", description = "Offset mismatch - resume from HEAD request"),
+            @ApiResponse(responseCode = "413", description = "The chunk would go past the declared Upload-Length",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "Upload not found")
     })
-    public Mono<ResponseEntity<Void>> uploadChunk(
+    public Mono<ResponseEntity<Object>> uploadChunk(
             @Parameter(description = "Upload identifier") @PathVariable String uploadId,
             @RequestHeader("Upload-Offset") Long offset,
             @RequestHeader(value = "Content-Length", required = false) Long contentLength,
@@ -308,13 +323,23 @@ public class TusController {
 
         log.debug("TUS PATCH - Uploading chunk for: {} at offset: {}", uploadId, offset);
 
-        return tusUploadService.uploadChunk(uploadId, offset, body)
+        Mono<Void> declaredLengthCheck = contentLength == null || contentLength < 0 ? Mono.empty()
+                : tusUploadService.getUploadLength(uploadId)
+                        .flatMap(length -> offset + contentLength > length
+                                ? Mono.<Void>error(new TusUploadLengthExceededException(offset, contentLength, length))
+                                : Mono.<Void>empty())
+                        .onErrorResume(e -> e instanceof TusUploadLengthExceededException ? Mono.error(e) : Mono.empty());
+        return declaredLengthCheck
+                .then(tusUploadService.uploadChunk(uploadId, offset, body))
                 .map(newOffset -> ResponseEntity.noContent()
                         .header("Tus-Resumable", TUS_VERSION)
                         .header("Upload-Offset", newOffset.toString())
-                        .<Void>build())
+                        .build())
                 .onErrorResume(e -> {
                     log.warn("Error uploading chunk for {}: {}", uploadId, e.getMessage());
+                    if (e instanceof TusUploadLengthExceededException tooLong) {
+                        return Mono.just(tusError(HttpStatus.CONTENT_TOO_LARGE, tooLong.getError(), tooLong.getMessage()));
+                    }
                     if (e.getMessage() != null && e.getMessage().contains("Offset mismatch")) {
                         return Mono.just(ResponseEntity.status(HttpStatus.CONFLICT)
                                 .header("Tus-Resumable", TUS_VERSION)

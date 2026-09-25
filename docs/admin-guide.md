@@ -434,19 +434,60 @@ openfilz:
 
 | Property | Default | Description |
 |----------|---------|-------------|
-| `openfilz.tus.enabled` | `true` | Enable TUS resumable uploads |
-| `openfilz.tus.temp-storage-path` | `/tmp/tus-uploads` | Temporary chunk storage |
-| `openfilz.tus.max-upload-size` | `10737418240` (10 GB) | Maximum upload size |
-| `openfilz.tus.chunk-size` | `52428800` (50 MB) | Chunk size |
-| `openfilz.tus.upload-expiration-period` | `86400000` (24h) | Abandoned upload TTL |
-| `openfilz.tus.cleanup-interval` | `3600000` (1h) | Cleanup sweep interval |
+| `openfilz.tus.enabled` / `TUS_ENABLED` | `true` | Enable TUS resumable uploads |
+| `openfilz.tus.max-upload-size` / `TUS_MAX_UPLOAD_SIZE` | `10737418240` (10 GB) | Maximum upload size (bytes) — a hard ceiling on top of the quotas below |
+| `openfilz.tus.chunk-size` / `TUS_CHUNK_SIZE` | `52428800` (50 MB) | Chunk size advertised to clients |
+| `openfilz.tus.upload-expiration-period` / `TUS_UPLOAD_EXPIRATION` | `86400000` (24h) | Abandoned upload TTL (ms) |
+| `openfilz.tus.cleanup-interval` / `TUS_CLEANUP_INTERVAL` | `3600000` (1h) | Cleanup sweep interval (ms) |
+
+Uploads in progress are kept in the main storage under the `_tus/` prefix (a folder of the local
+base path, or objects of the bucket) — there is no separate temporary directory. The quotas are
+checked when the upload is created (against its declared `Upload-Length`) and again at finalize; a
+`PATCH` that would write past the declared length is refused with 413 and nothing is recorded.
+Refusals carry the same JSON body as the rest of the API (`{"status", "message", "error"}`).
 
 ### Quotas
 
 | Property | Default | Description |
 |----------|---------|-------------|
-| `openfilz.quota.file-upload` | `0` | Max file size per upload (MB), `0` = unlimited |
-| `openfilz.quota.user` | `0` | Max total storage per user (MB), `0` = unlimited |
+| `openfilz.quota.file-upload` / `OPENFILZ_QUOTA_FILE_UPLOAD` | `0` | Max file size per upload (MB), `0` = unlimited — HTTP 413 |
+| `openfilz.quota.user` / `OPENFILZ_QUOTA_USER` | `0` | Default max total storage per user (MB), `0` = unlimited — HTTP 507 `UserQuotaExceeded` |
+| `openfilz.quota.total` / `OPENFILZ_QUOTA_TOTAL` | `0` | Max total storage of the whole instance (MB), `0` = unlimited — HTTP 507 `InstanceQuotaExceeded` |
+
+**What counts.** A user's usage is the size of the active files charged to them — in the Community
+Edition the files they created (`documents.created_by`). Files in the recycle bin do not count (restoring
+them is checked against the quota), nor do previous versions kept by bucket versioning. The instance
+usage is the size of every active file. Usage is computed on the fly: nothing to recount after an
+import or a clean-up.
+
+**Effective limit of a user — most specific wins:**
+
+1. the user's own limit, set by an administrator (below) — `0` exempts that user;
+2. a limit inherited from a group of users, when the edition defines one (none in the Community Edition);
+3. the default `openfilz.quota.user`.
+
+The instance limit applies on top, to everyone (even an exempt user). Every path that adds bytes is
+checked: upload, multi-upload, TUS (creation and finalize), replace content (only the growth counts),
+ZIP extraction (once for the whole archive), restore from the recycle bin, PDF tools.
+
+**Per-user limits (ADMIN role).** Give the `ADMIN` realm role (group `/OPENFILZ/ADMIN`) to whoever
+administers storage, then:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/v1/admin/quotas` | Defaults (MB), instance usage and limit, number of user overrides |
+| `GET /api/v1/admin/quotas/users?sort=usage\|percent\|limit\|name&order=desc&search=&page=&size=` | Users with usage, effective limit, its source (`USER` / `GROUP` / `DEFAULT`) and percentage |
+| `GET /api/v1/admin/quotas/users/{username}` | One user |
+| `PUT /api/v1/admin/quotas/users/{username}` `{"quotaMb": 5120}` | Set the user's own limit (`0` = no limit) |
+| `DELETE /api/v1/admin/quotas/users/{username}` | Remove it — the group or default limit applies again |
+
+`username` is the user's e-mail (the `email` claim). Overrides are stored in `user_storage_quota` (Flyway `V1_15`).
+
+**What users see.** `GET /api/v1/quotas/me` returns the caller's usage, effective limit (`null` =
+unlimited), its source and the per-file limit; the dashboard ring (`/dashboard/statistics` →
+`storage.quota`) and the settings card show it, "Unlimited" when there is no limit. Error bodies carry
+`error` = `FileSizeExceeded`, `UserQuotaExceeded` or `InstanceQuotaExceeded`, so the web app tells
+"this file is too big", "your space is full" and "the server is full — contact your administrator" apart.
 
 ### Audit and Compliance
 

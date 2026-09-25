@@ -230,6 +230,10 @@ openfilz:
     # Maximum total storage quota per user in megabytes (MB)
     # 0 = no limit (default), > 0 = max total storage in MB per user
     user: ${OPENFILZ_QUOTA_USER:0}
+    # Maximum total storage of the whole instance in megabytes (MB) — every user's active files together
+    # 0 = no limit (default). Over it, uploads are refused with HTTP 507 (error InstanceQuotaExceeded).
+    # Per-user overrides are set at runtime (PUT /api/v1/admin/quotas/users/{username}, ADMIN role).
+    total: ${OPENFILZ_QUOTA_TOTAL:0}
 
   # AI Document Chat Configuration
   ai:
@@ -502,8 +506,7 @@ openfilz:
   # Enables chunked uploads to bypass Cloudflare's 100MB limit
   tus:
     enabled: ${TUS_ENABLED:true}
-    # Temporary storage path for TUS uploads in progress
-    temp-storage-path: ${TUS_TEMP_STORAGE:/tmp/tus-uploads}
+    # Uploads in progress live in the main storage under the _tus/ prefix (filesystem or bucket), not in a temp dir.
     # Maximum upload size in bytes (default: 10GB)
     max-upload-size: ${TUS_MAX_UPLOAD_SIZE:10737418240}
     # Recommended chunk size in bytes (default: 50MB - safely under Cloudflare's 100MB limit)

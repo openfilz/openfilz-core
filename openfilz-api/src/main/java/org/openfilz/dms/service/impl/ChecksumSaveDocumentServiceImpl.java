@@ -3,7 +3,7 @@ package org.openfilz.dms.service.impl;
 import tools.jackson.databind.ObjectMapper;
 import io.r2dbc.postgresql.codec.Json;
 import lombok.extern.slf4j.Slf4j;
-import org.openfilz.dms.config.QuotaProperties;
+import org.openfilz.dms.service.quota.StorageQuotaService;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.repository.DocumentDAO;
@@ -35,8 +35,8 @@ public class ChecksumSaveDocumentServiceImpl extends SaveDocumentServiceImpl {
     /** C2 — the append-only ledger the JSONB fingerprint stopped being the reference for. */
     private final DocumentIntegrityService documentIntegrityService;
 
-    public ChecksumSaveDocumentServiceImpl(StorageService storageService, ObjectMapper objectMapper, AuditService auditService, JsonUtils jsonUtils, DocumentDAO documentDAO, MetadataPostProcessor metadataPostProcessor, TransactionalOperator tx, QuotaProperties quotaProperties, ChecksumService checksumService, DocumentIntegrityService documentIntegrityService) {
-        super(storageService, objectMapper, auditService, jsonUtils, documentDAO, metadataPostProcessor, tx, quotaProperties);
+    public ChecksumSaveDocumentServiceImpl(StorageService storageService, ObjectMapper objectMapper, AuditService auditService, JsonUtils jsonUtils, DocumentDAO documentDAO, MetadataPostProcessor metadataPostProcessor, TransactionalOperator tx, StorageQuotaService storageQuotaService, ChecksumService checksumService, DocumentIntegrityService documentIntegrityService) {
+        super(storageService, objectMapper, auditService, jsonUtils, documentDAO, metadataPostProcessor, tx, storageQuotaService);
         this.checksumService = checksumService;
         this.documentIntegrityService = documentIntegrityService;
     }
