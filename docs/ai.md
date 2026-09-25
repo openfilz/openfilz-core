@@ -218,7 +218,7 @@ Where each knob lives:
 | Master switch | `openfilz.ai.active` (`OPENFILZ_AI_ACTIVE`) |
 | Provider selection | `openfilz.ai.<provider>.<kind>.enabled` (`*_CHAT_ENABLED`, `*_EMBEDDING_ENABLED`) |
 | Provider connection | `spring.ai.<provider>.api-key` / `.chat.model` / `.embedding.model` (`*_API_KEY`, `*_CHAT_MODEL`, …) |
-| Chunking / RAG | `openfilz.ai.embedding.chunk-size`, `.chunk-overlap`, `.top-k`, `.similarity-threshold` |
+| Chunking / RAG | `openfilz.ai.embedding.chunk-size` (tokens), `.min-chunk-size-chars` (no overlap between chunks; replaces the deprecated `.chunk-overlap`), `.top-k`, `.similarity-threshold` — a chunking change applies to documents embedded afterwards, re-embed to apply it to the library |
 | Embedding-change policy | `openfilz.ai.embedding.validation` = `fail-fast` (default) \| `warn` |
 | System prompt | `openfilz.ai.system-prompt` |
 | BYOK | `openfilz.ai.user-settings.enabled` (`AI_USER_SETTINGS_ENABLED`) + `.encryption-key` (`AI_SETTINGS_ENCRYPTION_KEY`, `openssl rand -base64 32`) |
