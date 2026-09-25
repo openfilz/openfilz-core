@@ -21,6 +21,7 @@ import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.exception.*;
 import org.openfilz.dms.exception.GlobalExceptionHandler.ErrorResponse;
 import org.openfilz.dms.service.TusUploadService;
+import org.springframework.aot.hint.annotation.RegisterReflectionForBinding;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpStatus;
@@ -55,6 +56,8 @@ import java.util.UUID;
  * - POST /api/v1/tus/{uploadId}/finalize - Complete upload and create Document
  */
 @Slf4j
+// The create / PATCH refusals return ResponseEntity<Object>, which AOT cannot see through: register the body type.
+@RegisterReflectionForBinding(ErrorResponse.class)
 @RestController
 @RequestMapping(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_TUS)
 @RequiredArgsConstructor
