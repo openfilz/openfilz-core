@@ -83,13 +83,40 @@ public final class SharedOllamaContainer {
         for (String model : new String[]{CHAT_MODEL, EMBEDDING_MODEL}) {
             if (!hasModel(model)) {
                 log.info("[AI-E2E] Pulling {} (one-off; the result is cached as {})", model, CACHED_IMAGE);
-                exec("ollama", "pull", model);
+                pull(model);
                 pulledAnything = true;
             }
         }
         if (pulledAnything) {
             log.info("[AI-E2E] Committing populated container to {}", CACHED_IMAGE);
             OLLAMA_CONTAINER.commitToImage(CACHED_IMAGE);
+        }
+    }
+
+    /**
+     * The Ollama registry answers transient 5xx now and then (run 36203909630 died on a 503 after
+     * the 986 MB blob had downloaded). {@code ollama pull} resumes from the blobs already on disk,
+     * so a retry is cheap — only a pull that keeps failing is a real problem.
+     */
+    private static void pull(String model) {
+        long[] backoffSeconds = {10, 30, 60};
+        for (int attempt = 0; ; attempt++) {
+            try {
+                exec("ollama", "pull", model);
+                return;
+            } catch (IllegalStateException e) {
+                if (attempt >= backoffSeconds.length) {
+                    throw e;
+                }
+                log.warn("[AI-E2E] Pulling {} failed (attempt {}), retrying in {}s: {}",
+                        model, attempt + 1, backoffSeconds[attempt], e.getMessage());
+                try {
+                    Thread.sleep(backoffSeconds[attempt] * 1000);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
+            }
         }
     }
 
@@ -104,7 +131,7 @@ public final class SharedOllamaContainer {
             var result = OLLAMA_CONTAINER.execInContainer(command);
             if (result.getExitCode() != 0) {
                 throw new IllegalStateException("Ollama command %s failed (%d): %s"
-                        .formatted(String.join(" ", command), result.getExitCode(), result.getStderr()));
+                        .formatted(String.join(" ", command), result.getExitCode(), tail(result.getStderr())));
             }
             return result.getStdout();
         } catch (IOException e) {
@@ -113,6 +140,12 @@ public final class SharedOllamaContainer {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted running: " + String.join(" ", command), e);
         }
+    }
+
+    /** {@code ollama pull} writes its progress bars to stderr; the error is on the last line. */
+    private static String tail(String stderr) {
+        String trimmed = stderr == null ? "" : stderr.strip();
+        return trimmed.length() <= 300 ? trimmed : "…" + trimmed.substring(trimmed.length() - 300);
     }
 
     public static OllamaContainer getInstance() {
