@@ -553,7 +553,7 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
 
     @Test
     void searchReturnsAHighlightedContentSnippet() throws IOException {
-        String word = "qz" + UUID.randomUUID().toString().replaceAll("[^a-f]", "").substring(0, 8);
+        String word = "qz" + UUID.randomUUID().toString().replace("-", "").replaceAll("[0-9]", "g").substring(0, 8);
         String filename = word + "-notes.txt";
         Files.writeString(Paths.get("target/test-classes/" + filename),
                 "Meeting notes. The " + word + " contract covers the yearly maintenance of the servers.");

@@ -263,8 +263,8 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
 
     /** Names: "<token> folder", "<token> alpha.pdf" (131 KB), "<token> beta.png" (2.7 KB), "<token> gamma.txt" (74 B). */
     protected SearchFixture createSearchFixture() {
-        String token = "qz" + UUID.randomUUID().toString().replaceAll("[^a-f]", "").substring(0, 6)
-                + UUID.randomUUID().toString().replaceAll("[^a-f]", "").substring(0, 4);
+        String token = "qz" + UUID.randomUUID().toString().replace("-", "").replaceAll("[0-9]", "g").substring(0, 6)
+                + UUID.randomUUID().toString().replace("-", "").replaceAll("[0-9]", "g").substring(0, 4);
         FolderResponse folder = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/folders")
                 .body(BodyInserters.fromValue(new CreateFolderRequest(token + " folder", null)))
                 .exchange()
