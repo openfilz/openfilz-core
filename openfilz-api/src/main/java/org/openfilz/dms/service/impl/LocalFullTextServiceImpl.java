@@ -118,7 +118,22 @@ public class LocalFullTextServiceImpl implements FullTextService {
     private void indexFileWithTextExtraction(Document document) {
         // Queued: a burst of uploads (unzip, bulk upload) extracts a few files at a time instead of
         // all at once. Everything — temp file included — is created only once a slot frees up.
-        postProcessingQueue.run(withIndexRetry(Mono.defer(() -> textExtractionPipeline(document)), document,
+        // A retry re-runs the pipeline, whose first step is a full metadata index (an upsert). The
+        // first attempt created the index entry, so an entry gone by now means the document was
+        // deleted meanwhile: re-indexing it would resurrect it in search results.
+        java.util.concurrent.atomic.AtomicBoolean firstAttempt = new java.util.concurrent.atomic.AtomicBoolean(true);
+        Mono<Void> pipeline = Mono.defer(() -> firstAttempt.getAndSet(false)
+                ? textExtractionPipeline(document)
+                : indexService.exists(document.getId())
+                        .onErrorReturn(true)
+                        .flatMap(exists -> {
+                            if (!exists) {
+                                log.debug("[INDEX] document {} deleted during indexing: not retrying", document.getId());
+                                return Mono.<Void>empty();
+                            }
+                            return textExtractionPipeline(document);
+                        }));
+        postProcessingQueue.run(withIndexRetry(pipeline, document,
                 "Retrying indexFile for document {}, attempt {}", "indexFile error for {} : {}"));
     }
 
