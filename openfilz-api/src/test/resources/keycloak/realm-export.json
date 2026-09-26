@@ -571,14 +571,16 @@
         "CLEANER",
         "AUDITOR",
         "SIGN_REQUESTER",
-        "WORKFLOW_DESIGNER"
+        "WORKFLOW_DESIGNER",
+        "ADMIN"
       ],
       "groups": [
         "/OPENFILZ/CONTRIBUTOR",
         "/OPENFILZ/CLEANER",
         "/OPENFILZ/AUDITOR",
         "/OPENFILZ/SIGN_REQUESTER",
-        "/OPENFILZ/WORKFLOW_DESIGNER"
+        "/OPENFILZ/WORKFLOW_DESIGNER",
+        "/OPENFILZ/ADMIN"
       ]
     },
     {
@@ -624,6 +626,10 @@
       {
         "name": "WORKFLOW_DESIGNER",
         "description": "WORKFLOW_DESIGNER role"
+      },
+      {
+        "name": "ADMIN",
+        "description": "ADMIN role — storage quota administration"
       }
     ]
   },
@@ -655,6 +661,10 @@
         {
           "name": "WORKFLOW_DESIGNER",
           "path": "/OPENFILZ/WORKFLOW_DESIGNER"
+        },
+        {
+          "name": "ADMIN",
+          "path": "/OPENFILZ/ADMIN"
         }
       ]
     }

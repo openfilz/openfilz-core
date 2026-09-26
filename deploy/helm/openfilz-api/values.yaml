@@ -126,7 +126,18 @@ onlyoffice:
 # Quotas (MB, 0 = no limit)
 quotas:
   fileUploadMb: 1024
+  # Default per-user limit; per-user overrides are set at runtime (PUT /api/v1/admin/quotas/users/{username})
   userMb: 2048
+  # Whole instance (every user's active files together); 0 = no limit
+  totalMb: 0
+
+# Resumable uploads (TUS). Sizes in bytes, periods in milliseconds.
+tus:
+  enabled: true
+  maxUploadSize: 10737418240   # 10 GB
+  chunkSize: 52428800          # 50 MB — under Cloudflare's 100 MB request cap
+  uploadExpiration: 86400000   # 24 h
+  cleanupInterval: 3600000     # 1 h
 
 # MCP server — external AI agents over POST /mcp (Claude, Cursor, n8n…; see
 # docs/mcp.md). OAuth discovery advertises the PUBLIC realm URL to MCP hosts

@@ -3,7 +3,7 @@ package org.openfilz.dms.service.impl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.compress.archivers.zip.ZipFile;
-import org.openfilz.dms.config.QuotaProperties;
+import org.openfilz.dms.service.quota.StorageQuotaService;
 import org.openfilz.dms.config.UnzipProperties;
 import org.openfilz.dms.dto.request.CreateFolderRequest;
 import org.openfilz.dms.dto.request.UnzipRequest;
@@ -73,7 +73,7 @@ public class UnzipServiceImpl implements UnzipService, UserInfoService {
     private final DocumentDAO documentDAO;
     private final StorageService storageService;
     private final SaveDocumentService saveDocumentService;
-    private final QuotaProperties quotaProperties;
+    private final StorageQuotaService storageQuotaService;
     private final UnzipProperties props;
 
     /** A folder of the destination tree; {@code id == null} is the root. */
@@ -179,15 +179,7 @@ public class UnzipServiceImpl implements UnzipService, UserInfoService {
 
     /** One quota check for the whole archive instead of one aggregate query per file. */
     private Mono<Void> validateUserQuota(long totalBytes) {
-        if (!quotaProperties.isUserQuotaEnabled() || totalBytes == 0) {
-            return Mono.empty();
-        }
-        long maxQuota = quotaProperties.getUserQuotaInBytes();
-        return getConnectedUserEmail()
-                .flatMap(username -> documentDAO.getTotalStorageByUser(username)
-                        .flatMap(currentUsage -> currentUsage + totalBytes > maxQuota
-                                ? Mono.error(new UserQuotaExceededException(username, currentUsage, totalBytes, maxQuota))
-                                : Mono.empty()));
+        return storageQuotaService.checkStorage(totalBytes);
     }
 
     private Mono<FolderRef> resolveDestination(Document zip, UnzipRequest request) {
@@ -297,7 +289,8 @@ public class UnzipServiceImpl implements UnzipService, UserInfoService {
                 skipped.add(new UnzipSkippedEntry(file.path(), SkipReason.PARENT_NOT_CREATED, null));
                 return Mono.empty();
             }
-            if (quotaProperties.isFileUploadQuotaEnabled() && file.size() > quotaProperties.getFileUploadQuotaInBytes()) {
+            Long maxFileSize = storageQuotaService.maxFileSizeBytes();
+            if (maxFileSize != null && file.size() > maxFileSize) {
                 skipped.add(new UnzipSkippedEntry(file.path(), SkipReason.FILE_TOO_LARGE, null));
                 return Mono.empty();
             }

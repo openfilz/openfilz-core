@@ -549,6 +549,10 @@
       {
         "name": "WORKFLOW_DESIGNER",
         "description": "May create and edit workflow definitions (enforced when OPENFILZ_WORKFLOWS_REQUIRE_DESIGNER_ROLE=true)"
+      },
+      {
+        "name": "ADMIN",
+        "description": "Administers the instance: storage quotas (per-user limits, usage)"
       }
     ]
   },
@@ -580,6 +584,10 @@
         {
           "name": "WORKFLOW_DESIGNER",
           "path": "/OPENFILZ/WORKFLOW_DESIGNER"
+        },
+        {
+          "name": "ADMIN",
+          "path": "/OPENFILZ/ADMIN"
         }
       ]
     }

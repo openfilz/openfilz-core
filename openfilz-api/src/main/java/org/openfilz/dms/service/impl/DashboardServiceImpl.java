@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.CommonProperties;
 import org.openfilz.dms.config.QuotaProperties;
+import org.openfilz.dms.service.quota.StorageQuotaService;
 import org.openfilz.dms.dto.response.DashboardStatisticsResponse;
 import org.openfilz.dms.dto.response.FileTypeStats;
 import org.openfilz.dms.dto.response.StorageBreakdown;
@@ -25,7 +26,8 @@ import java.util.List;
 public class DashboardServiceImpl implements DashboardService {
 
     private final StatisticsDAO statisticsDAO;
-    private final QuotaProperties commonProperties;
+    private final StorageQuotaService storageQuotaService;
+    private final QuotaProperties quotaProperties;
 
     // File type patterns for categorization
     private static final String DOCUMENTS_PATTERN = "application/%";
@@ -76,7 +78,7 @@ public class DashboardServiceImpl implements DashboardService {
         Mono<Long> videosSizeMono = statisticsDAO.getTotalStorageByContentType(VIDEOS_PATTERN);
         Mono<Long> audioSizeMono = statisticsDAO.getTotalStorageByContentType(AUDIO_PATTERN);
 
-        return Mono.zip(totalStorageMono, documentsSizeMono, imagesSizeMono, videosSizeMono, audioSizeMono)
+        return Mono.zip(totalStorageMono, documentsSizeMono, imagesSizeMono, videosSizeMono, audioSizeMono, storageQuotaService.myQuota())
                 .map(tuple -> {
                     Long totalStorage = tuple.getT1();
                     Long documentsSize = tuple.getT2();
@@ -95,8 +97,11 @@ public class DashboardServiceImpl implements DashboardService {
                             new FileTypeStats("others", null, Math.max(0, othersSize))
                     );
 
-                    // For now, set total available to null (no quota system)
-                    return new StorageBreakdown(totalStorage, commonProperties.getUserQuotaInBytes(), breakdown);
+                    // The limit next to totalStorage must measure the same thing: the caller's quota when the
+                    // statistics are the caller's, the instance's when they cover the instance.
+                    var myQuota = tuple.getT6();
+                    Long available = statisticsDAO.isScopedToCaller() ? myQuota.limitBytes() : quotaProperties.getTotalQuotaInBytes();
+                    return new StorageBreakdown(totalStorage, available, breakdown, myQuota);
                 });
     }
 

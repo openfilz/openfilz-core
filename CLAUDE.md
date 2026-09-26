@@ -258,10 +258,23 @@ Optional audit chain verification (hash chain for integrity): `openfilz.audit.ch
 - Configuration: `openfilz.calculate-checksum: false` (default)
 
 ### Quota Management
-- **QuotaProperties** — per-file and per-user storage limits
-- `openfilz.quota.file-upload` — max file size per upload (MB, 0 = no limit)
-- `openfilz.quota.user` — max total storage per user (MB, 0 = no limit)
-- Throws `UserQuotaExceededException` on violation
+- **QuotaProperties** — deployment defaults, read per call (runtime changes apply at once):
+  `openfilz.quota.file-upload` (MB per file → 413 `FileSizeExceeded`), `openfilz.quota.user` (default MB per
+  user → 507 `UserQuotaExceeded`), `openfilz.quota.total` (MB for the whole instance → 507 `InstanceQuotaExceeded`); 0 = no limit.
+- **`service/quota/StorageQuotaService`** (`DefaultStorageQuotaService`) is the ONLY place quotas are resolved and
+  enforced — upload, multi-upload, TUS create/finalize, replace (growth only), unzip (once per archive), recycle-bin
+  restore all call `checkFileSize` / `checkStorage` / `checkUpload`. Never re-implement a quota check in a service.
+- Effective user limit, most specific wins: own override (`user_storage_quota`, V1_15; 0 = exempt) > inherited
+  (`inheritedQuotas` hook — none in core, EE = teams) > default. Seams (protected): `usedBytes` (core = `created_by`),
+  `inheritedQuotas`, `chargedUsers`, `displayName`.
+- REST: `GET /api/v1/quotas/me` (any user); `/api/v1/admin/quotas[/users[/{username}]]` (GET/PUT/DELETE, `Role.ADMIN`
+  via the `AbstractSecurityService.isQuotaAdminAuthorized` hook; outside the WORM perimeter). Error bodies carry
+  `ErrorResponse.error` (the `OpenFilzException` code). TUS create/PATCH refusals carry the same JSON body; a PATCH past
+  the declared `Upload-Length` is 413 (`TusUploadLengthExceededException`).
+- Dashboard: `StorageBreakdown.quota` = the caller's `MyStorageQuota` (the ring); `totalStorageAvailable` is the limit
+  matching `totalStorageUsed` (`StatisticsDAO.isScopedToCaller()`: instance limit in core, the caller's in EE).
+- Tests: `DefaultStorageQuotaServiceTest`, `e2e/StorageQuotaAdminIT` (Keycloak, `admin-user` has `ADMIN` in the test
+  realm), `e2e/InstanceQuotaIT` (instance limit + TUS bodies), plus the older `QuotaIT` / `FileQuotaIT`.
 
 ### Favorites
 - **FavoriteController** (`/api/v1/favorites/{documentId}`) — add, remove, toggle, check
