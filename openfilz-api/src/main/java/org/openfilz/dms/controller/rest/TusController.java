@@ -323,14 +323,17 @@ public class TusController {
 
         log.debug("TUS PATCH - Uploading chunk for: {} at offset: {}", uploadId, offset);
 
+        // Refuse a chunk that would overflow the declared Upload-Length before reading it — but only
+        // once the offset is the server's: an offset mismatch is a 409 (TUS §PATCH), which the
+        // service reports, and takes precedence over the length.
         Mono<Void> declaredLengthCheck = contentLength == null || contentLength < 0 ? Mono.empty()
-                : tusUploadService.getUploadLength(uploadId)
-                        .flatMap(length -> offset + contentLength > length
-                                ? Mono.<Void>error(new TusUploadLengthExceededException(offset, contentLength, length))
+                : Mono.zip(tusUploadService.getUploadOffset(uploadId), tusUploadService.getUploadLength(uploadId))
+                        .flatMap(t -> offset.equals(t.getT1()) && offset + contentLength > t.getT2()
+                                ? Mono.<Void>error(new TusUploadLengthExceededException(offset, contentLength, t.getT2()))
                                 : Mono.<Void>empty())
                         .onErrorResume(e -> e instanceof TusUploadLengthExceededException ? Mono.error(e) : Mono.empty());
         return declaredLengthCheck
-                .then(tusUploadService.uploadChunk(uploadId, offset, body))
+                .then(Mono.defer(() -> tusUploadService.uploadChunk(uploadId, offset, body)))
                 .map(newOffset -> ResponseEntity.noContent()
                         .header("Tus-Resumable", TUS_VERSION)
                         .header("Upload-Offset", newOffset.toString())
