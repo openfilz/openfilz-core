@@ -386,4 +386,49 @@ class LocalFullTextServiceImplTest {
         assertEquals(Boolean.FALSE, org.springframework.test.util.ReflectionTestUtils.invokeMethod(
                 service, "isRetryableException", new RuntimeException()));
     }
+    @Test
+    void indexDocument_retryAfterConflict_skipsDocumentDeletedMeanwhile() {
+        Document doc = extractableFile();
+        doReturn(Mono.just(new ByteArrayResource("content".getBytes())))
+                .when(storageService).loadFile("storage/doc.pdf");
+        when(indexService.indexDocMetadataMono(doc)).thenReturn(Mono.empty());
+        when(tikaService.processResource(any(), any(), any())).thenReturn(Flux.empty());
+        when(indexService.indexDocumentStream(any(), eq(doc.getId())))
+                .thenReturn(Mono.error(new RuntimeException("version_conflict")));
+        // The delete removed the index entry between the first attempt and the retry.
+        when(indexService.exists(doc.getId())).thenReturn(Mono.just(false));
+
+        service.indexDocument(doc);
+
+        verify(indexService, timeout(2000)).exists(doc.getId());
+        // Only the first attempt indexed the metadata: the retry must not re-create the entry.
+        verify(indexService, after(500).times(1)).indexDocMetadataMono(doc);
+    }
+
+    @Test
+    void indexDocument_retryAfterConflict_reindexesDocumentStillIndexed() {
+        Document doc = extractableFile();
+        doReturn(Mono.just(new ByteArrayResource("content".getBytes())))
+                .when(storageService).loadFile("storage/doc.pdf");
+        when(indexService.indexDocMetadataMono(doc)).thenReturn(Mono.empty());
+        when(tikaService.processResource(any(), any(), any())).thenReturn(Flux.empty());
+        when(indexService.indexDocumentStream(any(), eq(doc.getId())))
+                .thenReturn(Mono.error(new RuntimeException("version_conflict")), Mono.empty());
+        when(indexService.exists(doc.getId())).thenReturn(Mono.just(true));
+
+        service.indexDocument(doc);
+
+        verify(indexService, timeout(2000).times(2)).indexDocMetadataMono(doc);
+    }
+
+    private static Document extractableFile() {
+        return Document.builder()
+                .id(UUID.randomUUID())
+                .type(DocumentType.FILE)
+                .name("document.pdf")
+                .contentType("application/pdf")
+                .size(1024L)
+                .storagePath("storage/doc.pdf")
+                .build();
+    }
 }

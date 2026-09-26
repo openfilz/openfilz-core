@@ -11,6 +11,7 @@ import org.openfilz.dms.service.OpenSearchMetadataService;
 import org.openfilz.dms.utils.JsonUtils;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.opensearch.core.DeleteRequest;
+import org.opensearch.client.opensearch.core.ExistsRequest;
 import org.opensearch.client.opensearch.core.GetRequest;
 import org.opensearch.client.opensearch.core.IndexRequest;
 import org.opensearch.client.opensearch.core.IndexResponse;
@@ -113,6 +114,22 @@ public class OpenSearchIndexService implements IndexService {
         }
     }
 
+
+    @Override
+    public Mono<Boolean> exists(UUID id) {
+        ExistsRequest request = new ExistsRequest.Builder()
+                .index(indexNameProvider.getIndexName(id))
+                .id(id.toString())
+                .build();
+        return Mono.fromFuture(() -> {
+                    try {
+                        return openSearchAsyncClient.exists(request);
+                    } catch (IOException e) {
+                        throw new java.io.UncheckedIOException(e);
+                    }
+                })
+                .map(response -> response.value());
+    }
 
     public Object getValueToIndex(String key, Object value) {
         if(value == null) {

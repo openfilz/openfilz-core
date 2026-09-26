@@ -19,6 +19,11 @@ public interface IndexService {
 
     Mono<Void> deleteDocument(UUID id);
 
+    /** Whether the index holds an entry for this document (true when the index can't tell). */
+    default Mono<Boolean> exists(UUID id) {
+        return Mono.just(true);
+    }
+
     Mono<Map<String, Object>> newOpenSearchDocumentMetadata(Document document);
 
     Mono<Void> indexMetadata(UUID documentId, Map<String, Object> metadata);
