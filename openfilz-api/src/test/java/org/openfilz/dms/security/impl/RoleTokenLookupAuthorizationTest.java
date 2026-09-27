@@ -113,6 +113,15 @@ class RoleTokenLookupAuthorizationTest {
     }
 
     @Test
+    void groups_aSlashOrSpaceInTheRootGroupSettingDoesNotDenyEveryone() {
+        SecurityServiceImpl service = service(mode(RoleTokenLookup.GROUPS, " /OPENFILZ/ "));
+
+        assertThat(authorize(service, groups("/OPENFILZ/CONTRIBUTOR"), HttpMethod.POST, CREATE_FOLDER)).isTrue();
+        assertThat(authorize(service, groups("//OPENFILZ/CONTRIBUTOR"), HttpMethod.POST, CREATE_FOLDER)).isFalse();
+        assertThat(authorize(service, groups("/OTHER/ADMIN"), HttpMethod.GET, ADMIN_QUOTAS)).isFalse();
+    }
+
+    @Test
     void groups_realmRolesAloneGrantNothing() {
         SecurityServiceImpl service = service(mode(RoleTokenLookup.GROUPS, "OPENFILZ"));
 

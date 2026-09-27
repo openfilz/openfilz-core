@@ -163,6 +163,27 @@ class AutorizationModeTest {
         assertEquals(List.of(), claims.get("groups"));
     }
 
+    @Test
+    void init_withGroups_rootGroupIsNormalised() {
+        for (String raw : List.of("/OPENFILZ", "OPENFILZ/", "/OPENFILZ/", " OPENFILZ ", " /OPENFILZ/ ", "//OPENFILZ//")) {
+            AutorizationMode mode = groups(raw);
+            assertEquals("OPENFILZ", mode.getRootGroupName(), raw);
+            assertEquals("/OPENFILZ/CONTRIBUTOR", mode.groupPath("CONTRIBUTOR"), raw);
+        }
+    }
+
+    @Test
+    void init_withGroups_slashesOnlyRootGroupFallsBackToOpenfilz() {
+        assertEquals("OPENFILZ", groups("/").getRootGroupName());
+        assertEquals("OPENFILZ", groups(" // ").getRootGroupName());
+    }
+
+    @Test
+    void init_withGroups_innerSlashesAndCaseAreKept() {
+        assertEquals("/ACME/DMS/READER", groups("/ACME/DMS/").groupPath("READER"));
+        assertEquals("/acme/READER", groups("acme").groupPath("READER"));
+    }
+
     private static AutorizationMode groups(String root) {
         AutorizationMode mode = new AutorizationMode();
         ReflectionTestUtils.setField(mode, "roleTokenLookup", RoleTokenLookup.GROUPS);

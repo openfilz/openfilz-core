@@ -51,12 +51,28 @@ public class AutorizationMode {
         if(!rolesBasedOnGroups) {
             rootGroupName = null;
         } else {
-            if(rootGroupName == null || rootGroupName.isBlank()) {
-                rootGroupName = DEFAULT_ROOT_GROUP;
-            }
+            rootGroupName = normalizeRootGroup(rootGroupName);
             // Full Keycloak group paths, exactly as the "groups" claim carries them (full.path=true)
             licensedUserDefaultGroups = LICENSED_USER_DEFAULT_ROLES.stream().map(this::groupPath).toList();
         }
+    }
+
+    /**
+     * {@code " /OPENFILZ/ "} and {@code "OPENFILZ"} name the same root group: trim, strip leading and
+     * trailing '/', blank → {@code OPENFILZ}. Without it a stray slash or space in
+     * {@code OPENFILZ_SECURITY_ROOT_GROUP} would build {@code //OPENFILZ/ROLE} and silently deny everyone.
+     */
+    static String normalizeRootGroup(String rootGroup) {
+        if (rootGroup == null) {
+            return DEFAULT_ROOT_GROUP;
+        }
+        String name = rootGroup.trim();
+        int start = 0;
+        int end = name.length();
+        while (start < end && name.charAt(start) == '/') start++;
+        while (end > start && name.charAt(end - 1) == '/') end--;
+        name = name.substring(start, end).trim();
+        return name.isEmpty() ? DEFAULT_ROOT_GROUP : name;
     }
 
     public boolean areRolesBasedOnGroups() {
