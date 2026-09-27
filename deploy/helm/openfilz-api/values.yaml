@@ -97,6 +97,14 @@ storage:
     bucketName: ""
     region: ""
 
+# Where roles are read in the access token (see docs/admin-guide.md):
+#   REALM_ACCESS (default) — Keycloak realm roles (realm_access.roles)
+#   GROUPS                 — Keycloak groups (claim "groups", full paths); a role is granted only
+#                            by the group /<rootGroup>/<ROLE>, e.g. /OPENFILZ/CONTRIBUTOR
+security:
+  roleTokenLookup: REALM_ACCESS
+  rootGroup: OPENFILZ
+
 features:
   thumbnails: false          # needs gotenberg.url
   softDelete: true

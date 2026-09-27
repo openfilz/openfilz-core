@@ -7,16 +7,34 @@ import org.openfilz.dms.enums.RoleTokenLookup;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static java.util.List.of;
 
+/**
+ * Where role information lives in the caller's JWT ({@code openfilz.security.role-token-lookup}):
+ * <ul>
+ *   <li>{@code REALM_ACCESS} (default) — Keycloak realm roles, claim {@code realm_access.roles};</li>
+ *   <li>{@code GROUPS} — Keycloak group membership, claim {@code groups} with full paths, a role
+ *       being granted only by the exact path {@code /<root-group>/<ROLE>}
+ *       ({@code openfilz.security.root-group}, default {@code OPENFILZ}).</li>
+ * </ul>
+ * Read at runtime (plain {@code @Value}), so the same native image serves both modes.
+ */
 @Configuration
 public class AutorizationMode {
 
+    public static final String REALM_ACCESS_CLAIM = "realm_access";
+    public static final String ROLES_CLAIM = "roles";
+    public static final String GROUPS_CLAIM = "groups";
+    private static final String DEFAULT_ROOT_GROUP = "OPENFILZ";
+
     private static final List<String> LICENSED_USER_DEFAULT_ROLES = of(Role.CONTRIBUTOR.toString(), Role.CLEANER.toString(), Role.AUDITOR.toString());
 
-    @Value("${openfilz.security.role-token-lookup}")
+    @Value("${openfilz.security.role-token-lookup:REALM_ACCESS}")
     private RoleTokenLookup roleTokenLookup;
 
     @Getter
@@ -33,10 +51,11 @@ public class AutorizationMode {
         if(!rolesBasedOnGroups) {
             rootGroupName = null;
         } else {
-            if(rootGroupName == null) {
-                rootGroupName = "OPENFILZ";
+            if(rootGroupName == null || rootGroupName.isBlank()) {
+                rootGroupName = DEFAULT_ROOT_GROUP;
             }
-            licensedUserDefaultGroups = LICENSED_USER_DEFAULT_ROLES.stream().map(r -> "//" + rootGroupName + "/" + r).toList();
+            // Full Keycloak group paths, exactly as the "groups" claim carries them (full.path=true)
+            licensedUserDefaultGroups = LICENSED_USER_DEFAULT_ROLES.stream().map(this::groupPath).toList();
         }
     }
 
@@ -50,5 +69,26 @@ public class AutorizationMode {
 
     public List<String> getLicensedUserDefaultRoles() {
         return rolesBasedOnGroups ? null : LICENSED_USER_DEFAULT_ROLES;
+    }
+
+    /** The group path granting {@code role} in GROUPS mode: {@code /<root-group>/<role>}; {@code null} in REALM_ACCESS mode. */
+    public String groupPath(String role) {
+        return rolesBasedOnGroups ? "/" + rootGroupName + "/" + role : null;
+    }
+
+    /**
+     * The role-bearing claims a synthetic (server-built) JWT must carry so that downstream role
+     * checks grant exactly {@code roles}, whatever the configured mode: {@code realm_access.roles}
+     * always, plus {@code groups} ({@code /<root-group>/<ROLE>}) in GROUPS mode. Keeps both claims
+     * in step so a synthetic principal is never role-less in one mode and privileged in the other.
+     */
+    public Map<String, Object> roleClaims(Collection<String> roles) {
+        List<String> names = List.copyOf(roles);
+        Map<String, Object> claims = new LinkedHashMap<>();
+        claims.put(REALM_ACCESS_CLAIM, Map.of(ROLES_CLAIM, names));
+        if (rolesBasedOnGroups) {
+            claims.put(GROUPS_CLAIM, names.stream().map(this::groupPath).toList());
+        }
+        return claims;
     }
 }

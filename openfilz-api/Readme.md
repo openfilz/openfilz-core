@@ -241,7 +241,10 @@ When security is enabled, the API acts as an OIDC resource server, validating JW
 #### Default Authorization
 
 The default authorization model uses roles extracted from the JWT token.
-You can configure how roles are looked up using the `openfilz.security.role-token-lookup` property.
+You can configure how roles are looked up using the `openfilz.security.role-token-lookup` property
+(env `OPENFILZ_SECURITY_ROLE_TOKEN_LOOKUP`): `REALM_ACCESS` (default, realm roles in `realm_access.roles`)
+or `GROUPS` (Keycloak groups in the `groups` claim, full path `/<root-group>/<ROLE>` with
+`openfilz.security.root-group` / `OPENFILZ_SECURITY_ROOT_GROUP`, default `OPENFILZ`).
 
 The available roles are:
 

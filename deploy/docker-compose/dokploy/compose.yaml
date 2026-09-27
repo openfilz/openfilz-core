@@ -180,6 +180,9 @@ services:
       OPENFILZ_SECURITY_NO_AUTH: "false"
       OPENFILZ_SECURITY_WORM_MODE: ${OPENFILZ_SECURITY_WORM_MODE:-false}
       OPENFILZ_SECURITY_WORM_RETENTION: ${OPENFILZ_SECURITY_WORM_RETENTION:-}
+      # Where roles are read in the JWT: REALM_ACCESS (realm_access.roles) or GROUPS (groups claim, /<ROOT_GROUP>/<ROLE>)
+      OPENFILZ_SECURITY_ROLE_TOKEN_LOOKUP: ${OPENFILZ_SECURITY_ROLE_TOKEN_LOOKUP:-REALM_ACCESS}
+      OPENFILZ_SECURITY_ROOT_GROUP: ${OPENFILZ_SECURITY_ROOT_GROUP:-OPENFILZ}
       KEYCLOAK_REALM_URL: http://keycloak:8080/realms/openfilz
       OPENFILZ_SECURITY_CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://app.openfilz.com,https://docs.openfilz.com}
 
@@ -462,6 +465,9 @@ services:
       NG_APP_AUTHENTICATION_CLIENT_ID: openfilz-web
       NG_APP_ONLYOFFICE_ENABLED: "true"
       NG_APP_ONLYOFFICE_URL: https://${ONLYOFFICE_HOSTNAME:-docs.openfilz.com}
+      # Role lookup mode, driven by the API's variables so backend and UI always agree
+      NG_APP_ROLE_TOKEN_LOOKUP: ${OPENFILZ_SECURITY_ROLE_TOKEN_LOOKUP:-REALM_ACCESS}
+      NG_APP_ROOT_GROUP: ${OPENFILZ_SECURITY_ROOT_GROUP:-OPENFILZ}
     networks:
       - dokploy-network
     labels:

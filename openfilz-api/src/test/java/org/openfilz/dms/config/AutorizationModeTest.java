@@ -5,6 +5,7 @@ import org.openfilz.dms.enums.RoleTokenLookup;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -81,9 +82,9 @@ class AutorizationModeTest {
         List<String> groups = mode.getLicensedUserDefaultGroups();
         assertNotNull(groups);
         assertEquals(3, groups.size());
-        assertTrue(groups.contains("//MYORG/CONTRIBUTOR"));
-        assertTrue(groups.contains("//MYORG/CLEANER"));
-        assertTrue(groups.contains("//MYORG/AUDITOR"));
+        assertTrue(groups.contains("/MYORG/CONTRIBUTOR"));
+        assertTrue(groups.contains("/MYORG/CLEANER"));
+        assertTrue(groups.contains("/MYORG/AUDITOR"));
     }
 
     @Test
@@ -107,8 +108,66 @@ class AutorizationModeTest {
 
         List<String> groups = mode.getLicensedUserDefaultGroups();
         assertNotNull(groups);
-        assertTrue(groups.contains("//OPENFILZ/CONTRIBUTOR"));
-        assertTrue(groups.contains("//OPENFILZ/CLEANER"));
-        assertTrue(groups.contains("//OPENFILZ/AUDITOR"));
+        assertTrue(groups.contains("/OPENFILZ/CONTRIBUTOR"));
+        assertTrue(groups.contains("/OPENFILZ/CLEANER"));
+        assertTrue(groups.contains("/OPENFILZ/AUDITOR"));
+    }
+
+    /** License-server looks groups up by path: exactly "/ROOT/ROLE", never "//ROOT/ROLE". */
+    @Test
+    void init_withGroups_licensedUserDefaultGroups_areSingleSlashKeycloakPaths() {
+        AutorizationMode mode = groups("OPENFILZ");
+
+        assertEquals(List.of("/OPENFILZ/CONTRIBUTOR", "/OPENFILZ/CLEANER", "/OPENFILZ/AUDITOR"),
+                mode.getLicensedUserDefaultGroups());
+        mode.getLicensedUserDefaultGroups().forEach(g -> assertFalse(g.startsWith("//"), g));
+    }
+
+    @Test
+    void init_withGroups_andBlankRootGroup_usesDefaultOpenfilz() {
+        AutorizationMode mode = groups("  ");
+
+        assertEquals("OPENFILZ", mode.getRootGroupName());
+        assertEquals("/OPENFILZ/READER", mode.groupPath("READER"));
+    }
+
+    @Test
+    void roleClaims_inRealmAccessMode_carryRealmRolesOnly() {
+        AutorizationMode mode = new AutorizationMode();
+        ReflectionTestUtils.setField(mode, "roleTokenLookup", RoleTokenLookup.REALM_ACCESS);
+        mode.init();
+
+        Map<String, Object> claims = mode.roleClaims(List.of("CONTRIBUTOR"));
+
+        assertEquals(Map.of("realm_access", Map.of("roles", List.of("CONTRIBUTOR"))), claims);
+        assertNull(mode.groupPath("CONTRIBUTOR"));
+    }
+
+    @Test
+    void roleClaims_inGroupsMode_carryRealmRolesAndFullGroupPaths() {
+        AutorizationMode mode = groups("MYORG");
+
+        Map<String, Object> claims = mode.roleClaims(List.of("CONTRIBUTOR", "READER"));
+
+        assertEquals(Map.of("roles", List.of("CONTRIBUTOR", "READER")), claims.get("realm_access"));
+        assertEquals(List.of("/MYORG/CONTRIBUTOR", "/MYORG/READER"), claims.get("groups"));
+    }
+
+    @Test
+    void roleClaims_withNoRole_grantNothingInEitherMode() {
+        AutorizationMode mode = groups("OPENFILZ");
+
+        Map<String, Object> claims = mode.roleClaims(List.of());
+
+        assertEquals(Map.of("roles", List.of()), claims.get("realm_access"));
+        assertEquals(List.of(), claims.get("groups"));
+    }
+
+    private static AutorizationMode groups(String root) {
+        AutorizationMode mode = new AutorizationMode();
+        ReflectionTestUtils.setField(mode, "roleTokenLookup", RoleTokenLookup.GROUPS);
+        ReflectionTestUtils.setField(mode, "rootGroupName", root);
+        mode.init();
+        return mode;
     }
 }
