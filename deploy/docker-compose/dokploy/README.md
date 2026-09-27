@@ -259,6 +259,49 @@ The Keycloak database and user are automatically created by PostgreSQL on first 
    gotenberg (thumbnails)
 ```
 
+## Lean OpenSearch (single node, no dashboards)
+
+The stack runs a 2-node OpenSearch cluster plus OpenSearch Dashboards by default. A demo or a small
+box can run a single capped node instead — set in the environment:
+
+```
+OPENSEARCH_SECOND_NODE_REPLICAS=0
+OPENSEARCH_DASHBOARDS_REPLICAS=0
+OPENSEARCH_SEED_HOSTS=opensearch-node1
+OPENSEARCH_INITIAL_MANAGER_NODES=opensearch-node1
+OPENSEARCH_JAVA_OPTS=-Xms384m -Xmx384m
+OPENSEARCH_MEM_LIMIT=1g
+```
+
+Leaving them unset keeps the 2-node cluster (each node capped at `OPENSEARCH_MEM_LIMIT`, default 2g).
+
+**Fresh install:** set the variables before the first deploy — nothing else to do.
+
+**Existing 2-node cluster:** node1 alone has no voting quorum, so drain node2 *before* deploying
+with the variables, from the Docker host (`N1` = the node1 container, e.g.
+`<project>-opensearch-node1-1`):
+
+```bash
+# 1. no replica copies needed on one node; move every shard off node2
+docker exec N1 curl -s -XPUT localhost:9200/_all/_settings -H 'Content-Type: application/json' -d '{"index":{"number_of_replicas":0}}'
+docker exec N1 curl -s -XPUT localhost:9200/_cluster/settings -H 'Content-Type: application/json' -d '{"persistent":{"cluster.routing.allocation.exclude._name":"opensearch-node2"}}'
+# 2. wait until node2 holds no shard (repeat until the node2 line reads 0)
+docker exec N1 curl -s 'localhost:9200/_cat/allocation?v'
+# 3. take node2 out of the voting configuration
+docker exec N1 curl -s -XPOST 'localhost:9200/_cluster/voting_config_exclusions?node_names=opensearch-node2'
+```
+
+Then add the variables and **Deploy** (not Restart): node2 and the dashboards are removed, node1
+restarts with the new heap and limit. Finally clear the leftovers:
+
+```bash
+docker exec N1 curl -s -XDELETE 'localhost:9200/_cluster/voting_config_exclusions?wait_for_removal=false'
+docker exec N1 curl -s -XPUT localhost:9200/_cluster/settings -H 'Content-Type: application/json' -d '{"persistent":{"cluster.routing.allocation.exclude._name":null}}'
+docker exec N1 curl -s 'localhost:9200/_cluster/health?pretty'   # expect "status" : "green", 1 node
+```
+
+The `opensearch-data2` volume can be removed afterwards (`docker volume rm <project>_opensearch-data2`).
+
 ## Volume Backups
 
 Dokploy can automatically backup named volumes. Configure backups for:

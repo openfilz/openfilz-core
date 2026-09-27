@@ -494,18 +494,31 @@ services:
       start_period: 30s
 
   # =============================================================================
-  # OpenSearch Cluster - Full-Text Search (2-node)
+  # OpenSearch Cluster - Full-Text Search (2-node by default)
+  #
+  # Lean mode (a demo, a small box) — one node, no dashboards, capped memory:
+  #   OPENSEARCH_SECOND_NODE_REPLICAS=0
+  #   OPENSEARCH_DASHBOARDS_REPLICAS=0
+  #   OPENSEARCH_SEED_HOSTS=opensearch-node1
+  #   OPENSEARCH_INITIAL_MANAGER_NODES=opensearch-node1
+  #   OPENSEARCH_JAVA_OPTS=-Xms384m -Xmx384m
+  #   OPENSEARCH_MEM_LIMIT=1g
+  # `deploy.replicas` (not a profile) switches the optional containers off, so a deployment that
+  # sets none of these variables keeps the 2-node cluster exactly as before — no COMPOSE_PROFILES
+  # activator needed. Converting an EXISTING 2-node cluster: drain node2 first (README → "Lean
+  # OpenSearch"), otherwise node1 alone has no voting quorum and the cluster stays red.
   # =============================================================================
   opensearch-node1:
     image: opensearchproject/opensearch:2.19.1
     restart: unless-stopped
+    mem_limit: ${OPENSEARCH_MEM_LIMIT:-2g}
     environment:
       - cluster.name=opensearch-cluster
       - node.name=opensearch-node1
-      - discovery.seed_hosts=opensearch-node1,opensearch-node2
-      - cluster.initial_cluster_manager_nodes=opensearch-node1,opensearch-node2
+      - discovery.seed_hosts=${OPENSEARCH_SEED_HOSTS:-opensearch-node1,opensearch-node2}
+      - cluster.initial_cluster_manager_nodes=${OPENSEARCH_INITIAL_MANAGER_NODES:-opensearch-node1,opensearch-node2}
       - bootstrap.memory_lock=true
-      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "OPENSEARCH_JAVA_OPTS=${OPENSEARCH_JAVA_OPTS:--Xms512m -Xmx512m}"
       - "DISABLE_INSTALL_DEMO_CONFIG=true"
       - "DISABLE_SECURITY_PLUGIN=true"
       - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD}
@@ -530,13 +543,16 @@ services:
   opensearch-node2:
     image: opensearchproject/opensearch:2.19.1
     restart: unless-stopped
+    mem_limit: ${OPENSEARCH_MEM_LIMIT:-2g}
+    deploy:
+      replicas: ${OPENSEARCH_SECOND_NODE_REPLICAS:-1}
     environment:
       - cluster.name=opensearch-cluster
       - node.name=opensearch-node2
-      - discovery.seed_hosts=opensearch-node1,opensearch-node2
-      - cluster.initial_cluster_manager_nodes=opensearch-node1,opensearch-node2
+      - discovery.seed_hosts=${OPENSEARCH_SEED_HOSTS:-opensearch-node1,opensearch-node2}
+      - cluster.initial_cluster_manager_nodes=${OPENSEARCH_INITIAL_MANAGER_NODES:-opensearch-node1,opensearch-node2}
       - bootstrap.memory_lock=true
-      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "OPENSEARCH_JAVA_OPTS=${OPENSEARCH_JAVA_OPTS:--Xms512m -Xmx512m}"
       - "DISABLE_INSTALL_DEMO_CONFIG=true"
       - "DISABLE_SECURITY_PLUGIN=true"
       - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD}
@@ -555,6 +571,8 @@ services:
   opensearch-dashboards:
     image: opensearchproject/opensearch-dashboards:2.19.1
     restart: unless-stopped
+    deploy:
+      replicas: ${OPENSEARCH_DASHBOARDS_REPLICAS:-1}
     environment:
       - 'OPENSEARCH_HOSTS=["http://opensearch-node1:9200","http://opensearch-node2:9200"]'
       - "DISABLE_SECURITY_DASHBOARDS_PLUGIN=true"
