@@ -30,7 +30,9 @@ public class DefaultWorkflowActorResolver implements WorkflowActorResolver {
                 .claim("preferred_username", email)
                 .claim("name", email)
                 .claim("azp", AZP_WORKFLOW_SERVICE)
+                // No role in either lookup mode (realm_access or groups): the actor is identified, never privileged
                 .claim("realm_access", Map.of("roles", List.of()))
+                .claim("groups", List.of())
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(300))
                 .build();

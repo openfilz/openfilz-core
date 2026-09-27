@@ -169,8 +169,16 @@ spring.security.oauth2.resourceserver.jwt:
 openfilz.security:
   no-auth: false
   worm-mode: false
-  role-token-lookup: REALM_ACCESS
+  role-token-lookup: REALM_ACCESS   # OPENFILZ_SECURITY_ROLE_TOKEN_LOOKUP: REALM_ACCESS | GROUPS
+  root-group: OPENFILZ             # OPENFILZ_SECURITY_ROOT_GROUP (GROUPS mode only)
 ```
+
+**Role lookup modes.** `REALM_ACCESS` reads `realm_access.roles`; `GROUPS` reads the `groups` claim
+and grants a role only for the exact path `/<root-group>/<ROLE>` (`/OTHER/ADMIN` grants nothing —
+`RoleTokenLookupAuthorizationTest`). `AutorizationMode` owns the mode: `groupPath(role)` and
+`roleClaims(roles)` — every **synthetic** JWT the server builds must take its role claims from
+`roleClaims(...)` (or carry none in either claim), never a hand-written `realm_access` alone, or it
+is role-less in GROUPS mode.
 
 ---
 
@@ -610,7 +618,7 @@ Every new variable is therefore added, in the same change, to:
 5. the env examples (`deploy/docker-compose/.env.example`, `dokploy/.env.example`, EE `docker/.env.dokploy-ee`)
    and the variable table of `docs/admin-guide.md`.
 
-Then run the check, which lists every AI / MCP placeholder missing from a target (exit 1 on a gap;
+Then run the check, which lists every AI / MCP / `OPENFILZ_SECURITY_` placeholder missing from a target (exit 1 on a gap;
 `--prefix`/`--all` widen it, `--ee` adds the enterprise compose):
 
 ```bash
@@ -819,7 +827,7 @@ external agents (Claude Code/Desktop, n8n, custom agents, Spring AI clients) ove
   own OIDC document. Both whitelisted, both 404 when `openfilz.mcp.active=false`. A shared public
   PKCE client `openfilz-mcp` (in both realm-exports) is what hosts authenticate with — DCR is
   deliberately off (one client, not one per connecting app); its token carries `realm_access.roles`
-  so role enforcement applies. `authorization-server-url` defaults to `KEYCLOAK_REALM_URL`.
+  and `groups` so role enforcement applies in either `role-token-lookup` mode. `authorization-server-url` defaults to `KEYCLOAK_REALM_URL`.
 - **`/mcp` is JWT-protected simply by not being whitelisted** (`DefaultAuthSecurityConfig` ends
   with `anyExchange().authenticated()`) — but that chain performs **no role check** on it: its
   `.access(...)` manager is scoped to `/api/v1/**` + the GraphQL path. Roles are therefore enforced
