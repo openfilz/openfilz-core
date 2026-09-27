@@ -503,6 +503,7 @@ services:
   #   OPENSEARCH_INITIAL_MANAGER_NODES=opensearch-node1
   #   OPENSEARCH_JAVA_OPTS=-Xms384m -Xmx384m
   #   OPENSEARCH_MEM_LIMIT=1g
+  #   OPENSEARCH_DISABLE_PERFORMANCE_ANALYZER=true   (saves ~100 MB: a second JVM)
   # `deploy.replicas` (not a profile) switches the optional containers off, so a deployment that
   # sets none of these variables keeps the 2-node cluster exactly as before — no COMPOSE_PROFILES
   # activator needed. Converting an EXISTING 2-node cluster: drain node2 first (README → "Lean
@@ -519,6 +520,7 @@ services:
       - cluster.initial_cluster_manager_nodes=${OPENSEARCH_INITIAL_MANAGER_NODES:-opensearch-node1,opensearch-node2}
       - bootstrap.memory_lock=true
       - "OPENSEARCH_JAVA_OPTS=${OPENSEARCH_JAVA_OPTS:--Xms512m -Xmx512m}"
+      - "DISABLE_PERFORMANCE_ANALYZER_AGENT_CLI=${OPENSEARCH_DISABLE_PERFORMANCE_ANALYZER:-false}"
       - "DISABLE_INSTALL_DEMO_CONFIG=true"
       - "DISABLE_SECURITY_PLUGIN=true"
       - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD}
@@ -553,6 +555,7 @@ services:
       - cluster.initial_cluster_manager_nodes=${OPENSEARCH_INITIAL_MANAGER_NODES:-opensearch-node1,opensearch-node2}
       - bootstrap.memory_lock=true
       - "OPENSEARCH_JAVA_OPTS=${OPENSEARCH_JAVA_OPTS:--Xms512m -Xmx512m}"
+      - "DISABLE_PERFORMANCE_ANALYZER_AGENT_CLI=${OPENSEARCH_DISABLE_PERFORMANCE_ANALYZER:-false}"
       - "DISABLE_INSTALL_DEMO_CONFIG=true"
       - "DISABLE_SECURITY_PLUGIN=true"
       - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD}

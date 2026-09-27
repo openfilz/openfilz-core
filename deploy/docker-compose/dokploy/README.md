@@ -271,6 +271,7 @@ OPENSEARCH_SEED_HOSTS=opensearch-node1
 OPENSEARCH_INITIAL_MANAGER_NODES=opensearch-node1
 OPENSEARCH_JAVA_OPTS=-Xms384m -Xmx384m
 OPENSEARCH_MEM_LIMIT=1g
+OPENSEARCH_DISABLE_PERFORMANCE_ANALYZER=true
 ```
 
 Leaving them unset keeps the 2-node cluster (each node capped at `OPENSEARCH_MEM_LIMIT`, default 2g).
