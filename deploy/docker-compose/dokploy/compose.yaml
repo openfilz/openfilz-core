@@ -180,6 +180,9 @@ services:
       OPENFILZ_SECURITY_NO_AUTH: "false"
       OPENFILZ_SECURITY_WORM_MODE: ${OPENFILZ_SECURITY_WORM_MODE:-false}
       OPENFILZ_SECURITY_WORM_RETENTION: ${OPENFILZ_SECURITY_WORM_RETENTION:-}
+      # Where roles are read in the JWT: REALM_ACCESS (realm_access.roles) or GROUPS (groups claim, /<ROOT_GROUP>/<ROLE>)
+      OPENFILZ_SECURITY_ROLE_TOKEN_LOOKUP: ${OPENFILZ_SECURITY_ROLE_TOKEN_LOOKUP:-REALM_ACCESS}
+      OPENFILZ_SECURITY_ROOT_GROUP: ${OPENFILZ_SECURITY_ROOT_GROUP:-OPENFILZ}
       KEYCLOAK_REALM_URL: http://keycloak:8080/realms/openfilz
       OPENFILZ_SECURITY_CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://app.openfilz.com,https://docs.openfilz.com}
 
@@ -462,6 +465,9 @@ services:
       NG_APP_AUTHENTICATION_CLIENT_ID: openfilz-web
       NG_APP_ONLYOFFICE_ENABLED: "true"
       NG_APP_ONLYOFFICE_URL: https://${ONLYOFFICE_HOSTNAME:-docs.openfilz.com}
+      # Role lookup mode, driven by the API's variables so backend and UI always agree
+      NG_APP_ROLE_TOKEN_LOOKUP: ${OPENFILZ_SECURITY_ROLE_TOKEN_LOOKUP:-REALM_ACCESS}
+      NG_APP_ROOT_GROUP: ${OPENFILZ_SECURITY_ROOT_GROUP:-OPENFILZ}
     networks:
       - dokploy-network
     labels:
@@ -503,6 +509,7 @@ services:
   #   OPENSEARCH_INITIAL_MANAGER_NODES=opensearch-node1
   #   OPENSEARCH_JAVA_OPTS=-Xms384m -Xmx384m
   #   OPENSEARCH_MEM_LIMIT=1g
+  #   OPENSEARCH_DISABLE_PERFORMANCE_ANALYZER=true   (saves ~100 MB: a second JVM)
   # `deploy.replicas` (not a profile) switches the optional containers off, so a deployment that
   # sets none of these variables keeps the 2-node cluster exactly as before — no COMPOSE_PROFILES
   # activator needed. Converting an EXISTING 2-node cluster: drain node2 first (README → "Lean
@@ -519,6 +526,7 @@ services:
       - cluster.initial_cluster_manager_nodes=${OPENSEARCH_INITIAL_MANAGER_NODES:-opensearch-node1,opensearch-node2}
       - bootstrap.memory_lock=true
       - "OPENSEARCH_JAVA_OPTS=${OPENSEARCH_JAVA_OPTS:--Xms512m -Xmx512m}"
+      - "DISABLE_PERFORMANCE_ANALYZER_AGENT_CLI=${OPENSEARCH_DISABLE_PERFORMANCE_ANALYZER:-false}"
       - "DISABLE_INSTALL_DEMO_CONFIG=true"
       - "DISABLE_SECURITY_PLUGIN=true"
       - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD}
@@ -553,6 +561,7 @@ services:
       - cluster.initial_cluster_manager_nodes=${OPENSEARCH_INITIAL_MANAGER_NODES:-opensearch-node1,opensearch-node2}
       - bootstrap.memory_lock=true
       - "OPENSEARCH_JAVA_OPTS=${OPENSEARCH_JAVA_OPTS:--Xms512m -Xmx512m}"
+      - "DISABLE_PERFORMANCE_ANALYZER_AGENT_CLI=${OPENSEARCH_DISABLE_PERFORMANCE_ANALYZER:-false}"
       - "DISABLE_INSTALL_DEMO_CONFIG=true"
       - "DISABLE_SECURITY_PLUGIN=true"
       - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD}

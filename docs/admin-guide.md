@@ -345,11 +345,39 @@ Leave empty to disable a provider:
 
 | Property | Default | Description |
 |----------|---------|-------------|
-| `openfilz.security.role-token-lookup` | `REALM_ACCESS` | Where to find roles in JWT: `REALM_ACCESS` (realm roles) or `GROUPS` (Keycloak groups) |
-| `openfilz.security.root-group` | `OPENFILZ` | Root group name when using `GROUPS` lookup (e.g., `/OPENFILZ/READER`) |
+| `openfilz.security.role-token-lookup` (`OPENFILZ_SECURITY_ROLE_TOKEN_LOOKUP`) | `REALM_ACCESS` | Where roles are read in the access token: `REALM_ACCESS` (realm roles, claim `realm_access.roles`) or `GROUPS` (Keycloak groups, claim `groups`) — see [Role lookup mode](#role-lookup-mode-realm_access-or-groups) |
+| `openfilz.security.root-group` (`OPENFILZ_SECURITY_ROOT_GROUP`) | `OPENFILZ` | `GROUPS` mode only: the root group whose sub-groups are the roles (e.g. `/OPENFILZ/READER`) |
 | `openfilz.security.custom-roles` | `false` | Enable custom security implementation |
 | `openfilz.security.worm-mode` | `false` | Enable WORM (write-once) mode. Ingestion (upload, new folder, copy) and reads stay open; deletes and in-place updates are refused. Requires `openfilz.calculate-checksum=true` and `openfilz.security.no-auth=false`; compatible with `openfilz.features.custom-access` since 1.3.19. |
 | `openfilz.security.worm-retention` | — | **Mandatory when `worm-mode=true` and `storage.type=minio`.** ISO-8601 period (e.g. `P10Y`) written on every object as an S3 Object Lock retention in `COMPLIANCE` mode. The API refuses to start without it: dropping the old blanket legal hold without a retention would leave objects deletable at the storage layer. Legal hold is no longer set automatically — it is reserved for an explicit evidentiary freeze. |
+
+#### Role lookup mode (REALM_ACCESS or GROUPS)
+
+- **`REALM_ACCESS`** (default) — a user holds a role when the realm role of that name
+  (`READER`, `CONTRIBUTOR`, …) is in the token's `realm_access.roles` claim. Assign realm roles
+  (directly, through a composite or through `KEYCLOAK_DEFAULT_ROLE_*`).
+- **`GROUPS`** — a user holds a role when the token's `groups` claim contains the **full path**
+  `/<root-group>/<ROLE>`, e.g. `/OPENFILZ/CONTRIBUTOR`. Nothing else counts: a group under another
+  root (`/OTHER/ADMIN`), a nested group (`/OPENFILZ/ADMIN/team`) or a realm role grants nothing.
+  Every client whose tokens reach the API must map the `groups` claim with **Full group path ON**
+  (the bundled realm's `openfilz-web` client does; add a *Group Membership* mapper,
+  claim `groups`, to any other client such as `openfilz-mcp` or a service account); new users are placed in the
+  groups through the realm's default groups (`KEYCLOAK_DEFAULT_GROUP_*`).
+
+Set it the same way on every deployment target — `.env` for Docker Compose / Dokploy,
+`security.roleTokenLookup` / `security.rootGroup` in the `openfilz-api` Helm chart:
+
+```bash
+OPENFILZ_SECURITY_ROLE_TOKEN_LOOKUP=GROUPS
+OPENFILZ_SECURITY_ROOT_GROUP=OPENFILZ
+```
+
+The web UI reads the mode too, to show or hide actions: the Compose files pass the same two
+variables to it as `NG_APP_ROLE_TOKEN_LOOKUP` / `NG_APP_ROOT_GROUP`, so one setting drives both.
+On Helm, set those two on the `openfilz-web` chart to match.
+
+Tokens the server builds for itself (e-Sign and workflow actors, and in Enterprise the scoped
+upload tokens) carry their roles in both claims, so they behave identically in either mode.
 
 #### Built-in Roles
 

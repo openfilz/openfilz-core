@@ -74,6 +74,11 @@ openfilz-api:
   # mcp:
   #   active: true
   #   mode: READ_ONLY          # READ_ONLY | READ_WRITE
+  # Where roles are read in the access token: REALM_ACCESS (default) or GROUPS
+  # (claim "groups", role granted only by /<rootGroup>/<ROLE>) — see docs/admin-guide.md.
+  # security:
+  #   roleTokenLookup: GROUPS
+  #   rootGroup: OPENFILZ
   gotenberg:
     url: http://shared-gotenberg.openfilz-shared.svc.cluster.local:3000
   opensearch:

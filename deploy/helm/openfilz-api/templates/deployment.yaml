@@ -141,6 +141,10 @@ spec:
             - name: OPENFILZ_SECURITY_WORM_RETENTION
               value: {{ . | quote }}
             {{- end }}
+            - name: OPENFILZ_SECURITY_ROLE_TOKEN_LOOKUP
+              value: {{ .Values.security.roleTokenLookup | default "REALM_ACCESS" | quote }}
+            - name: OPENFILZ_SECURITY_ROOT_GROUP
+              value: {{ .Values.security.rootGroup | default "OPENFILZ" | quote }}
             - name: ONLYOFFICE_ENABLED
               value: {{ include "openfilz-api.onlyofficeEnabled" . | quote }}
             {{- if eq (include "openfilz-api.onlyofficeEnabled" .) "true" }}

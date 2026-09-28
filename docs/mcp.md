@@ -399,7 +399,12 @@ export TOKEN=$(curl -s -X POST \
 
 The client must be a **dedicated user or service account** with only the roles the agent needs
 (a READER-only agent can search and read but not write — see the security model above), and its
-token must carry `realm_access.roles`, which the default `openfilz` realm's mappers already do.
+token must carry the roles in the claim the API reads: `realm_access.roles` in the default
+`REALM_ACCESS` mode, or `groups` (full paths `/OPENFILZ/<ROLE>`) when
+`OPENFILZ_SECURITY_ROLE_TOKEN_LOOKUP=GROUPS` — see the
+[admin guide → Role lookup mode](admin-guide.md#role-lookup-mode-realm_access-or-groups).
+The default `openfilz` realm's role mappers emit `realm_access.roles`; in GROUPS mode give the
+client a *Group Membership* mapper (claim `groups`, full group path ON).
 The full walkthrough — creating the client, assigning roles, verifying the mappers — is in the
 [developer guide → Service Account Tokens](developer-guide.md#service-account-tokens-server-to-server).
 Tokens are short-lived (5 min by default); a long-running agent refreshes, which its MCP client

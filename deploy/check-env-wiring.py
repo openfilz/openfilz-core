@@ -6,7 +6,7 @@ template names, so a variable added to application.yml is unreachable on those d
 until it is added to each of them by hand. This script lists the placeholders of one or more
 prefixes and reports the targets that do not mention them.
 
-    python deploy/check-env-wiring.py                       # the AI / MCP prefixes, CE targets
+    python deploy/check-env-wiring.py                       # the AI / MCP / security prefixes, CE targets
     python deploy/check-env-wiring.py --ee ../openfilz-enterprise/docker/dokploy-compose-ee.yml
     python deploy/check-env-wiring.py --prefix OPENFILZ_    # any prefix
     python deploy/check-env-wiring.py --all                 # every placeholder (many are dev-only)
@@ -20,7 +20,8 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 APPLICATION_YML = ROOT / 'openfilz-api/src/main/resources/application.yml'
-DEFAULT_PREFIXES = ('OPENFILZ_AI_', 'OPENFILZ_MCP_', 'TRANSFORMERS_', 'OLLAMA_', 'OPENAI_', 'ANTHROPIC_', 'GOOGLE_', 'AI_')
+# AI / MCP, plus the security switches (role lookup mode, root group, WORM) a deployment must reach
+DEFAULT_PREFIXES = ('OPENFILZ_SECURITY_', 'OPENFILZ_AI_', 'OPENFILZ_MCP_', 'TRANSFORMERS_', 'OLLAMA_', 'OPENAI_', 'ANTHROPIC_', 'GOOGLE_', 'AI_')
 TARGETS = {
     'ce compose (base + AI overlay)': [ROOT / 'deploy/docker-compose/docker-compose.yml',
                                        ROOT / 'deploy/docker-compose/docker-compose.ai.yml'],
