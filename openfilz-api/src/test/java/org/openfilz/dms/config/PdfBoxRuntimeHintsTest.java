@@ -5,6 +5,7 @@ import org.apache.pdfbox.pdmodel.encryption.PublicKeySecurityHandler;
 import org.apache.pdfbox.pdmodel.encryption.StandardProtectionPolicy;
 import org.apache.pdfbox.pdmodel.encryption.StandardSecurityHandler;
 import org.junit.jupiter.api.Test;
+import org.openfilz.dms.service.impl.SignaturePdfServiceImpl;
 import org.springframework.aot.hint.RuntimeHints;
 import org.springframework.aot.hint.predicate.RuntimeHintsPredicates;
 
@@ -33,5 +34,18 @@ class PdfBoxRuntimeHintsTest {
         assertThat(RuntimeHintsPredicates.reflection()
                 .onConstructorInvocation(PublicKeySecurityHandler.class
                         .getDeclaredConstructor(PublicKeyProtectionPolicy.class))).accepts(hints);
+    }
+
+    @Test
+    void registersTheFontsESignStampsWith() {
+        RuntimeHints hints = new RuntimeHints();
+        new PdfBoxRuntimeHints().registerHints(hints, getClass().getClassLoader());
+
+        for (String font : new String[]{"LiberationSans-Regular.ttf", "LiberationSans-Bold.ttf",
+                "LiberationSans-Italic.ttf"}) {
+            String path = SignaturePdfServiceImpl.FONT_DIR + font;
+            assertThat(RuntimeHintsPredicates.resource().forResource(path)).as(path).accepts(hints);
+            assertThat(getClass().getClassLoader().getResource(path)).as(path).isNotNull();
+        }
     }
 }
