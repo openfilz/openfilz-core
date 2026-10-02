@@ -108,8 +108,8 @@ class SignaturePdfServiceImplTest {
         fields.add(field(signed.getId(), SignatureFieldType.DATE_SIGNED, 0, 0.5, 0.2, 0.2, 0.04, "2026-08-21", null));
         fields.add(field(signed.getId(), SignatureFieldType.CHECKBOX, 0, 0.5, 0.15, 0.05, 0.03, "true", null));
         fields.add(field(signed.getId(), SignatureFieldType.CHECKBOX, 0, 0.6, 0.15, 0.05, 0.03, "false", null));
-        // unicode → sanitized to '?', must not throw with WinAnsi fonts
-        fields.add(field(signed.getId(), SignatureFieldType.TEXT, 0, 0.5, 0.1, 0.3, 0.04, "Zoë — 日本語 ✓", null));
+        // Latin-1 / punctuation render as typed; glyphs missing from the font fall back to '?'
+        fields.add(field(signed.getId(), SignatureFieldType.TEXT, 0, 0.5, 0.1, 0.3, 0.04, "Zoë — 日本語", null));
         // unfilled field of a signed recipient → skipped
         fields.add(field(signed.getId(), SignatureFieldType.TEXT, 0, 0.1, 0.1, 0.2, 0.04, null, null));
         fields.add(field(signed.getId(), SignatureFieldType.SIGNATURE, 0, 0.1, 0.6, 0.2, 0.06, null, "   "));
@@ -157,6 +157,60 @@ class SignaturePdfServiceImplTest {
             assertThat(first).contains("Option B").contains("alice@example.com").contains("42")
                     .doesNotContain("never rendered").doesNotContain("cc text").doesNotContain("orphan");
             assertThat(first).contains("Signed by Alice Signer <alice@example.com>");
+            assertThat(first).contains("Zoë — ???");
+        }
+    }
+
+    @Test
+    void buildStampedDocument_nonAsciiSignerName_isStampedAsTyped() throws IOException {
+        // Regression: Helvetica (WinAnsi) stamped "In?s Benali ... ? 2026-10-02" on the demo.
+        String name = "Inès Benali — Ødegård";
+        SignatureRecipient r = recipient(name, "i.benali@pharmacie-tilleuls.example", SignatureRecipientStatus.SIGNED);
+        r.setSignedAt(OffsetDateTime.of(2026, 10, 2, 10, 34, 0, 0, ZoneOffset.UTC));
+        SignatureEnvelope env = envelope("Contrat de location — Pharmacie des Tilleuls", false);
+        List<SignatureField> fields = List.of(
+                field(r.getId(), SignatureFieldType.SIGNATURE, 0, 0.1, 0.4, 0.3, 0.06, null, tinyPngB64),
+                field(r.getId(), SignatureFieldType.TEXT, 0, 0.1, 0.3, 0.5, 0.04, "Fait à Besançon, Ελλάδα, Москва", null));
+        List<SignatureEvent> events = List.of(event(SignatureEventType.RECIPIENT_SIGNED,
+                "i.benali@pharmacie-tilleuls.example", r.getSignedAt(), "signé par Inès\nligne 2"));
+
+        byte[] out = service.buildStampedDocument(originalPdf, env, List.of(r), fields, events);
+
+        try (PDDocument doc = Loader.loadPDF(out)) {
+            String first = textOfPage(doc, 1);
+            assertThat(first)
+                    .contains("Signed by " + name + " <i.benali@pharmacie-tilleuls.example> — 2026-10-02 10:34:00 UTC")
+                    .contains("Fait à Besançon, Ελλάδα, Москва");
+            String cert = textOfPage(doc, doc.getNumberOfPages());
+            assertThat(cert)
+                    .contains("Contrat de location — Pharmacie des Tilleuls")
+                    .contains("- " + name + " <i.benali@pharmacie-tilleuls.example>")
+                    .contains("signé par Inès ligne 2")
+                    .doesNotContain("?");
+            // Every font in the signed PDF is embedded (PDF/A requires it), as a subset.
+            for (int i = 0; i < doc.getNumberOfPages(); i++) {
+                var resources = doc.getPage(i).getResources();
+                for (var fontName : resources.getFontNames()) {
+                    var font = resources.getFont(fontName);
+                    if (font.getName() != null && font.getName().contains("LiberationSans")) {
+                        assertThat(font.isEmbedded()).as(font.getName()).isTrue();
+                        assertThat(font.getName()).matches("[A-Z]{6}\\+LiberationSans.*");
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    void sanitize_keepsDrawableCharacters_replacesTheRest() throws IOException {
+        try (PDDocument doc = new PDDocument();
+             var in = getClass().getClassLoader().getResourceAsStream(
+                     SignaturePdfServiceImpl.FONT_DIR + "LiberationSans-Regular.ttf")) {
+            var font = org.apache.pdfbox.pdmodel.font.PDType0Font.load(doc, in);
+            assertThat(SignaturePdfServiceImpl.sanitize("Inès · Ødegård — Ωμέγα", font)).isEqualTo("Inès · Ødegård — Ωμέγα");
+            assertThat(SignaturePdfServiceImpl.sanitize("a\tb\r\nc", font)).isEqualTo("a b  c");
+            assertThat(SignaturePdfServiceImpl.sanitize("日本 \uD83D\uDE00", font)).isEqualTo("?? ?");
+            assertThat(SignaturePdfServiceImpl.sanitize(null, font)).isEmpty();
         }
     }
 
