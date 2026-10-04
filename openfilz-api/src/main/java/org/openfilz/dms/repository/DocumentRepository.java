@@ -28,6 +28,8 @@ public interface DocumentRepository extends ReactiveCrudRepository<Document, UUI
 
     Mono<Boolean> existsByNameAndParentIdAndActiveIsTrue(String name, UUID parentId);
 
+    Mono<Boolean> existsByStoragePath(String storagePath);
+
     /**
      * Name-fallback resolution for the AI tools: at most 50 active documents whose name contains
      * the fragment, by name. An unindexed {@code ILIKE '%...%'} scan, bounded on purpose.

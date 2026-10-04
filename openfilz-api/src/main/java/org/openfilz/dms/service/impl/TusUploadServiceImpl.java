@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.service.quota.StorageQuotaService;
 import org.openfilz.dms.config.TusProperties;
+import org.openfilz.dms.dto.Checksum;
 import org.openfilz.dms.dto.TusUploadMetadata;
 import org.openfilz.dms.dto.audit.UploadAudit;
 import org.openfilz.dms.dto.request.TusFinalizeRequest;
@@ -17,17 +18,23 @@ import org.openfilz.dms.enums.AuditAction;
 import org.openfilz.dms.exception.*;
 import org.openfilz.dms.repository.DocumentDAO;
 import org.openfilz.dms.service.AuditService;
+import org.openfilz.dms.service.ChecksumService;
+import org.openfilz.dms.service.DocumentIntegrityService;
 import org.openfilz.dms.service.MetadataPostProcessor;
 import org.openfilz.dms.service.StorageService;
 import org.openfilz.dms.service.TusUploadService;
 import org.openfilz.dms.utils.ContentTypeMapper;
 import org.openfilz.dms.utils.JsonUtils;
 import org.openfilz.dms.utils.UserInfoService;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.reactive.TransactionalOperator;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -40,7 +47,10 @@ import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.openfilz.dms.enums.DocumentType.FILE;
 import static org.openfilz.dms.enums.DocumentType.FOLDER;
@@ -69,6 +79,23 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
     private final MetadataPostProcessor metadataPostProcessor;
     private final TransactionalOperator tx;
     private final ObjectMapper objectMapper;
+    /**
+     * With checksums on, a finished upload is fingerprinted and entered in the integrity ledger (C2) like
+     * every other upload path — without it a large file sent in pieces had no SHA-256, which the desktop
+     * sync uses as the content's identity (ETag / If-Match).
+     */
+    private final ObjectProvider<ChecksumService> checksumServiceProvider;
+    private final DocumentIntegrityService documentIntegrityService;
+
+    @Value("${openfilz.calculate-checksum:false}")
+    private boolean calculateChecksum;
+
+    /**
+     * Uploads being finalized on this instance. A second finalize of the same upload (a client that
+     * gave up waiting and asks again) must not run beside the first — both would create a document on
+     * the same stored file — and the clean-up must not take the file away from under it.
+     */
+    private final Set<String> finalizing = ConcurrentHashMap.newKeySet();
 
     @Override
     public Mono<Void> validateUploadCreation(Long uploadLength, String filename, UUID parentFolderId, Boolean allowDuplicateFileNames) {
@@ -196,11 +223,18 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
                     String filename = request.filename();
                     UUID parentFolderId = request.parentFolderId();
 
-                    // Validate and create document
-                    return storageQuotaService.checkUpload(filename, meta.length())
-                            .then(validateParentFolder(parentFolderId))
-                            .then(validateDuplicateName(filename, parentFolderId, request.allowDuplicateFileNames()))
-                            .then(moveToStorageAndCreateDocument(uploadId, meta, request));
+                    if (!finalizing.add(uploadId)) {
+                        // Not a refusal: the caller asks again later and finds the upload finalized.
+                        return Mono.error(new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                                "Upload " + uploadId + " is already being finalized"));
+                    }
+                    // Validate and create document. Deferred as a whole: whatever fails, however it fails,
+                    // the upload leaves the set — left in it, it could never be finalized nor cleaned up.
+                    return Mono.defer(() -> storageQuotaService.checkUpload(filename, meta.length())
+                                    .then(validateParentFolder(parentFolderId))
+                                    .then(validateDuplicateName(filename, parentFolderId, request.allowDuplicateFileNames()))
+                                    .then(Mono.defer(() -> moveToStorageAndCreateDocument(uploadId, meta, request))))
+                            .doFinally(_ -> finalizing.remove(uploadId));
                 });
     }
 
@@ -232,13 +266,75 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
 
     private Mono<UploadResponse> moveToStorageAndCreateDocument(String uploadId, TusUploadMetadata meta,
                                                                  TusFinalizeRequest request) {
-        String filename = request.filename();
-        String storagePath = storageService.getUniqueStorageFileName(filename);
-        String tusDataPath = storageService.getTusDataPath(uploadId);
+        return moveToStorage(uploadId, meta, request.filename())
+                .flatMap(storagePath -> createDocumentRecord(storagePath, meta, request, uploadId));
+    }
 
-        // Move file from TUS temp location to permanent storage
+    /**
+     * Moves the finished upload to its permanent place — once. Where it goes is written in the
+     * upload's metadata before the move, so a finalize cut after it (a proxy's timeout, a restart,
+     * while the file was being hashed) is finished by the next one from the file already there: moving
+     * again would find nothing left to move — on S3 the pieces are gone once composed, and an empty
+     * object would stand for the file. Whatever the storage did, a document is only ever created on a
+     * stored file of the announced length.
+     */
+    private Mono<String> moveToStorage(String uploadId, TusUploadMetadata meta, String filename) {
+        String tusDataPath = storageService.getTusDataPath(uploadId);
+        String remembered = meta.finalStoragePath();
+        if (remembered != null) {
+            return documentDAO.existsByStoragePath(remembered).flatMap(held -> held
+                    // The earlier finalize went all the way (only its clean-up is late): no second document on its file.
+                    ? Mono.<String>error(new DocumentNotFoundException("Upload not found: " + uploadId))
+                    : storedLength(remembered).flatMap(length -> length.equals(meta.length())
+                            ? Mono.just(remembered) // an earlier finalize moved it and went no further
+                            : moveAndVerify(tusDataPath, remembered, meta))); // it stopped before the move
+        }
+        String storagePath = storageService.getUniqueStorageFileName(filename);
+        return saveMetadata(meta.withFinalStoragePath(storagePath))
+                .then(Mono.defer(() -> moveAndVerify(tusDataPath, storagePath, meta)));
+    }
+
+    private Mono<String> moveAndVerify(String tusDataPath, String storagePath, TusUploadMetadata meta) {
         return storageService.moveFile(tusDataPath, storagePath)
-                .then(createDocumentRecord(storagePath, meta, request, uploadId));
+                .then(Mono.defer(() -> storedLength(storagePath)))
+                .flatMap(length -> {
+                    if (length.equals(meta.length())) {
+                        return Mono.just(storagePath);
+                    }
+                    log.error("TUS upload {}: {} bytes stored at {} for {} announced — no document created",
+                            meta.uploadId(), length, storagePath, meta.length());
+                    // 410: what was sent is no longer all there, the upload has to start again.
+                    return storageService.deleteFile(storagePath)
+                            .onErrorResume(e -> Mono.empty())
+                            .then(Mono.error(new ResponseStatusException(HttpStatus.GONE,
+                                    "The data of upload " + meta.uploadId() + " is no longer complete on the server: send the file again")));
+                });
+    }
+
+    /**
+     * The length of what is stored at this path; -1 when nothing is. A storage that cannot say (down,
+     * timing out) is an error, never "nothing": on that guess the file already moved would be moved
+     * again — an empty object written over it on S3 — or deleted as the wrong length. The finalize
+     * fails and is asked again.
+     */
+    private Mono<Long> storedLength(String storagePath) {
+        return Mono.defer(() -> storageService.getFileLength(storagePath))
+                .onErrorResume(TusUploadServiceImpl::isNotFound, e -> Mono.just(-1L));
+    }
+
+    /** The storage said there is no such file (local: no such path; S3: NoSuchKey) — as opposed to failing to answer. */
+    static boolean isNotFound(Throwable error) {
+        Throwable cause = error;
+        for (int depth = 0; cause != null && depth < 10; depth++, cause = cause.getCause()) {
+            if (cause instanceof java.nio.file.NoSuchFileException || cause instanceof java.io.FileNotFoundException) {
+                return true;
+            }
+            if (cause instanceof io.minio.errors.ErrorResponseException s3 && s3.errorResponse() != null
+                    && "NoSuchKey".equals(s3.errorResponse().code())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Mono<UploadResponse> createDocumentRecord(String storagePath, TusUploadMetadata meta,
@@ -246,16 +342,18 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
         String filename = request.filename();
         String contentType = getContentType(filename);
 
-        return getConnectedUserEmail()
-                .flatMap(username -> {
+        return Mono.zip(getConnectedUserEmail(), checksum(storagePath, request.metadata()))
+                .flatMap(userAndChecksum -> {
+                    String username = userAndChecksum.getT1();
+                    Optional<Checksum> checksum = userAndChecksum.getT2();
                     Document document = Document.builder()
                             .name(filename)
                             .type(FILE)
                             .contentType(contentType)
                             .size(meta.length())
                             .parentId(request.parentFolderId())
-                            .storagePath(storagePath)
-                            .metadata(jsonUtils.toJson(request.metadata()))
+                            .storagePath(checksum.map(Checksum::storagePath).orElse(storagePath))
+                            .metadata(jsonUtils.toJson(checksum.map(Checksum::metadataWithChecksum).orElse(request.metadata())))
                             .createdAt(OffsetDateTime.now())
                             .updatedAt(OffsetDateTime.now())
                             .createdBy(username)
@@ -263,6 +361,11 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
                             .build();
 
                     return documentDAO.create(document)
+                            // The ledger entry lands in the same transaction as the document row.
+                            .flatMap(savedDoc -> checksum
+                                    .map(c -> documentIntegrityService.record(savedDoc.getId(), savedDoc.getStoragePath(), null, c.hash())
+                                            .thenReturn(savedDoc))
+                                    .orElseGet(() -> Mono.just(savedDoc)))
                             .flatMap(savedDoc -> storageService.getLatestVersionId(savedDoc.getStoragePath())
                                     .map(versionId -> new UploadAudit(savedDoc.getName(), request.parentFolderId(), request.metadata(), versionId))
                                     .defaultIfEmpty(new UploadAudit(savedDoc.getName(), request.parentFolderId(), request.metadata()))
@@ -278,6 +381,15 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
                                     savedDoc.getSize()
                             ));
                 });
+    }
+
+    /** The finished file's fingerprint when checksums are on; empty otherwise. */
+    private Mono<Optional<Checksum>> checksum(String storagePath, Map<String, Object> metadata) {
+        ChecksumService checksumService = calculateChecksum ? checksumServiceProvider.getIfAvailable() : null;
+        if (checksumService == null) {
+            return Mono.just(Optional.empty());
+        }
+        return checksumService.calculateChecksum(storagePath, metadata).map(Optional::of);
     }
 
     private void postProcessDocument(Document document) {
@@ -306,8 +418,21 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
         return "application/octet-stream";
     }
 
+    /**
+     * Only its owner cancels an upload. One the server does not know — or that is someone else's,
+     * which reads the same from outside — is left alone: there is nothing of the caller's to remove.
+     */
     @Override
     public Mono<Void> cancelUpload(String uploadId) {
+        return loadMetadata(uploadId)
+                .onErrorResume(DocumentNotFoundException.class, e -> Mono.empty())
+                .flatMap(meta -> removeUpload(uploadId, meta));
+    }
+
+    private Mono<Void> removeUpload(String uploadId, TusUploadMetadata meta) {
+        if (finalizing.contains(uploadId)) {
+            return Mono.empty(); // being turned into a document right now: not the moment
+        }
         String dataPath = storageService.getTusDataPath(uploadId);
         String metaPath = storageService.getTusMetadataPath(uploadId);
 
@@ -316,12 +441,28 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
         return storageService.listFiles(dataPath + ".chunk.")
                 .flatMap(chunkPath -> storageService.deleteFile(chunkPath))
                 .then(storageService.deleteFile(dataPath))
+                .then(removeMovedFile(meta))
+                // Last: while the metadata is there, a step that failed above is tried again by the next clean-up.
                 .then(storageService.deleteFile(metaPath))
                 .doOnSuccess(v -> log.debug("Cancelled TUS upload: {}", uploadId))
                 .onErrorResume(e -> {
                     log.warn("Error cancelling TUS upload {}: {}", uploadId, e.getMessage());
                     return Mono.empty();
                 });
+    }
+
+    /**
+     * What an interrupted finalize moved to permanent storage and no document holds would stay there
+     * for ever, counted in nobody's quota: it goes with the upload. A file a document holds (the
+     * finalize went through, only its own clean-up did not) is never touched.
+     */
+    private Mono<Void> removeMovedFile(TusUploadMetadata meta) {
+        String moved = meta.finalStoragePath();
+        if (moved == null) {
+            return Mono.empty();
+        }
+        return documentDAO.existsByStoragePath(moved)
+                .flatMap(held -> held ? Mono.<Void>empty() : storageService.deleteFile(moved));
     }
 
     @Override
@@ -341,7 +482,7 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
                     String uploadId = extractUploadIdFromMetaPath(metaPath);
                     return loadMetadata(false, uploadId)
                             .filter(TusUploadMetadata::isExpired)
-                            .flatMap(meta -> cancelUpload(uploadId).thenReturn(1))
+                            .flatMap(meta -> removeUpload(uploadId, meta).thenReturn(1))
                             .onErrorResume(e -> {
                                 log.warn("Error checking/cleaning expired upload {}: {}", uploadId, e.getMessage());
                                 return Mono.just(0);
