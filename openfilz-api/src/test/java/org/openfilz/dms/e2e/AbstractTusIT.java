@@ -552,6 +552,60 @@ public abstract class AbstractTusIT extends TestContainersKeyCloakConfig {
         assertThat(stored).isEqualTo(smallFileBytes);
     }
 
+    /**
+     * An unfinished upload past its expiration answers 410 Gone — where to resume ({@code HEAD}) and any
+     * further piece ({@code PATCH}) — so a client starts again instead of retrying a server error. A
+     * complete one keeps answering: it only waits for its finalize. The expiration is a day away by
+     * default: it is moved into the past through the storage, the one seam here.
+     */
+    @Test
+    @Order(60)
+    void expiredUpload_shouldBeGone_unlessItIsComplete() throws Exception {
+        String unfinished = createUploadAndGetId(SMALL_FILE_SIZE, "expired-" + UUID.randomUUID() + ".bin");
+        expire(unfinished);
+
+        getWebTestClient().head().uri(TUS_ENDPOINT + "/{uploadId}", unfinished)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .exchange()
+                .expectStatus().isEqualTo(410)
+                .expectHeader().valueEquals("Tus-Resumable", "1.0.0");
+        uploadChunk(unfinished, 0, smallFileBytes)
+                .expectStatus().isEqualTo(410)
+                .expectHeader().valueEquals("Tus-Resumable", "1.0.0");
+
+        String filename = "expired-complete-" + UUID.randomUUID() + ".bin";
+        String complete = createUploadAndGetId(SMALL_FILE_SIZE, filename);
+        uploadChunk(complete, 0, smallFileBytes).expectStatus().isNoContent();
+        expire(complete);
+
+        getWebTestClient().head().uri(TUS_ENDPOINT + "/{uploadId}", complete)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .exchange()
+                .expectStatus().isOk()
+                .expectHeader().valueEquals("Upload-Offset", String.valueOf(SMALL_FILE_SIZE));
+        getWebTestClient().post().uri(TUS_ENDPOINT + "/{uploadId}/finalize", complete)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .header("Content-Type", "application/json")
+                .bodyValue(new TusFinalizeRequest(filename, null, null, true))
+                .exchange()
+                .expectStatus().isCreated();
+    }
+
+    /** Rewrites the upload's expiration to an hour ago, in whatever form the metadata keeps its dates. */
+    @SuppressWarnings("unchecked")
+    private void expire(String uploadId) throws Exception {
+        String metaPath = storageService.getTusMetadataPath(uploadId);
+        java.util.Map<String, Object> meta;
+        try (java.io.InputStream in = storageService.loadFile(metaPath).block().getInputStream()) {
+            meta = objectMapper.readValue(in, java.util.Map.class);
+        }
+        meta.put("expiresAt", meta.get("expiresAt") instanceof Number
+                ? (Object) 1 // seconds or milliseconds since 1970: long ago either way
+                : java.time.Instant.now().minusSeconds(3600).toString());
+        storageService.saveData(metaPath, reactor.core.publisher.Flux.just(
+                org.springframework.core.io.buffer.DefaultDataBufferFactory.sharedInstance.wrap(objectMapper.writeValueAsBytes(meta)))).block();
+    }
+
     @Test
     @Order(61)
     void finalizeUpload_shouldCreateDocument_forLargeFile() {

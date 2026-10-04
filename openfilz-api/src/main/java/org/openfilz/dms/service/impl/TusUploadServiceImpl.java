@@ -151,10 +151,17 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
                 ));
     }
 
+    /**
+     * An unfinished upload past its expiration is gone (410): a client that asks where to resume is
+     * told to start again, at once, instead of sending pieces that will be refused. A complete one
+     * still answers — it only waits for its finalize, which may be asked again.
+     */
     @Override
     public Mono<Long> getUploadOffset(String uploadId) {
         return loadMetadata(uploadId)
-                .map(TusUploadMetadata::offset);
+                .flatMap(meta -> meta.isExpired() && !meta.isComplete()
+                        ? Mono.<Long>error(new TusUploadExpiredException(uploadId))
+                        : Mono.just(meta.offset()));
     }
 
     @Override
@@ -167,15 +174,15 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
     public Mono<Long> uploadChunk(String uploadId, Long expectedOffset, Flux<DataBuffer> data) {
         return loadMetadata(uploadId)
                 .flatMap(meta -> {
+                    // An expired upload takes nothing more, whatever the offset says
+                    if (meta.isExpired()) {
+                        return Mono.error(new TusUploadExpiredException(uploadId));
+                    }
+
                     // Verify offset matches
                     if (!meta.offset().equals(expectedOffset)) {
                         return Mono.error(new TusUploadException(
                                 "Offset mismatch. Expected: " + meta.offset() + ", Got: " + expectedOffset));
-                    }
-
-                    // Check if upload is expired
-                    if (meta.isExpired()) {
-                        return Mono.error(new TusUploadException("Upload has expired"));
                     }
 
                     String dataPath = storageService.getTusDataPath(uploadId);
