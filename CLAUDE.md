@@ -424,7 +424,8 @@ Any contributor that opts into the chat must also be excluded in `AiRealLlmE2EIT
 changes: `service/filing/DestinationRule` (a rule stage before the neighbour vote — scope override, target path, dry run,
 excluded folders; stage `POLICY`), `service/filing/FilingFeedback` (per-folder weights in the vote + undo notifications),
 `service/insight/InsightsPolicy` (may this document be enriched, may a model read it, which kinds never leave — consulted by
-the tier-2 worker and at every filing entry point; permit-all in core) and `service/insight/CategoryTaxonomy` (the kind
+the tier-2 worker, at every filing entry point and before filing's model stage — a barred document, a blocked kind, or an
+unknown kind while kinds are blocked is never sent to the model, `SKIPPED` at stage `MODEL`; permit-all in core) and `service/insight/CategoryTaxonomy` (the kind
 list with descriptions that the prompt, the prototype classifier, `Settings.aiInsightsCategories` and the category
 correction read; `PropertiesCategoryTaxonomy` in core). Also: the per-user Inbox (`V1_12`, `openfilz.ai.auto-file.inbox.*`,
 `InboxScopeRule`, `POST /api/v1/ai/auto-file/inbox`), `category` / `language` search filters on both search paths +
