@@ -19,6 +19,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.http.codec.json.JacksonJsonEncoder;
@@ -146,6 +147,25 @@ public class MinioIT extends LocalStorageIT {
         // 5. Verify MinIO now has 2 versions of the same object
         List<Item> versionsAfter = listObjectVersions("dms-bucket", storagePath);
         Assertions.assertEquals(2, versionsAfter.size(), "MinIO must have 2 versions after replace");
+    }
+
+    @Test
+    void whenDownloadWithRangeHeader_thenFullContent() {
+        // MinIO content is a one-shot stream: a Range request (OnlyOffice, pdf.js, download
+        // managers) must get the whole file with 200, not a 416 Range Not Satisfiable.
+        UploadResponse uploaded = uploadDocument(newFileBuilder());
+        Assertions.assertNotNull(uploaded);
+        UUID id = uploaded.id();
+
+        byte[] body = webTestClient.get().uri(RestApiVersion.API_PREFIX + "/documents/{id}/download", id)
+                .header(HttpHeaders.RANGE, "bytes=0-9")
+                .exchange()
+                .expectStatus().isOk()
+                .expectHeader().valueEquals(HttpHeaders.ACCEPT_RANGES, "none")
+                .expectBody(byte[].class)
+                .returnResult().getResponseBody();
+        Assertions.assertNotNull(body);
+        Assertions.assertEquals(uploaded.size(), (long) body.length);
     }
 
     @Test
