@@ -106,7 +106,16 @@ public class CategoryReorganizationPlanner {
 
     /** Propose the by-kind split of a scope as a stored plan; a view with no id when nothing needs splitting. */
     public ReorganizationPlanView propose(UUID rootFolderId, UUID conversationId, Caller caller) {
-        Draft draft = draft(rootFolderId, caller);
+        return propose(rootFolderId, conversationId, caller, null);
+    }
+
+    /**
+     * @param preferredLanguage the language to name new folders in when the existing folder names
+     *                          do not tell (the user's UI language, e.g. {@code fr}); null = the
+     *                          deployment default
+     */
+    public ReorganizationPlanView propose(UUID rootFolderId, UUID conversationId, Caller caller, String preferredLanguage) {
+        Draft draft = draft(rootFolderId, caller, preferredLanguage);
         if (draft.isEmpty()) {
             return new ReorganizationPlanView(null, ReorganizationPlanService.STATUS_PROPOSED, rootFolderId,
                     planService.pathOf(rootFolderId, caller), nothingToSplit(draft.skipped(), "this scope"),
@@ -120,12 +129,22 @@ public class CategoryReorganizationPlanner {
 
     /** The plan as a request, computed and not stored. */
     public Draft draft(UUID rootFolderId, Caller caller) {
+        return draft(rootFolderId, caller, null);
+    }
+
+    /**
+     * The plan as a request, computed and not stored. New folders are named in the language of the
+     * scope's folder names; when they do not tell (none, or a tie), in {@code preferredLanguage},
+     * else in the deployment default.
+     */
+    public Draft draft(UUID rootFolderId, Caller caller, String preferredLanguage) {
         AiProperties.Reorganization config = aiProperties.getReorganization();
         List<ScopeFolder> scope = visibleTo(caller, walk(rootFolderId, caller));
         List<String> allFolderNames = new ArrayList<>();
         scope.forEach(f -> f.folders().forEach(d -> allFolderNames.add(d.getName())));
         String language = folderNames.languageOf(allFolderNames)
-                .orElse(defaultLanguage());
+                .orElseGet(() -> preferredLanguage == null || preferredLanguage.isBlank() ? defaultLanguage()
+                        : preferredLanguage.trim().toLowerCase(Locale.ROOT).split("[-_]")[0]);
 
         // A scope folder named after a kind ("CV", "Factures") is the home of that kind
         Optional<String> rootKind = rootFolderId == null ? Optional.empty()

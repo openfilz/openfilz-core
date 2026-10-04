@@ -398,7 +398,11 @@ names the category by nearest embedded description (no chat model, category-only
 nearest labelled documents vote with their stored category (the model's and the user's labels, `learned.learn-from`), descriptions
 as cold start — `PATCH /documents/{id}/insights {category}` is the user's correction that teaches it (final: the worker's later writes keep it — `DocumentInsightStore` SQL guards on `model = 'user'`); `auto` keeps the local
 verdict above `min-confidence` and asks the model otherwise; `CategoryClassifierBenchmark` (test sources, `-Dbench.dir=`)
-measures all of them on a labelled corpus — see `docs/ai.md` §3c (real library: learned 84–88 %, descriptions 47 %). Reorganisation by kind without a model: `CategoryReorganizationPlanner`
+measures all of them on a labelled corpus — see `docs/ai.md` §3c (real library: learned 84–88 %, descriptions 47 %). Whatever the
+mode, the bean is wrapped in `FileNameAwareCategoryClassifier`: a name that says its kind (`FileNameKindHints`, multilingual
+lexicon — `CNI recto.jpg`, `Facture 2026.pdf`, `.xlsx`) wins, and a file with **no text** (photo, scan without OCR) is `other`
+rather than a near-random kind embedded from its bare name; the stored `model` stays the delegate's name. The by-kind planner
+names new folders in the folder names' language, else the request's `language` (UI language), else the deployment default. Reorganisation by kind without a model: `CategoryReorganizationPlanner`
 (`POST /ai/reorganization/by-kind`, tool `proposeReorganizationByKind`) splits mixed folders into one sub-folder per kind
 (`reorganization.split-*`) as an ordinary stored plan; `FilingStrategyBenchmark` compares the stage-1 strategies offline.
 `GET /documents/{id}/insights`,

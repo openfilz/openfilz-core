@@ -10,7 +10,13 @@ import java.util.UUID;
  * stored, reviewable reorganisation plan — nothing moves until it is applied.
  *
  * @param rootFolderId the scope; null for the root level
+ * @param language     the language to name new folders in when the existing folder names do not tell
+ *                     (the user's UI language, e.g. {@code fr}); absent = the deployment default
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record ReorganizationByKindRequest(UUID rootFolderId) {
+public record ReorganizationByKindRequest(UUID rootFolderId, String language) {
+
+    public ReorganizationByKindRequest(UUID rootFolderId) {
+        this(rootFolderId, null);
+    }
 }

@@ -61,7 +61,7 @@ class DocumentInsightsPrototypeIT extends TestContainersBaseConfig {
     @Test
     @DisplayName("an upload is categorised by its nearest prototype, with no summary and the classifier as the model")
     void categoryByPrototype() {
-        UploadResponse invoice = upload("facture-" + UUID.randomUUID() + ".txt",
+        UploadResponse invoice = upload("doc-a-" + UUID.randomUUID() + ".txt",
                 "Invoice F-2026-0042 from ACME: amount due 1 200 EUR, VAT 20 %, payment terms 30 days.");
         DocumentInsightView view = awaitInsights(invoice.id(), v -> "DONE".equals(v.status()) && v.tier() == 2);
         assertThat(view.category()).isEqualTo("invoice");
@@ -71,7 +71,7 @@ class DocumentInsightsPrototypeIT extends TestContainersBaseConfig {
         assertThat(view.entities()).isNullOrEmpty();
         assertThat(view.promptVersion()).isEqualTo(org.openfilz.dms.service.insight.AiDocumentInsightService.PROMPT_VERSION);
 
-        UploadResponse report = upload("report-" + UUID.randomUUID() + ".txt",
+        UploadResponse report = upload("doc-b-" + UUID.randomUUID() + ".txt",
                 "Quarterly report of ACME: analysis, findings, figures and conclusions on the period.");
         DocumentInsightView reportView = awaitInsights(report.id(), v -> "DONE".equals(v.status()) && v.tier() == 2);
         assertThat(reportView.category()).isEqualTo("report");
