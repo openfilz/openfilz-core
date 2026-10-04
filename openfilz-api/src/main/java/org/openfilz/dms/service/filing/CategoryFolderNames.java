@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  * What a folder for a kind of document is called, in the languages OpenFilz ships — the
@@ -19,6 +20,8 @@ import java.util.Optional;
 public final class CategoryFolderNames {
 
     public static final String DEFAULT_LANGUAGE = "en";
+
+    private static final Pattern LANGUAGE_TAG = Pattern.compile("[A-Za-z]{2,3}([-_][A-Za-z0-9]{1,8})*");
 
     /** language → category → folder name. */
     private static final Map<String, Map<String, String>> BUILT_IN = Map.of(
@@ -125,11 +128,25 @@ public final class CategoryFolderNames {
         if (kind.isEmpty() || "other".equals(kind)) {
             return Optional.empty();
         }
-        String lang = language == null || language.isBlank() ? DEFAULT_LANGUAGE
-                : language.trim().toLowerCase(Locale.ROOT).split("[-_]")[0];
+        String lang = primaryLanguage(language).orElse(DEFAULT_LANGUAGE);
         String name = names.getOrDefault(lang, Map.of()).get(kind);
         if (name == null) name = names.getOrDefault(DEFAULT_LANGUAGE, Map.of()).get(kind);
         return Optional.ofNullable(name);
+    }
+
+    /**
+     * The primary subtag of a language tag, lower case ({@code fr-FR} → {@code fr}); empty for
+     * anything that is not a language tag — the value may come straight from a request.
+     */
+    public static Optional<String> primaryLanguage(String tag) {
+        if (tag == null) {
+            return Optional.empty();
+        }
+        String trimmed = tag.trim();
+        if (trimmed.length() > 35 || !LANGUAGE_TAG.matcher(trimmed).matches()) {
+            return Optional.empty();
+        }
+        return Optional.of(trimmed.split("[-_]")[0].toLowerCase(Locale.ROOT));
     }
 
     /** The kind an existing folder name denotes, in any language ("Factures" → invoice), if any. */

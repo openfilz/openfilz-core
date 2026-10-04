@@ -143,8 +143,7 @@ public class CategoryReorganizationPlanner {
         List<String> allFolderNames = new ArrayList<>();
         scope.forEach(f -> f.folders().forEach(d -> allFolderNames.add(d.getName())));
         String language = folderNames.languageOf(allFolderNames)
-                .orElseGet(() -> preferredLanguage == null || preferredLanguage.isBlank() ? defaultLanguage()
-                        : preferredLanguage.trim().toLowerCase(Locale.ROOT).split("[-_]")[0]);
+                .orElseGet(() -> CategoryFolderNames.primaryLanguage(preferredLanguage).orElseGet(this::defaultLanguage));
 
         // A scope folder named after a kind ("CV", "Factures") is the home of that kind
         Optional<String> rootKind = rootFolderId == null ? Optional.empty()
