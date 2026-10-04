@@ -39,8 +39,8 @@ class OneShotStreamResourceWriterTest {
     void rangeOnStream_sendsWholeContentWithoutRangeSupport() {
         MockServerHttpResponse response = write(new InputStreamResource(new ByteArrayInputStream(CONTENT)));
 
-        assertThat(response.getStatusCode()).isNotEqualTo(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
-                .isNotEqualTo(HttpStatus.PARTIAL_CONTENT);
+        // The writer leaves the status alone: no 206, no 416 — the server answers its default 200
+        assertThat(response.getStatusCode()).isNull();
         assertThat(response.getHeaders().getFirst(HttpHeaders.ACCEPT_RANGES)).isEqualTo("none");
         StepVerifier.create(response.getBodyAsString())
                 .expectNext(new String(CONTENT, StandardCharsets.UTF_8)).verifyComplete();

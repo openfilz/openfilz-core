@@ -15,6 +15,8 @@ import org.openfilz.dms.dto.response.DocumentInfo;
 import org.openfilz.dms.dto.response.FolderResponse;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.enums.DocumentType;
+import org.openfilz.dms.service.OnlyOfficeJwtService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.io.ClassPathResource;
@@ -35,6 +37,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.awaitility.Awaitility.await;
@@ -46,6 +49,9 @@ public class MinioIT extends LocalStorageIT {
 
     @Container
     static MinIOContainer minio = new MinIOContainer(DockerImageName.parse("ghcr.io/openfilz/minio:RELEASE.2026-09-22T19-25-18Z").asCompatibleSubstituteFor("minio/minio"));
+
+    @Autowired
+    private OnlyOfficeJwtService<?> onlyOfficeJwtService;
 
     public MinioIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
         super(webTestClient, customJacksonJsonEncoder);
@@ -59,6 +65,8 @@ public class MinioIT extends LocalStorageIT {
         registry.add("storage.minio.secret-key", minio::getPassword);
         registry.add("storage.type", () -> "minio");
         registry.add("storage.minio.versioning-enabled", () -> true);
+        // For the DocumentServer download endpoint (whenOnlyOfficeDownloadWithRangeHeader_thenFullContent)
+        registry.add("onlyoffice.enabled", () -> true);
     }
 
     protected MinioClient createMinioClient() {
@@ -158,6 +166,29 @@ public class MinioIT extends LocalStorageIT {
         UUID id = uploaded.id();
 
         byte[] body = webTestClient.get().uri(RestApiVersion.API_PREFIX + "/documents/{id}/download", id)
+                .header(HttpHeaders.RANGE, "bytes=0-9")
+                .exchange()
+                .expectStatus().isOk()
+                .expectHeader().valueEquals(HttpHeaders.ACCEPT_RANGES, "none")
+                .expectBody(byte[].class)
+                .returnResult().getResponseBody();
+        Assertions.assertNotNull(body);
+        Assertions.assertEquals(uploaded.size(), (long) body.length);
+    }
+
+    @Test
+    void whenOnlyOfficeDownloadWithRangeHeader_thenFullContent() {
+        // The request the DocumentServer makes: it failed with "Error downloadFile ... 416" on MinIO content.
+        UploadResponse uploaded = uploadDocument(newFileBuilder());
+        Assertions.assertNotNull(uploaded);
+        UUID id = uploaded.id();
+        String token = onlyOfficeJwtService.generateToken(Map.of(
+                "documentId", id.toString(), "userId", "anonymous", "userName", "DocumentServer", "type", "access"));
+
+        byte[] body = webTestClient.get().uri(uriBuilder -> uriBuilder
+                        .path(RestApiVersion.API_PREFIX + "/documents/" + id + "/onlyoffice-download")
+                        .queryParam("token", token)
+                        .build())
                 .header(HttpHeaders.RANGE, "bytes=0-9")
                 .exchange()
                 .expectStatus().isOk()
