@@ -273,7 +273,8 @@ public class TusController {
                             @Header(name = "Upload-Length", description = "Total file size in bytes", schema = @Schema(type = "integer")),
                             @Header(name = "Tus-Resumable", description = "TUS protocol version", schema = @Schema(type = "string"))
                     }),
-            @ApiResponse(responseCode = "404", description = "Upload not found")
+            @ApiResponse(responseCode = "404", description = "Upload not found"),
+            @ApiResponse(responseCode = "410", description = "Upload expired before it was complete - start it again")
     })
     public Mono<ResponseEntity<Void>> getUploadOffset(
             @Parameter(description = "Upload identifier") @PathVariable String uploadId) {
@@ -290,6 +291,12 @@ public class TusController {
                 .header("Cache-Control", "no-store")
                 .<Void>build()
         ).onErrorResume(e -> {
+            if (e instanceof TusUploadExpiredException) {
+                log.debug("Upload expired: {}", uploadId);
+                return Mono.just(ResponseEntity.status(HttpStatus.GONE)
+                        .header("Tus-Resumable", TUS_VERSION)
+                        .build());
+            }
             log.debug("Upload not found: {}", uploadId);
             return Mono.just(ResponseEntity.notFound()
                     .header("Tus-Resumable", TUS_VERSION)
@@ -311,6 +318,7 @@ public class TusController {
                             @Header(name = "Tus-Resumable", description = "TUS protocol version", schema = @Schema(type = "string"))
                     }),
             @ApiResponse(responseCode = "409", description = "Offset mismatch - resume from HEAD request"),
+            @ApiResponse(responseCode = "410", description = "Upload expired - start it again"),
             @ApiResponse(responseCode = "413", description = "The chunk would go past the declared Upload-Length",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "Upload not found")
@@ -342,6 +350,12 @@ public class TusController {
                     log.warn("Error uploading chunk for {}: {}", uploadId, e.getMessage());
                     if (e instanceof TusUploadLengthExceededException tooLong) {
                         return Mono.just(tusError(HttpStatus.CONTENT_TOO_LARGE, tooLong.getError(), tooLong.getMessage()));
+                    }
+                    if (e instanceof TusUploadExpiredException) {
+                        // Not a server failure: a client that retried a 500 kept sending pieces for nothing.
+                        return Mono.just(ResponseEntity.status(HttpStatus.GONE)
+                                .header("Tus-Resumable", TUS_VERSION)
+                                .build());
                     }
                     if (e.getMessage() != null && e.getMessage().contains("Offset mismatch")) {
                         return Mono.just(ResponseEntity.status(HttpStatus.CONFLICT)

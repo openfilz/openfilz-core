@@ -290,6 +290,39 @@ class TusUploadServiceImplTest {
         verify(documentDAO, never()).create(any());
     }
 
+    // ------------------------------------------------------------ expiration
+
+    private static TusUploadMetadata expired(long length, long offset) {
+        return new TusUploadMetadata(ID, length, offset, Instant.now().minusSeconds(7200), Instant.now().minusSeconds(3600),
+                Map.of(), UserInfoService.ANONYMOUS_USER, null);
+    }
+
+    @Test
+    void anExpiredUpload_takesNoMorePieces() {
+        known(expired(100, 40));
+
+        StepVerifier.create(service.uploadChunk(ID, 40L, reactor.core.publisher.Flux.empty()))
+                .expectError(org.openfilz.dms.exception.TusUploadExpiredException.class).verify();
+
+        verify(storageService, never()).appendData(anyString(), any(), anyLong());
+    }
+
+    @Test
+    void anExpiredUnfinishedUpload_isGoneWhenAskedWhereToResume() {
+        known(expired(100, 40));
+
+        StepVerifier.create(service.getUploadOffset(ID))
+                .expectError(org.openfilz.dms.exception.TusUploadExpiredException.class).verify();
+    }
+
+    /** All its bytes are there and only the finalize is missing — which may be asked again: it still answers. */
+    @Test
+    void anExpiredCompleteUpload_stillSaysItIsComplete() {
+        known(expired(100, 100));
+
+        StepVerifier.create(service.getUploadOffset(ID)).expectNext(100L).verifyComplete();
+    }
+
     // ------------------------------------------------------------ cancel
 
     @Test
