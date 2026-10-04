@@ -50,6 +50,13 @@ public abstract class AbstractTusIT extends TestContainersKeyCloakConfig {
     @Autowired
     private TusUploadCleanupScheduler tusUploadCleanupScheduler;
 
+    /** Only for {@link #finalizeUpload_askedAgainAfterOneCutAfterTheMove_shouldCreateTheDocumentFromTheMovedFile()}. */
+    @Autowired
+    private org.openfilz.dms.service.StorageService storageService;
+
+    @Autowired
+    private tools.jackson.databind.ObjectMapper objectMapper;
+
     public AbstractTusIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
         super(webTestClient, customJacksonJsonEncoder);
     }
@@ -450,6 +457,60 @@ public abstract class AbstractTusIT extends TestContainersKeyCloakConfig {
                 });
     }
 
+    /**
+     * A finalize cut after the file was moved to its permanent place — a proxy's timeout, a restart, while
+     * the file was being hashed — is finished by the next one from the file already there. Moving again
+     * would find nothing to move: on S3 the pieces are gone once composed, and an empty object stood for
+     * the file. No request can be stopped half-way from outside, so what such a finalize leaves behind
+     * (the file moved, the upload's metadata saying where) is set up through the storage: the one seam here.
+     */
+    @Test
+    @Order(60)
+    @SuppressWarnings("unchecked")
+    void finalizeUpload_askedAgainAfterOneCutAfterTheMove_shouldCreateTheDocumentFromTheMovedFile() throws Exception {
+        String filename = "finalize-again-" + UUID.randomUUID() + ".bin";
+        String uploadId = createUploadAndGetId(SMALL_FILE_SIZE, filename);
+        uploadChunk(uploadId, 0, smallFileBytes).expectStatus().isNoContent();
+
+        String moved = storageService.getUniqueStorageFileName(filename);
+        String metaPath = storageService.getTusMetadataPath(uploadId);
+        java.util.Map<String, Object> meta;
+        try (java.io.InputStream in = storageService.loadFile(metaPath).block().getInputStream()) {
+            meta = objectMapper.readValue(in, java.util.Map.class);
+        }
+        meta.put("finalStoragePath", moved);
+        storageService.saveData(metaPath, reactor.core.publisher.Flux.just(
+                org.springframework.core.io.buffer.DefaultDataBufferFactory.sharedInstance.wrap(objectMapper.writeValueAsBytes(meta)))).block();
+        storageService.moveFile(storageService.getTusDataPath(uploadId), moved).block();
+
+        // The upload still reads as complete: a client that lost the answer asks for the finalize again.
+        getWebTestClient().head().uri(TUS_ENDPOINT + "/{uploadId}", uploadId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .exchange()
+                .expectStatus().isOk()
+                .expectHeader().valueEquals("Upload-Offset", String.valueOf(SMALL_FILE_SIZE));
+
+        UploadResponse document = getWebTestClient().post().uri(TUS_ENDPOINT + "/{uploadId}/finalize", uploadId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .header("Content-Type", "application/json")
+                .bodyValue(new TusFinalizeRequest(filename, null, null, true))
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(UploadResponse.class)
+                .returnResult().getResponseBody();
+        assertThat(document).isNotNull();
+        assertThat(document.size()).isEqualTo(SMALL_FILE_SIZE);
+
+        byte[] stored = getWebTestClient().get()
+                .uri(RestApiVersion.API_PREFIX + "/documents/{id}/download", document.id())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(byte[].class)
+                .returnResult().getResponseBody();
+        assertThat(stored).isEqualTo(smallFileBytes);
+    }
+
     @Test
     @Order(61)
     void finalizeUpload_shouldCreateDocument_forLargeFile() {
@@ -794,5 +855,23 @@ public abstract class AbstractTusIT extends TestContainersKeyCloakConfig {
                 .exchange()
                 // Should fail: either 403 or 404 (implementation may vary)
                 .expectStatus().is4xxClientError();
+    }
+
+    /** Only its owner cancels an upload: someone else's request is answered and changes nothing. */
+    @Test
+    @Order(111)
+    void cancelUpload_ofAnotherUser_shouldLeaveItAlone() {
+        String uploadId = createUploadAndGetId(SMALL_FILE_SIZE, "cancel-isolation-" + UUID.randomUUID() + ".bin");
+
+        getWebTestClient().delete().uri(TUS_ENDPOINT + "/{uploadId}", uploadId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + getAccessToken("admin-user"))
+                .exchange()
+                .expectStatus().isNoContent();
+
+        getWebTestClient().head().uri(TUS_ENDPOINT + "/{uploadId}", uploadId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .exchange()
+                .expectStatus().isOk()
+                .expectHeader().valueEquals("Upload-Offset", "0");
     }
 }
