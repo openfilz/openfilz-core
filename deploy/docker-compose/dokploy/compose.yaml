@@ -489,7 +489,7 @@ services:
       - "--api-timeout=60s"
       - "--libreoffice-restart-after=100"
       - "--libreoffice-auto-start=true"
-      - "--log-level=info"
+      - "--log-level=warn"
     networks:
       - dokploy-network
     healthcheck:
