@@ -228,11 +228,12 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
                         return Mono.error(new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                                 "Upload " + uploadId + " is already being finalized"));
                     }
-                    // Validate and create document
-                    return storageQuotaService.checkUpload(filename, meta.length())
-                            .then(validateParentFolder(parentFolderId))
-                            .then(validateDuplicateName(filename, parentFolderId, request.allowDuplicateFileNames()))
-                            .then(Mono.defer(() -> moveToStorageAndCreateDocument(uploadId, meta, request)))
+                    // Validate and create document. Deferred as a whole: whatever fails, however it fails,
+                    // the upload leaves the set — left in it, it could never be finalized nor cleaned up.
+                    return Mono.defer(() -> storageQuotaService.checkUpload(filename, meta.length())
+                                    .then(validateParentFolder(parentFolderId))
+                                    .then(validateDuplicateName(filename, parentFolderId, request.allowDuplicateFileNames()))
+                                    .then(Mono.defer(() -> moveToStorageAndCreateDocument(uploadId, meta, request))))
                             .doFinally(_ -> finalizing.remove(uploadId));
                 });
     }
@@ -310,9 +311,30 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
                 });
     }
 
-    /** The length of what is stored at this path; -1 when nothing is. */
+    /**
+     * The length of what is stored at this path; -1 when nothing is. A storage that cannot say (down,
+     * timing out) is an error, never "nothing": on that guess the file already moved would be moved
+     * again — an empty object written over it on S3 — or deleted as the wrong length. The finalize
+     * fails and is asked again.
+     */
     private Mono<Long> storedLength(String storagePath) {
-        return Mono.defer(() -> storageService.getFileLength(storagePath)).onErrorReturn(-1L);
+        return Mono.defer(() -> storageService.getFileLength(storagePath))
+                .onErrorResume(TusUploadServiceImpl::isNotFound, e -> Mono.just(-1L));
+    }
+
+    /** The storage said there is no such file (local: no such path; S3: NoSuchKey) — as opposed to failing to answer. */
+    static boolean isNotFound(Throwable error) {
+        Throwable cause = error;
+        for (int depth = 0; cause != null && depth < 10; depth++, cause = cause.getCause()) {
+            if (cause instanceof java.nio.file.NoSuchFileException || cause instanceof java.io.FileNotFoundException) {
+                return true;
+            }
+            if (cause instanceof io.minio.errors.ErrorResponseException s3 && s3.errorResponse() != null
+                    && "NoSuchKey".equals(s3.errorResponse().code())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Mono<UploadResponse> createDocumentRecord(String storagePath, TusUploadMetadata meta,

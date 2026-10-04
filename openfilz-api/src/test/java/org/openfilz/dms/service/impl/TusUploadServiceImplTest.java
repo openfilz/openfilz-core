@@ -219,7 +219,7 @@ class TusUploadServiceImplTest {
         known(upload(100, UserInfoService.ANONYMOUS_USER, FINAL));
         when(documentDAO.existsByStoragePath(FINAL)).thenReturn(Mono.just(false));
         when(storageService.getFileLength(FINAL))
-                .thenReturn(Mono.error(new org.openfilz.dms.exception.StorageException("nothing there", null)))
+                .thenReturn(Mono.error(new org.openfilz.dms.exception.StorageException(new java.nio.file.NoSuchFileException(FINAL))))
                 .thenReturn(Mono.just(100L));
         when(storageService.moveFile(DATA, FINAL)).thenReturn(Mono.empty());
 
@@ -245,6 +245,38 @@ class TusUploadServiceImplTest {
 
         verify(documentDAO, never()).create(any());
         verify(storageService).deleteFile(FINAL);
+    }
+
+    /**
+     * The storage does not answer (down, timing out) when asked whether the moved file is there. That is
+     * not "nothing there": the file is neither moved again — on S3 an empty object would overwrite it —
+     * nor deleted. The finalize fails and is asked again.
+     */
+    @Test
+    void finalize_whenTheStorageCannotSayWhatIsThere_touchesNothing() {
+        known(upload(100, UserInfoService.ANONYMOUS_USER, FINAL));
+        when(documentDAO.existsByStoragePath(FINAL)).thenReturn(Mono.just(false));
+        when(storageService.getFileLength(FINAL))
+                .thenReturn(Mono.error(new org.openfilz.dms.exception.StorageException("MinIO getFileLength failed", new java.net.SocketTimeoutException("timeout"))));
+
+        StepVerifier.create(service.finalizeUpload(ID, REQUEST)).expectError(org.openfilz.dms.exception.StorageException.class).verify();
+
+        verify(storageService, never()).moveFile(anyString(), anyString());
+        verify(storageService, never()).deleteFile(FINAL);
+        verify(documentDAO, never()).create(any());
+    }
+
+    @Test
+    void finalize_whenTheStorageCannotSayAfterTheMove_keepsTheMovedFile() {
+        known(upload(100, UserInfoService.ANONYMOUS_USER, null));
+        when(storageService.moveFile(DATA, FINAL)).thenReturn(Mono.empty());
+        when(storageService.getFileLength(FINAL))
+                .thenReturn(Mono.error(new org.openfilz.dms.exception.StorageException("MinIO getFileLength failed", new java.net.SocketTimeoutException("timeout"))));
+
+        StepVerifier.create(service.finalizeUpload(ID, REQUEST)).expectError(org.openfilz.dms.exception.StorageException.class).verify();
+
+        verify(storageService, never()).deleteFile(FINAL);
+        verify(documentDAO, never()).create(any());
     }
 
     /** The earlier finalize went all the way and only its clean-up is late: no second document on the same file. */

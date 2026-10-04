@@ -511,6 +511,47 @@ public abstract class AbstractTusIT extends TestContainersKeyCloakConfig {
         assertThat(stored).isEqualTo(smallFileBytes);
     }
 
+    /**
+     * The same, cut one step earlier: the destination was written down, the file not moved yet. The next
+     * finalize finds nothing there — the storage says so, local or S3 — and moves it to that place.
+     */
+    @Test
+    @Order(60)
+    @SuppressWarnings("unchecked")
+    void finalizeUpload_askedAgainAfterOneCutBeforeTheMove_shouldMoveTheFileThen() throws Exception {
+        String filename = "finalize-again-early-" + UUID.randomUUID() + ".bin";
+        String uploadId = createUploadAndGetId(SMALL_FILE_SIZE, filename);
+        uploadChunk(uploadId, 0, smallFileBytes).expectStatus().isNoContent();
+
+        String metaPath = storageService.getTusMetadataPath(uploadId);
+        java.util.Map<String, Object> meta;
+        try (java.io.InputStream in = storageService.loadFile(metaPath).block().getInputStream()) {
+            meta = objectMapper.readValue(in, java.util.Map.class);
+        }
+        meta.put("finalStoragePath", storageService.getUniqueStorageFileName(filename));
+        storageService.saveData(metaPath, reactor.core.publisher.Flux.just(
+                org.springframework.core.io.buffer.DefaultDataBufferFactory.sharedInstance.wrap(objectMapper.writeValueAsBytes(meta)))).block();
+
+        UploadResponse document = getWebTestClient().post().uri(TUS_ENDPOINT + "/{uploadId}/finalize", uploadId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .header("Content-Type", "application/json")
+                .bodyValue(new TusFinalizeRequest(filename, null, null, true))
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(UploadResponse.class)
+                .returnResult().getResponseBody();
+        assertThat(document).isNotNull();
+
+        byte[] stored = getWebTestClient().get()
+                .uri(RestApiVersion.API_PREFIX + "/documents/{id}/download", document.id())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(byte[].class)
+                .returnResult().getResponseBody();
+        assertThat(stored).isEqualTo(smallFileBytes);
+    }
+
     @Test
     @Order(61)
     void finalizeUpload_shouldCreateDocument_forLargeFile() {
