@@ -36,6 +36,9 @@ public class DocumentInsightStore {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
+    /** The {@code model} of a row whose kind the user set. */
+    private static final String USER_MODEL = LearnedCategoryClassifier.USER_SOURCE;
+
     private static final String UPSERT_TIER1 = """
             INSERT INTO ai_document_insights (document_id, file_title, file_author, file_created_at, file_modified_at,
                                               page_count, language, tier, status, created_at, updated_at)
@@ -49,41 +52,61 @@ public class DocumentInsightStore {
                 language = COALESCE(EXCLUDED.language, ai_document_insights.language),
                 updated_at = now()""";
 
+    /*
+     * A kind the user set (model = :userModel, PATCH /documents/{id}/insights) is final: nothing the
+     * enrichment worker writes afterwards replaces it, neither the model's or a classifier's category
+     * nor a PENDING / FAILED / SKIPPED status. The worker may still be running when the user corrects
+     * the kind of a document just uploaded; without these guards its answer, landing seconds later,
+     * silently undid the correction (and taught the learned classifier the wrong label).
+     */
+
     private static final String MARK_PENDING = """
             INSERT INTO ai_document_insights (document_id, tier, status, created_at, updated_at)
             VALUES (:id, 1, 'PENDING', now(), now())
-            ON CONFLICT (document_id) DO UPDATE SET status = 'PENDING', error = NULL, updated_at = now()""";
+            ON CONFLICT (document_id) DO UPDATE SET
+                status = CASE WHEN ai_document_insights.model = :userModel THEN ai_document_insights.status ELSE 'PENDING' END,
+                error = CASE WHEN ai_document_insights.model = :userModel THEN ai_document_insights.error ELSE NULL END,
+                updated_at = now()""";
 
     private static final String MARK_OUTCOME = """
             INSERT INTO ai_document_insights (document_id, tier, status, error, created_at, updated_at)
             VALUES (:id, 1, :status, :error, now(), now())
-            ON CONFLICT (document_id) DO UPDATE SET status = :status, error = :error, updated_at = now()""";
+            ON CONFLICT (document_id) DO UPDATE SET
+                status = CASE WHEN ai_document_insights.model = :userModel THEN ai_document_insights.status ELSE :status END,
+                error = CASE WHEN ai_document_insights.model = :userModel THEN ai_document_insights.error ELSE :error END,
+                updated_at = now()""";
 
     private static final String UPSERT_TIER2 = """
             INSERT INTO ai_document_insights (document_id, category, summary, keywords, entities, language, tier, model,
                                               prompt_version, status, error, created_at, updated_at)
             VALUES (:id, :category, :summary, :keywords, :entities, :language, 2, :model, :promptVersion, 'DONE', NULL, now(), now())
             ON CONFLICT (document_id) DO UPDATE SET
-                category = EXCLUDED.category,
+                category = CASE WHEN ai_document_insights.model = :userModel THEN ai_document_insights.category ELSE EXCLUDED.category END,
                 summary = EXCLUDED.summary,
                 keywords = EXCLUDED.keywords,
                 entities = EXCLUDED.entities,
                 language = COALESCE(ai_document_insights.language, EXCLUDED.language),
                 tier = 2,
-                model = EXCLUDED.model,
+                model = CASE WHEN ai_document_insights.model = :userModel THEN ai_document_insights.model ELSE EXCLUDED.model END,
                 prompt_version = EXCLUDED.prompt_version,
                 status = 'DONE',
                 error = NULL,
-                updated_at = now()""";
+                updated_at = now()
+            RETURNING category""";
 
-    /** A category alone (the user's correction, or a learned verdict): the other tier-2 fields are kept when present. */
+    /**
+     * A category alone (the user's correction, or a local classifier's verdict): the other tier-2 fields
+     * are kept when present. A verdict never replaces the user's kind; the user's own correction always does.
+     */
     private static final String UPSERT_CATEGORY = """
             INSERT INTO ai_document_insights (document_id, category, tier, model, prompt_version, status, error, created_at, updated_at)
             VALUES (:id, :category, 2, :model, :promptVersion, 'DONE', NULL, now(), now())
             ON CONFLICT (document_id) DO UPDATE SET
-                category = EXCLUDED.category,
+                category = CASE WHEN ai_document_insights.model = :userModel AND EXCLUDED.model <> :userModel
+                                THEN ai_document_insights.category ELSE EXCLUDED.category END,
                 tier = 2,
-                model = EXCLUDED.model,
+                model = CASE WHEN ai_document_insights.model = :userModel AND EXCLUDED.model <> :userModel
+                             THEN ai_document_insights.model ELSE EXCLUDED.model END,
                 prompt_version = EXCLUDED.prompt_version,
                 status = 'DONE',
                 error = NULL,
@@ -117,7 +140,8 @@ public class DocumentInsightStore {
     // ── tier 2 ──────────────────────────────────────────────────────────────
 
     public Mono<Void> markPending(UUID documentId) {
-        return databaseClient.sql(MARK_PENDING).bind("id", documentId).fetch().rowsUpdated().then();
+        return databaseClient.sql(MARK_PENDING).bind("id", documentId).bind("userModel", USER_MODEL)
+                .fetch().rowsUpdated().then();
     }
 
     public Mono<Void> markFailed(UUID documentId, String error) {
@@ -132,15 +156,22 @@ public class DocumentInsightStore {
         String message = error == null ? null : error.length() > 512 ? error.substring(0, 512) : error;
         DatabaseClient.GenericExecuteSpec spec = databaseClient.sql(MARK_OUTCOME)
                 .bind("id", documentId)
-                .bind("status", status);
+                .bind("status", status)
+                .bind("userModel", USER_MODEL);
         spec = bindNullable(spec, "error", message, String.class);
         return spec.fetch().rowsUpdated().then();
     }
 
-    /** Tier 2: the model's answer. Tier-1 columns of the row are left as they are (a Tika language wins over the model's). */
-    public Mono<Void> saveEnrichment(UUID documentId, InsightResult result, String model, int promptVersion) {
+    /**
+     * Tier 2: the model's (or a local classifier's) answer. Tier-1 columns of the row are left as they
+     * are (a Tika language wins over the model's), and so is a kind the user set.
+     *
+     * @return the category the row holds afterwards: the answer's, or the user's when they had set one
+     */
+    public Mono<String> saveEnrichment(UUID documentId, InsightResult result, String model, int promptVersion) {
         DatabaseClient.GenericExecuteSpec spec = databaseClient.sql(UPSERT_TIER2)
                 .bind("id", documentId)
+                .bind("userModel", USER_MODEL)
                 .bind("category", result.category() == null ? InsightResult.OTHER : result.category())
                 .bind("keywords", result.keywords() == null ? new String[0] : result.keywords().toArray(new String[0]))
                 .bind("promptVersion", promptVersion);
@@ -150,13 +181,14 @@ public class DocumentInsightStore {
         spec = result.entities() == null || result.entities().isEmpty()
                 ? spec.bindNull("entities", Json.class)
                 : spec.bind("entities", Json.of(JSON.writeValueAsString(result.entities())));
-        return spec.fetch().rowsUpdated().then();
+        return spec.fetch().one().map(row -> String.valueOf(row.get("category")));
     }
 
     /** Set the category only — the user's correction ({@code model = "user"}) — keeping summary, keywords and entities. */
     public Mono<Void> saveCategory(UUID documentId, String category, String model, int promptVersion) {
         return databaseClient.sql(UPSERT_CATEGORY)
                 .bind("id", documentId)
+                .bind("userModel", USER_MODEL)
                 .bind("category", category == null ? InsightResult.OTHER : category)
                 .bind("model", model)
                 .bind("promptVersion", promptVersion)

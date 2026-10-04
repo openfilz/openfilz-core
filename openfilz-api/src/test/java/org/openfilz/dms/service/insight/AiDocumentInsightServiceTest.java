@@ -208,6 +208,22 @@ class AiDocumentInsightServiceTest {
     }
 
     @Test
+    @DisplayName("the user set the kind while the model was working: the row keeps it, and the event follows the row")
+    void userKindSetMeanwhileWins() {
+        verdict = Verdict.permitAll();
+        classifier(null);
+        // The model answers "invoice"; the store kept the user's "contract" (its RETURNING category)
+        when(store.saveEnrichment(any(), any(), any(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(Mono.just("contract"));
+        start(Mode.LLM);
+
+        process();
+
+        verify(events).publishEvent(argThat((Object event) -> event instanceof org.openfilz.dms.event.DocumentInsightsReadyEvent ready
+                && "contract".equals(ready.category()) && "Invoice F-2026-0042 from Globex.".equals(ready.summary())));
+        assertThat(modelCalls).hasValue(1);
+    }
+
+    @Test
     @DisplayName("permit-all: the model enriches as before — full row under provider:model")
     void permitAllIsUnchanged() {
         verdict = Verdict.permitAll();

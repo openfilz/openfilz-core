@@ -4,6 +4,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.response.DocumentInsightView;
+import org.openfilz.dms.dto.request.CreateFolderRequest;
+import org.openfilz.dms.dto.response.FolderResponse;
 import org.openfilz.dms.dto.response.InsightBackfillStatus;
 import org.openfilz.dms.dto.response.InsightFacets;
 import org.openfilz.dms.dto.response.Settings;
@@ -180,6 +182,52 @@ class DocumentInsightsTier2IT extends TestContainersBaseConfig {
 
         getWebTestClient().get().uri(INSIGHTS + "/backfill/" + UUID.randomUUID())
                 .exchange().expectStatus().isNotFound();
+    }
+
+    @Test
+    @DisplayName("a kind the user set survives the worker writing afterwards: the summary lands, the user's kind stays")
+    void userKindSurvivesALaterEnrichment() {
+        FolderResponse folder = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/folders")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(BodyInserters.fromValue(new CreateFolderRequest("user-kind-" + UUID.randomUUID(), null)))
+                .exchange().expectStatus().isCreated()
+                .expectBody(FolderResponse.class).returnResult().getResponseBody();
+        assertThat(folder).isNotNull();
+        MultipartBodyBuilder file = textFile("user-kind-" + UUID.randomUUID() + ".txt",
+                "Quarterly report for ACME: revenue grew 12% and the outlook is stable.");
+        file.part("parentFolderId", folder.id().toString());
+        UploadResponse uploaded = uploadDocument(file);
+        assertThat(awaitInsights(uploaded.id(), v -> "DONE".equals(v.status()) && v.tier() == 2).category()).isEqualTo("report");
+
+        // The user corrects the kind...
+        getWebTestClient().patch().uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_DOCUMENTS + "/" + uploaded.id() + "/insights")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(BodyInserters.fromValue("{\"category\":\"contract\"}"))
+                .exchange().expectStatus().is2xxSuccessful();
+
+        // ...and the worker writes after it (what an enrichment still running at upload time does): a forced backfill
+        InsightBackfillStatus started = getWebTestClient().post().uri(INSIGHTS + "/backfill")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(BodyInserters.fromValue("{\"force\":true,\"folderId\":\"" + folder.id() + "\"}"))
+                .exchange().expectStatus().isOk()
+                .expectBody(InsightBackfillStatus.class).returnResult().getResponseBody();
+        assertThat(started).isNotNull();
+        InsightBackfillStatus finished = null;
+        for (int attempt = 0; attempt < 120; attempt++) {
+            finished = getWebTestClient().get().uri(INSIGHTS + "/backfill/" + started.jobId())
+                    .exchange().expectStatus().isOk()
+                    .expectBody(InsightBackfillStatus.class).returnResult().getResponseBody();
+            if (finished != null && "DONE".equals(finished.status())) break;
+            sleep();
+        }
+        assertThat(finished).isNotNull();
+        assertThat(finished.status()).isEqualTo("DONE");
+        assertThat(finished.done()).as(finished.toString()).isEqualTo(1);
+
+        DocumentInsightView view = awaitInsights(uploaded.id(), v -> "DONE".equals(v.status()));
+        assertThat(view.category()).isEqualTo("contract");
+        assertThat(view.model()).isEqualTo("user");
+        assertThat(view.summary()).contains("short test summary");
     }
 
     @Test
