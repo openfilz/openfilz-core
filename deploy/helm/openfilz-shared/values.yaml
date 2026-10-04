@@ -130,7 +130,7 @@ gotenberg:
     - "--api-timeout=60s"
     - "--libreoffice-restart-after=100"
     - "--libreoffice-auto-start=true"
-    - "--log-level=info"
+    - "--log-level=warn"
 
 # =============================================================================
 # OnlyOffice document server (disabled by default — enable when a tenant needs
