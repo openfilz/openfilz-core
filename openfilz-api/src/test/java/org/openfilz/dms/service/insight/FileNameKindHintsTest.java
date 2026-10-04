@@ -74,7 +74,13 @@ class FileNameKindHintsTest {
                 java.util.Map.of());
         FileNameAwareCategoryClassifier classifier = new FileNameAwareCategoryClassifier(delegate, taxonomy);
 
-        assertThat(classifier.name()).isEqualTo("prototype:test");
+        assertThat(classifier.name()).isEqualTo("prototype:test+names");
+        assertThat(FileNameAwareCategoryClassifier.namedWithoutRules(classifier.name())).isFalse();
+        assertThat(FileNameAwareCategoryClassifier.namedWithoutRules("prototype:test")).isTrue();
+        assertThat(FileNameAwareCategoryClassifier.namedWithoutRules("learned:knn")).isTrue();
+        assertThat(FileNameAwareCategoryClassifier.namedWithoutRules("policy:prototype:test")).isFalse();
+        assertThat(FileNameAwareCategoryClassifier.namedWithoutRules("user")).isFalse();
+        assertThat(FileNameAwareCategoryClassifier.namedWithoutRules(null)).isFalse();
         assertThat(classifier.classify(null, "CNI recto.jpg", "").category()).isEqualTo("id-document");
         assertThat(classifier.classify(null, "Djibi.jpg", "").category()).isEqualTo(InsightResult.OTHER);
         assertThat(classifier.classify(null, "Djibi.jpg", "   ").category()).isEqualTo(InsightResult.OTHER);
