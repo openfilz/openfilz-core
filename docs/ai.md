@@ -530,7 +530,7 @@ folder holding documents of several kinds (at least `reorganization.split-min-fi
 files, the dominant kind below `split-min-purity` of them), proposes one sub-folder per kind of at
 least `split-min-group` files — an existing child that denotes the kind, else a new one named in
 the library's language from the same folder-name table — and the moves into them; loose files at
-the scope root are grouped the same way, `other` and uncategorised files stay. The answer is an
+the scope root are grouped the same way (a scope folder holding one kind and no sub-folder, or named after the kind, is left as it is), `other` and uncategorised files stay. The answer is an
 ordinary stored `ReorganizationPlanView` (proposed, reviewed, applied, undone like a model's plan;
 a view without an id means nothing needs splitting). Deterministic and instant; the model remains
 the tool for anything that is not "by kind" (by client, by project, by period).
