@@ -2,6 +2,7 @@ package org.openfilz.dms.config;
 
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.service.insight.CategoryClassifier;
+import org.openfilz.dms.service.insight.FileNameAwareCategoryClassifier;
 import org.openfilz.dms.service.insight.CategoryTaxonomy;
 import org.openfilz.dms.service.insight.DocumentInsightService;
 import org.openfilz.dms.service.insight.DocumentInsightStore;
@@ -51,7 +52,9 @@ public class DocumentInsightConfig {
      * the first tier-2 enrichment, never in {@code llm} mode; without an embedding model it exists
      * but every classification fails with a clear message. The descriptions it embeds are the
      * {@link CategoryTaxonomy}'s — an extension's taxonomy drives them, and the classifier
-     * re-embeds when the taxonomy's content changes (it caches by content fingerprint).
+     * re-embeds when the taxonomy's content changes (it caches by content fingerprint). Either way
+     * it sits behind {@link FileNameAwareCategoryClassifier}: a name that says its kind wins, a file
+     * with no text is not guessed from its name.
      */
     @Bean
     @Lazy
@@ -90,10 +93,11 @@ public class DocumentInsightConfig {
         if (mode == AiProperties.Insights.Classifier.Mode.LEARNED || mode == AiProperties.Insights.Classifier.Mode.AUTO) {
             DocumentInsightStore insightStore = insightStoreProvider.getIfAvailable();
             if (insightStore != null) {
-                return new LearnedCategoryClassifier(vectorStoreProvider, insightStore, prototype, config);
+                return new FileNameAwareCategoryClassifier(
+                        new LearnedCategoryClassifier(vectorStoreProvider, insightStore, prototype, config), taxonomy);
             }
             log.warn("openfilz.ai.insights.classifier.mode is {} but there is no insight store — the prototype descriptions classify", mode);
         }
-        return prototype;
+        return new FileNameAwareCategoryClassifier(prototype, taxonomy);
     }
 }
