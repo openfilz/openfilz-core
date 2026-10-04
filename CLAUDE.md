@@ -396,7 +396,7 @@ toggle `openfilz.ai.insights.active`; mirrored to OpenSearch `category`/`summary
 (`llm` | `prototype` | `learned` | `auto`) puts the `CategoryClassifier` seam in front of the model: `PrototypeCategoryClassifier`
 names the category by nearest embedded description (no chat model, category-only row); `LearnedCategoryClassifier` lets the
 nearest labelled documents vote with their stored category (the model's and the user's labels, `learned.learn-from`), descriptions
-as cold start — `PATCH /documents/{id}/insights {category}` is the user's correction that teaches it; `auto` keeps the local
+as cold start — `PATCH /documents/{id}/insights {category}` is the user's correction that teaches it (final: the worker's later writes keep it — `DocumentInsightStore` SQL guards on `model = 'user'`); `auto` keeps the local
 verdict above `min-confidence` and asks the model otherwise; `CategoryClassifierBenchmark` (test sources, `-Dbench.dir=`)
 measures all of them on a labelled corpus — see `docs/ai.md` §3c (real library: learned 84–88 %, descriptions 47 %). Reorganisation by kind without a model: `CategoryReorganizationPlanner`
 (`POST /ai/reorganization/by-kind`, tool `proposeReorganizationByKind`) splits mixed folders into one sub-folder per kind

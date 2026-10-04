@@ -376,14 +376,26 @@ public class AiDocumentInsightService implements DocumentInsightService {
                 .subscribeOn(scheduler)
                 .flatMap(entry -> {
                     String modelName = entry.getKey();
-                    return store.saveEnrichment(document.getId(), entry.getValue(), modelName, PROMPT_VERSION)
-                            // The row is committed: whoever waits on it (smart filing) may read it now.
-                            .doOnSuccess(v -> signal.complete(document.getId()))
-                            .then(mirrorToIndex(document.getId(), entry.getValue()))
-                            .then(finish(task, AiDocumentInsight.STATUS_DONE))
-                            .doOnSuccess(v -> publishReady(document, entry.getValue()))
-                            .doOnSuccess(v -> log.info("[INSIGHTS] '{}' ({}) -> {} [{}]", document.getName(), document.getId(),
-                                    entry.getValue().category(), modelName));
+                    InsightResult answer = entry.getValue();
+                    return store.saveEnrichment(document.getId(), answer, modelName, PROMPT_VERSION)
+                            .defaultIfEmpty(answer.category() == null ? InsightResult.OTHER : answer.category())
+                            .flatMap(storedCategory -> {
+                                // The row keeps a kind the user set meanwhile: the index and the event follow the row
+                                InsightResult stored = storedCategory.equals(answer.category()) ? answer
+                                        : new InsightResult(storedCategory, answer.summary(), answer.keywords(),
+                                                answer.language(), answer.entities());
+                                if (stored != answer) {
+                                    log.info("[INSIGHTS] '{}' ({}): kept the kind the user set ({}) over {}'s {}",
+                                            document.getName(), document.getId(), storedCategory, modelName, answer.category());
+                                }
+                                // The row is committed: whoever waits on it (smart filing) may read it now.
+                                signal.complete(document.getId());
+                                return mirrorToIndex(document.getId(), stored)
+                                        .then(finish(task, AiDocumentInsight.STATUS_DONE))
+                                        .doOnSuccess(v -> publishReady(document, stored))
+                                        .doOnSuccess(v -> log.info("[INSIGHTS] '{}' ({}) -> {} [{}]", document.getName(),
+                                                document.getId(), stored.category(), modelName));
+                            });
                 })
                 .onErrorResume(SkipEnrichment.class, skip -> {
                     log.info("[INSIGHTS] '{}' ({}) not enriched: {}", document.getName(), document.getId(), skip.getMessage());
