@@ -478,18 +478,23 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
         UploadResponse uploaded = getUploadResponse(builder, true);
         String id = uploaded.id().toString();
 
-        // The index entry exists once the async indexing has run: retry the mirror until it does
-        awaitIndexed("the insight mirror should reach the index entry", () -> indexService.updateIndexFields(uploaded.id(),
-                Map.of(OpenSearchDocumentKey.category.toString(), "invoice", OpenSearchDocumentKey.language.toString(), "fr"))
-                .block());
+        // Let the upload's async indexing finish first (the extracted content is its last write): its
+        // full-document index op replaces the entry, wiping a mirror written in between
+        awaitIndexed("the upload indexing should complete", () ->
+                Assertions.assertFalse(indexService.getContent(uploaded.id()).blockOptional().orElse("").isBlank()));
 
-        awaitIndexed("a category filter should find the mirrored document", () ->
-                Assertions.assertTrue(searchIdsByFacets("{ field: \"category\", value: \"invoice\" }").contains(id)));
-        // The hit carries the mirrored facets
-        Map<String, Object> hit = searchByFacets("{ field: \"category\", value: \"invoice\" }").stream()
-                .filter(d -> id.equals(String.valueOf(d.get("id")))).findFirst().orElseThrow();
-        Assertions.assertEquals("invoice", hit.get("category"));
-        Assertions.assertEquals("fr", hit.get("language"));
+        // The mirror is one partial update per field: write it and check the hit carries both facets,
+        // retrying the pair together so a late re-index cannot leave just one of them
+        awaitIndexed("the insight mirror should reach the index entry", () -> {
+            indexService.updateIndexFields(uploaded.id(),
+                    Map.of(OpenSearchDocumentKey.category.toString(), "invoice", OpenSearchDocumentKey.language.toString(), "fr"))
+                    .block();
+            Map<String, Object> hit = searchByFacets("{ field: \"category\", value: \"invoice\" }").stream()
+                    .filter(d -> id.equals(String.valueOf(d.get("id")))).findFirst().orElse(null);
+            Assertions.assertNotNull(hit, "a category filter should find the mirrored document");
+            Assertions.assertEquals("invoice", hit.get("category"));
+            Assertions.assertEquals("fr", hit.get("language"));
+        });
         Assertions.assertTrue(searchIdsByFacets("{ field: \"category\", value: \"Invoice, quote\" }").contains(id));
         Assertions.assertTrue(searchIdsByFacets("{ field: \"language\", value: \"fr,en\" }").contains(id));
         Assertions.assertTrue(searchIdsByFacets("{ field: \"category\", value: \"invoice\" }, { field: \"language\", value: \"fr\" }").contains(id));
