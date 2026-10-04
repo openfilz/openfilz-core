@@ -232,6 +232,41 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
         }
     }
 
+    /**
+     * Why the model may not decide where this document goes, or null when it may. The same
+     * {@link InsightsPolicy.Verdict} the enrichment worker obeys: a document whose text no model may
+     * read, or whose kind is kept away from the model, is never sent to it here either. With kinds
+     * kept away and the document's kind unknown, nothing proves it is not one of them: no call.
+     * A failing lookup fails closed.
+     */
+    String modelBarredReason(Document document, String category) {
+        ObjectProvider<InsightsPolicy> provider = insightsPolicyProvider;
+        InsightsPolicy policy = provider == null ? null : provider.getIfAvailable();
+        if (policy == null) {
+            return null;
+        }
+        InsightsPolicy.Verdict verdict;
+        try {
+            verdict = policy.forDocument(document).defaultIfEmpty(InsightsPolicy.Verdict.permitAll()).block();
+        } catch (Exception e) {
+            log.warn("[AUTOFILE] policy lookup failed for {} — not asking the model: {}", document.getId(), e.toString());
+            return "the model was not asked: the policy lookup failed";
+        }
+        if (verdict == null) {
+            return null;
+        }
+        if (!verdict.modelAllowed()) {
+            return "the policy keeps this document away from the model";
+        }
+        if (verdict.blocks(category)) {
+            return "its kind (" + category + ") is kept away from the model by the policy";
+        }
+        if (!verdict.blockedCategories().isEmpty() && (category == null || category.isBlank())) {
+            return "its kind is unknown and the policy keeps some kinds away from the model";
+        }
+        return null;
+    }
+
     private record Task(UUID documentId, Caller caller, boolean allowNewFolders, UUID jobId) {
     }
 
@@ -588,7 +623,13 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
             }
         }
 
-        // Stage 2 — the model
+        // Stage 2 — the model, unless the insights policy keeps this document's text away from it
+        String barred = modelBarredReason(document, category);
+        if (barred != null) {
+            log.debug("[AUTOFILE] '{}' ({}): no model call — {}", document.getName(), documentId, barred);
+            return outcome(documentId, document.getName(), FilingOutcome.SKIPPED, document.getParentId(), from,
+                    FilingOutcome.STAGE_MODEL, null, barred, null);
+        }
         String raw;
         try {
             raw = askModel(document, scopeRoot, excluded, insight, text, scan.unfiledSiblings(), caller, allowNewFolders);

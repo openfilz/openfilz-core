@@ -567,7 +567,10 @@ puts a `CategoryClassifier` seam in front of it:
 
 **The user teaches it** with `PATCH /api/v1/documents/{id}/insights {"category": "…"}` (one of the
 deployment's categories or `other`; modify access required): the row becomes a tier-2 `DONE` row
-written by `user`, never overwritten by a non-forced backfill, mirrored to the index, and from then
+written by `user`, mirrored to the index, and **final**: no later write of the enrichment worker replaces
+it — not the model's or a classifier's kind (an enrichment still running when the user corrected the kind,
+or a forced backfill, still fills in the summary, keywords and entities but keeps the user's kind, and
+mirrors that kind to the index and the ready event), not a PENDING / FAILED / SKIPPED status. From then
 on it votes for its neighbours in `learned` / `auto` mode and counts for the by-kind reorganisation
 and the filing rule like a model's label. In the web app the category chip of the details panel's
 Insights section is the editor: it opens a select of the deployment's categories (served as
