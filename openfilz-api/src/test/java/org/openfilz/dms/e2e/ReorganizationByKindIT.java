@@ -174,6 +174,62 @@ class ReorganizationByKindIT extends TestContainersBaseConfig {
         assertThat(plan.items()).hasSize(6);
     }
 
+    @Test
+    @Order(3)
+    @DisplayName("a scope folder holding one kind only is their home: no sub-folder inside it; a small mixed folder is too small to split")
+    void oneKindScopeFolderIsLeftAlone() {
+        FolderResponse scope = createFolder("Invoices-" + UUID.randomUUID().toString().substring(0, 8), null);
+        List<UUID> invoices = new ArrayList<>();
+        for (int i = 0; i < 4; i++) {
+            invoices.add(upload("invoice-" + i + ".txt", "Invoice F-2026-09" + i + " from Initech, amount due.", scope.id()).id());
+        }
+        for (UUID id : invoices) awaitTier2(id);
+
+        ReorganizationPlanView plan = getWebTestClient().post().uri(REORG + "/by-kind")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(BodyInserters.fromValue("{\"rootFolderId\":\"" + scope.id() + "\"}"))
+                .exchange().expectStatus().isOk().expectBody(ReorganizationPlanView.class).returnResult().getResponseBody();
+        assertThat(plan).isNotNull();
+        assertThat(plan.id()).as("no '" + scope.name() + "/Invoices': " + plan).isNull();
+        assertThat(plan.rationale()).isEqualTo("Every folder of this scope already holds documents of one kind.");
+
+        FolderResponse small = createFolder("Small-" + UUID.randomUUID().toString().substring(0, 8), null);
+        List<UUID> mixed = List.of(
+                upload("invoice.txt", "Invoice F-2026-100 from Initech, amount due.", small.id()).id(),
+                upload("report.txt", "Weekly report of Initech, figures.", small.id()).id());
+        for (UUID id : mixed) awaitTier2(id);
+        ReorganizationPlanView none = getWebTestClient().post().uri(REORG + "/by-kind")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(BodyInserters.fromValue("{\"rootFolderId\":\"" + small.id() + "\"}"))
+                .exchange().expectStatus().isOk().expectBody(ReorganizationPlanView.class).returnResult().getResponseBody();
+        assertThat(none).isNotNull();
+        assertThat(none.id()).isNull();
+        assertThat(none.rationale()).isEqualTo("Nothing to split in this scope: 1 folder holds fewer than 4 classified documents, too few to split.");
+
+        // Loose files of one kind beside sub-folders still get their folder — unless the scope folder is named after the kind
+        for (String name : List.of("Client-" + UUID.randomUUID().toString().substring(0, 8), "Invoices")) {
+            FolderResponse holder = createFolder("Holder-" + UUID.randomUUID().toString().substring(0, 8), null);
+            FolderResponse client = createFolder(name, holder.id());
+            createFolder("Misc", client.id());
+            List<UUID> loose = new ArrayList<>();
+            for (int i = 0; i < 4; i++) {
+                loose.add(upload("invoice-" + i + ".txt", "Invoice F-2026-11" + i + " from Hooli, amount due.", client.id()).id());
+            }
+            for (UUID id : loose) awaitTier2(id);
+            ReorganizationPlanView view = getWebTestClient().post().uri(REORG + "/by-kind")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(BodyInserters.fromValue("{\"rootFolderId\":\"" + client.id() + "\"}"))
+                    .exchange().expectStatus().isOk().expectBody(ReorganizationPlanView.class).returnResult().getResponseBody();
+            assertThat(view).isNotNull();
+            if ("Invoices".equals(name)) {
+                assertThat(view.id()).as("a folder named after the kind is its home: " + view).isNull();
+            } else {
+                assertThat(view.id()).as(String.valueOf(view)).isNotNull();
+                assertThat(view.items()).hasSize(4).allSatisfy(item -> assertThat(item.targetPath()).endsWith("/" + name + "/Invoices"));
+            }
+        }
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────
 
     private void awaitTier2(UUID documentId) {
