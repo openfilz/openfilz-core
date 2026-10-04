@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.service.quota.StorageQuotaService;
 import org.openfilz.dms.config.TusProperties;
+import org.openfilz.dms.dto.Checksum;
 import org.openfilz.dms.dto.TusUploadMetadata;
 import org.openfilz.dms.dto.audit.UploadAudit;
 import org.openfilz.dms.dto.request.TusFinalizeRequest;
@@ -17,12 +18,16 @@ import org.openfilz.dms.enums.AuditAction;
 import org.openfilz.dms.exception.*;
 import org.openfilz.dms.repository.DocumentDAO;
 import org.openfilz.dms.service.AuditService;
+import org.openfilz.dms.service.ChecksumService;
+import org.openfilz.dms.service.DocumentIntegrityService;
 import org.openfilz.dms.service.MetadataPostProcessor;
 import org.openfilz.dms.service.StorageService;
 import org.openfilz.dms.service.TusUploadService;
 import org.openfilz.dms.utils.ContentTypeMapper;
 import org.openfilz.dms.utils.JsonUtils;
 import org.openfilz.dms.utils.UserInfoService;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
@@ -40,6 +45,7 @@ import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.openfilz.dms.enums.DocumentType.FILE;
@@ -69,6 +75,16 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
     private final MetadataPostProcessor metadataPostProcessor;
     private final TransactionalOperator tx;
     private final ObjectMapper objectMapper;
+    /**
+     * With checksums on, a finished upload is fingerprinted and entered in the integrity ledger (C2) like
+     * every other upload path — without it a large file sent in pieces had no SHA-256, which the desktop
+     * sync uses as the content's identity (ETag / If-Match).
+     */
+    private final ObjectProvider<ChecksumService> checksumServiceProvider;
+    private final DocumentIntegrityService documentIntegrityService;
+
+    @Value("${openfilz.calculate-checksum:false}")
+    private boolean calculateChecksum;
 
     @Override
     public Mono<Void> validateUploadCreation(Long uploadLength, String filename, UUID parentFolderId, Boolean allowDuplicateFileNames) {
@@ -246,16 +262,18 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
         String filename = request.filename();
         String contentType = getContentType(filename);
 
-        return getConnectedUserEmail()
-                .flatMap(username -> {
+        return Mono.zip(getConnectedUserEmail(), checksum(storagePath, request.metadata()))
+                .flatMap(userAndChecksum -> {
+                    String username = userAndChecksum.getT1();
+                    Optional<Checksum> checksum = userAndChecksum.getT2();
                     Document document = Document.builder()
                             .name(filename)
                             .type(FILE)
                             .contentType(contentType)
                             .size(meta.length())
                             .parentId(request.parentFolderId())
-                            .storagePath(storagePath)
-                            .metadata(jsonUtils.toJson(request.metadata()))
+                            .storagePath(checksum.map(Checksum::storagePath).orElse(storagePath))
+                            .metadata(jsonUtils.toJson(checksum.map(Checksum::metadataWithChecksum).orElse(request.metadata())))
                             .createdAt(OffsetDateTime.now())
                             .updatedAt(OffsetDateTime.now())
                             .createdBy(username)
@@ -263,6 +281,11 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
                             .build();
 
                     return documentDAO.create(document)
+                            // The ledger entry lands in the same transaction as the document row.
+                            .flatMap(savedDoc -> checksum
+                                    .map(c -> documentIntegrityService.record(savedDoc.getId(), savedDoc.getStoragePath(), null, c.hash())
+                                            .thenReturn(savedDoc))
+                                    .orElseGet(() -> Mono.just(savedDoc)))
                             .flatMap(savedDoc -> storageService.getLatestVersionId(savedDoc.getStoragePath())
                                     .map(versionId -> new UploadAudit(savedDoc.getName(), request.parentFolderId(), request.metadata(), versionId))
                                     .defaultIfEmpty(new UploadAudit(savedDoc.getName(), request.parentFolderId(), request.metadata()))
@@ -278,6 +301,15 @@ public class TusUploadServiceImpl implements TusUploadService, UserInfoService {
                                     savedDoc.getSize()
                             ));
                 });
+    }
+
+    /** The finished file's fingerprint when checksums are on; empty otherwise. */
+    private Mono<Optional<Checksum>> checksum(String storagePath, Map<String, Object> metadata) {
+        ChecksumService checksumService = calculateChecksum ? checksumServiceProvider.getIfAvailable() : null;
+        if (checksumService == null) {
+            return Mono.just(Optional.empty());
+        }
+        return checksumService.calculateChecksum(storagePath, metadata).map(Optional::of);
     }
 
     private void postProcessDocument(Document document) {

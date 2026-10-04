@@ -37,13 +37,15 @@ class TusUploadServiceImplTest {
     @Mock private MetadataPostProcessor metadataPostProcessor;
     @Mock private TransactionalOperator tx;
     @Mock private ObjectMapper objectMapper;
+    @Mock private org.springframework.beans.factory.ObjectProvider<org.openfilz.dms.service.ChecksumService> checksumServiceProvider;
+    @Mock private org.openfilz.dms.service.DocumentIntegrityService documentIntegrityService;
 
     private TusUploadServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new TusUploadServiceImpl(tusProperties, storageQuotaService, storageService,
-                documentDAO, auditService, jsonUtils, metadataPostProcessor, tx, objectMapper);
+                documentDAO, auditService, jsonUtils, metadataPostProcessor, tx, objectMapper, checksumServiceProvider, documentIntegrityService);
     }
 
     @SuppressWarnings("unchecked")
