@@ -21,11 +21,14 @@ import reactor.core.publisher.Mono;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -39,8 +42,12 @@ import java.util.UUID;
  * What is left alone: a folder whose dominant kind holds {@code split-min-purity} of its
  * categorised files (a home already), kinds with fewer than {@code split-min-group} files,
  * folders with fewer than {@code split-min-files} categorised files, files of kind
- * {@code other} or without a category. The scope root itself is treated like any folder: loose
- * files of one kind at the root get their folder.
+ * {@code other} or without a category, and a folder whose files are all of one kind — including
+ * the scope folder itself when it holds nothing else or is named after that kind ({@code CV}
+ * never gets {@code CV/CVs}). A scope folder with sub-folders and loose files of one kind, like
+ * the root level, gets a folder for them. Each folder left alone is counted under its
+ * {@link Skip} reason, so a caller can say why nothing moved. Only what the caller may read
+ * ({@link AiAccessPolicy}) is counted or proposed.
  */
 @Slf4j
 @Service
@@ -54,14 +61,17 @@ public class CategoryReorganizationPlanner {
     private final DocumentInsightStore insightStore;
     private final ReorganizationPlanService planService;
     private final AiProperties aiProperties;
+    private final AiAccessPolicy accessPolicy;
     private final CategoryFolderNames folderNames;
 
     public CategoryReorganizationPlanner(DocumentRepository documentRepository, DocumentInsightStore insightStore,
-                                         ReorganizationPlanService planService, AiProperties aiProperties) {
+                                         ReorganizationPlanService planService, AiProperties aiProperties,
+                                         AiAccessPolicy accessPolicy) {
         this.documentRepository = documentRepository;
         this.insightStore = insightStore;
         this.planService = planService;
         this.aiProperties = aiProperties;
+        this.accessPolicy = accessPolicy;
         this.folderNames = new CategoryFolderNames(aiProperties.getAutoFile().getFolderNames());
     }
 
@@ -69,8 +79,26 @@ public class CategoryReorganizationPlanner {
     record ScopeFolder(UUID id, String relativePath, List<Document> files, List<Document> folders) {
     }
 
-    /** What the planner found: the request to propose (null when nothing to do) and a human summary. */
-    public record Draft(ReorganizationPlanRequest request, int mixedFolders, int moves, List<String> newFolders, String language) {
+    /** Why a folder holding files was left as it is. */
+    public enum Skip {
+        /** Its classified files are all of one kind: it is their home already. */
+        ONE_KIND,
+        /** One kind holds at least {@code split-min-purity} of its classified files; the others are odd ones out. */
+        MOSTLY_ONE_KIND,
+        /** Fewer than {@code split-min-files} classified files: too few to be worth sub-folders. */
+        TOO_FEW_FILES,
+        /** Several kinds, none with {@code split-min-group} files. */
+        KINDS_TOO_SMALL,
+        /** None of its files has a kind (other than {@code other}). */
+        NO_KIND
+    }
+
+    /**
+     * What the planner found: the request to propose (null when nothing to do), a human summary,
+     * and how many folders holding files were left alone, per reason.
+     */
+    public record Draft(ReorganizationPlanRequest request, int mixedFolders, int moves, List<String> newFolders, String language,
+                        Map<Skip, Integer> skipped) {
         public boolean isEmpty() {
             return request == null || request.moves().isEmpty();
         }
@@ -81,7 +109,7 @@ public class CategoryReorganizationPlanner {
         Draft draft = draft(rootFolderId, caller);
         if (draft.isEmpty()) {
             return new ReorganizationPlanView(null, ReorganizationPlanService.STATUS_PROPOSED, rootFolderId,
-                    planService.pathOf(rootFolderId, caller), "Every folder of this scope already holds documents of one kind.",
+                    planService.pathOf(rootFolderId, caller), nothingToSplit(draft.skipped(), "this scope"),
                     List.of(), List.of(), 0, 0, caller.email(), null, null, List.of());
         }
         ReorganizationPlanView view = planService.propose(draft.request(), conversationId, caller);
@@ -93,37 +121,38 @@ public class CategoryReorganizationPlanner {
     /** The plan as a request, computed and not stored. */
     public Draft draft(UUID rootFolderId, Caller caller) {
         AiProperties.Reorganization config = aiProperties.getReorganization();
-        List<ScopeFolder> scope = walk(rootFolderId, caller);
+        List<ScopeFolder> scope = visibleTo(caller, walk(rootFolderId, caller));
         List<String> allFolderNames = new ArrayList<>();
         scope.forEach(f -> f.folders().forEach(d -> allFolderNames.add(d.getName())));
         String language = folderNames.languageOf(allFolderNames)
                 .orElse(defaultLanguage());
 
+        // A scope folder named after a kind ("CV", "Factures") is the home of that kind
+        Optional<String> rootKind = rootFolderId == null ? Optional.empty()
+                : Optional.ofNullable(blockWithAuth(documentRepository.findById(rootFolderId), caller))
+                        .flatMap(root -> folderNames.categoryOf(root.getName()));
+
         List<Move> moves = new ArrayList<>();
         List<String> created = new ArrayList<>();
+        Map<Skip, Integer> skipped = new EnumMap<>(Skip.class);
         int mixed = 0;
         Map<UUID, String> categories = categoriesOf(scope.stream().flatMap(f -> f.files().stream()).map(Document::getId).toList(), caller);
         for (ScopeFolder folder : scope) {
+            if (folder.files().isEmpty()) continue;
             Map<String, List<Document>> byKind = new LinkedHashMap<>();
             for (Document file : folder.files()) {
                 String kind = categories.get(file.getId());
                 if (kind == null || InsightResult.OTHER.equals(kind)) continue;
                 byKind.computeIfAbsent(kind, k -> new ArrayList<>()).add(file);
             }
-            int categorised = byKind.values().stream().mapToInt(List::size).sum();
-            if (categorised < Math.max(1, config.getSplitMinFiles())) continue;
-            int dominant = byKind.values().stream().mapToInt(List::size).max().orElse(0);
-            if (dominant >= config.getSplitMinPurity() * categorised && byKind.size() > 1) {
-                // A home already: the odd files out are not worth a folder each
+            Skip skip = skipOf(folder, byKind, config, rootKind);
+            if (skip != null) {
+                skipped.merge(skip, 1, Integer::sum);
                 continue;
             }
             List<String> kinds = byKind.entrySet().stream()
                     .filter(e -> e.getValue().size() >= Math.max(1, config.getSplitMinGroup()))
                     .map(Map.Entry::getKey).toList();
-            if (kinds.isEmpty() || (kinds.size() == 1 && byKind.size() == 1 && !folder.relativePath().isEmpty())) {
-                // One kind only, in its own folder: nothing to split
-                continue;
-            }
             mixed++;
             for (String kind : kinds) {
                 Optional<String> target = targetFor(folder, kind, language);
@@ -137,14 +166,69 @@ public class CategoryReorganizationPlanner {
             }
         }
         if (moves.isEmpty()) {
-            return new Draft(null, 0, 0, List.of(), language);
+            return new Draft(null, 0, 0, List.of(), language, skipped);
         }
         String rationale = "Split " + mixed + " folder" + (mixed == 1 ? "" : "s") + " holding documents of several kinds into one "
                 + "sub-folder per kind, named in " + language + " like the existing folders: " + String.join(", ", created.isEmpty()
                 ? List.of("existing folders reused") : created) + ".";
         ReorganizationPlanRequest request = new ReorganizationPlanRequest(
                 rootFolderId == null ? null : rootFolderId.toString(), moves, created, rationale);
-        return new Draft(request, mixed, moves.size(), created, language);
+        return new Draft(request, mixed, moves.size(), created, language, skipped);
+    }
+
+    /** Why a folder holding files is left alone, or null when its kinds are worth a sub-folder each. */
+    private static Skip skipOf(ScopeFolder folder, Map<String, List<Document>> byKind, AiProperties.Reorganization config,
+                               Optional<String> rootKind) {
+        int categorised = byKind.values().stream().mapToInt(List::size).sum();
+        if (categorised == 0) {
+            return Skip.NO_KIND;
+        }
+        if (byKind.size() == 1 && folder.id() != null) {
+            // One kind in its own folder is at home. The scope folder too when it holds nothing else
+            // or is named after that kind; with sub-folders beside them, its loose files get their folder
+            boolean scopeFolder = folder.relativePath().isEmpty();
+            String kind = byKind.keySet().iterator().next();
+            if (!scopeFolder || folder.folders().isEmpty() || rootKind.filter(kind::equalsIgnoreCase).isPresent()) {
+                return Skip.ONE_KIND;
+            }
+        }
+        if (categorised < Math.max(1, config.getSplitMinFiles())) {
+            return Skip.TOO_FEW_FILES;
+        }
+        int dominant = byKind.values().stream().mapToInt(List::size).max().orElse(0);
+        if (byKind.size() > 1 && dominant >= config.getSplitMinPurity() * categorised) {
+            // A home already: the odd files out are not worth a folder each
+            return Skip.MOSTLY_ONE_KIND;
+        }
+        boolean anyGroup = byKind.values().stream().anyMatch(files -> files.size() >= Math.max(1, config.getSplitMinGroup()));
+        return anyGroup ? null : Skip.KINDS_TOO_SMALL;
+    }
+
+    /**
+     * Why nothing was proposed, in plain English (the model and the logs read it; a UI should
+     * translate {@link Draft#skipped()} instead).
+     *
+     * @param scope how to name the scope, e.g. "this scope" or "the 4 selected folders"
+     */
+    public String nothingToSplit(Map<Skip, Integer> skipped, String scope) {
+        if (skipped == null || skipped.isEmpty()) {
+            return "There is no document to sort in " + scope + ".";
+        }
+        if (skipped.size() == 1 && skipped.containsKey(Skip.ONE_KIND)) {
+            return "Every folder of " + scope + " already holds documents of one kind.";
+        }
+        AiProperties.Reorganization config = aiProperties.getReorganization();
+        List<String> parts = new ArrayList<>();
+        skipped.forEach((skip, count) -> parts.add(count + " folder" + (count == 1 ? " " : "s ") + switch (skip) {
+            case ONE_KIND -> (count == 1 ? "holds" : "hold") + " documents of one kind already";
+            case MOSTLY_ONE_KIND -> (count == 1 ? "holds" : "hold") + " mostly documents of one kind";
+            case TOO_FEW_FILES -> (count == 1 ? "holds" : "hold") + " fewer than " + Math.max(1, config.getSplitMinFiles())
+                    + " classified documents, too few to split";
+            case KINDS_TOO_SMALL -> (count == 1 ? "mixes" : "mix") + " kinds with fewer than " + Math.max(1, config.getSplitMinGroup())
+                    + " documents of each";
+            case NO_KIND -> (count == 1 ? "holds" : "hold") + " documents without a kind";
+        }));
+        return "Nothing to split in " + scope + ": " + String.join("; ", parts) + ".";
     }
 
     /** An existing child folder denoting the kind (any language) wins over a new one named in the library's language. */
@@ -190,6 +274,35 @@ public class CategoryReorganizationPlanner {
     }
 
     private static final UUID NULL_ROOT = new UUID(0, 0);
+
+    /**
+     * The scope as the caller may see it: a walk reads the tree as it is stored, so sub-folders and
+     * files the caller cannot read are dropped before anything is counted or proposed. The scope
+     * root stays (the caller named it; its files are filtered like the others).
+     */
+    private List<ScopeFolder> visibleTo(Caller caller, List<ScopeFolder> scope) {
+        if (accessPolicy.permitAll()) {
+            return scope;
+        }
+        List<UUID> ids = new ArrayList<>();
+        for (ScopeFolder folder : scope) {
+            if (folder.id() != null && !folder.relativePath().isEmpty()) ids.add(folder.id());
+            folder.files().forEach(file -> ids.add(file.getId()));
+        }
+        Set<UUID> readable = new HashSet<>();
+        for (int from = 0; from < ids.size(); from += 500) {
+            Set<UUID> chunk = blockWithAuth(accessPolicy.readable(ids.subList(from, Math.min(ids.size(), from + 500)), caller.email()), caller);
+            if (chunk != null) readable.addAll(chunk);
+        }
+        List<ScopeFolder> out = new ArrayList<>();
+        for (ScopeFolder folder : scope) {
+            if (!folder.relativePath().isEmpty() && !readable.contains(folder.id())) continue;
+            out.add(new ScopeFolder(folder.id(), folder.relativePath(),
+                    folder.files().stream().filter(file -> readable.contains(file.getId())).toList(),
+                    folder.folders().stream().filter(sub -> readable.contains(sub.getId())).toList()));
+        }
+        return out;
+    }
 
     private Map<UUID, String> categoriesOf(List<UUID> ids, Caller caller) {
         if (ids.isEmpty()) {
