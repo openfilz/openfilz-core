@@ -30,7 +30,9 @@ public class WebFluxConfig implements WebFluxConfigurer {
 
         configurer.defaultCodecs().jacksonJsonEncoder(new JacksonJsonEncoder(objectMapper));
         configurer.defaultCodecs().jacksonJsonDecoder(new JacksonJsonDecoder(objectMapper));
-        
+        // Registered before the default ResourceHttpMessageWriter: Range on a stored-object stream → full 200, not 416
+        configurer.customCodecs().register(new OneShotStreamResourceWriter());
+
         log.info("WebFlux codecs configured with custom ObjectMapper");
     }
 
