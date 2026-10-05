@@ -10,7 +10,9 @@ import org.openfilz.dms.dto.response.UploadResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.http.codec.json.JacksonJsonEncoder;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -21,8 +23,13 @@ import org.springframework.web.reactive.function.BodyInserters;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.test.StepVerifier;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.Base64;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
@@ -89,6 +96,43 @@ public class DocumentIntegrityLedgerIT extends TestContainersBaseConfig {
         assertThat(entry.hash()).isNotBlank().isEqualTo(metadataChecksum(doc));
         assertThat(entry.recordedAt()).isNotNull();
         assertThat(entry.storagePath()).isNotBlank();
+    }
+
+    /**
+     * A file sent in resumable pieces (TUS) is fingerprinted and recorded like any other upload. It was not:
+     * finalize created the document with no SHA-256 at all — no ledger entry, and nothing for the desktop
+     * sync, which uses the hash as the content's identity.
+     */
+    @Test
+    void aFileSentInResumablePiecesIsFingerprintedAndRecorded() throws Exception {
+        byte[] content = ("sent in pieces " + UUID.randomUUID()).repeat(2000).getBytes(StandardCharsets.UTF_8);
+        String name = "tus-" + UUID.randomUUID() + ".txt";
+        String location = webTestClient.post().uri(RestApiVersion.API_PREFIX + "/tus")
+                .header("Tus-Resumable", "1.0.0")
+                .header("Upload-Length", Integer.toString(content.length))
+                .header("Upload-Metadata", "filename " + Base64.getEncoder().encodeToString(name.getBytes(StandardCharsets.UTF_8)))
+                .exchange().expectStatus().isCreated()
+                .returnResult(Void.class).getResponseHeaders().getFirst(HttpHeaders.LOCATION);
+        String uploadId = location.substring(location.lastIndexOf('/') + 1);
+        int half = content.length / 2;
+        for (int[] piece : new int[][]{{0, half}, {half, content.length}}) {
+            webTestClient.patch().uri(RestApiVersion.API_PREFIX + "/tus/{id}", uploadId)
+                    .header("Tus-Resumable", "1.0.0")
+                    .header("Upload-Offset", Integer.toString(piece[0]))
+                    .contentType(MediaType.parseMediaType("application/offset+octet-stream"))
+                    .bodyValue(java.util.Arrays.copyOfRange(content, piece[0], piece[1]))
+                    .exchange().expectStatus().isNoContent();
+        }
+        UploadResponse doc = webTestClient.post().uri(RestApiVersion.API_PREFIX + "/tus/{id}/finalize", uploadId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of("filename", name))
+                .exchange().expectStatus().isCreated()
+                .expectBody(UploadResponse.class).returnResult().getResponseBody();
+        Assertions.assertNotNull(doc);
+
+        String expected = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
+        assertThat(metadataChecksum(doc)).isEqualTo(expected);
+        assertThat(ledger(doc)).hasSize(1).first().extracting(DocumentIntegrityRecord::hash).isEqualTo(expected);
     }
 
     /**

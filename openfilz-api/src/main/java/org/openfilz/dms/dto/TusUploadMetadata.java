@@ -16,7 +16,13 @@ public record TusUploadMetadata(
         Instant createdAt,
         Instant expiresAt,
         Map<String, String> metadata,
-        String email
+        String email,
+        /**
+         * Where finalize moves the finished file, written down before the move: a finalize cut
+         * after it (a timeout, a restart) is finished by the next one from the file already there.
+         * Null until a finalize started.
+         */
+        String finalStoragePath
 ) {
     /**
      * Create a new upload metadata with initial values.
@@ -31,7 +37,8 @@ public record TusUploadMetadata(
                 now,
                 now.plusMillis(expirationMs),
                 metadata,
-                email
+                email,
+                null
         );
     }
 
@@ -39,7 +46,14 @@ public record TusUploadMetadata(
      * Create a copy with updated offset.
      */
     public TusUploadMetadata withOffset(Long newOffset) {
-        return new TusUploadMetadata(uploadId, length, newOffset, createdAt, expiresAt, metadata, email);
+        return new TusUploadMetadata(uploadId, length, newOffset, createdAt, expiresAt, metadata, email, finalStoragePath);
+    }
+
+    /**
+     * Create a copy that says where finalize moves the file.
+     */
+    public TusUploadMetadata withFinalStoragePath(String storagePath) {
+        return new TusUploadMetadata(uploadId, length, offset, createdAt, expiresAt, metadata, email, storagePath);
     }
 
     /**

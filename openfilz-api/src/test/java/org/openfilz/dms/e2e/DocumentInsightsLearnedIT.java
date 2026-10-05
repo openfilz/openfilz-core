@@ -90,7 +90,7 @@ class DocumentInsightsLearnedIT extends TestContainersBaseConfig {
                 "Relevé de compte Banque Zorg 99: solde, opérations du mois, virements et prélèvements.");
         DocumentInsightView learned = awaitInsights(next.id(), v -> "DONE".equals(v.status()) && v.tier() == 2);
         assertThat(learned.category()).as(String.valueOf(learned)).isEqualTo("other");
-        assertThat(learned.model()).isEqualTo("learned:knn");
+        assertThat(learned.model()).isEqualTo("learned:knn+names");
         assertThat(learned.summary()).isNull();
 
         // A kind the deployment does not know is refused; a document that is not visible is 404

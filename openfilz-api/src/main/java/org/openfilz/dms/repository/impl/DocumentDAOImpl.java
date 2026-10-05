@@ -355,6 +355,11 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
     }
 
     @Override
+    public Mono<Boolean> existsByStoragePath(String storagePath) {
+        return documentRepository.existsByStoragePath(storagePath);
+    }
+
+    @Override
     public Mono<Boolean> existsByIdAndType(UUID id, DocumentType type, AccessType accessType) {
         return documentRepository.existsByIdAndTypeAndActive(id, type, true);
     }

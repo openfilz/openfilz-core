@@ -70,11 +70,13 @@ public class AiReorganizationController implements UserInfoService {
     @PostMapping(value = "/by-kind", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Propose a reorganisation by kind of document — no model involved",
             description = "Every folder of the scope holding documents of several kinds (their insight category) gets one "
-                    + "sub-folder per kind, named like the existing folders (Invoices / Factures…), and the files move there. "
+                    + "sub-folder per kind, named like the existing folders (Invoices / Factures…) or else in the request's "
+                    + "language, and the files move there. "
                     + "The answer is a stored plan to review and apply; a plan without an id means nothing needs splitting.")
     public Mono<ReorganizationPlanView> proposeByKind(@RequestBody(required = false) ReorganizationByKindRequest request) {
         UUID root = request == null ? null : request.rootFolderId();
-        return withCaller((service, caller) -> byKindPlanner.getObject().propose(root, null, caller));
+        String language = request == null ? null : request.language();
+        return withCaller((service, caller) -> byKindPlanner.getObject().propose(root, null, caller, language));
     }
 
     @GetMapping(value = "/{planId}", produces = MediaType.APPLICATION_JSON_VALUE)

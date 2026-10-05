@@ -106,12 +106,12 @@ class TransformersEmbeddingIT extends TestContainersBaseConfig {
         assertThat(model.getClass().getSimpleName()).isEqualTo("TransformersEmbeddingModel");
         assertThat(model.dimensions()).isEqualTo(768);
 
-        UploadResponse invoice = upload("facture-" + UUID.randomUUID() + ".txt",
+        UploadResponse invoice = upload("doc-" + UUID.randomUUID() + ".txt",
                 "INVOICE No F-2026-0042 from ACME SA to Globex. Description: consulting services. "
                         + "Subtotal 1 200.00 EUR, VAT 20 % 240.00 EUR, total due 1 440.00 EUR. Payment terms: 30 days net, bank transfer.");
         DocumentInsightView view = awaitInsights(invoice.id(), v -> "DONE".equals(v.status()) && v.tier() == 2);
         assertThat(view.category()).as(String.valueOf(view)).isEqualTo("invoice");
-        assertThat(view.model()).isEqualTo("prototype:nomic-embed-text-v1.5");
+        assertThat(view.model()).isEqualTo("prototype:nomic-embed-text-v1.5+names");
 
         // The chunks went through the same model: real 768-dimensional vectors, findable by meaning
         List<org.springframework.ai.document.Document> chunks = awaitChunks(invoice.id());

@@ -29,6 +29,9 @@ public interface DocumentDAO {
 
     Mono<Boolean> existsByNameAndParentId(String name, UUID parentId);
 
+    /** Whether a document — in the recycle bin or not — holds the file stored at this path. */
+    Mono<Boolean> existsByStoragePath(String storagePath);
+
     Mono<Boolean> existsByIdAndType(UUID id, DocumentType type, AccessType accessType);
 
     Mono<Document> getFolderToDelete(UUID folderId);

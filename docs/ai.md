@@ -549,7 +549,7 @@ puts a `CategoryClassifier` seam in front of it:
   name first, optional task `prefix` — nomic models expect `classification: `) is embedded with
   the same model, and the nearest description wins. One embedding call, tens of milliseconds, no
   chat model needed. The row is category-only (no summary, keywords, language or entities), its
-  `model` column reads `prototype:<embedding model>`, the daily cap does not apply. The confidence
+  `model` column reads `prototype:<embedding model>+names`, the daily cap does not apply. The confidence
   is the softmax share of the best similarity at `classifier.temperature`; below
   `classifier.min-similarity` (off by default) the answer is `other`;
 - `learned` — `LearnedCategoryClassifier`: the library teaches its own classifier. The document's
@@ -560,7 +560,7 @@ puts a `CategoryClassifier` seam in front of it:
   the descriptions' are left out so a wrong guess does not breed). With fewer than
   `learned.min-neighbours` labelled neighbours (a young library, an unusual document) or a winning
   share below `learned.min-confidence`, the prototype descriptions answer as the cold start. Rows
-  read `learned:knn`. One vector query plus one read, no model;
+  read `learned:knn+names`. One vector query plus one read, no model;
 - `auto` — the learned classifier (descriptions as cold start) when its confidence reaches
   `classifier.min-confidence` (0.5), the model for the rest (and the local verdict again once the
   daily model cap is spent).

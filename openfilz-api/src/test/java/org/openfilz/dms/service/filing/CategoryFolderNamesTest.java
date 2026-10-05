@@ -22,6 +22,11 @@ class CategoryFolderNamesTest {
         assertThat(names.nameOf("Invoice", "FR-fr")).as("case and region tolerant").contains("Factures");
         assertThat(names.nameOf("invoice", "xx")).as("unknown language falls back to English").contains("Invoices");
         assertThat(names.nameOf("invoice", null)).contains("Invoices");
+        for (String notATag : List.of("", " ", "-", "_", "f", "fr-", "fr FR", "<b>", "x".repeat(200))) {
+            assertThat(CategoryFolderNames.primaryLanguage(notATag)).as("'%s' is no language tag", notATag).isEmpty();
+            assertThat(names.nameOf("invoice", notATag)).contains("Invoices");
+        }
+        assertThat(CategoryFolderNames.primaryLanguage(" pt_BR ")).contains("pt");
         assertThat(names.nameOf("other", "en")).isEmpty();
         assertThat(names.nameOf("payslip", "en")).as("a kind the table does not know").isEmpty();
         for (String language : List.of("en", "fr", "de", "es", "it", "nl", "pt", "ar")) {
