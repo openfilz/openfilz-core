@@ -63,6 +63,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -289,12 +290,7 @@ public class SignatureServiceImpl implements SignatureService {
                                 env.setUpdatedAt(now);
                                 env.setCurrentOrder(firstActionableOrder(recipients));
                                 // Re-issue every token so the invitation carries a fresh link.
-                                List<RecipientWithToken> withTokens = recipients.stream().map(r -> {
-                                    String raw = newRawToken();
-                                    r.setTokenHash(sha256(raw));
-                                    r.setTokenRevoked(false);
-                                    return new RecipientWithToken(r, raw);
-                                }).toList();
+                                List<RecipientWithToken> withTokens = recipients.stream().map(this::issueToken).toList();
                                 return envelopeRepo.save(env)
                                         .thenMany(Flux.fromIterable(withTokens).concatMap(rt -> recipientRepo.save(rt.recipient())))
                                         .then(event(envelopeId, SignatureEventType.ENVELOPE_SENT, initiatorEmail,
@@ -358,6 +354,7 @@ public class SignatureServiceImpl implements SignatureService {
                     env.setCancelledAt(now);
                     env.setUpdatedAt(now);
                     return envelopeRepo.save(env)
+                            .then(recipientRepo.revokeTokens(envelopeId))
                             .then(event(envelopeId, SignatureEventType.ENVELOPE_CANCELLED, env.getInitiatorEmail(),
                                     env.getOriginalSha256(), null, null))
                             .then(auditService.logAction(AuditAction.SIGNATURE_ENVELOPE_CANCELLED, DocumentType.FILE, env.getSourceDocId()))
@@ -380,9 +377,7 @@ public class SignatureServiceImpl implements SignatureService {
                                     return Mono.error(new ResponseStatusException(HttpStatus.CONFLICT,
                                             "Recipient has already " + r.getStatus()));
                                 }
-                                String raw = newRawToken();
-                                r.setTokenHash(sha256(raw));
-                                r.setTokenRevoked(false);
+                                RecipientWithToken rt = issueToken(r);
                                 r.setReminderCount(r.getReminderCount() + 1);
                                 r.setOtpVerifiedAt(null);   // a fresh link restarts the OTP step
                                 env.setLastRemindedAt(OffsetDateTime.now());
@@ -394,7 +389,7 @@ public class SignatureServiceImpl implements SignatureService {
                                         .then(auditService.logAction(AuditAction.SIGNATURE_REMINDER_SENT, DocumentType.FILE, env.getSourceDocId()))
                                         .as(tx::transactional)
                                         .then(documentName(env))
-                                        .doOnNext(name -> mailer.sendReminder(env, r, name, signLink(raw)))
+                                        .doOnNext(name -> mailer.sendReminder(env, r, name, signLink(rt.rawToken())))
                                         .thenReturn(env);
                             });
                 })
@@ -414,9 +409,7 @@ public class SignatureServiceImpl implements SignatureService {
                                     return Mono.error(new ResponseStatusException(HttpStatus.CONFLICT,
                                             "Recipient has already " + r.getStatus()));
                                 }
-                                String raw = newRawToken();
-                                r.setTokenHash(sha256(raw));
-                                r.setTokenRevoked(false);
+                                String raw = issueToken(r).rawToken();
                                 return recipientRepo.save(r).as(tx::transactional)
                                         .thenReturn(new SigningLink(r.getId(), raw, signLink(raw)));
                             });
@@ -442,9 +435,11 @@ public class SignatureServiceImpl implements SignatureService {
 
     @Override
     public Mono<Resource> loadDocumentByToken(String rawToken) {
-        return recipientByToken(rawToken)
-                .flatMap(r -> envelopeRepo.findById(r.getEnvelopeId()))
-                .flatMap(env -> documentRepository.findByIdAndActive(env.getSourceDocId(), true))
+        return openRecipientByToken(rawToken)
+                .flatMap(tr -> {
+                    requireOtpSatisfied(tr.recipient());
+                    return documentRepository.findByIdAndActive(tr.envelope().getSourceDocId(), true);
+                })
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Document not found")))
                 .flatMap(doc -> storageService.loadFile(doc.getStoragePath()).cast(Resource.class));
     }
@@ -452,19 +447,25 @@ public class SignatureServiceImpl implements SignatureService {
     @Override
     public Mono<PublicSignatureView> recordView(String rawToken, String ip, String userAgent) {
         return recipientByToken(rawToken)
-                .flatMap(r -> {
-                    if (r.getStatus() == SignatureRecipientStatus.PENDING) {
-                        r.setStatus(SignatureRecipientStatus.VIEWED);
-                        r.setViewedAt(OffsetDateTime.now());
-                        r.setSignerIp(ip);
-                        r.setSignerUserAgent(truncate(userAgent, 512));
-                        return recipientRepo.save(r)
-                                .then(event(r.getEnvelopeId(), SignatureEventType.RECIPIENT_VIEWED, r.getRecipientEmail(), null, ip, null))
-                                .as(tx::transactional)
-                                .thenReturn(r);
-                    }
-                    return healStuckEnvelope(r).thenReturn(r);
-                })
+                .flatMap(r -> envelopeRepo.findById(r.getEnvelopeId())
+                        .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Envelope not found")))
+                        .flatMap(env -> {
+                            if (isClosedForSigner(env, r)) {
+                                // A dead link records nothing — the view below only says the envelope is closed.
+                                return Mono.just(r);
+                            }
+                            if (r.getStatus() == SignatureRecipientStatus.PENDING) {
+                                r.setStatus(SignatureRecipientStatus.VIEWED);
+                                r.setViewedAt(OffsetDateTime.now());
+                                r.setSignerIp(ip);
+                                r.setSignerUserAgent(truncate(userAgent, 512));
+                                return recipientRepo.save(r)
+                                        .then(event(r.getEnvelopeId(), SignatureEventType.RECIPIENT_VIEWED, r.getRecipientEmail(), null, ip, null))
+                                        .as(tx::transactional)
+                                        .thenReturn(r);
+                            }
+                            return healStuckEnvelope(r, env).thenReturn(r);
+                        }))
                 .flatMap(this::publicView);
     }
 
@@ -474,144 +475,214 @@ public class SignatureServiceImpl implements SignatureService {
      * but the envelope is still SENT and nothing can ever retry it. Detected when a signer
      * re-opens their link; errors are swallowed so the page still renders the current state.
      */
-    private Mono<Void> healStuckEnvelope(SignatureRecipient r) {
-        if (r.getStatus() != SignatureRecipientStatus.SIGNED) {
+    private Mono<Void> healStuckEnvelope(SignatureRecipient r, SignatureEnvelope env) {
+        if (r.getStatus() != SignatureRecipientStatus.SIGNED || env.getStatus() != SignatureEnvelopeStatus.SENT
+                || !healing.add(env.getId())) {
             return Mono.empty();
         }
-        return envelopeRepo.findById(r.getEnvelopeId())
-                .filter(env -> env.getStatus() == SignatureEnvelopeStatus.SENT)
-                .filter(env -> healing.add(env.getId()))
-                .flatMap(env -> recipientRepo.findByEnvelopeIdOrderByOrderIndexAscSortOrderAscIdAsc(env.getId()).collectList()
-                        .filter(recipients -> recipients.stream().filter(SignatureRecipient::isSigner)
-                                .allMatch(x -> x.getStatus() == SignatureRecipientStatus.SIGNED))
-                        .flatMap(recipients -> {
-                            log.warn("[e-sign] envelope {} is fully signed but never completed — retrying finalization",
-                                    env.getId());
-                            return finalizeEnvelope(env, recipients);
-                        })
-                        .onErrorResume(e -> {
-                            log.error("[e-sign] finalization retry failed for envelope {}: {}", env.getId(), e.toString());
-                            return Mono.empty();
-                        })
-                        .doFinally(sig -> healing.remove(env.getId())));
+        return recipientRepo.findByEnvelopeIdOrderByOrderIndexAscSortOrderAscIdAsc(env.getId()).collectList()
+                .filter(recipients -> recipients.stream().filter(SignatureRecipient::isSigner)
+                        .allMatch(x -> x.getStatus() == SignatureRecipientStatus.SIGNED))
+                .flatMap(recipients -> {
+                    log.warn("[e-sign] envelope {} is fully signed but never completed — retrying finalization",
+                            env.getId());
+                    // Standalone finalization: its transaction commits first, then the audit row and the side effects.
+                    return finalizeEnvelope(env, recipients)
+                            .flatMap(cr -> auditCompleted(env, cr).then(completionSideEffects(env, recipients, cr)));
+                })
+                .onErrorResume(e -> {
+                    log.error("[e-sign] finalization retry failed for envelope {}: {}", env.getId(), e.toString());
+                    return Mono.empty();
+                })
+                .doFinally(sig -> healing.remove(env.getId()));
     }
 
     @Override
     public Mono<Void> requestOtp(String rawToken) {
-        return recipientByToken(rawToken)
-                .flatMap(r -> envelopeRepo.findById(r.getEnvelopeId()).flatMap(env -> {
-                    requireActive(env);
-                    if (!r.requiresOtp()) {
-                        return Mono.error(new ResponseStatusException(HttpStatus.CONFLICT, "This recipient does not require a code"));
-                    }
-                    SignatureOtpSender sender = otpSenders.stream().filter(s -> s.supports(r.getAuthMethod())).findFirst()
-                            .orElse(null);
-                    if (sender == null) {
-                        return Mono.error(new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED,
-                                r.getAuthMethod() + " delivery is not available on this server"));
-                    }
-                    String code = newOtpCode(props.getOtp().getLength());
-                    r.setOtpHash(sha256(code));
-                    r.setOtpExpiresAt(OffsetDateTime.now().plusMinutes(props.getOtp().getValidMinutes()));
-                    r.setOtpAttempts(0);
-                    r.setOtpVerifiedAt(null);
-                    return recipientRepo.save(r).as(tx::transactional)
-                            .then(sender.send(env, r, code, props.getOtp().getValidMinutes()));
-                }));
+        return openRecipientByToken(rawToken).flatMap(tr -> {
+            SignatureRecipient r = tr.recipient();
+            SignatureEnvelope env = tr.envelope();
+            if (!r.requiresOtp()) {
+                return Mono.error(new ResponseStatusException(HttpStatus.CONFLICT, "This recipient does not require a code"));
+            }
+            SignatureOtpSender sender = otpSenders.stream().filter(s -> s.supports(r.getAuthMethod())).findFirst()
+                    .orElse(null);
+            if (sender == null) {
+                return Mono.error(new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED,
+                        r.getAuthMethod() + " delivery is not available on this server"));
+            }
+            OffsetDateTime now = OffsetDateTime.now();
+            long cooldownMs = otpRequestCooldownMillis();
+            int maxRequests = props.getOtp().getMaxRequests() <= 0 ? Integer.MAX_VALUE : props.getOtp().getMaxRequests();
+            // Fast path on the row we already hold; the UPDATE below re-checks both rules atomically.
+            if (r.getOtpRequestCount() >= maxRequests) {
+                return Mono.error(otpRequestsExhausted());
+            }
+            if (cooldownMs > 0 && r.getOtpRequestedAt() != null
+                    && r.getOtpRequestedAt().plus(cooldownMs, ChronoUnit.MILLIS).isAfter(now)) {
+                return Mono.error(otpCooldown(r.getOtpRequestedAt(), cooldownMs, now));
+            }
+            String code = newOtpCode(props.getOtp().getLength());
+            OffsetDateTime expiresAt = now.plusMinutes(props.getOtp().getValidMinutes());
+            OffsetDateTime notBefore = now.minus(cooldownMs, ChronoUnit.MILLIS);
+            return recipientRepo.issueOtp(r.getId(), sha256(code), expiresAt, now, notBefore, maxRequests)
+                    .defaultIfEmpty(0)
+                    .flatMap(rows -> {
+                        if (rows == 0) {
+                            // Lost a race with a parallel request on the same link.
+                            return Mono.error(r.getOtpRequestCount() + 1 >= maxRequests ? otpRequestsExhausted()
+                                    : otpCooldown(now, cooldownMs, now));
+                        }
+                        r.setOtpHash(sha256(code));
+                        r.setOtpExpiresAt(expiresAt);
+                        r.setOtpAttempts(0);
+                        r.setOtpVerifiedAt(null);
+                        r.setOtpRequestedAt(now);
+                        r.setOtpRequestCount(r.getOtpRequestCount() + 1);
+                        return sender.send(env, r, code, props.getOtp().getValidMinutes());
+                    });
+        });
+    }
+
+    private long otpRequestCooldownMillis() {
+        Duration cooldown = props.getOtp().getRequestCooldown();
+        return cooldown == null || cooldown.isNegative() ? 0 : cooldown.toMillis();
+    }
+
+    private static ResponseStatusException otpRequestsExhausted() {
+        return new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                "Too many codes were requested for this link — ask the sender for a new link");
+    }
+
+    private static ResponseStatusException otpCooldown(OffsetDateTime lastRequest, long cooldownMs, OffsetDateTime now) {
+        long waitSeconds = Math.max(1, Duration.between(now, lastRequest.plus(cooldownMs, ChronoUnit.MILLIS)).toSeconds());
+        return new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                "A code was sent recently — wait " + waitSeconds + " s before requesting another one");
     }
 
     @Override
     public Mono<PublicSignatureView> verifyOtp(String rawToken, String code, String ip) {
-        return recipientByToken(rawToken)
-                .flatMap(r -> envelopeRepo.findById(r.getEnvelopeId()).flatMap(env -> {
-                    requireActive(env);
+        return openRecipientByToken(rawToken)
+                .flatMap(tr -> {
+                    SignatureRecipient r = tr.recipient();
+                    SignatureEnvelope env = tr.envelope();
                     if (!r.requiresOtp()) {
                         return Mono.error(new ResponseStatusException(HttpStatus.CONFLICT, "This recipient does not require a code"));
                     }
                     if (r.getOtpHash() == null || r.getOtpExpiresAt() == null || r.getOtpExpiresAt().isBefore(OffsetDateTime.now())) {
                         return Mono.error(new ResponseStatusException(HttpStatus.GONE, "Code expired — request a new one"));
                     }
-                    if (r.getOtpAttempts() >= props.getOtp().getMaxAttempts()) {
-                        return Mono.error(new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many attempts — request a new code"));
+                    int max = props.getOtp().getMaxAttempts();
+                    if (r.getOtpAttempts() >= max) {
+                        return Mono.error(tooManyOtpAttempts());
                     }
-                    boolean ok = code != null && constantTimeEquals(sha256(code.trim()), r.getOtpHash());
-                    if (!ok) {
-                        r.setOtpAttempts(r.getOtpAttempts() + 1);
-                        return recipientRepo.save(r).as(tx::transactional)
-                                .then(Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid code")));
-                    }
-                    r.setOtpVerifiedAt(OffsetDateTime.now());
-                    r.setOtpHash(null);
-                    return recipientRepo.save(r)
-                            .then(event(env.getId(), SignatureEventType.RECIPIENT_OTP_VERIFIED, r.getRecipientEmail(),
-                                    null, ip, r.getAuthMethod().name()))
-                            .as(tx::transactional)
-                            .thenReturn(r);
-                }))
-                .flatMap(this::publicView);
+                    // Reserve the attempt BEFORE comparing, with an atomic conditional increment that
+                    // commits on its own: N parallel guesses get at most `max` slots between them, and
+                    // a wrong guess keeps its slot consumed whatever happens next.
+                    return recipientRepo.reserveOtpAttempt(r.getId(), max)
+                            .defaultIfEmpty(0)
+                            .flatMap(rows -> {
+                                if (rows == 0) {
+                                    return Mono.error(tooManyOtpAttempts());
+                                }
+                                r.setOtpAttempts(r.getOtpAttempts() + 1);
+                                boolean ok = code != null && constantTimeEquals(sha256(code.trim()), r.getOtpHash());
+                                if (!ok) {
+                                    return Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid code"));
+                                }
+                                r.setOtpVerifiedAt(OffsetDateTime.now());
+                                r.setOtpHash(null);
+                                return recipientRepo.save(r)
+                                        .then(event(env.getId(), SignatureEventType.RECIPIENT_OTP_VERIFIED, r.getRecipientEmail(),
+                                                null, ip, r.getAuthMethod().name()))
+                                        .as(tx::transactional)
+                                        .thenReturn(r);
+                            });
+                })
+                .flatMap(r -> publicView(r, true));
+    }
+
+    private static ResponseStatusException tooManyOtpAttempts() {
+        return new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many attempts — request a new code");
     }
 
     @Override
     public Mono<PublicSignatureView> applySignature(String rawToken, ApplySignatureRequest req, String ip, String userAgent) {
         return recipientByToken(rawToken)
-                .flatMap(r -> envelopeRepo.findById(r.getEnvelopeId()).flatMap(env -> {
-                    requireActive(env);
-                    if (!r.isSigner()) {
-                        return Mono.error(new ResponseStatusException(HttpStatus.CONFLICT, "CC recipients do not sign"));
-                    }
-                    if (r.getStatus() == SignatureRecipientStatus.SIGNED) {
-                        return Mono.error(new ResponseStatusException(HttpStatus.CONFLICT, "You have already signed this document"));
-                    }
-                    if (r.getStatus() == SignatureRecipientStatus.DECLINED) {
-                        return Mono.error(new ResponseStatusException(HttpStatus.CONFLICT, "This signing request was declined"));
-                    }
-                    if (env.isSequential() && r.getOrderIndex() != env.getCurrentOrder()) {
-                        return Mono.error(new ResponseStatusException(HttpStatus.CONFLICT, "It is not your turn to sign yet"));
-                    }
-                    if (r.requiresOtp() && r.getOtpVerifiedAt() == null) {
-                        return Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "Access code not verified"));
-                    }
-                    return fieldRepo.findByRecipientIdOrderBySortOrderAscIdAsc(r.getId()).collectList()
-                            .flatMap(fields -> {
-                                OffsetDateTime now = OffsetDateTime.now();
-                                applyValues(fields, req, now);
-                                r.setStatus(SignatureRecipientStatus.SIGNED);
-                                r.setSignedAt(now);
-                                r.setSignerIp(ip);
-                                r.setSignerUserAgent(truncate(userAgent, 512));
-                                // legacy mirror for old readers
-                                fields.stream().filter(f -> f.getType() == SignatureFieldType.SIGNATURE).findFirst().ifPresent(f -> {
-                                    r.setSignatureImage(f.getValueImage());
-                                    r.setSignatureTyped(f.getValueImage() == null ? f.getValue() : null);
-                                });
-                                return recipientRepo.save(r)
-                                        .thenMany(Flux.fromIterable(fields).concatMap(fieldRepo::save))
-                                        .then(event(env.getId(), SignatureEventType.RECIPIENT_SIGNED, r.getRecipientEmail(),
-                                                env.getOriginalSha256(), ip, fields.size() + " field(s)"))
-                                        // Attribute the audit entry to the signer (identity from the validated token row).
-                                        .then(auditService.logAction(AuditAction.SIGNATURE_DOCUMENT_SIGNED, DocumentType.FILE, env.getSourceDocId())
-                                                .contextWrite(ReactiveSecurityContextHolder.withAuthentication(
-                                                        actorResolver.signerAuthentication(r))))
-                                        // Single transaction with advance/completion: if sealing (or any other
-                                        // finalization step) fails, the SIGNED status rolls back too, so the
-                                        // signer can retry — otherwise the envelope is stuck SENT forever with
-                                        // an unretryable "already signed" recipient.
-                                        .then(Mono.defer(() -> advanceOrComplete(env)))
-                                        .as(tx::transactional)
-                                        .thenReturn(r);
-                            });
-                }))
-                .flatMap(this::publicView);
+                .flatMap(r -> envelopeRepo.findByIdForUpdate(r.getEnvelopeId())
+                        // Row lock for the whole signing transaction: two last signers finishing together
+                        // serialise, so the second one sees the first SIGNED row and completes the envelope
+                        // instead of both leaving it SENT.
+                        .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Envelope not found")))
+                        .flatMap(env -> {
+                            requireOpenForSigner(env, r);
+                            if (!r.isSigner()) {
+                                return Mono.error(new ResponseStatusException(HttpStatus.CONFLICT, "CC recipients do not sign"));
+                            }
+                            if (r.getStatus() == SignatureRecipientStatus.SIGNED) {
+                                return Mono.error(new ResponseStatusException(HttpStatus.CONFLICT, "You have already signed this document"));
+                            }
+                            if (r.getStatus() == SignatureRecipientStatus.DECLINED) {
+                                return Mono.error(new ResponseStatusException(HttpStatus.CONFLICT, "This signing request was declined"));
+                            }
+                            if (env.isSequential() && r.getOrderIndex() != env.getCurrentOrder()) {
+                                return Mono.error(new ResponseStatusException(HttpStatus.CONFLICT, "It is not your turn to sign yet"));
+                            }
+                            requireOtpSatisfied(r);
+                            return fieldRepo.findByRecipientIdOrderBySortOrderAscIdAsc(r.getId()).collectList()
+                                    .flatMap(fields -> {
+                                        OffsetDateTime now = OffsetDateTime.now();
+                                        applyValues(fields, req, now);
+                                        r.setStatus(SignatureRecipientStatus.SIGNED);
+                                        r.setSignedAt(now);
+                                        r.setSignerIp(ip);
+                                        r.setSignerUserAgent(truncate(userAgent, 512));
+                                        // legacy mirror for old readers
+                                        fields.stream().filter(f -> f.getType() == SignatureFieldType.SIGNATURE).findFirst().ifPresent(f -> {
+                                            r.setSignatureImage(f.getValueImage());
+                                            r.setSignatureTyped(f.getValueImage() == null ? f.getValue() : null);
+                                        });
+                                        return recipientRepo.save(r)
+                                                .thenMany(Flux.fromIterable(fields).concatMap(fieldRepo::save))
+                                                .then(event(env.getId(), SignatureEventType.RECIPIENT_SIGNED, r.getRecipientEmail(),
+                                                        env.getOriginalSha256(), ip, fields.size() + " field(s)"))
+                                                // Single transaction with advance/completion: if sealing (or any other
+                                                // finalization step) fails, the SIGNED status rolls back too, so the
+                                                // signer can retry — otherwise the envelope is stuck SENT forever with
+                                                // an unretryable "already signed" recipient.
+                                                .then(Mono.defer(() -> advanceOrComplete(env)))
+                                                // Audit rows LAST: the chained audit insert takes the global audit
+                                                // lock until commit, so it must come after the slow work (stamp, seal,
+                                                // store) and right before the commit — never around it.
+                                                .flatMap(transition -> auditSigned(r, env)
+                                                        .then(transition.completion() == null ? Mono.empty()
+                                                                : auditCompleted(env, transition.completion()))
+                                                        .thenReturn(transition));
+                                    });
+                        })
+                        .as(tx::transactional)
+                        // Post-commit side effects: notifications, mails, thumbnail / indexing.
+                        .flatMap(transition -> transition.afterCommit().thenReturn(r)))
+                .flatMap(r -> publicView(r, true));
+    }
+
+    /** Attributes the signature audit row to the signer (identity from the validated token row). */
+    private Mono<Void> auditSigned(SignatureRecipient r, SignatureEnvelope env) {
+        return auditService.logAction(AuditAction.SIGNATURE_DOCUMENT_SIGNED, DocumentType.FILE, env.getSourceDocId())
+                .contextWrite(ReactiveSecurityContextHolder.withAuthentication(actorResolver.signerAuthentication(r)));
     }
 
     @Override
     public Mono<PublicSignatureView> decline(String rawToken, DeclineSignatureRequest req, String ip) {
-        return recipientByToken(rawToken)
-                .flatMap(r -> envelopeRepo.findById(r.getEnvelopeId()).flatMap(env -> {
-                    requireActive(env);
+        return openRecipientByToken(rawToken)
+                .flatMap(tr -> {
+                    SignatureRecipient r = tr.recipient();
+                    SignatureEnvelope env = tr.envelope();
                     if (!r.isActionable()) {
                         return Mono.error(new ResponseStatusException(HttpStatus.CONFLICT, "Recipient has already " + r.getStatus()));
                     }
+                    // Voiding the envelope is as consequential as signing it: same identity step.
+                    requireOtpSatisfied(r);
                     OffsetDateTime now = OffsetDateTime.now();
                     r.setStatus(SignatureRecipientStatus.DECLINED);
                     r.setDeclineReason(truncate(req == null ? null : req.reason(), 1000));
@@ -620,6 +691,7 @@ public class SignatureServiceImpl implements SignatureService {
                     env.setUpdatedAt(now);
                     return recipientRepo.save(r)
                             .then(envelopeRepo.save(env))
+                            .then(recipientRepo.revokeTokens(env.getId()))
                             .then(event(env.getId(), SignatureEventType.RECIPIENT_DECLINED, r.getRecipientEmail(),
                                     env.getOriginalSha256(), ip, r.getDeclineReason()))
                             .then(auditService.logAction(AuditAction.SIGNATURE_ENVELOPE_DECLINED, DocumentType.FILE, env.getSourceDocId())
@@ -628,30 +700,43 @@ public class SignatureServiceImpl implements SignatureService {
                             .then(notifier.declined(env, r).onErrorResume(e -> Mono.empty()))
                             .doOnSuccess(v -> mailer.sendDeclined(env, r))
                             .thenReturn(r);
-                }))
-                .flatMap(this::publicView);
+                })
+                .flatMap(r -> publicView(r, true));
     }
 
     // ═════════════════════════════════════════════════════════════════════
     //  Sequential advance + completion
     // ═════════════════════════════════════════════════════════════════════
 
-    private Mono<Void> advanceOrComplete(SignatureEnvelope env) {
+    /**
+     * What a signature did to the envelope, decided inside the signing transaction:
+     * {@code completion} is set when this signature completed the envelope; {@code afterCommit}
+     * holds the side effects (invitations, notifications, mails, post-processing) the caller
+     * runs once the transaction has committed — never inside it.
+     */
+    private record Transition(CompletionResult completion, Mono<Void> afterCommit) {
+        static Transition none() {
+            return new Transition(null, Mono.empty());
+        }
+    }
+
+    private Mono<Transition> advanceOrComplete(SignatureEnvelope env) {
         return recipientRepo.findByEnvelopeIdOrderByOrderIndexAscSortOrderAscIdAsc(env.getId()).collectList()
                 .flatMap(recipients -> {
                     boolean allSigned = recipients.stream().filter(SignatureRecipient::isSigner)
                             .allMatch(x -> x.getStatus() == SignatureRecipientStatus.SIGNED);
                     if (allSigned) {
-                        return finalizeEnvelope(env, recipients);
+                        return finalizeEnvelope(env, recipients)
+                                .map(cr -> new Transition(cr, completionSideEffects(env, recipients, cr)));
                     }
                     if (!env.isSequential()) {
-                        return Mono.empty();
+                        return Mono.just(Transition.none());
                     }
                     boolean currentDone = recipients.stream()
                             .filter(x -> x.isSigner() && x.getOrderIndex() == env.getCurrentOrder())
                             .allMatch(x -> x.getStatus() == SignatureRecipientStatus.SIGNED);
                     if (!currentDone) {
-                        return Mono.empty();
+                        return Mono.just(Transition.none());
                     }
                     int next = recipients.stream().filter(SignatureRecipient::isActionable)
                             .mapToInt(SignatureRecipient::getOrderIndex).min().orElse(env.getCurrentOrder());
@@ -660,22 +745,26 @@ public class SignatureServiceImpl implements SignatureService {
                     // Mint fresh tokens for the newly unlocked signers and invite them.
                     List<RecipientWithToken> unlocked = recipients.stream()
                             .filter(x -> x.isActionable() && x.getOrderIndex() == next)
-                            .map(x -> {
-                                String raw = newRawToken();
-                                x.setTokenHash(sha256(raw));
-                                x.setTokenRevoked(false);
-                                return new RecipientWithToken(x, raw);
-                            }).toList();
+                            .map(this::issueToken)
+                            .toList();
                     return envelopeRepo.save(env)
                             .thenMany(Flux.fromIterable(unlocked).concatMap(rt -> recipientRepo.save(rt.recipient())))
                             .then()
                             .as(tx::transactional)
-                            .then(Mono.defer(() -> documentName(env)
-                                    .flatMap(name -> dispatchInvitations(env, name, unlocked, next))));
+                            .thenReturn(new Transition(null, Mono.defer(() -> documentName(env)
+                                    .flatMap(name -> dispatchInvitations(env, name, unlocked, next)))));
                 });
     }
 
-    private Mono<Void> finalizeEnvelope(SignatureEnvelope env, List<SignatureRecipient> recipients) {
+    /**
+     * Completes the envelope: stamp + seal + store the signed PDF, persist it as a document,
+     * flip the envelope to COMPLETED, write the completion event, kill every signing link and
+     * let the completion listener run — all in one transaction (joined when the caller has
+     * one). No audit row and no side effect here: the caller adds the audit entries right
+     * before its commit ({@link #auditCompleted}) and runs {@link #completionSideEffects}
+     * after it.
+     */
+    private Mono<CompletionResult> finalizeEnvelope(SignatureEnvelope env, List<SignatureRecipient> recipients) {
         return documentRepository.findByIdAndActive(env.getSourceDocId(), true)
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Source document not found")))
                 .flatMap(srcDoc -> Mono.zip(
@@ -701,23 +790,32 @@ public class SignatureServiceImpl implements SignatureService {
                                                 .then(event(env.getId(), SignatureEventType.ENVELOPE_COMPLETED, "system",
                                                         env.getSignedSha256(), null, "seal=" + seal.provider()
                                                                 + (seal.flavor() != null ? " " + seal.flavor() : "")))
+                                                // Terminal state: no signing link of this envelope may act again.
+                                                .then(recipientRepo.revokeTokens(env.getId()))
                                                 .then(completionListener.onCompleted(env, signedDoc, seal))
                                                 .thenReturn(new CompletionResult(seal, signedDoc));
                                     });
                         }))
                 .as(tx::transactional)
-                // Post-commit side effects: audit attributed to the requester, notification, mails, thumbnail.
-                .flatMap(cr -> actorResolver.requesterAuthentication(env)
-                        .flatMap(auth -> auditService.logAction(AuditAction.SIGNATURE_ENVELOPE_COMPLETED, DocumentType.FILE,
-                                        cr.signedDoc().getId())
-                                .contextWrite(ReactiveSecurityContextHolder.withAuthentication(auth)))
-                        .thenReturn(cr))
-                .flatMap(cr -> notifier.completed(env).onErrorResume(e -> Mono.empty()).thenReturn(cr))
-                .doOnNext(cr -> emailSignedDocumentToAll(env, recipients, cr.seal().bytes()))
-                .doOnNext(cr -> triggerPostProcessing(cr.signedDoc()))
                 .doOnSuccess(cr -> log.info("[e-sign] COMPLETED envelope={} signedDoc={} seal={}", env.getId(),
-                        env.getSignedDocId(), cr == null ? "?" : cr.seal().provider()))
-                .then();
+                        env.getSignedDocId(), cr == null ? "?" : cr.seal().provider()));
+    }
+
+    /** The completion audit row, attributed to the requester. Resolve the identity first — the lock is only taken by the insert. */
+    private Mono<Void> auditCompleted(SignatureEnvelope env, CompletionResult cr) {
+        return actorResolver.requesterAuthentication(env)
+                .flatMap(auth -> auditService.logAction(AuditAction.SIGNATURE_ENVELOPE_COMPLETED, DocumentType.FILE,
+                                cr.signedDoc().getId())
+                        .contextWrite(ReactiveSecurityContextHolder.withAuthentication(auth)));
+    }
+
+    /** Post-commit only: in-app notification, the sealed PDF mailed to everyone, thumbnail / indexing. */
+    private Mono<Void> completionSideEffects(SignatureEnvelope env, List<SignatureRecipient> recipients, CompletionResult cr) {
+        return Mono.defer(() -> notifier.completed(env).onErrorResume(e -> Mono.empty())
+                .then(Mono.fromRunnable(() -> {
+                    emailSignedDocumentToAll(env, recipients, cr.seal().bytes());
+                    triggerPostProcessing(cr.signedDoc());
+                })));
     }
 
     private record CompletionResult(SignatureSealer.SealResult seal, Document signedDoc) {}
@@ -739,7 +837,8 @@ public class SignatureServiceImpl implements SignatureService {
     }
 
     private Mono<Document> persistSignedDocument(SignatureEnvelope env, Document src, String storagePath, long size) {
-        return accessPolicy.resolveSignedDocumentParent(env, src).flatMap(parent -> {
+        // An empty answer from the policy must not swallow the completion (the caller's audit + commit depend on a value).
+        return accessPolicy.resolveSignedDocumentParent(env, src).defaultIfEmpty(Optional.empty()).flatMap(parent -> {
             OffsetDateTime now = OffsetDateTime.now();
             // No explicit id: Document has no Persistable flag, so a non-null id would make R2DBC UPDATE.
             Document signed = Document.builder()
@@ -796,6 +895,7 @@ public class SignatureServiceImpl implements SignatureService {
                     env.setStatus(SignatureEnvelopeStatus.EXPIRED);
                     env.setUpdatedAt(OffsetDateTime.now());
                     return envelopeRepo.save(env)
+                            .then(recipientRepo.revokeTokens(env.getId()))
                             .then(event(env.getId(), SignatureEventType.ENVELOPE_EXPIRED, "system", env.getOriginalSha256(), null, null))
                             .then(actorResolver.requesterAuthentication(env)
                                     .flatMap(auth -> auditService.logAction(AuditAction.SIGNATURE_ENVELOPE_EXPIRED, DocumentType.FILE,
@@ -815,12 +915,10 @@ public class SignatureServiceImpl implements SignatureService {
                             List<RecipientWithToken> due = recipients.stream()
                                     .filter(r -> r.isActionable() && (!env.isSequential() || r.getOrderIndex() == env.getCurrentOrder()))
                                     .map(r -> {
-                                        String raw = newRawToken();
-                                        r.setTokenHash(sha256(raw));
-                                        r.setTokenRevoked(false);
+                                        RecipientWithToken rt = issueToken(r);
                                         r.setReminderCount(r.getReminderCount() + 1);
                                         r.setOtpVerifiedAt(null);
-                                        return new RecipientWithToken(r, raw);
+                                        return rt;
                                     }).toList();
                             env.setLastRemindedAt(OffsetDateTime.now());
                             env.setUpdatedAt(OffsetDateTime.now());
@@ -845,6 +943,20 @@ public class SignatureServiceImpl implements SignatureService {
     // ═════════════════════════════════════════════════════════════════════
 
     private record RecipientWithToken(SignatureRecipient recipient, String rawToken) {}
+
+    /**
+     * Re-issues the signing link of a recipient: new token (the previous link stops resolving),
+     * revocation lifted, and the per-link OTP request throttle starts over. Every writer that
+     * rotates a token goes through here.
+     */
+    private RecipientWithToken issueToken(SignatureRecipient r) {
+        String raw = newRawToken();
+        r.setTokenHash(sha256(raw));
+        r.setTokenRevoked(false);
+        r.setOtpRequestedAt(null);
+        r.setOtpRequestCount(0);
+        return new RecipientWithToken(r, raw);
+    }
 
     private void validateRecipients(CreateSignatureEnvelopeRequest req, int pages) {
         boolean anySigner = false;
@@ -1073,13 +1185,33 @@ public class SignatureServiceImpl implements SignatureService {
                 .build();
     }
 
+    /**
+     * Resolves a raw signing token to its recipient row, revoked or not: the token is the only
+     * authenticator, and a revoked one still identifies a party who may be told the envelope is
+     * closed ({@link #publicView}). Every action goes through {@link #openRecipientByToken}.
+     */
     private Mono<SignatureRecipient> recipientByToken(String rawToken) {
         if (rawToken == null || rawToken.isBlank()) {
             return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing token"));
         }
         return recipientRepo.findByTokenHash(sha256(rawToken))
-                .filter(r -> !r.isTokenRevoked())
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Invalid or expired signing link")));
+    }
+
+    private record TokenResolution(SignatureRecipient recipient, SignatureEnvelope envelope) {}
+
+    /**
+     * Token + envelope for an <em>action</em> (document, OTP, sign, decline): refuses revoked
+     * links and terminal / expired envelopes with {@code 410 Gone}, drafts with {@code 409}.
+     */
+    private Mono<TokenResolution> openRecipientByToken(String rawToken) {
+        return recipientByToken(rawToken)
+                .flatMap(r -> envelopeRepo.findById(r.getEnvelopeId())
+                        .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Envelope not found")))
+                        .map(env -> {
+                            requireOpenForSigner(env, r);
+                            return new TokenResolution(r, env);
+                        }));
     }
 
     private Mono<SignatureEnvelope> loadOwned(UUID envelopeId, String userEmail) {
@@ -1136,35 +1268,124 @@ public class SignatureServiceImpl implements SignatureService {
     }
 
     private Mono<PublicSignatureView> publicView(SignatureRecipient r) {
+        return publicView(r, false);
+    }
+
+    /**
+     * What the holder of this token may see.
+     * <ul>
+     *   <li>Closed envelope (terminal, past its expiry, or revoked link): status only — no
+     *       document name, no message, no fields. The completed PDF reaches the parties through
+     *       the completion e-mail and the initiator's API, never through a dead link.</li>
+     *   <li>OTP recipient who has not passed (or whose verification has aged out of
+     *       {@code otp.verified-for}): the same minimal view with {@code otpRequired=true}, which
+     *       the signing page turns into the code step before it ever asks for the PDF.</li>
+     *   <li>Otherwise the full view: the recipient's own fields with values, other recipients'
+     *       filled fields as <em>placements</em> (position + fill status, never their values or
+     *       images).</li>
+     * </ul>
+     *
+     * @param ownAction {@code true} when answering the recipient's own sign / decline / verify
+     *                  call: their own fields are returned even though the envelope may have just
+     *                  reached a terminal state, so the response shows what they signed.
+     */
+    private Mono<PublicSignatureView> publicView(SignatureRecipient r, boolean ownAction) {
         return envelopeRepo.findById(r.getEnvelopeId())
-                .flatMap(env -> Mono.zip(
-                        documentName(env),
-                        fieldRepo.findByEnvelopeIdOrderBySortOrderAscIdAsc(env.getId()).collectList())
-                        .map(t -> {
-                            List<SignatureField> all = t.getT2();
-                            List<SignatureFieldDTO> mine = all.stream().filter(f -> f.getRecipientId().equals(r.getId()))
-                                    .map(f -> SignatureFieldDTO.from(f, true)).toList();
-                            List<SignatureFieldDTO> others = all.stream()
-                                    .filter(f -> !f.getRecipientId().equals(r.getId()) && f.isFilled())
-                                    .map(f -> SignatureFieldDTO.from(f, true)).toList();
-                            SignatureField first = all.stream().filter(f -> f.getRecipientId().equals(r.getId())
-                                    && f.getType() == SignatureFieldType.SIGNATURE).findFirst().orElse(null);
-                            boolean myTurn = env.getStatus() == SignatureEnvelopeStatus.SENT
-                                    && (!env.isSequential() || r.getOrderIndex() == env.getCurrentOrder());
-                            return new PublicSignatureView(env.getTitle(), env.getMessage(), env.getInitiatorEmail(),
-                                    t.getT1(), r.getRecipientName(), r.getRecipientEmail(),
-                                    env.getStatus(), r.getStatus(), myTurn,
-                                    r.getAuthMethod() == null ? SignatureAuthMethod.NONE : r.getAuthMethod(),
-                                    r.requiresOtp(), r.getOtpVerifiedAt() != null,
-                                    mine, others,
-                                    first == null ? r.getFieldPage() : first.getPage(),
-                                    first == null ? r.getFieldX() : first.getX(),
-                                    first == null ? r.getFieldY() : first.getY(),
-                                    first == null ? r.getFieldW() : first.getW(),
-                                    first == null ? r.getFieldH() : first.getH(),
-                                    first == null ? r.getSignatureImage() : first.getValueImage(),
-                                    first == null ? r.getSignatureTyped() : (first.getValueImage() == null ? first.getValue() : null));
-                        }));
+                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Envelope not found")))
+                .flatMap(env -> {
+                    SignatureEnvelopeStatus status = effectiveStatus(env);
+                    boolean myTurn = status == SignatureEnvelopeStatus.SENT
+                            && (!env.isSequential() || r.getOrderIndex() == env.getCurrentOrder());
+                    boolean closed = isClosedForSigner(env, r);
+                    if ((closed && !ownAction) || !otpSatisfied(r)) {
+                        return Mono.just(minimalView(env, r, status, myTurn));
+                    }
+                    return Mono.zip(
+                                    documentName(env),
+                                    fieldRepo.findByEnvelopeIdOrderBySortOrderAscIdAsc(env.getId()).collectList())
+                            .map(t -> {
+                                List<SignatureField> all = t.getT2();
+                                List<SignatureFieldDTO> mine = all.stream().filter(f -> f.getRecipientId().equals(r.getId()))
+                                        .map(f -> SignatureFieldDTO.from(f, true)).toList();
+                                // Other signers' fields: where they are and that they are filled — never what they contain.
+                                List<SignatureFieldDTO> others = all.stream()
+                                        .filter(f -> !f.getRecipientId().equals(r.getId()) && f.isFilled())
+                                        .map(SignatureFieldDTO::placement).toList();
+                                SignatureField first = all.stream().filter(f -> f.getRecipientId().equals(r.getId())
+                                        && f.getType() == SignatureFieldType.SIGNATURE).findFirst().orElse(null);
+                                return new PublicSignatureView(env.getTitle(), env.getMessage(), env.getInitiatorEmail(),
+                                        t.getT1(), r.getRecipientName(), r.getRecipientEmail(),
+                                        status, r.getStatus(), myTurn,
+                                        authMethod(r), r.requiresOtp(), otpSatisfied(r),
+                                        mine, others,
+                                        first == null ? r.getFieldPage() : first.getPage(),
+                                        first == null ? r.getFieldX() : first.getX(),
+                                        first == null ? r.getFieldY() : first.getY(),
+                                        first == null ? r.getFieldW() : first.getW(),
+                                        first == null ? r.getFieldH() : first.getH(),
+                                        first == null ? r.getSignatureImage() : first.getValueImage(),
+                                        first == null ? r.getSignatureTyped() : (first.getValueImage() == null ? first.getValue() : null));
+                            });
+                });
+    }
+
+    /** Status page only: who is asking whom, and where the envelope stands. Nothing about the document. */
+    private PublicSignatureView minimalView(SignatureEnvelope env, SignatureRecipient r, SignatureEnvelopeStatus status,
+                                            boolean myTurn) {
+        return new PublicSignatureView(env.getTitle(), null, env.getInitiatorEmail(),
+                null, r.getRecipientName(), r.getRecipientEmail(),
+                status, r.getStatus(), myTurn,
+                authMethod(r), r.requiresOtp(), otpSatisfied(r),
+                List.of(), List.of(),
+                null, null, null, null, null, null, null);
+    }
+
+    private static SignatureAuthMethod authMethod(SignatureRecipient r) {
+        return r.getAuthMethod() == null ? SignatureAuthMethod.NONE : r.getAuthMethod();
+    }
+
+    /** The status a signer should be told: an envelope past its deadline is EXPIRED even before the sweeper flips the column. */
+    private static SignatureEnvelopeStatus effectiveStatus(SignatureEnvelope env) {
+        return env.getStatus() == SignatureEnvelopeStatus.SENT && isPastExpiry(env)
+                ? SignatureEnvelopeStatus.EXPIRED : env.getStatus();
+    }
+
+    private static boolean isPastExpiry(SignatureEnvelope env) {
+        return env.getExpiresAt() != null && env.getExpiresAt().isBefore(OffsetDateTime.now());
+    }
+
+    /** Nothing may happen on this link any more: revoked token, terminal envelope, or deadline passed. */
+    static boolean isClosedForSigner(SignatureEnvelope env, SignatureRecipient r) {
+        return r.isTokenRevoked() || env.getStatus() == null || env.getStatus().isTerminal() || isPastExpiry(env);
+    }
+
+    /**
+     * The OTP step, when the recipient has one, was passed on this link and has not aged out of
+     * {@code openfilz.signature.otp.verified-for} (0 = never ages out).
+     */
+    boolean otpSatisfied(SignatureRecipient r) {
+        if (!r.requiresOtp()) return true;
+        if (r.getOtpVerifiedAt() == null) return false;
+        Duration window = props.getOtp().getVerifiedFor();
+        if (window == null || window.isZero() || window.isNegative()) return true;
+        return r.getOtpVerifiedAt().plus(window).isAfter(OffsetDateTime.now());
+    }
+
+    private void requireOtpSatisfied(SignatureRecipient r) {
+        if (!otpSatisfied(r)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access code not verified");
+        }
+    }
+
+    /** Guard for every signer-side action: {@code 410} once the link is dead, {@code 409} for a draft. */
+    private static void requireOpenForSigner(SignatureEnvelope env, SignatureRecipient r) {
+        if (isClosedForSigner(env, r)) {
+            throw new ResponseStatusException(HttpStatus.GONE,
+                    "This signing link is no longer valid — envelope is " + effectiveStatus(env));
+        }
+        if (env.getStatus() != SignatureEnvelopeStatus.SENT) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Envelope is " + env.getStatus());
+        }
     }
 
     private Mono<String> documentName(SignatureEnvelope env) {

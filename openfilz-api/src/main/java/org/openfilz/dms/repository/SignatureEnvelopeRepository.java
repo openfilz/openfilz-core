@@ -38,4 +38,13 @@ public interface SignatureEnvelopeRepository extends ReactiveCrudRepository<Sign
     Mono<Long> countByInitiatorSince(String initiatorEmail, OffsetDateTime since);
 
     Flux<SignatureEnvelope> findBySourceDocId(UUID sourceDocId);
+
+    /**
+     * The envelope row, locked for the rest of the current transaction. Used by the signing
+     * path so that two signers finishing an envelope at the same time serialise: the second
+     * one waits for the first commit and therefore sees the first signature when it decides
+     * whether the envelope is complete.
+     */
+    @Query("SELECT * FROM signature_envelope WHERE id = :id FOR UPDATE")
+    Mono<SignatureEnvelope> findByIdForUpdate(UUID id);
 }

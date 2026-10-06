@@ -60,6 +60,9 @@ public abstract class AbstractSignatureIT extends TestContainersKeyCloakConfig {
         registry.add("openfilz.security.no-auth", () -> false);
         registry.add("openfilz.signature.active", () -> true);
         registry.add("openfilz.signature.web-base-url", () -> "http://web.test/");
+        // The ITs request a second code right after burning the first one's attempts; the
+        // per-link cooldown is covered by SignatureServiceImplPublicAccessTest.
+        registry.add("openfilz.signature.otp.request-cooldown", () -> "0s");
     }
 
     // ── helpers ─────────────────────────────────────────────────────────

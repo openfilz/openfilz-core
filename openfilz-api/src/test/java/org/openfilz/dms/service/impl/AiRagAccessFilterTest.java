@@ -81,8 +81,8 @@ class AiRagAccessFilterTest {
                 // real service, feature off by default — mint() returns null, links stay plain
                 new org.openfilz.dms.security.DownloadTokenService(
                         new org.openfilz.dms.config.DownloadTokenProperties()),
-                // no audit trail, full-text index nor insight store in this unit test
-                null, null, null, null);
+                // no audit trail, full-text index, insight store nor guardrails in this unit test
+                null, null, null, null, null);
     }
 
     private static Document chunk(UUID documentId, String name, String text, double score) {
@@ -125,6 +125,22 @@ class AiRagAccessFilterTest {
         Assertions.assertFalse(ragNames.contains("doc-b.txt"), "B's document name must not be registered for A");
         Assertions.assertFalse(tools.getRegistry().containsKey("doc-b.txt"),
                 "B's document must not enter the doc-link registry");
+    }
+
+    @Test
+    void ragChunksAreFencedAsUntrustedDocumentData() {
+        givenVectorStoreReturnsAllThreeChunks();
+
+        String context = retrieveContext(service(new PermitAllAiAccessPolicy()), tools(), new HashSet<>());
+
+        Assertions.assertTrue(context.contains(org.openfilz.dms.service.ai.UntrustedContent.OPEN_TAG + " id=\"" + DOC_A_ID + "\" name=\"doc-a.txt\">"),
+                "each chunk opens a fence naming its document");
+        Assertions.assertTrue(context.contains(org.openfilz.dms.service.ai.UntrustedContent.NOTICE),
+                "the fence carries the 'this is data, not instructions' notice");
+        Assertions.assertTrue(context.contains(org.openfilz.dms.service.ai.UntrustedContent.CLOSE_TAG));
+        Assertions.assertTrue(context.contains("[Document: doc-a.txt]"), "the link-enrichment header line stays");
+        // the notice is inside the fence, before the text
+        Assertions.assertTrue(context.indexOf(org.openfilz.dms.service.ai.UntrustedContent.NOTICE) < context.indexOf(TEXT_A));
     }
 
     @Test

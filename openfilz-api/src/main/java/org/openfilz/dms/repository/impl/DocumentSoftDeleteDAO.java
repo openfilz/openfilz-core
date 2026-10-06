@@ -107,6 +107,12 @@ public class DocumentSoftDeleteDAO implements UserInfoService, SqlQueryUtils {
             )
             SELECT id FROM descendants""";
 
+    public static final String IS_IN_RECYCLE_BIN = """
+            SELECT count(*)
+            FROM documents d
+            JOIN recycle_bin r ON d.id = r.id
+            WHERE d.id = :docId AND d.active = false""";
+
     public static final String EMPTY_BIN_WHERE_IDS = """
             WITH RECURSIVE descendants AS (
                 SELECT id FROM documents WHERE id = :docId
@@ -167,6 +173,21 @@ public class DocumentSoftDeleteDAO implements UserInfoService, SqlQueryUtils {
         return databaseClient.sql(FIND_DOCS_TO_DELETE)
                 .map(mapFolderElementInfo())
                 .all();
+    }
+
+    /**
+     * Whether the caller may see this one document in the recycle bin — the per-id form of the
+     * criteria {@link #findDeletedDocuments()} applies, consulted before a restore or a permanent
+     * delete. The core lists every soft-deleted document, so here it means "soft-deleted and
+     * recorded in the bin"; an extension that scopes the listing to the caller overrides this too.
+     */
+    public Mono<Boolean> isVisibleInRecycleBin(UUID documentId) {
+        return databaseClient.sql(IS_IN_RECYCLE_BIN)
+                .bind("docId", documentId)
+                .map(mapCount())
+                .one()
+                .map(count -> count > 0)
+                .defaultIfEmpty(false);
     }
 
 

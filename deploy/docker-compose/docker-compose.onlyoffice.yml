@@ -16,7 +16,9 @@ services:
     restart: unless-stopped
     environment:
       JWT_ENABLED: "true"
-      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-openfilz-onlyoffice-jwt-secret-2024}
+      # Required, no default: a published value lets anyone forge editor tokens. Generate one with
+      # `openssl rand -hex 32` and set ONLYOFFICE_JWT_SECRET in .env (same value reaches the API below).
+      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:?ONLYOFFICE_JWT_SECRET is required (generate one with: openssl rand -hex 32)}
       JWT_HEADER: Authorization
       # Allow connections from OpenFilz containers
       ALLOW_META_IP_ADDRESS: "true"
@@ -48,4 +50,6 @@ services:
       ONLYOFFICE_ALLOWED_DOWNLOAD_HOSTS: ${ONLYOFFICE_ALLOWED_DOWNLOAD_HOSTS:-onlyoffice}
       ONLYOFFICE_DOWNLOAD_TIMEOUT: ${ONLYOFFICE_DOWNLOAD_TIMEOUT:-120s}
       ONLYOFFICE_MAX_DOWNLOAD_BYTES: ${ONLYOFFICE_MAX_DOWNLOAD_BYTES:-268435456}
-      ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-openfilz-onlyoffice-jwt-secret-2024}
+      # Must match JWT_SECRET on the document server; the API refuses to start on a blank, short or
+      # published value (OnlyOfficeJwtSecretStartupGuard).
+      ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:?ONLYOFFICE_JWT_SECRET is required (generate one with: openssl rand -hex 32)}
