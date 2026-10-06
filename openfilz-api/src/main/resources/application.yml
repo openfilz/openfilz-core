@@ -603,6 +603,11 @@ onlyoffice:
   document-server:
     url: ${ONLYOFFICE_URL:http://localhost}
     api-path: /web-apps/apps/api/documents/api.js
+    # Save callbacks may only download from the host of `url` plus these (comma-separated hosts or URLs;
+    # needed when the document server names itself differently towards the API than towards the browser)
+    allowed-download-hosts: ${ONLYOFFICE_ALLOWED_DOWNLOAD_HOSTS:}
+    download-timeout: ${ONLYOFFICE_DOWNLOAD_TIMEOUT:120s}
+    max-download-bytes: ${ONLYOFFICE_MAX_DOWNLOAD_BYTES:268435456}
   jwt:
     enabled: true
     secret: ${ONLYOFFICE_JWT_SECRET:openfilz-onlyoffice-jwt-secret-2024}

@@ -130,6 +130,10 @@ onlyoffice:
   enabled: null
   internalUrl: ""            # → global.onlyoffice.internalUrl
   jwtSecret: ""              # → global.onlyoffice.jwtSecret
+  # Hosts the API may download saved documents from (SSRF guard on the save callback). The host of
+  # the internal URL is always allowed; add the public OnlyOffice host here (comma-separated) when
+  # the document server names itself by that host in its callbacks.
+  allowedDownloadHosts: ""
 
 # Quotas (MB, 0 = no limit)
 quotas:

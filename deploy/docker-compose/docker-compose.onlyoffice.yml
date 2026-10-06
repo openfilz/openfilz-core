@@ -43,4 +43,9 @@ services:
       # OnlyOffice configuration
       ONLYOFFICE_ENABLED: "true"
       ONLYOFFICE_URL: ${ONLYOFFICE_URL:-http://localhost:8080}
+      # Save callbacks may only download from the host of ONLYOFFICE_URL plus these (comma-separated,
+      # SSRF guard). The document server's container name is allowed by default.
+      ONLYOFFICE_ALLOWED_DOWNLOAD_HOSTS: ${ONLYOFFICE_ALLOWED_DOWNLOAD_HOSTS:-onlyoffice}
+      ONLYOFFICE_DOWNLOAD_TIMEOUT: ${ONLYOFFICE_DOWNLOAD_TIMEOUT:-120s}
+      ONLYOFFICE_MAX_DOWNLOAD_BYTES: ${ONLYOFFICE_MAX_DOWNLOAD_BYTES:-268435456}
       ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-openfilz-onlyoffice-jwt-secret-2024}

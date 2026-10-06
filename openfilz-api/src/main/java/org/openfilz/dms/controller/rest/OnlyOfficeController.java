@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.OnlyOfficeCallbackRequest;
 import org.openfilz.dms.dto.response.OnlyOfficeConfigResponse;
+import org.openfilz.dms.exception.OperationForbiddenException;
 import org.openfilz.dms.service.OnlyOfficeService;
 import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -79,6 +80,12 @@ public class OnlyOfficeController implements UserInfoService {
         return onlyOfficeService.handleCallback(documentId, callback)
                 .thenReturn(Map.of("error", 0))
                 .onErrorResume(e -> {
+                    if (e instanceof OperationForbiddenException) {
+                        // A callback that is not the document server's for this document (token bound
+                        // to another document, user-held access token, download URL off the
+                        // allow-list): answered 403, not swallowed into {"error": 1}
+                        return Mono.error(e);
+                    }
                     log.error("Error processing OnlyOffice callback for document {}: {}", documentId, e.getMessage());
                     // Return error code 1 to indicate failure
                     return Mono.just(Map.of("error", 1));
