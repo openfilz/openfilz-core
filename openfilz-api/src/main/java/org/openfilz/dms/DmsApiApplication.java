@@ -2,6 +2,7 @@ package org.openfilz.dms;
 
 import org.openfilz.dms.config.AiMigrationRuntimeHints;
 import org.openfilz.dms.config.AnthropicSdkRuntimeHints;
+import org.openfilz.dms.config.AuditDetailsRuntimeHints;
 import org.openfilz.dms.config.TransformersRuntimeHints;
 import org.openfilz.dms.config.CaffeineRuntimeHints;
 import org.openfilz.dms.config.McpRuntimeHints;
@@ -15,7 +16,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @SpringBootApplication
 @EnableScheduling
 @ImportRuntimeHints({PoiOoxmlRuntimeHints.class, AnthropicSdkRuntimeHints.class, AiMigrationRuntimeHints.class,
-        CaffeineRuntimeHints.class, McpRuntimeHints.class, TransformersRuntimeHints.class, PdfBoxRuntimeHints.class})
+        CaffeineRuntimeHints.class, McpRuntimeHints.class, TransformersRuntimeHints.class, PdfBoxRuntimeHints.class,
+        AuditDetailsRuntimeHints.class})
 public class DmsApiApplication {
 
     public static void main(String[] args) {
