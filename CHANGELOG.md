@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[bdf197970c8b507](https://github.com/openfilz/openfilz-core/commit/bdf197970c8b507) maven-release-bot[bot] *2026-10-07 00:42:44*
+[07320ee6f0146dc](https://github.com/openfilz/openfilz-core/commit/07320ee6f0146dc) maven-release-bot[bot] *2026-10-07 08:33:35*
 
 
-## v1.3.38
+## v1.3.39
 ### No issue
 
-**[maven-release-plugin] prepare release v1.3.38**
+**[maven-release-plugin] prepare release v1.3.39**
 
 
-[e08467bcce65910](https://github.com/openfilz/openfilz-core/commit/e08467bcce65910) maven-release-bot[bot] *2026-10-07 00:42:41*
+[f5208cab1f19e8f](https://github.com/openfilz/openfilz-core/commit/f5208cab1f19e8f) maven-release-bot[bot] *2026-10-07 08:33:32*
 
-**Merge pull request #310 from openfilz/develop**
+**Merge pull request #312 from openfilz/develop**
 
- * Release: native audit details hints (audit trail 500 on workflow entries)
+ * Release: filing record answers 204 when never filed
 
-[03b04de1c6fc0c4](https://github.com/openfilz/openfilz-core/commit/03b04de1c6fc0c4) Yann Demel *2026-10-07 00:03:58*
+[8ed3ff9fb912a92](https://github.com/openfilz/openfilz-core/commit/8ed3ff9fb912a92) Yann Demel *2026-10-07 08:30:25*
 
 
