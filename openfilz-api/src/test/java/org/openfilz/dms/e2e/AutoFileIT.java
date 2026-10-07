@@ -159,6 +159,11 @@ class AutoFileIT extends TestContainersBaseConfig {
     void explicitFlagAndPreference() {
         UploadResponse plain = upload("plain-" + UUID.randomUUID() + ".txt", "Invoice F-2026-0100 from ACME.", null, false);
         assertThat(plain.autoFile()).isNull();
+        // Never filed: 204 with no body (not a 404 the browser would log), same for an unknown document
+        getWebTestClient().get().uri(AUTO_FILE + "/document/" + plain.id())
+                .exchange().expectStatus().isNoContent().expectBody().isEmpty();
+        getWebTestClient().get().uri(AUTO_FILE + "/document/" + UUID.randomUUID())
+                .exchange().expectStatus().isNoContent().expectBody().isEmpty();
 
         UploadResponse implicit = upload("implicit-" + UUID.randomUUID() + ".txt", "Invoice F-2026-0101 from ACME.", null, null);
         assertThat(implicit.autoFile()).as("the switch is off by default").isNull();
