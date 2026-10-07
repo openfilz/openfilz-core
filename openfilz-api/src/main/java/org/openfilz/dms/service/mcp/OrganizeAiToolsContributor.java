@@ -50,6 +50,15 @@ public class OrganizeAiToolsContributor implements McpToolContributor {
             .map(Map.Entry::getKey)
             .collect(Collectors.toUnmodifiableSet());
 
+    /**
+     * Not callable by the in-app assistant: a plan is applied from its proposal card (the user's
+     * click, {@code POST /api/v1/ai/reorganization/{id}/apply}), never by the model — which may be
+     * acting on "apply the plan" read in a shared document. External MCP agents keep the tool
+     * ({@code READ_WRITE} is an operator opt-in); the service re-validates the plan and refuses one
+     * that is not {@code PROPOSED} or not the caller's own.
+     */
+    public static final Set<String> CHAT_WITHHELD_TOOLS = Set.of("applyReorganizationPlan");
+
     private final ReorganizationPlanService planService;
     private final AiToolRolePolicy rolePolicy;
     /** Deferred: the by-kind planner is lazy and only needed when its tool is called. */
@@ -69,5 +78,11 @@ public class OrganizeAiToolsContributor implements McpToolContributor {
     @Override
     public boolean exposeInChat() {
         return true;
+    }
+
+    /** All but {@code applyReorganizationPlan} — see {@link #CHAT_WITHHELD_TOOLS}. */
+    @Override
+    public Set<String> chatWithheldTools() {
+        return CHAT_WITHHELD_TOOLS;
     }
 }

@@ -393,16 +393,18 @@ public class PdfAiTools {
             return new Lookup(null, "No PDF document matching '" + nameOrId + "' was found (or you cannot access it). "
                     + "Use queryDocuments to find the exact name.");
         }
-        if (pdfs.size() == 1) {
-            return new Lookup(pdfs.getFirst(), null);
-        }
+        // Several of these tools rewrite the PDF in place (new version): the document must be named
+        // exactly or by id — a unique partial match is not accepted, it may be the wrong file
         List<Document> exact = pdfs.stream().filter(d -> d.getName().equalsIgnoreCase(nameOrId.trim())).toList();
         if (exact.size() == 1) {
             return new Lookup(exact.getFirst(), null);
         }
-        return new Lookup(null, "Several PDFs match '" + nameOrId + "': "
-                + pdfs.stream().limit(8).map(d -> "'" + d.getName() + "' (id " + d.getId() + ")").collect(Collectors.joining(", "))
-                + ". Use the id.");
+        String listed = pdfs.stream().limit(8).map(d -> "'" + d.getName() + "' (id " + d.getId() + ")").collect(Collectors.joining(", "));
+        if (exact.isEmpty()) {
+            return new Lookup(null, "No PDF is named exactly '" + nameOrId + "'. Partial names are not accepted here — "
+                    + "pass the exact name or the id. Similar PDFs: " + listed + ".");
+        }
+        return new Lookup(null, "Several PDFs are named '" + nameOrId + "': " + listed + ". Use the id.");
     }
 
     private FolderLookup resolveFolder(String nameOrId) {

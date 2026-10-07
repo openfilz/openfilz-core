@@ -55,6 +55,11 @@ class DocumentAiToolsMcpIT extends AbstractMcpIT {
         registerModelSelectors(registry, "none");
         registry.add("openfilz.mcp.mode", () -> "READ_WRITE");
         registry.add("openfilz.ai.active", () -> true);
+        // The test profile has no recycle bin (openfilz.soft-delete.active=false), where the default
+        // confirm-only destructive mode refuses deleteDocument outright; this suite exercises the
+        // delete path itself, so it opts into the operator mode. The refusal is pinned by
+        // DocumentAiToolsMutationGuardrailsTest.
+        registry.add("openfilz.ai.tools.destructive-mode", () -> "allow");
     }
 
     @Test

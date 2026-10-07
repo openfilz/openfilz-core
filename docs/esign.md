@@ -23,9 +23,9 @@ offline: no call to any `*.openfilz.com` service is made unless you explicitly c
 | **Sequential / parallel** | With `sequential: true`, only recipients whose `orderIndex` equals the envelope's `currentOrder` may act; the next group is invited automatically (with fresh tokens) when the current one finishes. With `sequential: false` (default) everyone is invited at once. Recipients sharing an `orderIndex` always sign in parallel. |
 | **Drafts** | `send: false` on create stores the envelope as `DRAFT` and sends nothing. `POST /signatures/{id}/send` re-issues every token and mails the invitations. |
 | **Templates** | Reusable named roles + fields (stored as JSON) with an optional default document. Instantiating binds each role to a real person. |
-| **Email OTP** | Opt-in per recipient (`authMethod: EMAIL_OTP`). The signer must request and verify a numeric code before `/sign` is accepted. |
+| **Email OTP** | Opt-in per recipient (`authMethod: EMAIL_OTP`). The signer must request and verify a numeric code before the link reveals anything beyond the envelope title: the document, the fields and `/sign` all wait for it (see [§5](#5-security-model)). |
 | **Resend** | `POST /signatures/{id}/recipients/{rid}/resend` mints a new token — the previous link stops working immediately — and re-mails it. It counts as a reminder (`reminderCount++`, `RECIPIENT_REMINDED` event, `SIGNATURE_REMINDER_SENT` audit action). |
-| **Expiry sweeper** | A scheduled job flips `SENT` envelopes past `expiresAt` to `EXPIRED`. The public endpoints reject expired envelopes with `410` regardless, so the sweeper is there to make the *status column* converge for listings, metrics, audit and webhooks. |
+| **Expiry sweeper** | A scheduled job flips `SENT` envelopes past `expiresAt` to `EXPIRED` and revokes their signing links. The public endpoints treat an envelope past `expiresAt` as expired regardless (`410` on every action, status-only view), so the sweeper is there to make the *status column* converge for listings, metrics, audit and webhooks. |
 | **Certificate of Completion** | A page appended to the signed PDF listing every signer with timestamps, IP and OTP method, the SHA-256 of the original document, and the full append-only event trail. Stamps and certificate are written in Liberation Sans (SIL OFL 1.1, bundled in `openfilz-api` under `fonts/liberation/`), embedded as a subset: Latin, Greek and Cyrillic names render as typed; characters outside the font (CJK, emoji) print as `?`. |
 | **Seal** | Once every SIGNER has signed, the stamped PDF gets a PAdES signature over the whole document (see [§4](#4-seal-providers)). |
 | **The signed copy** | A normal DMS document named `<title> (signed).pdf`, created next to the source, with metadata `{"_signed":true,"_readOnly":true,"_signedEnvelopeId":"<uuid>"}` — OnlyOffice opens it read-only. It is also mailed as an attachment to the initiator and to every recipient (signers **and** CCs), de-duplicated by address. |
@@ -107,10 +107,13 @@ Applies to `EMAIL_OTP` (CE) and `SMS_OTP` (EE).
 |---|---|---|---|
 | `openfilz.signature.otp.length` | `OPENFILZ_SIGNATURE_OTP_LENGTH` | `6` | Number of digits in the generated code. |
 | `openfilz.signature.otp.valid-minutes` | `OPENFILZ_SIGNATURE_OTP_VALID_MINUTES` | `10` | Validity window; after that a new code must be requested. |
-| `openfilz.signature.otp.max-attempts` | `OPENFILZ_SIGNATURE_OTP_MAX_ATTEMPTS` | `5` | Failed verifications before the code is locked out (`429`) and must be re-requested. |
+| `openfilz.signature.otp.max-attempts` | `OPENFILZ_SIGNATURE_OTP_MAX_ATTEMPTS` | `5` | Verification attempts per code before it is locked out (`429`) and must be re-requested. The counter is reserved atomically, so parallel guesses share the same budget. |
+| `openfilz.signature.otp.request-cooldown` | `OPENFILZ_SIGNATURE_OTP_REQUEST_COOLDOWN` | `60s` | Minimum delay between two `/otp/request` calls on the same link (`429` with the remaining wait). `0` = none. |
+| `openfilz.signature.otp.max-requests` | `OPENFILZ_SIGNATURE_OTP_MAX_REQUESTS` | `10` | Codes one link may request in its lifetime; past it `/otp/request` answers `429` and the signer needs a new link (resend). Reset whenever the token is re-issued. `0` = unlimited. |
+| `openfilz.signature.otp.verified-for` | `OPENFILZ_SIGNATURE_OTP_VERIFIED_FOR` | `24h` | How long a passed OTP step keeps unlocking the document and `/sign` on that link; afterwards the signer verifies a code again. `0` = for as long as the link lives. |
 
-The three OTP keys *are* present in the shipped YAML but as literal values, so overriding them
-goes through relaxed binding.
+`length`, `valid-minutes` and `max-attempts` *are* present in the shipped YAML but as literal
+values, so overriding them goes through relaxed binding; the other three have env vars.
 
 ### 3.3 Seal
 
@@ -197,23 +200,59 @@ previously sealed PDFs keep verifying against the old certificate.
 **Signing links.** Each recipient gets `{web-base-url}sign?token=<token>`, where the token is
 32 bytes from `SecureRandom`, base64url without padding. Only `sha256(token)` is stored on the
 recipient row — the raw token exists in the e-mail and nowhere else. The lookup is
-`findByTokenHash(sha256(raw))` filtered on `!tokenRevoked`.
+`findByTokenHash(sha256(raw))`; an unknown token is `404`.
 
-**Revocation.** Sending a draft, resending a link, advancing a sequential envelope to the next
-group, sending a scheduled reminder and minting an embedded-signing URL (EE) all **overwrite
-the stored hash with a fresh one**, which is what makes the previous link stop resolving.
-(The `token_revoked` column exists and is honoured by the read path, but nothing in the current
-code sets it to `true` — revocation in practice is the hash rotation.) Resend, next-group
-advance and scheduled reminders also clear `otpVerifiedAt`, so the OTP step must be passed
-again on the new link; the EE `embed-url` rotation does not.
+**What a link may show.** The view endpoints (`GET` and `POST /viewed`) answer in three
+shapes, decided by `SignatureServiceImpl.publicView`:
+
+* **Open envelope, OTP passed (or none required)** — the full view: the recipient's own
+  fields with their values, and the other recipients' already-filled fields as *placements*
+  (`id`, `recipientId`, `type`, position, `filledAt`) with `value` and `valueImage` **null**.
+  Another signer's signature image or typed text never crosses a link that is not theirs.
+* **OTP recipient who has not passed the step** (or whose verification has aged past
+  `otp.verified-for`) — a status-only view: envelope title, initiator, the recipient's own
+  name / e-mail, statuses, `otpRequired: true`, `otpVerified: false`; `documentName`,
+  `message`, `fields` and `otherFields` are empty. `GET /document` answers `403` until the
+  code is verified. The signing page shows the code step from this view before it ever asks
+  for the PDF.
+* **Closed envelope** (`COMPLETED` / `DECLINED` / `CANCELLED` / `EXPIRED`, an envelope past
+  `expiresAt` the sweeper has not flipped yet, or a revoked token) — the same status-only
+  view, so the page can say "completed" / "cancelled", and nothing else: no document, no
+  fields. The completed PDF reaches the parties through the completion e-mail (attachment)
+  and the initiator through `GET /signatures/{id}/document`, never through a dead link.
+
+The response of the recipient's **own** `/sign`, `/decline` and `/otp/verify` call is the full
+view even when that call just closed the envelope, so the signer sees what they signed once.
+
+**Actions on a closed link.** `GET /document`, `POST /otp/request`, `/otp/verify`, `/sign` and
+`/decline` answer `410 Gone` for a terminal or expired envelope and for a revoked token, `409`
+for a draft. `/decline` requires the passed OTP step like `/sign` (voiding the envelope is as
+consequential as signing it).
+
+**Revocation.** When an envelope reaches a terminal state — completion, decline, cancel, the
+expiry sweeper — every recipient's `token_revoked` is set in the same transaction, so no link
+of that envelope can act again whatever its hash. Sending a draft, resending a link, advancing
+a sequential envelope to the next group, sending a scheduled reminder and minting an
+embedded-signing URL (EE) all go through one helper (`issueToken`) that **overwrites the stored
+hash with a fresh one**, lifts the revocation and restarts the per-link OTP request throttle —
+which is what makes the previous link stop resolving. Resend, next-group advance and scheduled
+reminders also clear `otpVerifiedAt`, so the OTP step must be passed again on the new link; the
+EE `embed-url` rotation does not.
 
 **OTP.** For `EMAIL_OTP`, `POST /otp/request` generates an all-digit code, stores only its
-SHA-256, and mails it. `POST /otp/verify` compares in constant time
-(`MessageDigest.isEqual`), increments `otpAttempts` on failure, and refuses beyond
-`max-attempts` (`429`) or past `otpExpiresAt` (`410`). On success `otpHash` is cleared and
-`otpVerifiedAt` is set. `/sign` answers `403` until then. An `authMethod` that this deployment
-cannot deliver is refused **at envelope creation** (`422`) rather than stranding a signer who
-could never pass the step.
+SHA-256, and mails it — under two throttles enforced by one conditional `UPDATE`
+(`SignatureRecipientRepository.issueOtp`): a cooldown between requests on the same link
+(`otp.request-cooldown`, `429` with the remaining wait) and a lifetime cap per link
+(`otp.max-requests`, `429` telling the signer to ask for a new link); a new code resets the
+failed-attempt counter. `POST /otp/verify` first **reserves an attempt** with an atomic
+conditional increment (`reserveOtpAttempt`: `otp_attempts + 1 WHERE otp_attempts < max`, its
+own statement, so a wrong guess keeps its slot consumed) — parallel guesses can never exceed
+`max-attempts` together, the overflow answers `429` — then compares in constant time
+(`MessageDigest.isEqual`); a wrong code is `403`, a missing or expired code `410`. On success
+`otpHash` is cleared and `otpVerifiedAt` is set; the unlock lasts `otp.verified-for`. `/sign`
+and `GET /document` answer `403` until then. An `authMethod` that this deployment cannot
+deliver is refused **at envelope creation** (`422`) rather than stranding a signer who could
+never pass the step.
 
 **Public chain.** `/api/v1/public/signatures/**` gets its own `@Order(-3)`
 `SecurityWebFilterChain` (`SignaturePublicSecurityConfig`) with CSRF disabled and
@@ -271,13 +310,15 @@ images must be `data:image/…` or base64 and under the size cap; client IP come
 
 | Method | Path | Notes |
 |---|---|---|
-| `GET` | `` | `PublicSignatureView`: envelope, this recipient, their fields, other recipients' already-filled values, `myTurn`, `otpRequired`. |
-| `POST` | `/viewed` | Records the open (IP + user-agent) and flips the recipient to `VIEWED`. |
-| `GET` | `/document` | The source PDF, inline. |
-| `POST` | `/otp/request` | `202`. `501` if this deployment has no sender for the recipient's `authMethod`. |
-| `POST` | `/otp/verify` | Body `{ "code": "123456" }`. |
+| `GET` | `` | `PublicSignatureView`: envelope, this recipient, their fields, other recipients' filled fields as placements (no values), `myTurn`, `otpRequired`. Status-only before the OTP step and once the envelope is closed (§5). |
+| `POST` | `/viewed` | Records the open (IP + user-agent) and flips the recipient to `VIEWED`; same view as `GET`. Records nothing on a closed envelope. |
+| `GET` | `/document` | The source PDF, inline. `403` until the recipient's OTP step is passed, `410` once the envelope is closed. |
+| `POST` | `/otp/request` | `202`. `429` during the cooldown or past the per-link cap, `501` if this deployment has no sender for the recipient's `authMethod`. |
+| `POST` | `/otp/verify` | Body `{ "code": "123456" }`. `403` wrong, `410` no / expired code, `429` attempts exhausted. |
 | `POST` | `/sign` | Body `{ "fields": [{ "fieldId": …, "value": …, "valueImage": … }] }`. The legacy single-field shape (exactly one of `signatureImage` or `typedName`, applied to every SIGNATURE/INITIALS field) is still accepted. |
-| `POST` | `/decline` | Optional `{ "reason": "…" }`; voids the envelope and alerts the initiator. |
+| `POST` | `/decline` | Optional `{ "reason": "…" }`; voids the envelope (links revoked) and alerts the initiator. Requires the OTP step when the recipient has one. |
+
+Every action above answers `410 Gone` once the envelope is terminal, past its deadline, or the token revoked.
 
 ### Example — create and send an envelope
 
@@ -327,6 +368,22 @@ persisted in CE but nothing acts on it there).
 * **Audit actions.** `SIGNATURE_ENVELOPE_CREATED`, `_SENT`, `_COMPLETED`, `_DECLINED`,
   `_CANCELLED`, `_EXPIRED`, plus `SIGNATURE_DOCUMENT_SIGNED`, `SIGNATURE_REMINDER_SENT`,
   `SIGNATURE_TEMPLATE_CREATED`, `SIGNATURE_TEMPLATE_DELETED`.
+* **Finalization and the audit chain.** A signature is one transaction: recipient + fields +
+  `RECIPIENT_SIGNED` event, then — when it was the last one — stamp, seal (an HTTP call on the
+  EE archiving / cloud providers), store, the signed document row, `COMPLETED`, link
+  revocation and the completion listener; **the audit rows (`SIGNATURE_DOCUMENT_SIGNED`,
+  then `SIGNATURE_ENVELOPE_COMPLETED`) are written last**, right before the commit. The
+  chained audit insert takes the instance-wide advisory lock until the commit, so putting it
+  first would have held every other audited write (uploads, moves, downloads…) behind a seal
+  call. Notifications, the completion mails and post-processing run after the commit. A seal
+  or completion-listener failure still fails the whole signature, so the recipient stays
+  actionable and simply retries; an envelope wedged by the historical partial commit is
+  re-finalised when a signer re-opens their link (standalone transaction, then audit, then
+  mails). The envelope row is locked (`SELECT … FOR UPDATE`) for the signing transaction, so
+  two last signers finishing together serialise and the second one completes the envelope.
+  The lock wait itself is bounded by `openfilz.audit.chain.lock-timeout` (`5s`; `0` = forever):
+  a holder stuck in slow work fails the waiting audit insert with a logged
+  `Audit chain lock not acquired within …` instead of queueing the instance behind it.
 * **Event types** (envelope trail, rendered into the Certificate of Completion):
   `ENVELOPE_CREATED`, `ENVELOPE_SENT`, `RECIPIENT_VIEWED`, `RECIPIENT_OTP_VERIFIED`,
   `RECIPIENT_SIGNED`, `RECIPIENT_DECLINED`, `RECIPIENT_REMINDED`, `RECIPIENT_LINK_RESENT`,

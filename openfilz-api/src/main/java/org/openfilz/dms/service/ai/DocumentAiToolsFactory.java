@@ -44,6 +44,8 @@ public class DocumentAiToolsFactory {
     private final org.springframework.beans.factory.ObjectProvider<org.openfilz.dms.service.IndexService> indexServiceProvider;
     private final org.springframework.beans.factory.ObjectProvider<org.openfilz.dms.service.insight.DocumentInsightStore> insightStoreProvider;
     private final org.springframework.beans.factory.ObjectProvider<org.openfilz.dms.service.filing.AutoFileService> autoFileServiceProvider;
+    /** Destructive-action guardrails (destructive mode, soft-delete), read per tool call. */
+    private final AiToolGuardrails guardrails;
 
     /**
      * Create a tools instance bound to the requesting user: every document access inside
@@ -54,7 +56,7 @@ public class DocumentAiToolsFactory {
     public DocumentAiTools create(ChatModel chatModel, String userEmail, org.springframework.security.core.Authentication authentication) {
         return new DocumentAiTools(documentService, documentRepository, storageService, queryService, chatModel, accessPolicy, rolePolicy, versionService, commonProperties, downloadTokenService,
                 auditService, indexServiceProvider.getIfAvailable(), insightStoreProvider.getIfAvailable(),
-                autoFileServiceProvider.getIfAvailable())
+                autoFileServiceProvider.getIfAvailable(), guardrails)
                 .forUser(userEmail, authentication);
     }
 }
