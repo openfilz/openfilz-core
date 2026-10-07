@@ -684,7 +684,12 @@ public class SignatureServiceImpl implements SignatureService {
                                 fieldRepo.findByEnvelopeIdOrderBySortOrderAscIdAsc(env.getId()).collectList(),
                                 eventRepo.findByEnvelopeIdOrderByCreatedAtAsc(env.getId()).collectList())
                         .flatMap(t -> stampAndSeal(env, t.getT1(), recipients, t.getT2(), t.getT3()))
-                        .flatMap(seal -> {
+                        // Hashing and re-parsing the sealed PDF is CPU work: keep it off the R2DBC event loop.
+                        .flatMap(seal -> Mono.fromCallable(() -> new SealedPdf(seal,
+                                        pdfService.sha256Hex(seal.bytes()), SealCertificates.signerName(seal.bytes())))
+                                .subscribeOn(Schedulers.boundedElastic()))
+                        .flatMap(sealed -> {
+                            SignatureSealer.SealResult seal = sealed.seal();
                             byte[] signedBytes = seal.bytes();
                             String storagePath = storageService.getUniqueStorageFileName(safeName(env.getTitle()) + "-signed.pdf");
                             return storageService.saveData(storagePath, toBuffers(signedBytes))
@@ -696,9 +701,9 @@ public class SignatureServiceImpl implements SignatureService {
                                         env.setUpdatedAt(now);
                                         env.setSignedDocId(signedDoc.getId());
                                         env.setSignedStoragePath(storagePath);
-                                        env.setSignedSha256(pdfService.sha256Hex(signedBytes));
+                                        env.setSignedSha256(sealed.sha256());
                                         env.setSealProvider(seal.provider());
-                                        env.setSealSigner(SealCertificates.signerName(signedBytes));
+                                        env.setSealSigner(sealed.signerName());
                                         return envelopeRepo.save(env)
                                                 .then(event(env.getId(), SignatureEventType.ENVELOPE_COMPLETED, "system",
                                                         env.getSignedSha256(), null, "seal=" + seal.provider()
@@ -723,6 +728,9 @@ public class SignatureServiceImpl implements SignatureService {
     }
 
     private record CompletionResult(SignatureSealer.SealResult seal, Document signedDoc) {}
+
+    /** Sealed bytes plus what is derived from them off the event loop (digest, seal certificate name). */
+    private record SealedPdf(SignatureSealer.SealResult seal, String sha256, String signerName) {}
 
     /** Stamp fields + certificate, then seal through the primary sealer; fall back to the core sealer on failure. */
     Mono<SignatureSealer.SealResult> stampAndSeal(SignatureEnvelope env, byte[] original, List<SignatureRecipient> recipients,
