@@ -21,6 +21,8 @@ public record SignatureEnvelopeDTO(
         UUID templateId,
         Integer reminderDays,
         String sealProvider,
+        /** Name of the certificate that sealed the signed document (e.g. "OpenFilz SAS"), null until COMPLETED. */
+        String sealSigner,
         OffsetDateTime createdAt,
         OffsetDateTime sentAt,
         OffsetDateTime completedAt,
@@ -30,7 +32,7 @@ public record SignatureEnvelopeDTO(
     public static SignatureEnvelopeDTO from(SignatureEnvelope e, List<SignatureRecipientDTO> recipients) {
         return new SignatureEnvelopeDTO(e.getId(), e.getTitle(), e.getMessage(), e.getSourceDocId(),
                 e.getSignedDocId(), e.getStatus(), e.getInitiatorEmail(), e.isSequential(), e.getCurrentOrder(),
-                e.getTemplateId(), e.getReminderDays(), e.getSealProvider(), e.getCreatedAt(), e.getSentAt(),
+                e.getTemplateId(), e.getReminderDays(), e.getSealProvider(), e.getSealSigner(), e.getCreatedAt(), e.getSentAt(),
                 e.getCompletedAt(), e.getExpiresAt(), recipients);
     }
 }

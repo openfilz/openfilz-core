@@ -64,7 +64,7 @@ approval*. The approver finds it under **Workflows → My tasks** (and in their 
       "key": "draft", "label": "Draft", "kind": "START", "color": "#94a3b8",
       "assignees": { "type": "INITIATOR" },
       "transitions": [
-        { "key": "submit", "label": "Submit for approval", "to": "pending_approval", "style": "primary" }
+        { "key": "submit", "label": "Submit for approval", "to": "pending_approval", "style": "PRIMARY" }
       ]
     },
     {
@@ -72,8 +72,8 @@ approval*. The approver finds it under **Workflows → My tasks** (and in their 
       "assignees": { "type": "USERS", "emails": ["alice@example.com", "bob@example.com"] },
       "dueInDays": 3,
       "transitions": [
-        { "key": "approve", "label": "Approve", "to": "approved", "style": "success" },
-        { "key": "reject",  "label": "Reject",  "to": "rejected", "style": "danger", "requireComment": true }
+        { "key": "approve", "label": "Approve", "to": "approved", "style": "SUCCESS" },
+        { "key": "reject",  "label": "Reject",  "to": "rejected", "style": "DANGER", "requireComment": true }
       ]
     },
     {
@@ -94,7 +94,7 @@ approval*. The approver finds it under **Workflows → My tasks** (and in their 
 | `states[].key` | `^[a-z0-9_]{1,40}$`, unique. |
 | `kind` | Exactly one `START`; at least one `END`. `END` states have no assignees, no transitions and no due delay. Every state must be reachable from `START`, and every non-`END` state must reach an `END`. |
 | `assignees.type` | `INITIATOR` (the person who started the instance), `USERS` (`emails`, ≥ 1, lower-cased), `ROLE` (`role` = a realm role name, e.g. `CONTRIBUTOR`), `CHOSEN_AT_START` (`label` shown in the start dialog; the starter names the people). Absent on `START` = `INITIATOR`. |
-| `transitions[]` | `key` unique inside the state, `label` ≤ 60 chars, `to` must exist, `style` ∈ `primary \| success \| danger \| neutral`, `requireComment` default `false`. |
+| `transitions[]` | `key` unique inside the state, `label` ≤ 60 chars, `to` must exist, `style` ∈ `PRIMARY \| SUCCESS \| DANGER \| NEUTRAL` (upper case, like every enum of the spec), `requireComment` default `false`. |
 | `onEnter[]` | `MOVE_TO_FOLDER {folderId}`, `SET_METADATA {entries: {k: v}}` (≤ 20 keys, keys must not start with `_`), `NOTIFY {emails}`. |
 | `dueInDays` | 1..365. |
 | `review` | Optional, `STEP` only — makes the status a **parallel review** (below): `rule` ∈ `ALL \| FIRST_REJECTION \| QUORUM`, `approveTransition` = the key of one of the status' transitions, `quorum` 1..20 for `QUORUM` (≤ the number of `emails` for `USERS`). Assignees must be `USERS` or `CHOSEN_AT_START`. Codes: `REVIEW_NOT_ON_STEP`, `REVIEW_NEEDS_PEOPLE`, `BAD_REVIEW_RULE`, `REVIEW_NO_APPROVE`, `BAD_QUORUM`, `QUORUM_TOO_HIGH`. |
@@ -112,8 +112,8 @@ status' transitions and leaves their own comment, and everyone involved sees the
   "assignees": { "type": "CHOSEN_AT_START", "label": "Reviewers" },
   "review": { "rule": "ALL", "approveTransition": "approve" },
   "transitions": [
-    { "key": "approve", "label": "Approve",         "to": "approved", "style": "success" },
-    { "key": "changes", "label": "Request changes", "to": "draft",    "style": "neutral", "requireComment": true }
+    { "key": "approve", "label": "Approve",         "to": "approved", "style": "SUCCESS" },
+    { "key": "changes", "label": "Request changes", "to": "draft",    "style": "NEUTRAL", "requireComment": true }
   ]
 }
 ```
