@@ -39,6 +39,7 @@ import org.openfilz.dms.service.MetadataPostProcessor;
 import org.openfilz.dms.service.SignaturePdfService;
 import org.openfilz.dms.service.SignatureService;
 import org.openfilz.dms.service.StorageService;
+import org.openfilz.dms.service.signature.SealCertificates;
 import org.openfilz.dms.service.signature.SignatureAccessPolicy;
 import org.openfilz.dms.service.signature.SignatureActorResolver;
 import org.openfilz.dms.service.signature.SignatureCompletionListener;
@@ -697,6 +698,7 @@ public class SignatureServiceImpl implements SignatureService {
                                         env.setSignedStoragePath(storagePath);
                                         env.setSignedSha256(pdfService.sha256Hex(signedBytes));
                                         env.setSealProvider(seal.provider());
+                                        env.setSealSigner(SealCertificates.signerName(signedBytes));
                                         return envelopeRepo.save(env)
                                                 .then(event(env.getId(), SignatureEventType.ENVELOPE_COMPLETED, "system",
                                                         env.getSignedSha256(), null, "seal=" + seal.provider()

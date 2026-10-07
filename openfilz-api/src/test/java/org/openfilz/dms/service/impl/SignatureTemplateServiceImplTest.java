@@ -289,7 +289,7 @@ class SignatureTemplateServiceImplTest {
         SignatureTemplate t = persisted(doc);
         when(repo.findById(t.getId())).thenReturn(Mono.just(t));
         SignatureEnvelopeDTO created = new SignatureEnvelopeDTO(UUID.randomUUID(), "NDA", null, doc, null, null, "owner@example.com",
-                true, 0, t.getId(), null, null, null, null, null, null, List.of());
+                true, 0, t.getId(), null, null, null, null, null, null, null, List.of());
         when(signatureService.create(any(), any())).thenReturn(Mono.just(created));
         SignatureService.Actor actor = actor();
 
@@ -341,7 +341,7 @@ class SignatureTemplateServiceImplTest {
         SignatureTemplate t = persisted(templateDoc);
         when(repo.findById(t.getId())).thenReturn(Mono.just(t));
         when(signatureService.create(any(), any())).thenReturn(Mono.just(
-                new SignatureEnvelopeDTO(UUID.randomUUID(), "x", null, overrideDoc, null, null, null, false, 0, null, null, null, null, null, null, null, List.of())));
+                new SignatureEnvelopeDTO(UUID.randomUUID(), "x", null, overrideDoc, null, null, null, false, 0, null, null, null, null, null, null, null, null, List.of())));
         InstantiateTemplateRequest req = new InstantiateTemplateRequest(overrideDoc, "Custom title", "custom msg",
                 List.of(bind("Sales", "s@x.io"), bind("Client", "c@x.io")), 42, null, null, null);
 
