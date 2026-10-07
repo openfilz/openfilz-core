@@ -162,6 +162,7 @@ class SignatureEnvelopeIT extends AbstractSignatureIT {
         assertThat(done.signedDocId()).isNotNull();
         assertThat(done.sealProvider()).isEqualTo("self-signed-dev");
         assertThat(done.completedAt()).isNotNull();
+        assertThat(done.sealSigner()).isEqualTo("OpenFilz e-Sign Seal (dev)");
 
         byte[] sealed = downloadSigned(contributor, env.id());
         try (PDDocument pdf = Loader.loadPDF(sealed)) {

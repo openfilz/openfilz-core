@@ -94,6 +94,10 @@ public class SignatureEnvelope implements Persistable<UUID> {
     @Column("seal_provider")
     private String sealProvider;
 
+    /** Name (CN) of the certificate that sealed the final document (set on completion, null if unreadable). */
+    @Column("seal_signer")
+    private String sealSigner;
+
     @Column("created_at")
     private OffsetDateTime createdAt;
 
