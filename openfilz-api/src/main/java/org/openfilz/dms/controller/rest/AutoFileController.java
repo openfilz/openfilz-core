@@ -1,6 +1,7 @@
 package org.openfilz.dms.controller.rest;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.openfilz.dms.config.RestApiVersion;
@@ -15,6 +16,7 @@ import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -124,10 +126,17 @@ public class AutoFileController implements UserInfoService {
 
     @GetMapping(value = "/document/{documentId}", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "The latest filing record of a document (the \"Filed by OpenFilz\" chip)")
-    public Mono<FilingOutcome> lastFiling(@PathVariable UUID documentId) {
+    @ApiResponse(responseCode = "200", description = "The document's latest filing record")
+    @ApiResponse(responseCode = "204", description = "The document was never filed (or is not visible to the caller)")
+    @ApiResponse(responseCode = "404", description = "Smart filing is off on this deployment")
+    public Mono<ResponseEntity<FilingOutcome>> lastFiling(@PathVariable UUID documentId) {
         requireActive();
+        // "Never filed" is the common answer (the details panel asks for every document it opens): 204, not an
+        // error, so browsers do not log a failed request each time. A document the caller cannot see answers the
+        // same, as the 404 did, so this tells nothing about its existence.
         return callerMono().flatMap(caller -> autoFileService.lastFiling(documentId, caller))
-                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "No filing record")));
+                .map(ResponseEntity::ok)
+                .defaultIfEmpty(ResponseEntity.noContent().build());
     }
 
     @PostMapping(value = "/filing/{planId}/undo", produces = MediaType.APPLICATION_JSON_VALUE)
