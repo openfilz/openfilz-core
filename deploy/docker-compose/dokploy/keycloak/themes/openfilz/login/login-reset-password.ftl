@@ -38,6 +38,17 @@
                         ${kcSanitize(messagesPerField.get('username'))?no_esc}
                     </span>
                 </#if>
+                <#-- Pre-fill the address an invited user came with ("Set up a password" on the login page) -->
+                <script>
+                    (function() {
+                        try {
+                            var invited = sessionStorage.getItem('openfilz_invited_email');
+                            var field = document.getElementById('username');
+                            if (invited && field && !field.value) { field.value = invited; }
+                            sessionStorage.removeItem('openfilz_invited_email');
+                        } catch (e) {}
+                    })();
+                </script>
             </div>
 
             <#-- Submit -->

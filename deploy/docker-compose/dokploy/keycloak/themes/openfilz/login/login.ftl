@@ -346,9 +346,13 @@
                         </div>
                     </#if>
 
-                    <#if isInvitedUser>
-                        <a href="#" class="of-link of-link--prominent" id="setup-password-link"
-                           onclick="event.preventDefault();document.getElementById('password').value=document.getElementById('username').value;document.getElementById('kc-form-login').submit();"
+                    <#if isInvitedUser && realm.resetPasswordAllowed>
+                        <#-- An invited account has no password: setting one goes through the reset-credentials
+                             flow, whose e-mailed link proves the person controls the mailbox. (It used to sign
+                             in with the e-mail as password — a credential anyone could guess.) The address is
+                             handed to the reset page through sessionStorage to pre-fill it. -->
+                        <a href="${url.loginResetCredentialsUrl}" class="of-link of-link--prominent" id="setup-password-link"
+                           onclick="try{sessionStorage.setItem('openfilz_invited_email',document.getElementById('username').value);}catch(e){}"
                         >
                             ${msg("loginInvitedSetupPasswordLink")}
                         </a>
