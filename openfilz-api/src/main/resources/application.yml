@@ -522,6 +522,7 @@ openfilz:
     worm-retention: ${OPENFILZ_SECURITY_WORM_RETENTION:} # MANDATORY when worm-mode is true and storage.type is minio : ISO-8601 period (e.g. P10Y) each object stays locked, written as S3 Object Lock COMPLIANCE retention
     custom-roles: false # if true : you can provide a custom implementation of org.openfilz.dms.config.DefaultAuthSecurityConfig and org.openfilz.dms.security.impl.SecurityServiceImpl
     cors-allowed-origins: http://localhost:4200/ # Comma-separated list of authorized origins
+    cors-allowed-headers: ${OPENFILZ_SECURITY_CORS_ALLOWED_HEADERS:} # Comma-separated list of extra request headers browsers may send (on top of Authorization, Content-Type and the TUS headers) — any custom header needs to be listed here or its CORS preflight fails
     role-token-lookup: ${OPENFILZ_SECURITY_ROLE_TOKEN_LOOKUP:REALM_ACCESS} # REALM_ACCESS (default: roles read from the realm_access.roles claim) or GROUPS (roles read from the "groups" claim, full paths /<root-group>/<ROLE>)
     root-group: ${OPENFILZ_SECURITY_ROOT_GROUP:OPENFILZ} # GROUPS mode only: root group whose sub-groups are the roles, e.g. /OPENFILZ/CONTRIBUTOR ; a group outside it (/OTHER/ADMIN) grants nothing
 
