@@ -1145,6 +1145,7 @@ openfilz:
 | Property / Env Variable | Default | Description |
 |--------------------------|---------|-------------|
 | `openfilz.security.cors-allowed-origins` / `CORS_ALLOWED_ORIGINS` | `http://localhost:4200` | Comma-separated allowed origins |
+| `openfilz.security.cors-allowed-headers` / `OPENFILZ_SECURITY_CORS_ALLOWED_HEADERS` | *(empty)* | Comma-separated extra request headers browsers may send, on top of `Authorization`, `Content-Type` and the TUS headers. A custom header that is not listed makes the browser's CORS preflight fail (the request shows as a network error) |
 
 ### API URLs
 
