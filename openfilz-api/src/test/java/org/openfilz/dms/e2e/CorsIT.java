@@ -28,6 +28,37 @@ public class CorsIT extends LocalStorageIT {
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
         registry.add("openfilz.security.cors-allowed-origins", () -> "http://localhost:4200/");
+        registry.add("openfilz.security.cors-allowed-headers", () -> " X-Custom-Reason, X-Other ");
+    }
+
+    @Test
+    void whenPreflightWithExtraAllowedHeader_thenAllowed() {
+        getWebTestClient().options().uri(RestApiVersion.API_PREFIX + "/folders/list")
+                .header("Origin", "http://localhost:4200")
+                .header("Access-Control-Request-Method", "GET")
+                .header("Access-Control-Request-Headers", "authorization, x-custom-reason")
+                .exchange()
+                .expectStatus().isOk()
+                .expectHeader().valueEquals("Access-Control-Allow-Origin", "http://localhost:4200")
+                .expectHeader().value("Access-Control-Allow-Headers", v -> {
+                    Assertions.assertTrue(v.toLowerCase().contains("authorization"), v);
+                    Assertions.assertTrue(v.toLowerCase().contains("x-custom-reason"), v);
+                });
+    }
+
+    /** An unlisted header is simply not echoed back — the browser then refuses to send the actual request. */
+    @Test
+    void whenPreflightWithUnknownHeader_thenNotAllowed() {
+        getWebTestClient().options().uri(RestApiVersion.API_PREFIX + "/folders/list")
+                .header("Origin", "http://localhost:4200")
+                .header("Access-Control-Request-Method", "GET")
+                .header("Access-Control-Request-Headers", "authorization, x-not-allowed")
+                .exchange()
+                .expectStatus().isOk()
+                .expectHeader().value("Access-Control-Allow-Headers", v -> {
+                    Assertions.assertTrue(v.toLowerCase().contains("authorization"), v);
+                    Assertions.assertFalse(v.toLowerCase().contains("x-not-allowed"), v);
+                });
     }
 
     @Test
