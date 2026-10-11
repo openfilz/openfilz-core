@@ -504,6 +504,10 @@
                         <phase>post-integration-test</phase>
                         <configuration>
                             <classifier>exec</classifier>
+                            <!-- Build the ~400 MB fat jar locally (Dockerfile / manual runs) but never
+                                 install or deploy it: it was ~95% of each Maven Central release and
+                                 blew Sonatype's monthly publishing limits. Releases ship as images. -->
+                            <attach>false</attach>
                         </configuration>
                     </execution>
                 </executions>
