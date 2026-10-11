@@ -18,6 +18,11 @@ on:
           - patch
           - minor
           - major
+      publish_maven_central:
+        description: 'Also publish the Java SDKs to Maven Central (counts against the monthly Sonatype limits)'
+        required: false
+        default: false
+        type: boolean
 
 # A release mutates shared state (tag, version-bump commits, published artifacts), so only one
 # may run at a time. cancel-in-progress stays false: interrupting release:perform mid-publish
@@ -180,8 +185,28 @@ jobs:
       - name: Prepare Release
         run: mvn -Dmaven.wagon.http.retryHandler.count=3 -B release:prepare -DtagNameFormat=v@{project.version} -DreleaseVersion=${{ steps.versions.outputs.releaseVersion }} -DdevelopmentVersion=${{ steps.versions.outputs.developmentVersion }} -Darguments="-Dsurefire.skip=true -Dit.test=OpenApiSpecExtractionIT -Dfailsafe.failIfNoSpecifiedTests=false"
 
+      # Maven Central is opt-in: Sonatype caps the organisation at 80 MB, 1 000 files and 7
+      # releases a month, and a core release ships about once a day. Only the Java SDKs (and their
+      # two parent POMs) go there — see excludeArtifacts in the root pom — and only when asked:
+      # the `publish_maven_central` input of a manual run, or the `publish-maven-central` label on
+      # the develop -> main PR. Without it the deploy phase still runs (npm / PyPI / NuGet publish
+      # there, jib pushes the images at install) but nothing is deployed to a Maven repository.
+      - name: Choose Maven Central publishing
+        id: central
+        env:
+          INPUT: ${{ inputs.publish_maven_central }}
+          LABELLED: ${{ contains(github.event.pull_request.labels.*.name, 'publish-maven-central') }}
+        run: |
+          if [ "$INPUT" = "true" ] || [ "$LABELLED" = "true" ]; then
+            echo "args=-Pkube,publishMaven,publishSdk" >> $GITHUB_OUTPUT
+            echo "Maven Central: publishing the Java SDKs"
+          else
+            echo "args=-Pkube,publishSdk -Dmaven.deploy.skip=true" >> $GITHUB_OUTPUT
+            echo "Maven Central: skipped (opt in with the publish_maven_central input or the publish-maven-central PR label)"
+          fi
+
       - name: Perform Release
-        run: mvn -Dmaven.wagon.http.retryHandler.count=3 -B release:perform -Darguments="-Pkube,publishMaven,publishSdk -Dmaven.test.skip=false -Dsurefire.skip=true -Dit.test=OpenApiSpecExtractionIT -Dfailsafe.failIfNoSpecifiedTests=false -Dnpm.publish.tag=latest -Dregistry.hostname=ghcr.io -Dregistry.port=443 -Ddocker.context.path=openfilz/ -Djib.to.auth.username=${{ github.actor }} -Djib.to.auth.password=${{ secrets.GITHUB_TOKEN }}"
+        run: mvn -Dmaven.wagon.http.retryHandler.count=3 -B release:perform -Darguments="${{ steps.central.outputs.args }} -Dmaven.test.skip=false -Dsurefire.skip=true -Dit.test=OpenApiSpecExtractionIT -Dfailsafe.failIfNoSpecifiedTests=false -Dnpm.publish.tag=latest -Dregistry.hostname=ghcr.io -Dregistry.port=443 -Ddocker.context.path=openfilz/ -Djib.to.auth.username=${{ github.actor }} -Djib.to.auth.password=${{ secrets.GITHUB_TOKEN }}"
         env:
           # npm publish authenticates via OIDC Trusted Publishing (no token) — see .npmrc
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
