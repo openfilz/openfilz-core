@@ -545,8 +545,15 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                             if (folderIdToCopy.equals(request.targetFolderId())) {
                                 return Flux.error(new OperationForbiddenException("Cannot copy a folder into itself."));
                             }
-                            // Add check for copying a parent into its child if needed, similar to move
-                            return copyFolderRecursive(folderIdToCopy, request.targetFolderId(), request.allowDuplicateFileNames());
+                            // Copying a folder into one of its own descendants would copy the copy forever
+                            // (every pass finds the fresh copy among the source's children): refuse before any write.
+                            return isDescendant(request.targetFolderId(), folderIdToCopy)
+                                    .flatMapMany(isDescendant -> {
+                                        if (isDescendant) {
+                                            return Flux.error(new OperationForbiddenException("Cannot copy a folder into one of its descendants."));
+                                        }
+                                        return copyFolderRecursive(folderIdToCopy, request.targetFolderId(), request.allowDuplicateFileNames());
+                                    });
                         })
         );
     }
@@ -555,15 +562,19 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
         return documentDAO.findById(sourceFolderId, AccessType.RO)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, sourceFolderId)))
                 .flatMapMany(sourceFolder -> {
+                    // Snapshot the children BEFORE the copy exists: the copy (or anything created under the
+                    // source while we run) must never be part of what gets copied, or the recursion never ends.
+                    Mono<List<Document>> childrenSnapshot = documentDAO.findDocumentsByParentId(sourceFolderId).collectList();
                     // Generate unique name for the new folder in the target location
-                    return raiseErrorIfExists(sourceFolder.getName(), targetParentFolderId, allowDuplicateFileNames)
+                    return childrenSnapshot.flatMap(children -> raiseErrorIfExists(sourceFolder.getName(), targetParentFolderId, allowDuplicateFileNames)
                             .flatMap(_ -> doCreateFolder(new CreateFolderRequest(sourceFolder.getName(), targetParentFolderId),
                                     jsonUtils.cloneOrNewEmptyJson(sourceFolder.getMetadata()), true, sourceFolderId))
                             .flatMap(savedNewFolder -> {
                                 UUID newFolderId = savedNewFolder.getId();
 
-                                // 2. Copy child files
-                                Flux<Document> copyChildFiles = documentDAO.findDocumentsByParentIdAndType(sourceFolderId, FILE)
+                                // 2. Copy child files (from the snapshot, never the copy itself)
+                                Flux<Document> copyChildFiles = Flux.fromIterable(children)
+                                        .filter(child -> child.getType() == FILE && !newFolderId.equals(child.getId()))
                                         .flatMap(childFile -> {
                                             // For each child file, copy physical file and create DB entry under newFolderId
                                             return raiseErrorIfExists(childFile.getName(), newFolderId, allowDuplicateFileNames)
@@ -590,12 +601,13 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                                                     );
                                         });
 
-                                // 3. Recursively copy child folders
-                                Flux<UUID> copyChildSubFolders = documentDAO.findDocumentsByParentIdAndType(sourceFolderId, FOLDER)
+                                // 3. Recursively copy child folders (from the snapshot, never the copy itself)
+                                Flux<UUID> copyChildSubFolders = Flux.fromIterable(children)
+                                        .filter(child -> child.getType() == FOLDER && !newFolderId.equals(child.getId()))
                                         .flatMap(childSubFolder -> copyFolderRecursive(childSubFolder.getId(), newFolderId, allowDuplicateFileNames));
 
                                 return Mono.when(copyChildFiles, copyChildSubFolders).thenReturn(newFolderId);
-                            });
+                            }));
                 });
     }
 

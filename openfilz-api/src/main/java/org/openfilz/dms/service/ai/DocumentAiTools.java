@@ -124,6 +124,13 @@ public class DocumentAiTools {
     /** Smart filing (writeFile's autoFile). Null-tolerated; null or inactive = the option is refused. */
     private final org.openfilz.dms.service.filing.AutoFileService autoFileService;
 
+    /**
+     * Destructive-action guardrails ({@code openfilz.ai.tools.destructive-mode}, soft-delete), read per
+     * call. Null-tolerated for direct unit construction: null behaves as the default
+     * {@code confirm-only} mode with no recycle bin, i.e. deletes are refused.
+     */
+    private final AiToolGuardrails guardrails;
+
     /** For parsing the metadata-map tool arguments, which arrive as a JSON object string. */
     private static final JsonMapper JSON = JsonMapper.builder().build();
     /**
@@ -149,7 +156,8 @@ public class DocumentAiTools {
                            @Nullable AuditService auditService,
                            @Nullable IndexService indexService,
                            @Nullable DocumentInsightStore insightStore,
-                           @Nullable org.openfilz.dms.service.filing.AutoFileService autoFileService) {
+                           @Nullable org.openfilz.dms.service.filing.AutoFileService autoFileService,
+                           @Nullable AiToolGuardrails guardrails) {
         this.documentService = documentService;
         this.documentRepository = documentRepository;
         this.storageService = storageService;
@@ -164,6 +172,7 @@ public class DocumentAiTools {
         this.indexService = indexService;
         this.insightStore = insightStore;
         this.autoFileService = autoFileService;
+        this.guardrails = guardrails;
     }
 
     /**
@@ -709,42 +718,26 @@ public class DocumentAiTools {
 
             for (String name : documentNames.split(",")) {
                 String trimmed = name.trim();
-                UUID id = parseUuid(trimmed);
-                Document doc = null;
-
-                if (id != null) {
-                    doc = canRead(id) ? blockWithAuth(documentRepository.findById(id)) : null;
-                } else {
-                    // Resolve by name from registry
-                    var ref = documentRegistry.get(trimmed);
-                    if (ref != null) {
-                        id = ref.id();
-                        doc = canRead(id) ? blockWithAuth(documentRepository.findById(id)) : null;
-                    } else {
-                        // Search by name — skip candidates the user cannot see
-                        var found = documentRepository.findTop50ByNameContainingIgnoreCaseAndActiveTrueOrderByNameAsc(trimmed)
-                                .collectList().block();
-                        if (found != null) {
-                            var readable = found.stream().filter(d -> canRead(d.getId())).findFirst();
-                            if (readable.isPresent()) {
-                                doc = readable.get();
-                                id = doc.getId();
-                            }
-                        }
-                    }
+                if (trimmed.isEmpty()) {
+                    continue;
                 }
-
-                if (doc != null && id != null) {
-                    if (!canModify(id)) {
-                        denied.add(doc.getName());
-                        continue;
-                    }
-                    sourceParents.add(doc.getParentId());
-                    if (doc.getType() == org.openfilz.dms.enums.DocumentType.FOLDER) {
-                        folderIds.add(id);
-                    } else {
-                        fileIds.add(id);
-                    }
+                // A move is a mutation: the item must be named exactly (or by id) — never the first
+                // partial match, which can move the wrong file
+                MutationTarget target = resolveForMutation(trimmed, "move");
+                if (target.error() != null) {
+                    return toolResult("moveDocuments", target.error());
+                }
+                Document doc = target.document();
+                UUID id = doc.getId();
+                if (!canModify(id)) {
+                    denied.add(doc.getName());
+                    continue;
+                }
+                sourceParents.add(doc.getParentId());
+                if (doc.getType() == org.openfilz.dms.enums.DocumentType.FOLDER) {
+                    folderIds.add(id);
+                } else {
+                    fileIds.add(id);
                 }
             }
 
@@ -813,6 +806,62 @@ public class DocumentAiTools {
         return found.stream().map(Document::getId).filter(this::canRead).findFirst().orElse(null);
     }
 
+    /**
+     * The target of a mutating tool: exactly one of {@code document} / {@code error} is set. The
+     * error is a complete tool result (it names the candidates when the reference is ambiguous).
+     */
+    record MutationTarget(Document document, String error) {
+        static MutationTarget of(Document document) {
+            return new MutationTarget(document, null);
+        }
+
+        static MutationTarget error(String error) {
+            return new MutationTarget(null, error);
+        }
+    }
+
+    /**
+     * Resolve the subject of a <b>mutating</b> tool (delete, move, rename, metadata writes, version
+     * restore): by id, or by the exact (case-insensitive) full name — never by the first partial
+     * match {@link #resolveDocumentToId} falls back to for reads. The model acts on text it has read,
+     * and a document can carry "delete X" for it to follow; a fuzzy match would then hit whatever
+     * file sorts first. When several visible documents bear that exact name, or none does, the
+     * answer is an error listing the candidates (name + id) and asking for the id.
+     *
+     * @param verb the tool's verb for the message ("delete", "move", "modify")
+     */
+    MutationTarget resolveForMutation(String nameOrId, String verb) {
+        if (nameOrId == null || nameOrId.isBlank()) {
+            return MutationTarget.error("You cannot %s: give the exact name or the id of the document.".formatted(verb));
+        }
+        String trimmed = nameOrId.trim();
+        UUID id = parseUuid(trimmed);
+        if (id != null) {
+            Document doc = canRead(id) ? blockWithAuth(documentRepository.findById(id)) : null;
+            return doc != null ? MutationTarget.of(doc)
+                    : MutationTarget.error("You cannot %s '%s': no document with that id is visible to you.".formatted(verb, trimmed));
+        }
+        List<Document> found = blockWithAuth(documentRepository.findByNameIgnoreCaseAndActiveTrue(trimmed).collectList());
+        List<Document> exact = found == null ? List.of() : found.stream()
+                .filter(d -> d.getName() != null && d.getName().equalsIgnoreCase(trimmed))
+                .filter(d -> canRead(d.getId()))
+                .toList();
+        if (exact.size() == 1) {
+            return MutationTarget.of(exact.getFirst());
+        }
+        if (exact.isEmpty()) {
+            return MutationTarget.error(("You cannot %s '%s': no document with exactly that name is visible to you. "
+                    + "Partial names are not accepted for this operation — use queryDocuments to find the document, "
+                    + "then pass its exact name or its id.").formatted(verb, trimmed));
+        }
+        String candidates = exact.stream().limit(10)
+                .map(d -> "'%s' (%s, id %s%s)".formatted(d.getName(), d.getType() == DocumentType.FOLDER ? "folder" : "file",
+                        d.getId(), d.getParentId() != null ? ", in folder " + d.getParentId() : ", at the root"))
+                .collect(Collectors.joining("; "));
+        return MutationTarget.error(("You cannot %s '%s': %d documents have that name — pass the id of the one you mean "
+                + "(use getDocumentPath to tell them apart): %s.").formatted(verb, trimmed, exact.size(), candidates));
+    }
+
     private UUID resolveToId(String nameOrId) {
         if (isRootFolderName(nameOrId)) {
             return null; // root folder
@@ -844,22 +893,14 @@ public class DocumentAiTools {
         if (roleDenial != null) return roleDenial;
         log.debug("[AI-TOOL] renameDocument called with: '{}' -> '{}'", documentName, newName);
         try {
-            UUID id = resolveDocumentToId(documentName);
-            if (id == null) {
-                // Also try searching files — skip candidates the user cannot see
-                var found = documentRepository.findTop50ByNameContainingIgnoreCaseAndActiveTrueOrderByNameAsc(documentName)
-                        .collectList().block();
-                if (found != null) {
-                    id = found.stream().filter(d -> canRead(d.getId()))
-                            .findFirst().map(Document::getId).orElse(null);
-                }
+            // A rename is a mutation: exact name or id only (see resolveForMutation)
+            MutationTarget target = resolveForMutation(documentName, "rename");
+            if (target.error() != null) {
+                return toolResult("renameDocument", target.error());
             }
+            Document doc = target.document();
+            UUID id = doc.getId();
             var renameRequest = new RenameRequest(newName);
-
-            Document doc = id != null ? blockWithAuth(documentRepository.findById(id)) : null;
-            if (doc == null) {
-                return "Document '%s' not found.".formatted(documentName);
-            }
             if (!canModify(doc.getId())) {
                 return toolResult("renameDocument",
                         "You don't have permission to rename '%s'.".formatted(doc.getName()));
@@ -964,7 +1005,8 @@ public class DocumentAiTools {
             if (fullText == null) {
                 return "Could not extract text from this file. It may be a binary or image file.";
             }
-            return "Content of '%s':\n\n%s".formatted(doc.getName(), fullText);
+            // Fenced: the file's text is third-party data, not instructions (see UntrustedContent)
+            return "Content of '%s':\n\n%s".formatted(doc.getName(), UntrustedContent.fence(doc.getId(), doc.getName(), fullText));
         } catch (Exception e) {
             log.error("Error reading document content", e);
             return "Error reading document: " + e.getMessage();
@@ -1158,7 +1200,9 @@ public class DocumentAiTools {
                 case "answer" -> "About '%s':\n\n%s";
                 default -> "Description of '%s':\n\n%s";
             };
-            return toolResult("describeImage", label.formatted(doc.getName(), result));
+            // Fenced like readDocumentContent: what an image says is data, not an instruction
+            return toolResult("describeImage", label.formatted(doc.getName(),
+                    UntrustedContent.fence(doc.getId(), doc.getName(), result)));
 
         } catch (Exception e) {
             log.error("Error analyzing image", e);
@@ -1315,8 +1359,12 @@ public class DocumentAiTools {
                     + "e.g. {\"status\":\"reviewed\",\"year\":2026}") String metadataJson) {
         String roleDenial = denyIfNotAllowed("updateMetadata", ToolCapability.DOCUMENT_WRITE);
         if (roleDenial != null) return roleDenial;
-        UUID id = resolveDocumentToId(documentName);
-        if (id == null || !canModify(id)) {
+        MutationTarget target = resolveForMutation(documentName, "modify");
+        if (target.error() != null) {
+            return toolResult("updateMetadata", target.error());
+        }
+        UUID id = target.document().getId();
+        if (!canModify(id)) {
             return toolResult("updateMetadata", "You cannot modify '%s'.".formatted(documentName));
         }
         Map<String, Object> metadata = parseJsonObject(metadataJson);
@@ -1334,8 +1382,12 @@ public class DocumentAiTools {
             @ToolParam(description = "Comma-separated list of metadata keys to remove") String keys) {
         String roleDenial = denyIfNotAllowed("deleteMetadata", ToolCapability.DOCUMENT_WRITE);
         if (roleDenial != null) return roleDenial;
-        UUID id = resolveDocumentToId(documentName);
-        if (id == null || !canModify(id)) {
+        MutationTarget target = resolveForMutation(documentName, "modify");
+        if (target.error() != null) {
+            return toolResult("deleteMetadata", target.error());
+        }
+        UUID id = target.document().getId();
+        if (!canModify(id)) {
             return toolResult("deleteMetadata", "You cannot modify '%s'.".formatted(documentName));
         }
         List<String> keyList = keys == null ? List.of()
@@ -1381,19 +1433,31 @@ public class DocumentAiTools {
         return toolResult("searchByMetadata", out.toString());
     }
 
-    @Tool(description = "Delete a document or folder (moves it to the recycle bin when soft-delete is "
-            + "enabled). Deleting a folder removes its contents too.")
+    @Tool(description = "Delete a document or folder: moves it to the recycle bin (the user can restore it). "
+            + "Refused when this deployment has no recycle bin — the user then deletes in the application. "
+            + "Deleting a folder removes its contents too. Always confirm "
+            + "with the user first.")
     public String deleteDocument(
             @ToolParam(description = "The name or reference of the document or folder to delete") String documentName) {
         String roleDenial = denyIfNotAllowed("deleteDocument", ToolCapability.DOCUMENT_DELETE);
         if (roleDenial != null) return roleDenial;
-        UUID id = resolveDocumentToId(documentName);
-        if (id == null || !canModify(id)) {
-            return toolResult("deleteDocument", "You cannot delete '%s'.".formatted(documentName));
+        // Reversible deletes only (confirm-only mode): the model acts on text it has read, so a
+        // delete it performs must be undoable from the recycle bin. Checked before any lookup.
+        String deleteRefusal = guardrails != null ? guardrails.deleteRefusal()
+                : AiToolGuardrails.fixed(org.openfilz.dms.config.AiProperties.Tools.DestructiveMode.CONFIRM_ONLY, false).deleteRefusal();
+        if (deleteRefusal != null) {
+            log.warn("[AI-TOOL] deleteDocument refused for '{}': irreversible deletion is not available to the assistant", documentName);
+            return toolResult("deleteDocument", deleteRefusal);
         }
-        Document doc = blockWithAuth(documentRepository.findById(id));
-        if (doc == null) {
-            return toolResult("deleteDocument", "No document named '%s' found.".formatted(documentName));
+        // Exact name or id only — never the first partial match (see resolveForMutation)
+        MutationTarget target = resolveForMutation(documentName, "delete");
+        if (target.error() != null) {
+            return toolResult("deleteDocument", target.error());
+        }
+        Document doc = target.document();
+        UUID id = doc.getId();
+        if (!canModify(id)) {
+            return toolResult("deleteDocument", "You cannot delete '%s'.".formatted(documentName));
         }
         DeleteRequest request = new DeleteRequest(List.of(id));
         if (doc.getType() == DocumentType.FOLDER) {
@@ -1434,8 +1498,12 @@ public class DocumentAiTools {
             @ToolParam(description = "The versionId to restore (from listVersions)") String versionId) {
         String roleDenial = denyIfNotAllowed("restoreVersion", ToolCapability.DOCUMENT_WRITE);
         if (roleDenial != null) return roleDenial;
-        UUID id = resolveDocumentToId(documentName);
-        if (id == null || !canModify(id)) {
+        MutationTarget target = resolveForMutation(documentName, "modify");
+        if (target.error() != null) {
+            return toolResult("restoreVersion", target.error());
+        }
+        UUID id = target.document().getId();
+        if (!canModify(id)) {
             return toolResult("restoreVersion", "You cannot modify '%s'.".formatted(documentName));
         }
         if (versionId == null || versionId.isBlank()) {
@@ -1501,7 +1569,11 @@ public class DocumentAiTools {
                 ? "link valid about %d minutes, no sign-in needed"
                         .formatted(Math.max(1, downloadTokenService.ttlSeconds() / 60))
                 : "browser, signed-in user";
-        return new DocumentDownload(doc, extractText(resource), tokenizedDownloadUrl(id, token), hint, null);
+        // The extracted text is fenced for both front-ends (chat text, MCP text block): it is
+        // document data, not instructions — see UntrustedContent
+        String extracted = extractText(resource);
+        return new DocumentDownload(doc, extracted == null ? null : UntrustedContent.fence(id, doc.getName(), extracted),
+                tokenizedDownloadUrl(id, token), hint, null);
     }
 
     /**

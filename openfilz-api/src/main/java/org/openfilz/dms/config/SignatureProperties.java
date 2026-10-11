@@ -69,6 +69,16 @@ public class SignatureProperties {
         private int validMinutes = 10;
         /** Failed attempts before a new code must be requested. */
         private int maxAttempts = 5;
+        /** Minimum delay between two code requests on the same link ({@code 0} = none). */
+        private Duration requestCooldown = Duration.ofSeconds(60);
+        /** Codes one link may request in its lifetime; reset when the token is re-issued ({@code 0} = unlimited). */
+        private int maxRequests = 10;
+        /**
+         * How long a passed OTP step keeps unlocking the document and the signing action on
+         * that link. Past it the signer must verify a code again ({@code 0} = for as long as
+         * the link lives).
+         */
+        private Duration verifiedFor = Duration.ofHours(24);
     }
 
     @Getter

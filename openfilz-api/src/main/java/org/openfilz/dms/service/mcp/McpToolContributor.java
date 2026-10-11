@@ -77,4 +77,17 @@ public interface McpToolContributor {
     default boolean exposeInChat() {
         return false;
     }
+
+    /**
+     * Tool names this contributor exposes over MCP but <b>withholds from the in-app chat</b> even
+     * though it opts in with {@link #exposeInChat()} — tools whose irreversible effect the app
+     * confirms through its own UI instead (e.g. {@code applyReorganizationPlan}: the user confirms a
+     * proposal on its card, which calls the REST apply; the model reading "apply plan X" in a
+     * document must not be able to do it). Honoured by the chat pipeline unless
+     * {@code openfilz.ai.tools.destructive-mode=allow}; the MCP server ignores it (an MCP
+     * {@code READ_WRITE} deployment is already an explicit operator opt-in).
+     */
+    default Set<String> chatWithheldTools() {
+        return Set.of();
+    }
 }

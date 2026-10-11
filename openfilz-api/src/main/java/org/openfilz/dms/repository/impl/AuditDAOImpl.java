@@ -191,12 +191,13 @@ public class AuditDAOImpl implements AuditDAO, UserInfoService {
                     String userPrincipal = username != null ? username : "SYSTEM";
                     OffsetDateTime timestamp = auditChainService.auditTimestamp();
 
-                    // Acquire advisory lock, read last hash, compute new hash, insert — all in one transaction
-                    Mono<Void> chainedInsert = databaseClient.sql("SELECT pg_advisory_xact_lock(1)")
-                            .then()
-                            .then(getLastHash()
-                                    .defaultIfEmpty(auditChainService.computeGenesisHash())
-                            )
+                    // Acquire advisory lock, read last hash, compute new hash, insert — all in one transaction.
+                    // The lock is global and held until commit, so it is taken under a bounded wait: a
+                    // holder stuck in slow work fails this insert with a clear error instead of queueing
+                    // every audited write of the instance behind it.
+                    Mono<Void> chainedInsert = acquireChainLock()
+                            .then(Mono.defer(() -> getLastHash()
+                                    .defaultIfEmpty(auditChainService.computeGenesisHash())))
                             .flatMap(previousHash -> {
                                 String newHash = auditChainService.computeHash(
                                         timestamp, userPrincipal, action, resourceType, resourceId, details, previousHash);
@@ -234,8 +235,60 @@ public class AuditDAOImpl implements AuditDAO, UserInfoService {
 
                     return chainedInsert.as(tx::transactional);
                 })
-                .doOnError(e -> log.error("Failed to log chained audit action {}: {}", action, e.getMessage()))
+                .doOnError(e -> {
+                    if (isLockTimeout(e)) {
+                        log.error("Audit chain lock not acquired within {} for action {} — another transaction is holding "
+                                        + "the audit chain lock (openfilz.audit.chain.lock-timeout); the entry is dropped",
+                                chainProperties.getLockTimeout(), action);
+                    } else {
+                        log.error("Failed to log chained audit action {}: {}", action, e.getMessage());
+                    }
+                })
                 .onErrorResume(e -> Mono.empty());
+    }
+
+    static final String ADVISORY_LOCK_SQL = "SELECT pg_advisory_xact_lock(1)";
+    static final String RESET_LOCK_TIMEOUT_SQL = "SET LOCAL lock_timeout = DEFAULT";
+
+    /**
+     * Takes the chain lock, bracketed with {@code SET LOCAL lock_timeout}: set just before,
+     * reset to the session default right after, so the rest of the (possibly joined)
+     * transaction keeps its own lock semantics. {@code 0} keeps the unbounded wait. Each
+     * statement is deferred so they run — and can be observed — in exactly this order.
+     */
+    Mono<Void> acquireChainLock() {
+        long millis = lockTimeoutMillis();
+        Mono<Void> lock = Mono.defer(() -> databaseClient.sql(ADVISORY_LOCK_SQL).then());
+        if (millis <= 0) {
+            return lock;
+        }
+        // The value is a validated number, never user input — SET takes no bind parameters.
+        return Mono.defer(() -> databaseClient.sql(lockTimeoutSql(millis)).then())
+                .then(lock)
+                .then(Mono.defer(() -> databaseClient.sql(RESET_LOCK_TIMEOUT_SQL).then()));
+    }
+
+    long lockTimeoutMillis() {
+        java.time.Duration timeout = chainProperties.getLockTimeout();
+        return timeout == null || timeout.isNegative() ? 0 : timeout.toMillis();
+    }
+
+    static String lockTimeoutSql(long millis) {
+        return "SET LOCAL lock_timeout = '" + millis + "ms'";
+    }
+
+    /** PostgreSQL {@code lock_not_available} (SQLSTATE 55P03) — what a lock_timeout expiry surfaces as. */
+    static boolean isLockTimeout(Throwable e) {
+        for (Throwable t = e; t != null; t = t.getCause() == t ? null : t.getCause()) {
+            if (t instanceof io.r2dbc.spi.R2dbcException r2 && "55P03".equals(r2.getSqlState())) {
+                return true;
+            }
+            String msg = t.getMessage();
+            if (msg != null && msg.contains("lock timeout")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override

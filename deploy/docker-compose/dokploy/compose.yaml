@@ -204,6 +204,11 @@ services:
       # OnlyOffice
       ONLYOFFICE_ENABLED: "true"
       ONLYOFFICE_URL: ${ONLYOFFICE_URL:-http://onlyoffice}
+      # Save callbacks may only download from the host of ONLYOFFICE_URL plus these (comma-separated).
+      # The document server names itself by its public host towards the API, so allow it (SSRF guard).
+      ONLYOFFICE_ALLOWED_DOWNLOAD_HOSTS: ${ONLYOFFICE_ALLOWED_DOWNLOAD_HOSTS:-${ONLYOFFICE_HOSTNAME:-docs.openfilz.com}}
+      ONLYOFFICE_DOWNLOAD_TIMEOUT: ${ONLYOFFICE_DOWNLOAD_TIMEOUT:-120s}
+      ONLYOFFICE_MAX_DOWNLOAD_BYTES: ${ONLYOFFICE_MAX_DOWNLOAD_BYTES:-268435456}
       ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET}
 
       # Feature toggles

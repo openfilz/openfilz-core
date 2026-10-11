@@ -152,6 +152,8 @@ spec:
               value: {{ include "openfilz-api.onlyofficeInternalUrl" . | quote }}
             - name: ONLYOFFICE_JWT_SECRET
               value: {{ include "openfilz-api.onlyofficeJwtSecret" . | quote }}
+            - name: ONLYOFFICE_ALLOWED_DOWNLOAD_HOSTS
+              value: {{ .Values.onlyoffice.allowedDownloadHosts | quote }}
             {{- end }}
             - name: OPENFILZ_FULLTEXT_ACTIVE
               value: {{ .Values.features.fulltext | quote }}

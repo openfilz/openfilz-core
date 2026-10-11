@@ -46,7 +46,7 @@ class DocumentAiToolsIndexedContentTest {
                 null, new PermitAllAiAccessPolicy(), (authentication, capability) -> true,
                 mock(DocumentVersionService.class), new CommonProperties(),
                 new DownloadTokenService(new DownloadTokenProperties()),
-                null, indexService, null, null);
+                null, indexService, null, null, null);
     }
 
     @Test
@@ -95,6 +95,8 @@ class DocumentAiToolsIndexedContentTest {
         String result = tools(index).readDocumentContent(id.toString(), null);
 
         assertThat(result).contains("[... content truncated, document is longer ...]");
-        assertThat(result.length()).isLessThan(DocumentAiTools.MAX_CONTENT_CHARS + 200);
+        // budget + header/truncation marker + the untrusted-content fence around the text
+        int fenceOverhead = UntrustedContent.fence(id, "report.txt", "").length();
+        assertThat(result.length()).isLessThan(DocumentAiTools.MAX_CONTENT_CHARS + 200 + fenceOverhead);
     }
 }

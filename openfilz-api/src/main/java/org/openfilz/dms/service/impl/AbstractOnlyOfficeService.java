@@ -11,7 +11,10 @@ import org.openfilz.dms.dto.response.OnlyOfficeConfigResponse.*;
 import org.openfilz.dms.dto.response.OnlyOfficeUserInfo;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.AccessType;
+import org.openfilz.dms.exception.FileSizeExceededException;
+import org.openfilz.dms.exception.OperationForbiddenException;
 import org.openfilz.dms.repository.DocumentDAO;
+import org.openfilz.dms.security.OnlyOfficeAuthenticationToken;
 import org.openfilz.dms.service.*;
 import org.openfilz.dms.utils.ContentInfo;
 import org.openfilz.dms.utils.PathFilePart;
@@ -19,21 +22,31 @@ import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.codec.multipart.FilePart;
+import org.springframework.security.core.context.ReactiveSecurityContextHolder;
+import org.springframework.security.core.context.SecurityContext;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.DigestOutputStream;
 import java.security.MessageDigest;
+import java.time.Duration;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.HexFormat;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.openfilz.dms.service.ChecksumService.SHA_256;
 
@@ -65,15 +78,148 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
     public Mono<Void> handleCallback(UUID documentId, OnlyOfficeCallbackRequest callback) {
         log.info("OnlyOffice callback for document {}: status={}, key={}", documentId, callback.status(), callback.key());
 
-        if (callback.shouldSave()) {
-            return saveDocumentFromCallback(documentId, callback);
-        } else if (callback.isError()) {
-            log.error("OnlyOffice error for document {}: status={}", documentId, callback.status());
-        } else {
-            log.debug("OnlyOffice status for document {}: {} (no action needed)", documentId, callback.status());
-        }
+        return authorizeCallback(documentId, callback)
+                .then(Mono.defer(() -> {
+                    if (callback.shouldSave()) {
+                        return saveDocumentFromCallback(documentId, callback);
+                    } else if (callback.isError()) {
+                        log.error("OnlyOffice error for document {}: status={}", documentId, callback.status());
+                    } else {
+                        log.debug("OnlyOffice status for document {}: {} (no action needed)", documentId, callback.status());
+                    }
+                    return Mono.empty();
+                }));
+    }
 
-        return Mono.empty();
+    private static final String TYPE_CLAIM = "type";
+    private static final String ACCESS_TOKEN_TYPE = "access";
+    private static final String PAYLOAD_CLAIM = "payload";
+    private static final String URL_FIELD = "url";
+
+    /**
+     * The callback endpoint accepts any token signed with the shared secret, and users hold one:
+     * the download access token in their editor config. So before acting, the authenticated
+     * token must be (1) bound to the document in the path (an access token for document A
+     * replayed on the callback of document B overwrote B) and (2) not a download access token
+     * at all ({@code type=access}); the document server's own callback tokens carry the callback
+     * body as {@code payload}. When the body carries the document server's {@code token} (a JWT
+     * of the body itself), it is verified too, and the download URL it signs must be the one in
+     * the body. Fails closed when no OnlyOffice token authenticated the request.
+     */
+    private Mono<Void> authorizeCallback(UUID documentId, OnlyOfficeCallbackRequest callback) {
+        return ReactiveSecurityContextHolder.getContext()
+                .map(SecurityContext::getAuthentication)
+                .filter(OnlyOfficeAuthenticationToken.class::isInstance)
+                .cast(OnlyOfficeAuthenticationToken.class)
+                .switchIfEmpty(Mono.error(new OperationForbiddenException("OnlyOffice callback without a document server token")))
+                .flatMap(auth -> {
+                    if (auth.getDocumentId() == null || !auth.getDocumentId().equals(documentId)) {
+                        log.warn("OnlyOffice callback for document {} refused: token is bound to document {}", documentId, auth.getDocumentId());
+                        return Mono.error(new OperationForbiddenException("OnlyOffice callback token is not for document " + documentId));
+                    }
+                    Map<String, Object> claims = jwtService.validateAndDecode(auth.getRawToken());
+                    if (claims == null) {
+                        return Mono.error(new OperationForbiddenException("Invalid OnlyOffice callback token"));
+                    }
+                    if (ACCESS_TOKEN_TYPE.equals(claims.get(TYPE_CLAIM))) {
+                        log.warn("OnlyOffice callback for document {} refused: authenticated with a download access token", documentId);
+                        return Mono.error(new OperationForbiddenException("A download access token cannot drive an OnlyOffice callback"));
+                    }
+                    if (!signedUrlMatches(claims.get(PAYLOAD_CLAIM), callback.url())) {
+                        log.warn("OnlyOffice callback for document {} refused: download URL differs from the one the document server signed", documentId);
+                        return Mono.error(new OperationForbiddenException("OnlyOffice callback URL does not match the signed callback"));
+                    }
+                    if (callback.token() != null && !callback.token().isBlank()) {
+                        Map<String, Object> bodyClaims = jwtService.validateAndDecode(callback.token());
+                        if (bodyClaims == null) {
+                            log.warn("OnlyOffice callback for document {} refused: body token signature invalid", documentId);
+                            return Mono.error(new OperationForbiddenException("Invalid OnlyOffice callback body token"));
+                        }
+                        if (!signedUrlMatches(bodyClaims, callback.url()) || !signedUrlMatches(bodyClaims.get(PAYLOAD_CLAIM), callback.url())) {
+                            log.warn("OnlyOffice callback for document {} refused: download URL differs from the one signed in the body token", documentId);
+                            return Mono.error(new OperationForbiddenException("OnlyOffice callback URL does not match the signed callback"));
+                        }
+                    }
+                    return Mono.empty();
+                });
+    }
+
+    /** True unless {@code signed} is a map carrying a {@code url} different from {@code url}. */
+    private static boolean signedUrlMatches(Object signed, String url) {
+        if (!(signed instanceof Map<?, ?> map) || !(map.get(URL_FIELD) instanceof String signedUrl)) {
+            return true;
+        }
+        return signedUrl.equals(url);
+    }
+
+    /**
+     * Whether a save callback's download URL may be fetched: http or https, no user info, and a
+     * host that is the configured document server's or one of
+     * {@code onlyoffice.document-server.allowed-download-hosts}. Allow-list semantics: anything
+     * else is refused whatever it resolves to, because the response becomes the document's
+     * content and the endpoint is reachable with a user-held token. Only the host is compared:
+     * the document server hands back URLs on its own public name, whose port is the public one.
+     * Loopback names count as one host ({@code localhost}, {@code 127.x}, {@code ::1}).
+     */
+    protected boolean isAllowedDownloadUrl(String url) {
+        URI uri;
+        try {
+            uri = new URI(url);
+        } catch (URISyntaxException | NullPointerException e) {
+            return false;
+        }
+        String scheme = uri.getScheme();
+        if (scheme == null || !(scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"))) {
+            return false;
+        }
+        if (uri.getRawUserInfo() != null || uri.getHost() == null) {
+            return false;
+        }
+        return allowedDownloadHosts().contains(normalizeHost(uri.getHost()));
+    }
+
+    private Set<String> allowedDownloadHosts() {
+        Set<String> hosts = new HashSet<>();
+        OnlyOfficeProperties.DocumentServer server = onlyOfficeProperties.getDocumentServer();
+        if (server == null) {
+            return hosts;
+        }
+        addHost(hosts, server.getUrl());
+        if (server.getAllowedDownloadHosts() != null) {
+            server.getAllowedDownloadHosts().forEach(h -> addHost(hosts, h));
+        }
+        return hosts;
+    }
+
+    /** Accepts a URL or a bare host name. */
+    private static void addHost(Set<String> hosts, String urlOrHost) {
+        if (urlOrHost == null || urlOrHost.isBlank()) {
+            return;
+        }
+        String value = urlOrHost.trim();
+        try {
+            URI uri = new URI(value.contains("://") ? value : "http://" + value);
+            if (uri.getHost() != null) {
+                hosts.add(normalizeHost(uri.getHost()));
+                return;
+            }
+        } catch (URISyntaxException ignored) {
+            // not a URL: kept as a host name below
+        }
+        hosts.add(normalizeHost(value));
+    }
+
+    private static final String LOOPBACK = "localhost";
+
+    private static String normalizeHost(String host) {
+        String h = host.toLowerCase(Locale.ROOT);
+        if (h.startsWith("[") && h.endsWith("]")) {
+            h = h.substring(1, h.length() - 1);
+        }
+        if (h.equals(LOOPBACK) || h.startsWith("127.") || h.equals("::1") || h.equals("0:0:0:0:0:0:0:1")) {
+            return LOOPBACK;
+        }
+        return h;
     }
 
     @Override
@@ -277,6 +423,11 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
             log.error("OnlyOffice callback has no download URL for document {}", documentId);
             return Mono.empty();
         }
+        if (!isAllowedDownloadUrl(callback.url())) {
+            log.warn("OnlyOffice callback for document {} refused: download URL {} is not on the document server host(s) {}",
+                    documentId, callback.url(), allowedDownloadHosts());
+            return Mono.error(new OperationForbiddenException("OnlyOffice callback download URL is not the document server's"));
+        }
 
         log.info("Downloading modified document from OnlyOffice: {}", callback.url());
 
@@ -328,10 +479,15 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
                                 .subscribeOn(Schedulers.boundedElastic()),
                         // Use resource: stream download through DigestOutputStream
                         outputStream -> {
+                            OnlyOfficeProperties.DocumentServer server = onlyOfficeProperties.getDocumentServer();
+                            Duration timeout = server != null && server.getDownloadTimeout() != null ? server.getDownloadTimeout() : Duration.ofSeconds(120);
+                            long maxBytes = server != null ? server.getMaxDownloadBytes() : 0L;
                             var dataBufferFlux = webClient.get()
                                     .uri(downloadUrl)
                                     .retrieve()
-                                    .bodyToFlux(DataBuffer.class);
+                                    .bodyToFlux(DataBuffer.class)
+                                    .timeout(timeout)
+                                    .transform(flux -> capBytes(flux, maxBytes));
 
                             // DataBufferUtils.write handles buffer release internally
                             return DataBufferUtils.write(dataBufferFlux, outputStream)
@@ -353,6 +509,23 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
                         outputStream -> Mono.fromRunnable(() -> closeQuietly(outputStream))
                                 .subscribeOn(Schedulers.boundedElastic())
                 ));
+    }
+
+    /** Fails the download once more than {@code maxBytes} came in (0 = no cap); the offending buffer is released. */
+    static Flux<DataBuffer> capBytes(Flux<DataBuffer> flux, long maxBytes) {
+        if (maxBytes <= 0) {
+            return flux;
+        }
+        AtomicLong seen = new AtomicLong();
+        return flux.handle((buffer, sink) -> {
+            long total = seen.addAndGet(buffer.readableByteCount());
+            if (total > maxBytes) {
+                DataBufferUtils.release(buffer);
+                sink.error(new FileSizeExceededException(total, maxBytes));
+            } else {
+                sink.next(buffer);
+            }
+        });
     }
 
     private void closeQuietly(java.io.OutputStream outputStream) {

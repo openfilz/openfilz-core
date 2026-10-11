@@ -276,7 +276,8 @@ class SignatureEnvelopeIT extends AbstractSignatureIT {
                 .exchange().expectStatus().isOk()
                 .expectBody(SignatureEnvelopeDTO.class).returnResult().getResponseBody();
         assertThat(cancelled.status()).isEqualTo(SignatureEnvelopeStatus.CANCELLED);
-        signRaw(secondToken, new ApplySignatureRequest(null, "Dana", null)).expectStatus().isEqualTo(409);
+        // A closed envelope answers 410 Gone to every action on its links
+        signRaw(secondToken, new ApplySignatureRequest(null, "Dana", null)).expectStatus().isEqualTo(410);
         // and the signed-document download says there is nothing.
         getWebTestClient().get().uri(SIG + "/" + draft.id() + "/signed-document")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + contributor)
@@ -302,9 +303,9 @@ class SignatureEnvelopeIT extends AbstractSignatureIT {
 
         SignatureEnvelopeDTO dto = getEnvelope(contributor, env.id());
         assertThat(dto.recipients().getFirst().declineReason()).isEqualTo("Wrong amount");
-        // Frank can no longer sign.
+        // Frank can no longer sign: the declined envelope is closed, its links answer 410 Gone.
         String frank = mails().tokenFor(env.id(), "frank@example.com");
-        signRaw(frank, new ApplySignatureRequest(null, "Frank", null)).expectStatus().isEqualTo(409);
+        signRaw(frank, new ApplySignatureRequest(null, "Frank", null)).expectStatus().isEqualTo(410);
     }
 
     @Test
