@@ -1028,7 +1028,7 @@ public class OnlyOfficeIT extends TestContainersKeyCloakConfig {
             // Step 3: Generate callback token and create callback request
             String callbackToken = generateCallbackToken(documentId, "contributor-user");
             String documentKey = documentId.toString() + "_" + System.currentTimeMillis();
-            String downloadUrl = mockWebServer.url("/cache/files/" + documentKey + "/output.docx").toString();
+            String downloadUrl = "http://localhost:" + mockWebServer.getPort() + "/cache/files/" + documentKey + "/output.docx";
 
             OnlyOfficeCallbackRequest saveCallback = new OnlyOfficeCallbackRequest(
                     OnlyOfficeCallbackRequest.Status.READY_FOR_SAVE, // status=2
@@ -1093,7 +1093,7 @@ public class OnlyOfficeIT extends TestContainersKeyCloakConfig {
             // Step 3: Create force save callback
             String callbackToken = generateCallbackToken(documentId, "contributor-user");
             String documentKey = documentId.toString() + "_" + System.currentTimeMillis();
-            String downloadUrl = mockWebServer.url("/cache/files/" + documentKey + "/output.docx").toString();
+            String downloadUrl = "http://localhost:" + mockWebServer.getPort() + "/cache/files/" + documentKey + "/output.docx";
 
             OnlyOfficeCallbackRequest forceSaveCallback = new OnlyOfficeCallbackRequest(
                     OnlyOfficeCallbackRequest.Status.FORCE_SAVE, // status=6
@@ -1159,7 +1159,7 @@ public class OnlyOfficeIT extends TestContainersKeyCloakConfig {
             // Step 3: Create callback
             String callbackToken = generateCallbackToken(documentId, "contributor-user");
             String documentKey = documentId.toString() + "_" + System.currentTimeMillis();
-            String downloadUrl = mockWebServer.url("/cache/files/" + documentKey + "/output.docx").toString();
+            String downloadUrl = "http://localhost:" + mockWebServer.getPort() + "/cache/files/" + documentKey + "/output.docx";
 
             OnlyOfficeCallbackRequest saveCallback = new OnlyOfficeCallbackRequest(
                     OnlyOfficeCallbackRequest.Status.READY_FOR_SAVE,
@@ -1257,7 +1257,7 @@ public class OnlyOfficeIT extends TestContainersKeyCloakConfig {
                     .setBody("Internal Server Error"));
 
             String callbackToken = generateCallbackToken(documentId, "contributor-user");
-            String downloadUrl = mockWebServer.url("/cache/files/error/output.docx").toString();
+            String downloadUrl = "http://localhost:" + mockWebServer.getPort() + "/cache/files/error/output.docx";
 
             OnlyOfficeCallbackRequest saveCallback = new OnlyOfficeCallbackRequest(
                     OnlyOfficeCallbackRequest.Status.READY_FOR_SAVE,
@@ -1299,7 +1299,7 @@ public class OnlyOfficeIT extends TestContainersKeyCloakConfig {
                     .setBody(buffer));
 
             String callbackToken = generateCallbackToken(nonExistentId, "contributor-user");
-            String downloadUrl = mockWebServer.url("/cache/files/test/output.docx").toString();
+            String downloadUrl = "http://localhost:" + mockWebServer.getPort() + "/cache/files/test/output.docx";
 
             OnlyOfficeCallbackRequest saveCallback = new OnlyOfficeCallbackRequest(
                     OnlyOfficeCallbackRequest.Status.READY_FOR_SAVE,
@@ -1345,7 +1345,7 @@ public class OnlyOfficeIT extends TestContainersKeyCloakConfig {
                     .setBody(buffer));
 
             String callbackToken = generateCallbackToken(documentId, "contributor-user");
-            String downloadUrl = mockWebServer.url("/cache/files/checksum/output.docx").toString();
+            String downloadUrl = "http://localhost:" + mockWebServer.getPort() + "/cache/files/checksum/output.docx";
 
             OnlyOfficeCallbackRequest saveCallback = new OnlyOfficeCallbackRequest(
                     OnlyOfficeCallbackRequest.Status.READY_FOR_SAVE,

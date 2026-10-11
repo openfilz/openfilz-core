@@ -67,6 +67,8 @@ public class MinioIT extends LocalStorageIT {
         registry.add("storage.minio.versioning-enabled", () -> true);
         // For the DocumentServer download endpoint (whenOnlyOfficeDownloadWithRangeHeader_thenFullContent)
         registry.add("onlyoffice.enabled", () -> true);
+        // OnlyOffice enabled + JWT enabled needs a real secret or OnlyOfficeJwtSecretStartupGuard refuses startup
+        registry.add("onlyoffice.jwt.secret", () -> "openfilz-onlyoffice-test-jwt-secret-2024");
     }
 
     protected MinioClient createMinioClient() {

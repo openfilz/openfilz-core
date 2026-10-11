@@ -446,16 +446,18 @@ public class SignatureAiTools {
             return new Lookup(null, "No PDF document matching '" + nameOrId + "' was found (or you cannot access it). "
                     + "Only PDFs can be sent for signature; use queryDocuments to find the exact name.");
         }
-        if (pdfs.size() == 1) {
-            return new Lookup(pdfs.getFirst(), null);
-        }
+        // Sending for signature is a mutation with external effects (emails go out): the PDF must
+        // be named exactly or by id — a unique partial match is not accepted, it may be the wrong file
         List<Document> exact = pdfs.stream().filter(d -> d.getName().equalsIgnoreCase(nameOrId.trim())).toList();
         if (exact.size() == 1) {
             return new Lookup(exact.getFirst(), null);
         }
-        return new Lookup(null, "Several PDFs match '" + nameOrId + "': "
-                + pdfs.stream().limit(8).map(d -> "'" + d.getName() + "' (id " + d.getId() + ")").collect(Collectors.joining(", "))
-                + ". Use the id.");
+        String listed = pdfs.stream().limit(8).map(d -> "'" + d.getName() + "' (id " + d.getId() + ")").collect(Collectors.joining(", "));
+        if (exact.isEmpty()) {
+            return new Lookup(null, "No PDF is named exactly '" + nameOrId + "'. Partial names are not accepted for sending "
+                    + "a document for signature — pass the exact name or the id. Similar PDFs: " + listed + ".");
+        }
+        return new Lookup(null, "Several PDFs are named '" + nameOrId + "': " + listed + ". Use the id.");
     }
 
     private TemplateLookup resolveTemplate(String nameOrId) {

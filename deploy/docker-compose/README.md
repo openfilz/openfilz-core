@@ -373,7 +373,7 @@ Used with `docker-compose.onlyoffice.yml`:
 | `ONLYOFFICE_ENABLED` | `false` | Enable OnlyOffice integration |
 | `ONLYOFFICE_PORT` | `8080` | OnlyOffice exposed port |
 | `ONLYOFFICE_URL` | `http://localhost:8080` | OnlyOffice URL |
-| `ONLYOFFICE_JWT_SECRET` | `openfilz-onlyoffice-jwt-secret-2024` | JWT secret for OnlyOffice |
+| `ONLYOFFICE_JWT_SECRET` | *(none — required)* | JWT secret shared with the document server. At least 32 characters, e.g. `openssl rand -hex 32`; the API refuses to start on a blank, short or published example value |
 
 ### Full-Text Search Configuration (OpenSearch)
 

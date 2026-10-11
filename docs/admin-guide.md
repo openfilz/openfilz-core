@@ -440,9 +440,12 @@ openfilz:
 |--------------------------|---------|-------------|
 | `onlyoffice.enabled` / `ONLYOFFICE_ENABLED` | `false` | Enable OnlyOffice integration |
 | `onlyoffice.document-server.url` / `ONLYOFFICE_URL` | `http://localhost` | OnlyOffice Document Server URL |
+| `onlyoffice.document-server.allowed-download-hosts` / `ONLYOFFICE_ALLOWED_DOWNLOAD_HOSTS` | *(empty)* | Extra hosts (comma-separated hosts or URLs) the save callback may download from, besides the host of `ONLYOFFICE_URL`. Any other download URL is refused (SSRF guard) |
+| `onlyoffice.document-server.download-timeout` / `ONLYOFFICE_DOWNLOAD_TIMEOUT` | `120s` | Timeout of the save-callback download |
+| `onlyoffice.document-server.max-download-bytes` / `ONLYOFFICE_MAX_DOWNLOAD_BYTES` | `268435456` | Size cap of the save-callback download (0 = none) |
 | `onlyoffice.document-server.api-path` | `/web-apps/apps/api/documents/api.js` | JS API path |
 | `onlyoffice.jwt.enabled` | `true` | Enable JWT between API and OnlyOffice |
-| `onlyoffice.jwt.secret` / `ONLYOFFICE_JWT_SECRET` | `openfilz-onlyoffice-jwt-secret-2024` | Shared JWT secret |
+| `onlyoffice.jwt.secret` / `ONLYOFFICE_JWT_SECRET` | *(none — required when OnlyOffice is enabled)* | Shared JWT secret (same value as `JWT_SECRET` on the document server). At least 32 characters, e.g. `openssl rand -hex 32`. With OnlyOffice and JWT enabled the API refuses to start when it is blank, shorter than 32 characters or a published example value |
 | `onlyoffice.supported-extensions` | `docx,doc,xlsx,xls,pptx,ppt,odt,ods,odp,pdf` | Editable file extensions |
 
 ### Thumbnails (Gotenberg)

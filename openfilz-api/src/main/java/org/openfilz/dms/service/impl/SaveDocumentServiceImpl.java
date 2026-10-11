@@ -72,12 +72,13 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
     }
 
     protected Mono<Document> replaceFileContentAndSave(FilePart newFilePart, ContentInfo contentInfo, Document document, String newStoragePath, String oldStoragePath) {
-        boolean quotaAlreadyChecked = contentInfo != null && contentInfo.length() != null;
+        Long declaredLength = contentInfo != null ? contentInfo.length() : null;
         String checksum = contentInfo != null ? contentInfo.checksum() : null;
         long oldSize = document.getSize() != null ? document.getSize() : 0L;
-        return storedFileLength(newStoragePath, newFilePart.filename(), quotaAlreadyChecked, oldSize,
-                        // In place (bucket versioning): the object is the document itself, never delete it.
-                        !newStoragePath.equals(oldStoragePath))
+        return storedFileLength(newStoragePath, newFilePart.filename(), declaredLength, oldSize,
+                        // In place (bucket versioning): the object is the document itself — on a
+                        // refusal only the version just written goes, never the object.
+                        newStoragePath.equals(oldStoragePath))
                 .flatMap(fileLength -> replaceDocumentInDB(newFilePart, newStoragePath, oldStoragePath, new ContentInfo(fileLength, checksum), document))
                 .doOnSuccess(this::postProcessDocument);
     }
@@ -91,35 +92,39 @@ public class SaveDocumentServiceImpl implements SaveDocumentService, UserInfoSer
 
 
     protected Mono<Document> saveDocumentInDatabase(FilePart filePart, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename, String storagePath) {
-        return storedFileLength(storagePath, originalFilename, contentLength != null, 0L, true)
+        return storedFileLength(storagePath, originalFilename, contentLength, 0L, false)
                 .flatMap(fileLength -> saveDocumentInDB(filePart, storagePath, fileLength, parentFolderId, metadata, originalFilename));
     }
 
     /**
-     * The size recorded for a document is the length of the file that was stored — never the
-     * request's Content-Length. That header measures the HTTP body: for a multipart upload, the
-     * file plus its envelope (a few hundred bytes), and for several files in one request, all of
-     * them together. It is good for refusing an oversized request before reading it, which is
-     * what the caller already did when it had one; without it, the quotas are checked here,
-     * against the real length.
+     * The size recorded for a document is the length of the file that was stored — never a
+     * length the client declared. The request's Content-Length measures the HTTP body (file plus
+     * multipart envelope, or several files together) and a multipart part's own Content-Length
+     * is whatever the client chose to write: both are good for refusing an oversized request
+     * before reading it, which is what the caller did when it had one, and for nothing else.
+     * So the quotas are checked here again, against the real length, unless the declared length
+     * turned out to be exact (then the pre-check already was this check).
      */
-    private Mono<Long> storedFileLength(String storagePath, String filename, boolean quotaAlreadyChecked, long replacedBytes, boolean deleteOnRefusal) {
+    private Mono<Long> storedFileLength(String storagePath, String filename, Long declaredLength, long replacedBytes, boolean inPlace) {
         return storageService.getFileLength(storagePath)
-                .flatMap(fileLength -> quotaAlreadyChecked
+                .flatMap(fileLength -> declaredLength != null && declaredLength.equals(fileLength)
                         ? Mono.just(fileLength)
-                        : validateQuotasAfterStorage(fileLength, replacedBytes, filename, storagePath, deleteOnRefusal).thenReturn(fileLength));
+                        : validateQuotasAfterStorage(fileLength, replacedBytes, filename, storagePath, inPlace).thenReturn(fileLength));
     }
 
     /**
-     * Validates the file size and storage quotas after storage, when the length was not known
-     * before (no Content-Length). {@code replacedBytes} is the size of the content being replaced
-     * (0 for a new document): only the growth counts against the storage quotas. When a quota is
-     * exceeded, the stored file is deleted before the error goes out.
+     * Validates the file size and storage quotas against the stored length. {@code replacedBytes}
+     * is the size of the content being replaced (0 for a new document): only the growth counts
+     * against the storage quotas. When a limit is exceeded, what was just written is removed
+     * before the error goes out: the object itself, or — {@code inPlace}, i.e. a new version of
+     * the document's own object under bucket versioning — only that latest version.
      */
-    private Mono<Void> validateQuotasAfterStorage(Long fileLength, long replacedBytes, String filename, String storagePath, boolean deleteOnRefusal) {
+    private Mono<Void> validateQuotasAfterStorage(Long fileLength, long replacedBytes, String filename, String storagePath, boolean inPlace) {
         return storageQuotaService.checkFileSize(filename, fileLength)
-                .then(storageQuotaService.checkStorage(fileLength - replacedBytes))
-                .onErrorResume(e -> deleteOnRefusal ? storageService.deleteFile(storagePath).then(Mono.error(e)) : Mono.error(e));
+                .then(Mono.defer(() -> storageQuotaService.checkStorage(fileLength - replacedBytes)))
+                .onErrorResume(e -> (inPlace ? storageService.deleteLatestVersion(storagePath) : storageService.deleteFile(storagePath))
+                        .onErrorResume(cleanupError -> Mono.empty())
+                        .then(Mono.error(e)));
     }
 
     private Mono<Document> saveDocumentInDB(FilePart filePart, String storagePath, Long contentLength, UUID parentFolderId, Map<String, Object> metadata, String originalFilename) {

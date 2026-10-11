@@ -4,6 +4,8 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -51,6 +53,27 @@ public class OnlyOfficeProperties {
          * Path to the OnlyOffice API JavaScript file.
          */
         private String apiPath = "/web-apps/apps/api/documents/api.js";
+
+        /**
+         * Hosts (or URLs, only the host is kept) the API may download a saved document from when
+         * the document server's callback hands back a download URL, in addition to the host of
+         * {@link #url}. Needed only when the document server names itself differently towards
+         * the API than towards the browser (split or internally proxied setups). Any other host
+         * in a callback is refused: the callback endpoint is reachable with a user-held token,
+         * and the downloaded response becomes the document's content.
+         */
+        private List<String> allowedDownloadHosts = new ArrayList<>();
+
+        /**
+         * A save download that stays silent for this long is abandoned.
+         */
+        private Duration downloadTimeout = Duration.ofSeconds(120);
+
+        /**
+         * A document the document server hands back above this many bytes is refused (the per-file
+         * storage quota still applies afterwards). 0 = no cap here.
+         */
+        private long maxDownloadBytes = 256L * 1024 * 1024;
 
         /**
          * Get the full URL to the OnlyOffice API JavaScript.

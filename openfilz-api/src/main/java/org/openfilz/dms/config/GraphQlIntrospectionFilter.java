@@ -1,13 +1,22 @@
 package org.openfilz.dms.config;
 
+import graphql.language.Definition;
+import graphql.language.Document;
+import graphql.language.Field;
+import graphql.language.FragmentDefinition;
+import graphql.language.OperationDefinition;
+import graphql.language.Selection;
+import graphql.parser.Parser;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.core.io.buffer.DataBufferLimitException;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpRequestDecorator;
 import org.springframework.stereotype.Component;
@@ -17,8 +26,12 @@ import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Set;
 
 /**
  * WebFilter that detects GraphQL introspection queries and marks them
@@ -28,6 +41,17 @@ import java.nio.charset.StandardCharsets;
  * is publicly accessible, while actual API calls require authentication.
  * Similarly, GraphQL schema introspection is allowed without auth,
  * while data queries still require a valid JWT token.
+ * <p>
+ * <b>Security.</b> The request is only marked as introspection when the GraphQL
+ * document actually parses and <em>every</em> operation is a {@code query} whose
+ * top-level selections are exclusively the meta-fields {@code __schema},
+ * {@code __type} or {@code __typename}. A document that merely <em>contains</em>
+ * one of those words (for example {@code query IntrospectionQuery { listFolder(...) }})
+ * is not introspection and stays authenticated. Fragment definitions are allowed
+ * (the standard IntrospectionQuery uses them) but top-level fragment spreads and
+ * inline fragments are not, so a selection cannot be smuggled through them.
+ * Unauthenticated bodies are also capped at {@link #MAX_UNAUTHENTICATED_BODY_BYTES}
+ * so the filter cannot be used to buffer arbitrary payloads before authentication.
  */
 @Component
 @ConditionalOnProperties({
@@ -39,11 +63,12 @@ public class GraphQlIntrospectionFilter implements WebFilter, Ordered {
 
     public static final String GRAPHQL_INTROSPECTION_ATTRIBUTE = "GRAPHQL_INTROSPECTION";
 
-    // Pre-computed ASCII byte patterns for zero-allocation scanning.
-    // Safe to match against UTF-8 content since ASCII bytes are identical in UTF-8.
-    private static final byte[] SCHEMA_MARKER = "__schema".getBytes(StandardCharsets.US_ASCII);
-    private static final byte[] TYPE_MARKER = "__type(".getBytes(StandardCharsets.US_ASCII);
-    private static final byte[] INTROSPECTION_MARKER = "IntrospectionQuery".getBytes(StandardCharsets.US_ASCII);
+    /** Introspection documents are a few KB; anything larger is never introspection. */
+    static final int MAX_UNAUTHENTICATED_BODY_BYTES = 64 * 1024;
+
+    private static final Set<String> INTROSPECTION_FIELDS = Set.of("__schema", "__type", "__typename");
+
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     private final String graphQlPath;
 
@@ -75,9 +100,12 @@ public class GraphQlIntrospectionFilter implements WebFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        return DataBufferUtils.join(request.getBody())
+        // The chain must run exactly once. Mono<Void> completes empty, so a plain
+        // `.switchIfEmpty(chain.filter(exchange))` after the replaying branch would run the
+        // downstream chain a second time; `handled` tells the two cases apart instead.
+        return DataBufferUtils.join(request.getBody(), MAX_UNAUTHENTICATED_BODY_BYTES)
                 .flatMap(dataBuffer -> {
-                    if (containsIntrospectionMarker(dataBuffer)) {
+                    if (isPureIntrospection(dataBuffer)) {
                         exchange.getAttributes().put(GRAPHQL_INTROSPECTION_ATTRIBUTE, Boolean.TRUE);
                     }
 
@@ -100,45 +128,90 @@ public class GraphQlIntrospectionFilter implements WebFilter, Ordered {
                         public ServerHttpRequest getRequest() {
                             return replayedRequest;
                         }
-                    });
+                    }).thenReturn(Boolean.TRUE);
                 })
-                .switchIfEmpty(chain.filter(exchange));
+                .onErrorResume(DataBufferLimitException.class, e -> {
+                    // An unauthenticated body this large is never an introspection query, and the
+                    // partially consumed body cannot be replayed — answer 413 instead of buffering on.
+                    log.warn("Rejected unauthenticated GraphQL body larger than {} bytes", MAX_UNAUTHENTICATED_BODY_BYTES);
+                    exchange.getResponse().setStatusCode(HttpStatus.PAYLOAD_TOO_LARGE);
+                    return exchange.getResponse().setComplete().thenReturn(Boolean.TRUE);
+                })
+                // No body at all: nothing to inspect, hand the untouched exchange on.
+                .defaultIfEmpty(Boolean.FALSE)
+                .flatMap(handled -> handled ? Mono.empty() : chain.filter(exchange));
     }
 
     /**
-     * Scans the DataBuffer directly for introspection markers using
-     * {@link DataBuffer#readPosition(int)} and {@link DataBuffer#read()} —
-     * no intermediate ByteBuffer, byte[] or String allocation needed.
-     * The read position is restored after scanning so the buffer can be replayed downstream.
+     * Decodes the buffered GraphQL HTTP body and decides whether it is a pure introspection
+     * document. The read position is restored afterwards so the buffer can be replayed downstream.
      */
-    private static boolean containsIntrospectionMarker(DataBuffer dataBuffer) {
+    private static boolean isPureIntrospection(DataBuffer dataBuffer) {
         int startPos = dataBuffer.readPosition();
-        int readable = dataBuffer.readableByteCount();
-        boolean found = containsPattern(dataBuffer, startPos, readable, SCHEMA_MARKER)
-                || containsPattern(dataBuffer, startPos, readable, TYPE_MARKER)
-                || containsPattern(dataBuffer, startPos, readable, INTROSPECTION_MARKER);
-        dataBuffer.readPosition(startPos);
-        return found;
+        try {
+            String body = dataBuffer.toString(StandardCharsets.UTF_8);
+            return isPureIntrospectionRequest(body);
+        } finally {
+            dataBuffer.readPosition(startPos);
+        }
     }
 
     /**
-     * Naive byte-pattern scan directly on the DataBuffer (sufficient for small GraphQL payloads).
+     * {@code true} only when {@code body} is a GraphQL-over-HTTP JSON object whose {@code query}
+     * parses and consists solely of introspection meta-fields. Visible for tests.
      */
-    private static boolean containsPattern(DataBuffer buffer, int startPos, int readable, byte[] pattern) {
-        int searchLimit = readable - pattern.length;
-        for (int i = 0; i <= searchLimit; i++) {
-            buffer.readPosition(startPos + i);
-            boolean match = true;
-            for (int j = 0; j < pattern.length; j++) {
-                if (buffer.read() != pattern[j]) {
-                    match = false;
-                    break;
-                }
+    static boolean isPureIntrospectionRequest(String body) {
+        String query;
+        try {
+            JsonNode root = JSON.readTree(body);
+            if (root == null || !root.isObject()) {
+                return false;
             }
-            if (match) {
-                return true;
+            JsonNode queryNode = root.get("query");
+            if (queryNode == null || !queryNode.isString()) {
+                return false;
+            }
+            query = queryNode.asString();
+        } catch (RuntimeException e) {
+            return false;
+        }
+        return isPureIntrospectionDocument(query);
+    }
+
+    /** Visible for tests. */
+    static boolean isPureIntrospectionDocument(String query) {
+        if (query == null || query.isBlank()) {
+            return false;
+        }
+        Document document;
+        try {
+            document = Parser.parse(query);
+        } catch (RuntimeException e) {
+            // InvalidSyntaxException and any other parser failure: not introspection.
+            return false;
+        }
+        List<Definition> definitions = document.getDefinitions();
+        boolean sawOperation = false;
+        for (Definition<?> definition : definitions) {
+            if (definition instanceof OperationDefinition operation) {
+                if (operation.getOperation() != OperationDefinition.Operation.QUERY) {
+                    return false;
+                }
+                if (operation.getSelectionSet() == null || operation.getSelectionSet().getSelections().isEmpty()) {
+                    return false;
+                }
+                for (Selection<?> selection : operation.getSelectionSet().getSelections()) {
+                    // Fragment spreads and inline fragments could hide a data field — refuse them at the top level.
+                    if (!(selection instanceof Field field) || !INTROSPECTION_FIELDS.contains(field.getName())) {
+                        return false;
+                    }
+                }
+                sawOperation = true;
+            } else if (!(definition instanceof FragmentDefinition)) {
+                // Anything else (type system definitions, extensions…) is not an introspection request.
+                return false;
             }
         }
-        return false;
+        return sawOperation;
     }
 }

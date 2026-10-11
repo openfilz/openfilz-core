@@ -85,6 +85,14 @@ public class SignatureRecipient implements Persistable<UUID> {
     @Column("otp_verified_at")
     private OffsetDateTime otpVerifiedAt;
 
+    /** When the last one-time code was issued for the current link — drives the request cooldown. */
+    @Column("otp_requested_at")
+    private OffsetDateTime otpRequestedAt;
+
+    /** One-time codes issued for the current link — lifetime cap; reset when the token is re-issued. */
+    @Column("otp_request_count")
+    private int otpRequestCount;
+
     @Column("locale")
     private String locale;
 
