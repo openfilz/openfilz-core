@@ -760,7 +760,14 @@ sequenceDiagram
      sentence in the augmented user message), `readDocumentContent`, `downloadDocument` (so the MCP
      `resource_link` text block too), `describeImage`'s vision output, and the reorganisation
      inventory (`<inventory>`, names + summaries + metadata). A closing tag inside the data is
-     neutralised. The system prompt carries the matching rule (`application.yml` rules 10–12).
+     neutralised. The system prompt carries the matching rule (`application.yml` rule 11).
+
+  Keep the prompt and tool-description side of this **short**: the guarantees above live in code,
+  not in wording. A longer version of rules 10–12 plus "identified by its EXACT name" on every
+  destructive tool made the small chat model (`AiRealLlmE2EIT`, qwen2.5 1.5B) answer *"create a
+  folder named exactly X"* with `renameDocument` and stop calling tools reliably (develop runs
+  38143901860 / 38147941611). Partial-name refusals are explained by the tools' error messages,
+  where the model only reads them once it has chosen the tool.
 
   What this is **not**: a full two-phase confirmation (the model proposes a destructive action,
   the UI shows it, the user confirms, the backend executes exactly that) is a later feature; until
