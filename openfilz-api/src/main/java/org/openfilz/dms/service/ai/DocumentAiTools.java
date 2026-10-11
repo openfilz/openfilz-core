@@ -685,10 +685,9 @@ public class DocumentAiTools {
         }
     }
 
-    @Tool(description = "Move files or folders to a different folder. Items are identified by their EXACT name or their id "
-            + "(partial names are refused; use queryDocuments first).")
+    @Tool(description = "Move files or folders to a different folder. Accepts document/folder names or IDs.")
     public String moveDocuments(
-            @ToolParam(description = "Comma-separated list of exact document or folder names (or ids) to move") String documentNames,
+            @ToolParam(description = "Comma-separated list of document or folder names to move") String documentNames,
             @ToolParam(required = false, description = "Name of the target folder (must already exist — create it with createFolder first if needed), or null for root.") String targetFolder
     ) {
         String roleDenial = denyIfNotAllowed("moveDocuments", ToolCapability.DOCUMENT_WRITE);
@@ -885,9 +884,9 @@ public class DocumentAiTools {
         return null;
     }
 
-    @Tool(description = "Rename a file or folder, identified by its EXACT name or its id (partial names are refused).")
+    @Tool(description = "Rename a file or folder.")
     public String renameDocument(
-            @ToolParam(description = "Exact name or id of the document or folder to rename") String documentName,
+            @ToolParam(description = "Name or reference of the document or folder to rename") String documentName,
             @ToolParam(description = "The new name") String newName
     ) {
         String roleDenial = denyIfNotAllowed("renameDocument", ToolCapability.DOCUMENT_WRITE);
@@ -1353,10 +1352,9 @@ public class DocumentAiTools {
     }
 
     @Tool(description = "Add or update metadata (custom properties) on a document or folder. Keys "
-            + "not mentioned are left unchanged; existing keys are overwritten. The document is identified "
-            + "by its exact name or its id.")
+            + "not mentioned are left unchanged; existing keys are overwritten.")
     public String updateMetadata(
-            @ToolParam(description = "The exact name or the id of the document or folder") String documentName,
+            @ToolParam(description = "The name or reference of the document or folder") String documentName,
             @ToolParam(description = "The metadata to set, as a JSON object of key/value pairs, "
                     + "e.g. {\"status\":\"reviewed\",\"year\":2026}") String metadataJson) {
         String roleDenial = denyIfNotAllowed("updateMetadata", ToolCapability.DOCUMENT_WRITE);
@@ -1378,9 +1376,9 @@ public class DocumentAiTools {
                 .formatted(metadata.size(), documentName));
     }
 
-    @Tool(description = "Remove metadata keys from a document or folder (identified by its exact name or its id).")
+    @Tool(description = "Remove metadata keys from a document or folder.")
     public String deleteMetadata(
-            @ToolParam(description = "The exact name or the id of the document or folder") String documentName,
+            @ToolParam(description = "The name or reference of the document or folder") String documentName,
             @ToolParam(description = "Comma-separated list of metadata keys to remove") String keys) {
         String roleDenial = denyIfNotAllowed("deleteMetadata", ToolCapability.DOCUMENT_WRITE);
         if (roleDenial != null) return roleDenial;
@@ -1437,10 +1435,10 @@ public class DocumentAiTools {
 
     @Tool(description = "Delete a document or folder: moves it to the recycle bin (the user can restore it). "
             + "Refused when this deployment has no recycle bin — the user then deletes in the application. "
-            + "Deleting a folder removes its contents too. Give the exact name or the id; always confirm "
+            + "Deleting a folder removes its contents too. Always confirm "
             + "with the user first.")
     public String deleteDocument(
-            @ToolParam(description = "The exact name or the id of the document or folder to delete") String documentName) {
+            @ToolParam(description = "The name or reference of the document or folder to delete") String documentName) {
         String roleDenial = denyIfNotAllowed("deleteDocument", ToolCapability.DOCUMENT_DELETE);
         if (roleDenial != null) return roleDenial;
         // Reversible deletes only (confirm-only mode): the model acts on text it has read, so a
@@ -1494,9 +1492,9 @@ public class DocumentAiTools {
     }
 
     @Tool(description = "Restore a previous version of a document, making it the current content. "
-            + "Get the versionId from listVersions first. The document is identified by its exact name or its id.")
+            + "Get the versionId from listVersions first.")
     public String restoreVersion(
-            @ToolParam(description = "The exact name or the id of the document") String documentName,
+            @ToolParam(description = "The name or reference of the document") String documentName,
             @ToolParam(description = "The versionId to restore (from listVersions)") String versionId) {
         String roleDenial = denyIfNotAllowed("restoreVersion", ToolCapability.DOCUMENT_WRITE);
         if (roleDenial != null) return roleDenial;

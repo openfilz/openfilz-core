@@ -113,6 +113,10 @@ public class AiRealLlmE2EIT extends TestContainersBaseConfig {
         registry.add("spring.ai.ollama.embedding.model", () -> SharedOllamaContainer.EMBEDDING_MODEL);
         // Small models wander under default sampling; pin the temperature for repeatability.
         registry.add("spring.ai.ollama.chat.temperature", () -> "0.0");
+        // ...and cap an answer's length: now and then the 1.5B model streams prose for minutes without
+        // calling a tool, and one such turn outlived the client's 300 s timeout. The suite's answers
+        // and tool calls are short; a runaway is now a failed sample, retried, rather than a hung test.
+        registry.add("spring.ai.ollama.chat.num-predict", () -> "1024");
         // The container already holds both models (SharedOllamaContainer pulls them once).
         registry.add("spring.ai.ollama.init.pull-model-strategy", () -> "never");
         // A 1.5B model stops calling tools once the bound schema grows past the document + PDF
@@ -236,10 +240,15 @@ public class AiRealLlmE2EIT extends TestContainersBaseConfig {
     @Test
     void toolCalling_createFolder_reallyCreatesIt() {
         String folderName = "aimade" + UUID.randomUUID().toString().substring(0, 8);
+        // At temperature 0 the same prompt yields the same answer, so a retry must rephrase to be a new sample
+        List<String> prompts = List.of(
+                "Create a folder named " + folderName + " at the root.",
+                "Please make a new folder called " + folderName + " in the root folder.",
+                "I need a new root-level folder. Name it " + folderName + ".");
 
         eventually("the assistant creates folder " + folderName,
                 attempt -> {
-                    chat("Create a folder named exactly " + folderName + " at the root.", null);
+                    chat(prompts.get(attempt - 1), null);
                     return folderExists(folderName);
                 });
     }
