@@ -395,6 +395,9 @@ public class PdfAiTools {
         }
         // Several of these tools rewrite the PDF in place (new version): the document must be named
         // exactly or by id — a unique partial match is not accepted, it may be the wrong file
+        if (id != null) {
+            return new Lookup(pdfs.getFirst(), null); // resolved by id: the name check below would compare it to the uuid
+        }
         List<Document> exact = pdfs.stream().filter(d -> d.getName().equalsIgnoreCase(nameOrId.trim())).toList();
         if (exact.size() == 1) {
             return new Lookup(exact.getFirst(), null);
