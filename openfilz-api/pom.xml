@@ -16,6 +16,12 @@
         <!-- Default for the @{argLine} placeholder in surefire/failsafe; overwritten
              at runtime by the jacoco prepare-agent goals unless -Djacoco.skip=true -->
         <argLine />
+        <!-- Not published to Maven Central (excluded in the root publishMaven profile): skip the
+             Central-only extras, the delombok + javadoc pass being the slowest step of a release. -->
+        <lombok.delombok.skip>true</lombok.delombok.skip>
+        <maven.javadoc.skip>true</maven.javadoc.skip>
+        <maven.source.skip>true</maven.source.skip>
+        <gpg.skip>true</gpg.skip>
     </properties>
 
     <!-- Testcontainers (2.x) is managed by spring-boot-dependencies -->

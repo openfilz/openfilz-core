@@ -289,6 +289,17 @@
                             <publishingServerId>central</publishingServerId>
                             <checksums>required</checksums>
                             <autoPublish>true</autoPublish>
+                            <!-- Only the Java SDKs (+ the two parent POMs they inherit from) go to
+                                 Central. The API ships as container images on ghcr, the TS / Python /
+                                 C# SDKs on npm / PyPI / NuGet, and Sonatype's monthly limits
+                                 (80 MB, 1 000 files, 7 releases) leave no room for the rest. -->
+                            <excludeArtifacts>
+                                <excludeArtifact>openfilz-api</excludeArtifact>
+                                <excludeArtifact>openfilz-sdk-typescript</excludeArtifact>
+                                <excludeArtifact>openfilz-sdk-python</excludeArtifact>
+                                <excludeArtifact>openfilz-sdk-csharp</excludeArtifact>
+                                <excludeArtifact>openfilz-sdk-samples-test</excludeArtifact>
+                            </excludeArtifacts>
                         </configuration>
                     </plugin>
                     <plugin>
