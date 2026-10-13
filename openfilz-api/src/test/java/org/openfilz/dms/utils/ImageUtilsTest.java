@@ -15,7 +15,9 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -287,6 +289,57 @@ class ImageUtilsTest {
     }
 
     // --- Helper methods ---
+
+    // ---------------------------------------------------------------- toVisionImage (MCP image block)
+
+    @Test
+    void toVisionImage_scalesTheLongestEdgeDownToTheLimit() throws IOException {
+        byte[] png = toBytes(createTestImage(3000, 1000, Color.BLUE), "png");
+
+        ImageUtils.EncodedImage encoded = ImageUtils.toVisionImage(png, 1568);
+
+        assertNotNull(encoded);
+        assertEquals("image/jpeg", encoded.mimeType());
+        BufferedImage decoded = ImageIO.read(new java.io.ByteArrayInputStream(encoded.bytes()));
+        assertEquals(1568, decoded.getWidth());
+        assertEquals(523, decoded.getHeight());
+        assertEquals(decoded.getWidth(), encoded.width());
+        assertEquals(decoded.getHeight(), encoded.height());
+    }
+
+    @Test
+    void toVisionImage_neverUpscales() throws IOException {
+        byte[] png = toBytes(createTestImage(200, 100, Color.GREEN), "png");
+
+        ImageUtils.EncodedImage encoded = ImageUtils.toVisionImage(png, 1568);
+
+        assertNotNull(encoded);
+        assertEquals(200, encoded.width());
+        assertEquals(100, encoded.height());
+    }
+
+    @Test
+    void toVisionImage_appliesExifOrientationSoPhonePhotosAreUpright() throws IOException {
+        // A landscape sensor frame tagged "rotate 90° CW": what a phone held upright stores
+        byte[] jpeg = createJpegWithExifOrientation(createTestImage(400, 300, Color.RED), 6);
+
+        ImageUtils.EncodedImage encoded = ImageUtils.toVisionImage(jpeg, 1568);
+
+        assertNotNull(encoded);
+        assertEquals(300, encoded.width());
+        assertEquals(400, encoded.height());
+    }
+
+    @Test
+    void toVisionImage_returnsNullForWhatImageIoCannotDecode() throws IOException {
+        assertNull(ImageUtils.toVisionImage("not an image at all".getBytes(), 1568));
+    }
+
+    private byte[] toBytes(BufferedImage image, String format) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ImageIO.write(image, format, out);
+        return out.toByteArray();
+    }
 
     private BufferedImage createTestImage(int width, int height, Color color) {
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);

@@ -55,6 +55,24 @@ public class McpProperties {
     private long maxResourceSizeBytes = 10L * 1024 * 1024;
 
     /**
+     * {@code downloadDocument} on an image also returns the picture itself as an MCP
+     * {@code image} content block, re-encoded so its longest edge is at most this many pixels.
+     * That block is what lets a host that consumes neither resource links nor
+     * {@code resources/read} (claude.ai) actually <em>see</em> the image with its own model —
+     * no OpenFilz-side vision model involved. 1568 px is what Claude's vision downscales to
+     * anyway. 0 turns the block off.
+     */
+    private int inlineImageMaxDimension = 1568;
+
+    /**
+     * Images larger than this on disk are not decoded for the {@code image} block (decoding
+     * costs memory proportional to the pixel count); the resource link and the browser download
+     * still serve them. Separate from {@link #maxResourceSizeBytes}: what goes on the wire here
+     * is the re-encoded image, a few hundred KB, not the original.
+     */
+    private long inlineImageMaxSourceBytes = 30L * 1024 * 1024;
+
+    /**
      * The OAuth 2.0 authorization server that protects this MCP endpoint — the Keycloak realm URL
      * (e.g. {@code https://auth.openfilz.com/realms/openfilz}). Advertised in the RFC 9728
      * protected-resource metadata so a remote MCP host can discover where to authenticate.

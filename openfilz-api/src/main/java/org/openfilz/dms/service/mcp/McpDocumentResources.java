@@ -10,13 +10,16 @@ import org.openfilz.dms.config.McpProperties;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.service.ai.DocumentAiTools;
 import org.openfilz.dms.service.ai.DocumentAiToolsFactory;
+import org.openfilz.dms.utils.ImageUtils;
 import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.core.Authentication;
 
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -37,7 +40,9 @@ import static org.openfilz.dms.security.JwtTokenParser.EMAIL;
  *       tools-only client (n8n, plain agent frameworks) ignores the unknown block, per spec, and
  *       keeps today's behaviour. The server cannot branch on client capability — MCP's
  *       {@code initialize} declares none for resource consumption — so one result serves both
- *       audiences.</li>
+ *       audiences. For an image the result also carries an {@code image} block (re-encoded,
+ *       {@code openfilz.mcp.inline-image-max-dimension}): claude.ai follows neither the link nor
+ *       {@code resources/read}, but it shows an {@code image} block to its model.</li>
  *   <li>a resource template {@code openfilz://documents/{id}} serves {@code resources/read}
  *       with the raw bytes (base64 blob), authenticated and authorized per call.</li>
  * </ul>
@@ -90,7 +95,8 @@ public class McpDocumentResources implements UserInfoService {
                 .description("Get a document's content and the original file. Returns the extracted text "
                         + "for text/PDF/Office files, plus a resource link (openfilz://documents/{id}): "
                         + "fetch it with resources/read on this same connection to obtain the original "
-                        + "file bytes.")
+                        + "file bytes. For an image (photo, scan), the picture itself is attached to the "
+                        + "result so you can look at it with your own vision.")
                 .inputSchema(Map.of(
                         "type", "object",
                         "properties", Map.of("documentName", Map.of(
@@ -147,7 +153,14 @@ public class McpDocumentResources implements UserInfoService {
                 .size(doc.getSize())
                 .description("The original file. Fetch it with resources/read on this same connection.")
                 .build();
-        String text = download.extractedText() != null
+        McpSchema.ImageContent image = imageContent(authentication, doc);
+        String text = image != null
+                ? ("'%s' is an image (%s, %d bytes), attached to this result so you can look at it "
+                        + "directly (re-encoded for viewing: %s). The resource link returns the original "
+                        + "file (resources/read); it can also be downloaded in a browser (%s): %s").formatted(
+                        doc.getName(), contentTypeOf(doc), sizeOf(doc), imageNote(image),
+                        download.downloadHint(), download.downloadUrl())
+                : download.extractedText() != null
                 ? ("Content of '%s' (%s, %d bytes):\n\n%s\n\n"
                         + "The resource link above returns the original file (resources/read); it can also "
                         + "be downloaded in a browser (%s): %s").formatted(
@@ -158,9 +171,16 @@ public class McpDocumentResources implements UserInfoService {
                         + "(%s): %s").formatted(
                         doc.getName(), contentTypeOf(doc), sizeOf(doc),
                         download.downloadHint(), download.downloadUrl());
-        log.debug("[MCP] {} served '{}' as resource link + text", DOWNLOAD_TOOL, doc.getName());
+        List<McpSchema.Content> blocks = new ArrayList<>();
+        blocks.add(link);
+        if (image != null) {
+            blocks.add(image);
+        }
+        blocks.add(McpSchema.TextContent.builder(text).build());
+        log.debug("[MCP] {} served '{}' as resource link{} + text", DOWNLOAD_TOOL, doc.getName(),
+                image != null ? " + image" : "");
         return McpSchema.CallToolResult.builder()
-                .content(List.of(link, McpSchema.TextContent.builder(text).build()))
+                .content(blocks)
                 .isError(false)
                 .build();
     }
@@ -199,6 +219,50 @@ public class McpDocumentResources implements UserInfoService {
     }
 
     // ---------------------------------------------------------------- helpers
+
+    /**
+     * The picture itself as an MCP {@code image} block, or null when the document is not an image,
+     * the feature is off ({@code openfilz.mcp.inline-image-max-dimension=0}), the file is too large
+     * to decode, or its format cannot be decoded (HEIC…). Hosts such as claude.ai consume neither
+     * resource links nor {@code resources/read}, but they hand an {@code image} block to their
+     * model as a real image — the only way such a host can see a photo stored in OpenFilz without
+     * an OpenFilz-side vision model. The bytes come from {@link DocumentAiTools#fetchContent}, so
+     * the role gate and the access policy apply exactly as for the resource.
+     */
+    private McpSchema.ImageContent imageContent(Authentication authentication, Document doc) {
+        int maxDimension = mcpProperties.getInlineImageMaxDimension();
+        String contentType = doc.getContentType();
+        if (maxDimension <= 0 || contentType == null || !contentType.toLowerCase(Locale.ROOT).startsWith("image/")) {
+            return null;
+        }
+        DocumentAiTools.DocumentContent content = boundTools(authentication)
+                .fetchContent(doc.getId(), mcpProperties.getInlineImageMaxSourceBytes());
+        if (content.error() != null) {
+            log.debug("[MCP] {} no image block for '{}': {}", DOWNLOAD_TOOL, doc.getName(), content.error());
+            return null;
+        }
+        try {
+            ImageUtils.EncodedImage encoded = ImageUtils.toVisionImage(content.bytes(), maxDimension);
+            if (encoded == null) {
+                log.debug("[MCP] {} no image block for '{}': {} cannot be decoded", DOWNLOAD_TOOL, doc.getName(), contentType);
+                return null;
+            }
+            return McpSchema.ImageContent.builder(Base64.getEncoder().encodeToString(encoded.bytes()), encoded.mimeType())
+                    .meta(Map.of("width", encoded.width(), "height", encoded.height()))
+                    .build();
+        } catch (Exception | LinkageError e) {
+            // Never fail the download over the preview: the link and the text still answer
+            log.warn("[MCP] {} could not re-encode image '{}': {}", DOWNLOAD_TOOL, doc.getName(), e.toString());
+            return null;
+        }
+    }
+
+    private static String imageNote(McpSchema.ImageContent image) {
+        Object width = image.meta() == null ? null : image.meta().get("width");
+        Object height = image.meta() == null ? null : image.meta().get("height");
+        return width == null || height == null ? image.mimeType()
+                : "%s, %sx%s px".formatted(image.mimeType(), width, height);
+    }
 
     /** Strict template match: {@code openfilz://documents/<uuid>} and nothing else. */
     private static UUID documentIdFrom(String uri) {

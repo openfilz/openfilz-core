@@ -134,7 +134,7 @@ OpenAPI spec would make agents *worse*, not better — the small, well-described
 | `queryDocuments` | read | List folder contents, search by name, find recent files, count documents. **The main entry point** — most other tools take a *name*, and this is what resolves an ambiguous name to the right item. |
 | `readDocumentContent` | read | Extract the text of a document. |
 | `getDocumentPath` | read | Full path (ancestors) of a document, from root to its parent folder. |
-| `describeImage` | read | Vision: describe/caption an image or PDF, OCR its text, or answer a question about it. Needs a local chat model — degrades with a clear message when there is none. |
+| `describeImage` | read | Vision: describe/caption an image or PDF, OCR its text, or answer a question about it, with an **OpenFilz-side** model — the caller's own (BYOK) or the server default, behind the same fallback chain as the chat assistant. Degrades with a clear message when there is none. An agent with vision of its own does not need it: `downloadDocument` hands it the image. |
 | `writeFile` | write | Write text content to a new file. `autoFile=true` additionally lets smart filing choose its folder right after saving (needs `openfilz.ai.auto-file.active`). |
 | `createBlankDocument` | write | Create an empty Word, Excel, PowerPoint or text document (the same templates as the app's "New document" menu), ready to edit. |
 | `createFolder` | write | Create a folder. |
@@ -148,7 +148,7 @@ OpenAPI spec would make agents *worse*, not better — the small, well-described
 | `listVersions` | read | List a document's stored versions (versioned storage). |
 | `restoreVersion` | write | Restore a previous version as the current content. |
 | `getDocumentActivity` | read | The audit trail of a document or folder (who did what, when), most recent first. Needs the **AUDITOR** role, like `/api/v1/audit`. |
-| `downloadDocument` | read | Get a document's content — extracted text for text/PDF/Office, or a download link for binary files. |
+| `downloadDocument` | read | Get a document's content — extracted text for text/PDF/Office, a `resource_link` to the original bytes, and a download link. For an **image**, the picture itself as an MCP `image` block (upright, longest edge ≤ `openfilz.mcp.inline-image-max-dimension`, default 1568 px, JPEG) — how claude.ai, which follows neither resource links nor `resources/read`, gets to *see* a photo with its own model. |
 
 ### PDF tools
 
@@ -583,6 +583,8 @@ with `401` — if it does not, `/mcp` is not protected and something is very wro
 | *"Not permitted: your OpenFilz role does not allow this operation"* | The user lacks the role — e.g. a READER calling `createFolder`. Grant CONTRIBUTOR, or use a `READ_ONLY` deployment. |
 | *"Not authenticated: this MCP server requires a bearer token…"* | The token did not reach the tool. Check that a proxy in front of OpenFilz forwards the `Authorization` header. |
 | *"Vision analysis is unavailable…"* from `describeImage` | No chat model configured. Either enable one (`openfilz.ai.active=true` + a provider) or let the calling agent analyse the file itself. |
+| *"model '…' not found"* from `describeImage` | Fixed in the release after 1.3.44: the MCP route used the bare compiled `ChatModel` (in the EE native image, Ollama with `OLLAMA_CHAT_MODEL`, default `llama3`) instead of the fallback chain. On an older server, pull a vision model into Ollama or let the agent read the image through `downloadDocument`. |
+| The agent says it cannot see an image | It needs the `image` block of `downloadDocument` (release after 1.3.44). Formats ImageIO cannot decode (HEIC) and files above `openfilz.mcp.inline-image-max-source-bytes` (30 MB) get no block. |
 | Agent keeps saying a document does not exist | It is scoped to the caller's permissions. In Enterprise, the document may simply not be shared with that user. |
 
 ---

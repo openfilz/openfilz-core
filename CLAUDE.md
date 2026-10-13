@@ -912,6 +912,20 @@ external agents (Claude Code/Desktop, n8n, custom agents, Spring AI clients) ove
   `nativeTools()` so `McpToolCallbackProvider` skips it (it stays in `CAPABILITIES` — still the
   source of truth for role/read-only classification, and the chat assistant keeps its `@Tool`
   method unchanged).
+  **Images ride inline:** for an `image/*` document the `downloadDocument` result also carries an
+  MCP `image` block (`ImageUtils.toVisionImage`: EXIF orientation applied, longest edge ≤
+  `openfilz.mcp.inline-image-max-dimension` = 1568, JPEG, WebP fallback; bytes via `fetchContent`,
+  so both gates apply; undecodable/oversized → no block, never a failed download). claude.ai
+  consumes neither `resource_link` nor `resources/read`, but it shows an `image` block to its
+  model — the only way it sees a stored photo without an OpenFilz-side vision model.
+- **`describeImage` over MCP resolves its model like the chat** (`FailoverChatModel`, bound in
+  `DocumentAiToolsContributor.visionModel`): the caller's BYOK or default model via
+  `UserChatClientResolver`, every call through `AiFallbackChain.callWithFailover` (tag `VISION`).
+  It used to call the bare `ChatModel` bean — in the EE native image the compiled Ollama
+  (`OLLAMA_CHAT_MODEL`, compose default `llama3`), so a deployment whose real models are a
+  pool-key fallback chain answered every MCP vision call with *"model 'llama3' not found"* while
+  the in-app chat failed over fine (Demo EE, 2026-10-13). AI off → the bare bean as before; no
+  model for the caller → null → the explicit "unavailable" answer.
 - **Signed download links (`openfilz.download-tokens.*`)** — the claude.ai connector consumes
   neither resource links nor `resources/read`, and the bare download URL needs a bearer *header*
   a browser address bar can't supply. When enabled, `downloadDocument`'s URL carries a

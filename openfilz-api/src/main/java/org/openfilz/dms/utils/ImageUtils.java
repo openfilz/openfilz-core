@@ -79,6 +79,95 @@ public class ImageUtils {
         });
     }
 
+    /** An image re-encoded for a vision model: the bytes and their MIME type. */
+    public record EncodedImage(byte[] bytes, String mimeType, int width, int height) {
+    }
+
+    /**
+     * Re-encode an image so a vision model can take it whole: upright (EXIF orientation applied —
+     * phone photos are stored sideways with a rotation tag the model never reads), its longest
+     * edge at most {@code maxDimension} pixels, as a JPEG (WebP when no JPEG writer is available).
+     * A phone photo goes from several MB to a few hundred KB; vision models downscale to about
+     * this size anyway, so nothing they would have seen is lost.
+     *
+     * @return the re-encoded image, or null when ImageIO cannot decode the format (HEIC…)
+     */
+    public static EncodedImage toVisionImage(byte[] imageBytes, int maxDimension) throws IOException {
+        int orientation = readExifOrientationFromBytes(
+                imageBytes.length > EXIF_BUFFER_SIZE ? java.util.Arrays.copyOf(imageBytes, EXIF_BUFFER_SIZE) : imageBytes);
+        BufferedImage raw;
+        try (ImageInputStream iis = new MemoryCacheImageInputStream(new ByteArrayInputStream(imageBytes))) {
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(iis);
+            if (!readers.hasNext()) {
+                return null;
+            }
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(iis, true, true);
+                // Subsample while decoding (cheap, bounds memory), never below the target size
+                int longest = Math.max(reader.getWidth(0), reader.getHeight(0));
+                int subsampling = Math.max(1, longest / Math.max(1, maxDimension));
+                ImageReadParam param = reader.getDefaultReadParam();
+                param.setSourceSubsampling(subsampling, subsampling, 0, 0);
+                raw = reader.read(0, param);
+            } finally {
+                reader.dispose();
+            }
+        }
+        BufferedImage oriented = applyExifOrientation(raw, orientation);
+        BufferedImage scaled = convertToRgb(scaleToFit(oriented, maxDimension));
+        byte[] jpeg = writeJpeg(scaled, 0.85f);
+        if (jpeg != null) {
+            return new EncodedImage(jpeg, "image/jpeg", scaled.getWidth(), scaled.getHeight());
+        }
+        return new EncodedImage(writeWebpLossy(scaled, 0.85f), "image/webp", scaled.getWidth(), scaled.getHeight());
+    }
+
+    /** Scale down (never up) so the longest edge is at most {@code maxDimension}, keeping the ratio. */
+    private BufferedImage scaleToFit(BufferedImage src, int maxDimension) {
+        int srcW = src.getWidth();
+        int srcH = src.getHeight();
+        if (maxDimension <= 0 || Math.max(srcW, srcH) <= maxDimension) {
+            return src;
+        }
+        double scale = (double) maxDimension / Math.max(srcW, srcH);
+        int targetW = Math.max(1, (int) Math.round(srcW * scale));
+        int targetH = Math.max(1, (int) Math.round(srcH * scale));
+        BufferedImage resized = new BufferedImage(targetW, targetH, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = resized.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        g.setColor(Color.WHITE);
+        g.fillRect(0, 0, targetW, targetH);
+        g.drawImage(src, 0, 0, targetW, targetH, null);
+        g.dispose();
+        return resized;
+    }
+
+    /** JPEG at the given quality, or null when this runtime has no JPEG writer. */
+    private byte[] writeJpeg(BufferedImage image, float quality) throws IOException {
+        Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("jpeg");
+        if (!writers.hasNext()) {
+            return null;
+        }
+        ImageWriter writer = writers.next();
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ImageWriteParam param = writer.getDefaultWriteParam();
+        param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+        param.setCompressionQuality(quality);
+        try (ImageOutputStream ios = ImageIO.createImageOutputStream(out)) {
+            writer.setOutput(ios);
+            writer.write(null, new IIOImage(image, null, null), param);
+        } catch (IOException | RuntimeException | LinkageError e) {
+            // A writer that is registered but cannot run (a native image without its JNI library)
+            log.debug("JPEG encoding unavailable, falling back to WebP: {}", e.toString());
+            return null;
+        } finally {
+            writer.dispose();
+        }
+        return out.toByteArray();
+    }
+
     /**
      * Read up to maxBytes from the input stream without loading the entire stream.
      */
