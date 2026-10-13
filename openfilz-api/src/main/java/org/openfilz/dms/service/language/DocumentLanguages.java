@@ -42,7 +42,12 @@ public final class DocumentLanguages {
             return DEFAULT_UI_LANG;
         }
         int dash = lang.indexOf('-');
-        return dash < 0 ? lang : lang.substring(0, dash) + "-" + lang.substring(dash + 1).toUpperCase(Locale.ROOT);
+        if (dash < 0) {
+            return lang;
+        }
+        String region = lang.substring(dash + 1);
+        // a 2-letter region is upper-cased (pt-br → pt-BR); a script subtag keeps its case (zh-Hans)
+        return lang.substring(0, dash) + "-" + (region.length() == 2 ? region.toUpperCase(Locale.ROOT) : region);
     }
 
     /** A language a document may be set to: {@code ll-RR} (BCP 47 language + region). */

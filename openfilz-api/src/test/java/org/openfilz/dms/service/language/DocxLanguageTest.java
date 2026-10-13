@@ -110,6 +110,25 @@ class DocxLanguageTest {
     }
 
     @Test
+    void aRegionalChangeMovesTheRunsToo() throws IOException {
+        String styles = styles("<w:docDefaults><w:rPrDefault><w:rPr><w:lang w:val=\"en-US\"/></w:rPr></w:rPrDefault></w:docDefaults>");
+        Map<String, String> parts = TestDocx.parts(TestDocx.build(styles, FRENCH));
+        parts.put("word/document.xml", parts.get("word/document.xml")
+                .replace("<w:r>", "<w:r><w:rPr><w:lang w:val=\"en-US\"/></w:rPr>"));
+
+        Map<String, String> result = rewrite(TestDocx.zip(parts), "en-GB", "en-US");
+
+        assertThat(result.get("word/styles.xml")).contains("<w:lang w:val=\"en-GB\"/>");
+        assertThat(result.get("word/document.xml")).contains("w:val=\"en-GB\"").doesNotContain("en-US");
+    }
+
+    @Test
+    void survivesAnOutOfRangeCharacterReference() {
+        assertThat(DocxLanguage.text("<w:p><w:r><w:t>a &#99999999999; b &#x110000; c</w:t></w:r></w:p>"))
+                .isEqualTo("a   b   c ");
+    }
+
+    @Test
     void keepsTheOtherPartsAndTheirOrder() throws IOException {
         byte[] docx = TestDocx.build(styles(""), FRENCH);
         Map<String, String> before = TestDocx.parts(docx);
@@ -151,6 +170,7 @@ class DocxLanguageTest {
         assertThat(DocumentLanguages.tagFor("pt")).isEqualTo("pt-PT");
         assertThat(DocumentLanguages.uiLanguage("fr")).isEqualTo("fr");
         assertThat(DocumentLanguages.uiLanguage("pt-br")).isEqualTo("pt-BR");
+        assertThat(DocumentLanguages.uiLanguage("zh-Hans")).isEqualTo("zh-Hans");
         assertThat(DocumentLanguages.uiLanguage(null)).isEqualTo("en");
         assertThat(DocumentLanguages.uiLanguage("fr\";alert(1)")).isEqualTo("en");
         assertThat(DocumentLanguages.isValidTag("fr-FR")).isTrue();

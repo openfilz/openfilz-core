@@ -57,6 +57,9 @@ public final class DocxLanguage {
     /** Text kept for the language guess; a few pages are plenty. */
     static final int MAX_TEXT_CHARS = 20_000;
 
+    /** An XML part larger than this once inflated is refused rather than read into memory. */
+    static final int MAX_PART_BYTES = 64 * 1024 * 1024;
+
     /**
      * @param defaultLanguage the document default ({@code w:docDefaults}), or null
      * @param languages       how many {@code w:lang w:val} carry each language, across the text parts
@@ -104,8 +107,9 @@ public final class DocxLanguage {
     /**
      * Copies {@code source} to {@code target} with {@code language} as the document default and
      * every {@code w:lang w:val} of the same base language as {@code previous} (e.g. {@code en-US},
-     * {@code en-GB} when previous is {@code en-US}) set to {@code language}. For Arabic the
-     * complex-script language ({@code w:bidi}) is set too.
+     * {@code en-GB} when previous is {@code en-US}) set to {@code language} — a regional change
+     * ({@code en-US} → {@code en-GB}) moves the runs too, so the document ends up uniformly in
+     * {@code language}. For Arabic the complex-script language ({@code w:bidi}) is set too.
      *
      * @param previous the language the document declared before, or null
      * @throws IOException when the document has no {@code styles.xml} to hold the default
@@ -128,7 +132,7 @@ public final class DocxLanguage {
                 zipOut.putNextEntry(copy);
                 if (TEXT_PARTS.matcher(entry.getName()).matches()) {
                     String xml = read(zip, entry.getName());
-                    UnaryOperator<String> relabel = previousBase == null || previousBase.equals(base(language))
+                    UnaryOperator<String> relabel = previousBase == null
                             ? UnaryOperator.identity()
                             : x -> relabel(x, previousBase, language);
                     String updated = relabel.apply(xml);
@@ -206,8 +210,12 @@ public final class DocxLanguage {
             case "apos" -> "'";
             default -> {
                 String code = m.group(1);
-                int cp = code.startsWith("#x") ? Integer.parseInt(code.substring(2), 16) : Integer.parseInt(code.substring(1));
-                yield Character.isValidCodePoint(cp) ? new String(Character.toChars(cp)) : " ";
+                try {
+                    int cp = code.startsWith("#x") ? Integer.parseInt(code.substring(2), 16) : Integer.parseInt(code.substring(1));
+                    yield Character.isValidCodePoint(cp) ? new String(Character.toChars(cp)) : " ";
+                } catch (NumberFormatException e) {
+                    yield " ";
+                }
             }
         }));
     }
@@ -297,7 +305,11 @@ public final class DocxLanguage {
             return null;
         }
         try (InputStream in = zip.getInputStream(entry)) {
-            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            byte[] bytes = in.readNBytes(MAX_PART_BYTES + 1);
+            if (bytes.length > MAX_PART_BYTES) {
+                throw new IOException("Part " + name + " is larger than " + MAX_PART_BYTES + " bytes");
+            }
+            return new String(bytes, StandardCharsets.UTF_8);
         }
     }
 }
