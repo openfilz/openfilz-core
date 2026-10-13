@@ -280,10 +280,15 @@ public class AiRealLlmE2EIT extends TestContainersBaseConfig {
         String codeword = "pelican" + UUID.randomUUID().toString().substring(0, 6);
         uploadTextFile(fileName, "The agreed codeword is " + codeword + ".");
 
+        // At temperature 0 the same prompt yields the same answer, so a retry must rephrase to be a new sample
+        List<String> prompts = List.of(
+                "Read the file named " + fileName + " and tell me the codeword it contains.",
+                "Open the document " + fileName + ", read its content and quote the codeword written in it.",
+                "Use the tool that reads a document's content on " + fileName + ". What codeword does the text give?");
+
         eventually("the assistant reads " + fileName,
                 attempt -> {
-                    String answer = textOf(chat("Read the file named " + fileName
-                            + " and tell me the codeword it contains.", null));
+                    String answer = textOf(chat(prompts.get(attempt - 1), null));
                     log.info("[AI-E2E] readDocumentContent answer: {}", answer);
                     return answer.contains(codeword);
                 });
