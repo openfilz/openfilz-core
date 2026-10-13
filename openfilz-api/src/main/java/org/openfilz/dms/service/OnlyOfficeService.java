@@ -1,6 +1,7 @@
 package org.openfilz.dms.service;
 
 import org.openfilz.dms.dto.request.OnlyOfficeCallbackRequest;
+import org.openfilz.dms.dto.response.DocumentLanguageInfo;
 import org.openfilz.dms.dto.response.OnlyOfficeConfigResponse;
 import reactor.core.publisher.Mono;
 
@@ -36,7 +37,28 @@ public interface OnlyOfficeService {
      * @param versionId  The storage version to view, or {@code null} for the latest content
      * @return Editor configuration including JWT token
      */
-    Mono<OnlyOfficeConfigResponse> generateEditorConfig(UUID documentId, boolean canEdit, String versionId);
+    default Mono<OnlyOfficeConfigResponse> generateEditorConfig(UUID documentId, boolean canEdit, String versionId) {
+        return generateEditorConfig(documentId, canEdit, versionId, null);
+    }
+
+    /**
+     * Same as {@link #generateEditorConfig(UUID, boolean, String)}, with the editor interface in
+     * {@code lang} (the caller's OpenFilz language, e.g. {@code fr}); null or malformed = English.
+     * OnlyOffice also spell-checks text that declares no language in this language.
+     */
+    Mono<OnlyOfficeConfigResponse> generateEditorConfig(UUID documentId, boolean canEdit, String versionId, String lang);
+
+    /**
+     * The proofing language a document declares and the one its text is written in. Only Word
+     * (.docx) documents are supported; any other answers {@link DocumentLanguageInfo#unsupported()}.
+     */
+    Mono<DocumentLanguageInfo> getDocumentLanguage(UUID documentId);
+
+    /**
+     * Sets the proofing language of a Word document ({@code language} = BCP 47, e.g. {@code fr-FR})
+     * and saves the result as a new version of the document.
+     */
+    Mono<DocumentLanguageInfo> setDocumentLanguage(UUID documentId, String language);
 
     /**
      * Handle a callback from OnlyOffice DocumentServer.

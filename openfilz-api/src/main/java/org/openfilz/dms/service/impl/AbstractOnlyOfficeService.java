@@ -5,31 +5,40 @@ import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.CommonProperties;
 import org.openfilz.dms.config.OnlyOfficeProperties;
 import org.openfilz.dms.dto.request.OnlyOfficeCallbackRequest;
+import org.openfilz.dms.dto.response.DocumentLanguageInfo;
 import org.openfilz.dms.dto.response.IUserInfo;
 import org.openfilz.dms.dto.response.OnlyOfficeConfigResponse;
 import org.openfilz.dms.dto.response.OnlyOfficeConfigResponse.*;
 import org.openfilz.dms.dto.response.OnlyOfficeUserInfo;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.AccessType;
+import org.openfilz.dms.exception.DocumentNotFoundException;
 import org.openfilz.dms.exception.FileSizeExceededException;
 import org.openfilz.dms.exception.OperationForbiddenException;
 import org.openfilz.dms.repository.DocumentDAO;
 import org.openfilz.dms.security.OnlyOfficeAuthenticationToken;
 import org.openfilz.dms.service.*;
+import org.openfilz.dms.service.language.DocumentLanguages;
+import org.openfilz.dms.service.language.DocxLanguage;
+import org.openfilz.dms.service.language.TextLanguageDetector;
 import org.openfilz.dms.utils.ContentInfo;
 import org.openfilz.dms.utils.PathFilePart;
 import org.openfilz.dms.utils.UserInfoService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferUtils;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLEncoder;
@@ -41,12 +50,14 @@ import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Stream;
 
 import static org.openfilz.dms.service.ChecksumService.SHA_256;
 
@@ -65,13 +76,169 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
     private final DocumentService documentService;
     private final WebClient.Builder webClientBuilder;
 
+    /** Reads document content for the language inspection; set by Spring, so subclass constructors stay unchanged. */
+    private StorageService storageService;
+
+    /** Above this size a document's language is not inspected (the whole file is copied to read it). */
+    static final long MAX_LANGUAGE_INSPECTION_BYTES = 50L * 1024 * 1024;
+
+    @Autowired
+    public void setStorageService(StorageService storageService) {
+        this.storageService = storageService;
+    }
+
     @Override
-    public Mono<OnlyOfficeConfigResponse> generateEditorConfig(UUID documentId, boolean canEdit, String versionId) {
+    public Mono<OnlyOfficeConfigResponse> generateEditorConfig(UUID documentId, boolean canEdit, String versionId, String lang) {
         // Viewing a historical version is always read-only, so request RO access for it.
         boolean wantsEdit = canEdit && versionId == null;
         return documentDAO.findById(documentId, wantsEdit ? AccessType.RW : AccessType.RO)
                 .switchIfEmpty(Mono.error(new IllegalArgumentException("Document not found: " + documentId)))
-                .flatMap(document -> buildEditorConfig(document, canEdit, versionId));
+                .flatMap(document -> buildEditorConfig(document, canEdit, versionId, DocumentLanguages.uiLanguage(lang)));
+    }
+
+    @Override
+    public Mono<DocumentLanguageInfo> getDocumentLanguage(UUID documentId) {
+        return documentDAO.findById(documentId, AccessType.RO)
+                .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
+                .flatMap(document -> {
+                    if (!isLanguageSupported(document)) {
+                        return Mono.just(DocumentLanguageInfo.unsupported());
+                    }
+                    Mono<Boolean> editable = documentDAO.findById(documentId, AccessType.RW)
+                            .map(rw -> !isDocumentReadOnly(rw))
+                            .defaultIfEmpty(false)
+                            .onErrorReturn(false);
+                    return editable
+                            .flatMap(canEdit -> withLocalCopy(document, file -> languageInfo(DocxLanguage.inspect(file), canEdit)))
+                            .onErrorResume(IOException.class, e -> {
+                                log.warn("Could not read the language of document {}: {}", documentId, e.getMessage());
+                                return Mono.just(DocumentLanguageInfo.unsupported());
+                            });
+                });
+    }
+
+    @Override
+    public Mono<DocumentLanguageInfo> setDocumentLanguage(UUID documentId, String language) {
+        if (!DocumentLanguages.isValidTag(language)) {
+            return Mono.error(new IllegalArgumentException(
+                    "Invalid language '" + language + "': expected a language and a region, e.g. fr-FR"));
+        }
+        return documentDAO.findById(documentId, AccessType.RW)
+                .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)))
+                .flatMap(document -> {
+                    if (isDocumentReadOnly(document)) {
+                        return Mono.error(new OperationForbiddenException("Document " + documentId + " is read-only"));
+                    }
+                    if (!isLanguageSupported(document)) {
+                        return Mono.error(new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT,
+                                "The language can only be set on a Word (.docx) document"));
+                    }
+                    return withLocalCopy(document, source -> source)
+                            .flatMap(source -> rewriteLanguage(document, source, language)
+                                    .doFinally(_ -> deleteQuietly(source.getParent())));
+                });
+    }
+
+    /**
+     * Writes {@code language} into the copy {@code source} and saves it as a new version, through
+     * {@code replaceDocumentContent} so versioning, audit, checksum, quota and indexing apply. A
+     * document already set to {@code language} is left as it is (no new version).
+     */
+    private Mono<DocumentLanguageInfo> rewriteLanguage(Document document, Path source, String language) {
+        return Mono.fromCallable(() -> {
+                    DocxLanguage.Inspection before = DocxLanguage.inspect(source);
+                    if (!before.rewritable()) {
+                        throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT,
+                                "This Word document has no style part to hold a default language");
+                    }
+                    if (isAlreadySet(before, language)) {
+                        return source;
+                    }
+                    Path target = source.resolveSibling("lang-" + source.getFileName());
+                    DocxLanguage.rewrite(source, target, language, before.declaredLanguage());
+                    return target;
+                })
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(result -> result == source
+                        ? Mono.just(result)
+                        : Mono.fromCallable(() -> Files.size(result)).subscribeOn(Schedulers.boundedElastic())
+                        .flatMap(size -> documentService.replaceDocumentContent(document.getId(),
+                                new PathFilePart("file", document.getName(), result), new ContentInfo(size, null)))
+                        .doOnSuccess(_ -> log.info("Proofing language of document {} set to {}", document.getId(), language))
+                        .thenReturn(result))
+                .flatMap(result -> Mono.fromCallable(() -> languageInfo(DocxLanguage.inspect(result), true))
+                        .subscribeOn(Schedulers.boundedElastic()));
+    }
+
+    /** The default is {@code language} and no run carries another variant of it. */
+    private static boolean isAlreadySet(DocxLanguage.Inspection inspection, String language) {
+        String base = DocxLanguage.base(language);
+        return language.equals(inspection.defaultLanguage()) && inspection.languages().keySet().stream()
+                .allMatch(l -> l.equals(language) || !DocxLanguage.base(l).equals(base));
+    }
+
+    /** True for the documents whose language {@link DocxLanguage} reads and writes. */
+    protected boolean isLanguageSupported(Document document) {
+        return "docx".equals(getFileExtension(document.getName()))
+                && (document.getSize() == null || document.getSize() <= MAX_LANGUAGE_INSPECTION_BYTES);
+    }
+
+    static DocumentLanguageInfo languageInfo(DocxLanguage.Inspection inspection, boolean editable) {
+        String declared = inspection.declaredLanguage();
+        var detection = TextLanguageDetector.detect(inspection.text());
+        String detected = detection.map(d -> DocumentLanguages.tagFor(d.language())).orElse(null);
+        boolean suggested = detection.isPresent() && inspection.rewritable()
+                && (declared == null || !DocxLanguage.base(declared).equals(detection.get().language()));
+        return new DocumentLanguageInfo(true, editable, declared, detected,
+                detection.map(TextLanguageDetector.Detection::confidence).orElse(null), suggested);
+    }
+
+    /**
+     * Copies the document's current content into a new temp directory and applies {@code use} to
+     * the copy. The directory is removed afterwards, unless {@code use} returns the copy itself:
+     * the caller then owns it and deletes {@code copy.getParent()}.
+     */
+    private <R> Mono<R> withLocalCopy(Document document, IoFunction<Path, R> use) {
+        return storageService.loadFile(document.getStoragePath())
+                .flatMap(resource -> Mono.fromCallable(() -> {
+                    Path dir = Files.createTempDirectory("onlyoffice-lang-");
+                    Path file = dir.resolve("document.docx");
+                    try {
+                        try (InputStream in = resource.getInputStream()) {
+                            Files.copy(in, file);
+                        }
+                        R result = use.apply(file);
+                        if (result != file) {
+                            deleteQuietly(dir);
+                        }
+                        return result;
+                    } catch (IOException | RuntimeException e) {
+                        deleteQuietly(dir);
+                        throw e;
+                    }
+                }).subscribeOn(Schedulers.boundedElastic()));
+    }
+
+    @FunctionalInterface
+    private interface IoFunction<T, R> {
+        R apply(T t) throws IOException;
+    }
+
+    private static void deleteQuietly(Path dir) {
+        if (dir == null) {
+            return;
+        }
+        try (Stream<Path> paths = Files.walk(dir)) {
+            paths.sorted(Comparator.reverseOrder()).forEach(p -> {
+                try {
+                    Files.deleteIfExists(p);
+                } catch (IOException e) {
+                    log.warn("Failed to delete temp file {}", p);
+                }
+            });
+        } catch (IOException e) {
+            log.warn("Failed to delete temp directory {}", dir);
+        }
     }
 
     @Override
@@ -236,7 +403,7 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
         return onlyOfficeProperties.isEnabled();
     }
 
-    private Mono<OnlyOfficeConfigResponse> buildEditorConfig(Document document, boolean requestedEdit, String versionId) {
+    private Mono<OnlyOfficeConfigResponse> buildEditorConfig(Document document, boolean requestedEdit, String versionId, String lang) {
         // Viewing a historical version is always read-only. Otherwise subclasses may force a
         // document into read-only mode regardless of the caller's access (see isDocumentReadOnly);
         // the base implementation never restricts.
@@ -284,7 +451,7 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
 
                     EditorConfig editorConfig = new EditorConfig(
                             callbackUrl,
-                            "en",
+                            lang,
                             canEdit ? "edit" : "view",
                             userInfo,
                             customization

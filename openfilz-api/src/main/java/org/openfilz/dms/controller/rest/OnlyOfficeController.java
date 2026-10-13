@@ -6,7 +6,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.RestApiVersion;
+import org.openfilz.dms.dto.request.DocumentLanguageRequest;
 import org.openfilz.dms.dto.request.OnlyOfficeCallbackRequest;
+import org.openfilz.dms.dto.response.DocumentLanguageInfo;
 import org.openfilz.dms.dto.response.OnlyOfficeConfigResponse;
 import org.openfilz.dms.exception.OperationForbiddenException;
 import org.openfilz.dms.service.OnlyOfficeService;
@@ -50,11 +52,42 @@ public class OnlyOfficeController implements UserInfoService {
             @Parameter(description = "Whether the user can edit the document")
             @RequestParam(defaultValue = "true") boolean canEdit,
             @Parameter(description = "Stored version to view (read-only); omit for the latest content")
-            @RequestParam(required = false) String versionId) {
+            @RequestParam(required = false) String versionId,
+            // Web-app only (the user's OpenFilz language): hidden so the generated SDK signatures stay unchanged
+            @Parameter(hidden = true) @RequestParam(required = false) String lang) {
 
-        log.debug("Generating OnlyOffice config for document {}, canEdit={}, versionId={}", documentId, canEdit, versionId);
+        log.debug("Generating OnlyOffice config for document {}, canEdit={}, versionId={}, lang={}", documentId, canEdit, versionId, lang);
 
-        return onlyOfficeService.generateEditorConfig(documentId, canEdit, versionId);
+        return onlyOfficeService.generateEditorConfig(documentId, canEdit, versionId, lang);
+    }
+
+    /**
+     * The proofing language of a Word document: the one it declares and the one its text is
+     * written in. The web app uses it to offer setting the language on first opening.
+     */
+    @GetMapping(value = "/language/{documentId}", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(
+            summary = "Get the proofing language of a document",
+            description = "Returns the language a Word (.docx) document declares for spell checking, the language detected "
+                    + "from its text, and whether setting it is suggested (no language declared, or another one than the text's)."
+    )
+    public Mono<DocumentLanguageInfo> getDocumentLanguage(@PathVariable UUID documentId) {
+        return onlyOfficeService.getDocumentLanguage(documentId);
+    }
+
+    /**
+     * Sets the proofing language of a Word document, saved as a new version.
+     */
+    @PostMapping(value = "/language/{documentId}", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(
+            summary = "Set the proofing language of a document",
+            description = "Writes the language (BCP 47, e.g. fr-FR) as the default language of a Word (.docx) document and "
+                    + "moves the text marked with the previous language to it. Saved as a new version; nothing changes when "
+                    + "the document already has this language."
+    )
+    public Mono<DocumentLanguageInfo> setDocumentLanguage(@PathVariable UUID documentId,
+                                                          @RequestBody DocumentLanguageRequest request) {
+        return onlyOfficeService.setDocumentLanguage(documentId, request == null ? null : request.language());
     }
 
     /**
