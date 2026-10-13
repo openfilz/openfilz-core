@@ -584,7 +584,7 @@ with `401` — if it does not, `/mcp` is not protected and something is very wro
 | *"Not authenticated: this MCP server requires a bearer token…"* | The token did not reach the tool. Check that a proxy in front of OpenFilz forwards the `Authorization` header. |
 | *"Vision analysis is unavailable…"* from `describeImage` | No chat model configured. Either enable one (`openfilz.ai.active=true` + a provider) or let the calling agent analyse the file itself. |
 | *"model '…' not found"* from `describeImage` | Fixed in the release after 1.3.44: the MCP route used the bare compiled `ChatModel` (in the EE native image, Ollama with `OLLAMA_CHAT_MODEL`, default `llama3`) instead of the fallback chain. On an older server, pull a vision model into Ollama or let the agent read the image through `downloadDocument`. |
-| The agent says it cannot see an image | It needs the `image` block of `downloadDocument` (release after 1.3.44). Formats ImageIO cannot decode (HEIC) and files above `openfilz.mcp.inline-image-max-source-bytes` (30 MB) get no block. |
+| The agent says it cannot see an image | It needs the `image` block of `downloadDocument` (release after 1.3.44). Formats ImageIO cannot decode (HEIC, SVG), files above `openfilz.mcp.inline-image-max-source-bytes` (30 MB) and images declaring more than 256 MP get no block. The image is read once, on the same fetch as the link — no Tika pass, no second storage round trip. |
 | Agent keeps saying a document does not exist | It is scoped to the caller's permissions. In Enterprise, the document may simply not be shared with that user. |
 
 ---

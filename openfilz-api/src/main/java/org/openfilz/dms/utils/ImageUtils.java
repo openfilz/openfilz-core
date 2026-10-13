@@ -1,6 +1,7 @@
 package org.openfilz.dms.utils;
 
 import com.luciad.imageio.webp.WebPWriteParam;
+import com.twelvemonkeys.imageio.stream.ByteArrayImageInputStream;
 import com.twelvemonkeys.imageio.metadata.CompoundDirectory;
 import com.twelvemonkeys.imageio.metadata.Directory;
 import com.twelvemonkeys.imageio.metadata.Entry;
@@ -33,6 +34,14 @@ public class ImageUtils {
 
     // Size of buffer to read for EXIF extraction (64KB is plenty for JPEG headers)
     private static final int EXIF_BUFFER_SIZE = 64 * 1024;
+
+    /**
+     * Largest source image {@link #toVisionImage} will decode, in pixels. Subsampling already
+     * bounds the decoded buffer, but every source row still has to be inflated and walked, so a
+     * decompression bomb (a tiny flat PNG declaring 100k x 100k) would otherwise cost minutes of
+     * CPU on a tool thread. 256 MP clears today's largest phone sensors (200 MP) with margin.
+     */
+    static final long MAX_VISION_SOURCE_PIXELS = 256L * 1024 * 1024;
 
     public static Mono<byte[]> resourceToWebpThumbnail(Resource resource) {
         return Mono.fromCallable(() -> {
@@ -90,13 +99,16 @@ public class ImageUtils {
      * A phone photo goes from several MB to a few hundred KB; vision models downscale to about
      * this size anyway, so nothing they would have seen is lost.
      *
-     * @return the re-encoded image, or null when ImageIO cannot decode the format (HEIC…)
+     * @return the re-encoded image, or null when ImageIO cannot decode the format (HEIC…) or the
+     *         source declares more than {@link #MAX_VISION_SOURCE_PIXELS}
      */
     public static EncodedImage toVisionImage(byte[] imageBytes, int maxDimension) throws IOException {
         int orientation = readExifOrientationFromBytes(
                 imageBytes.length > EXIF_BUFFER_SIZE ? java.util.Arrays.copyOf(imageBytes, EXIF_BUFFER_SIZE) : imageBytes);
         BufferedImage raw;
-        try (ImageInputStream iis = new MemoryCacheImageInputStream(new ByteArrayInputStream(imageBytes))) {
+        // Random access straight over the array: a MemoryCacheImageInputStream would copy the
+        // whole file a second time into its cache blocks as the reader seeks through it
+        try (ImageInputStream iis = new ByteArrayImageInputStream(imageBytes)) {
             Iterator<ImageReader> readers = ImageIO.getImageReaders(iis);
             if (!readers.hasNext()) {
                 return null;
@@ -104,8 +116,16 @@ public class ImageUtils {
             ImageReader reader = readers.next();
             try {
                 reader.setInput(iis, true, true);
+                // The header alone says how big the decode would be: refuse a bomb before reading a row
+                long width = reader.getWidth(0);
+                long height = reader.getHeight(0);
+                if (width <= 0 || height <= 0 || width * height > MAX_VISION_SOURCE_PIXELS) {
+                    log.debug("Refusing to decode a {}x{} image for vision ({} MP limit)", width, height,
+                            MAX_VISION_SOURCE_PIXELS >> 20);
+                    return null;
+                }
                 // Subsample while decoding (cheap, bounds memory), never below the target size
-                int longest = Math.max(reader.getWidth(0), reader.getHeight(0));
+                int longest = (int) Math.max(width, height);
                 int subsampling = Math.max(1, longest / Math.max(1, maxDimension));
                 ImageReadParam param = reader.getDefaultReadParam();
                 param.setSourceSubsampling(subsampling, subsampling, 0, 0);

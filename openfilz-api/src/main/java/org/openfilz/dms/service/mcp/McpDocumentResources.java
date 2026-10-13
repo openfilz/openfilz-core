@@ -19,7 +19,6 @@ import org.springframework.security.core.Authentication;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -141,7 +140,11 @@ public class McpDocumentResources implements UserInfoService {
         if (!(argument instanceof String documentName) || documentName.isBlank()) {
             return textResult("Provide the documentName to download.");
         }
-        DocumentAiTools.DocumentDownload download = boundTools(authentication).fetchDownload(documentName);
+        // One fetch serves every block: the gates, the storage read and the signed link happen
+        // once, and for an image the bytes come back here instead of a Tika pass over a photo
+        int maxDimension = mcpProperties.getInlineImageMaxDimension();
+        DocumentAiTools.DocumentDownload download = boundTools(authentication)
+                .fetchDownload(documentName, maxDimension > 0 ? mcpProperties.getInlineImageMaxSourceBytes() : 0L);
         if (download.error() != null) {
             return textResult(download.error());
         }
@@ -153,7 +156,7 @@ public class McpDocumentResources implements UserInfoService {
                 .size(doc.getSize())
                 .description("The original file. Fetch it with resources/read on this same connection.")
                 .build();
-        McpSchema.ImageContent image = imageContent(authentication, doc);
+        McpSchema.ImageContent image = imageContent(doc, download.imageBytes(), maxDimension);
         String text = image != null
                 ? ("'%s' is an image (%s, %d bytes), attached to this result so you can look at it "
                         + "directly (re-encoded for viewing: %s). The resource link returns the original "
@@ -221,30 +224,27 @@ public class McpDocumentResources implements UserInfoService {
     // ---------------------------------------------------------------- helpers
 
     /**
-     * The picture itself as an MCP {@code image} block, or null when the document is not an image,
-     * the feature is off ({@code openfilz.mcp.inline-image-max-dimension=0}), the file is too large
-     * to decode, or its format cannot be decoded (HEIC…). Hosts such as claude.ai consume neither
-     * resource links nor {@code resources/read}, but they hand an {@code image} block to their
-     * model as a real image — the only way such a host can see a photo stored in OpenFilz without
-     * an OpenFilz-side vision model. The bytes come from {@link DocumentAiTools#fetchContent}, so
-     * the role gate and the access policy apply exactly as for the resource.
+     * The picture itself as an MCP {@code image} block, or null when there is nothing to attach:
+     * the document is not an image, the feature is off
+     * ({@code openfilz.mcp.inline-image-max-dimension=0}), the file was above
+     * {@code openfilz.mcp.inline-image-max-source-bytes}, or its format cannot be decoded (HEIC…).
+     * Hosts such as claude.ai consume neither resource links nor {@code resources/read}, but they
+     * hand an {@code image} block to their model as a real image — the only way such a host can
+     * see a photo stored in OpenFilz without an OpenFilz-side vision model.
+     * <p>
+     * Pure encoding: the bytes were read by {@link DocumentAiTools#fetchDownload(String, long)}
+     * on the same fetch that produced the link, behind the same role gate and access policy, so
+     * attaching the image costs no second lookup or storage round trip.
      */
-    private McpSchema.ImageContent imageContent(Authentication authentication, Document doc) {
-        int maxDimension = mcpProperties.getInlineImageMaxDimension();
-        String contentType = doc.getContentType();
-        if (maxDimension <= 0 || contentType == null || !contentType.toLowerCase(Locale.ROOT).startsWith("image/")) {
-            return null;
-        }
-        DocumentAiTools.DocumentContent content = boundTools(authentication)
-                .fetchContent(doc.getId(), mcpProperties.getInlineImageMaxSourceBytes());
-        if (content.error() != null) {
-            log.debug("[MCP] {} no image block for '{}': {}", DOWNLOAD_TOOL, doc.getName(), content.error());
+    private McpSchema.ImageContent imageContent(Document doc, byte[] imageBytes, int maxDimension) {
+        if (imageBytes == null || maxDimension <= 0) {
             return null;
         }
         try {
-            ImageUtils.EncodedImage encoded = ImageUtils.toVisionImage(content.bytes(), maxDimension);
+            ImageUtils.EncodedImage encoded = ImageUtils.toVisionImage(imageBytes, maxDimension);
             if (encoded == null) {
-                log.debug("[MCP] {} no image block for '{}': {} cannot be decoded", DOWNLOAD_TOOL, doc.getName(), contentType);
+                log.debug("[MCP] {} no image block for '{}': {} cannot be decoded", DOWNLOAD_TOOL, doc.getName(),
+                        doc.getContentType());
                 return null;
             }
             return McpSchema.ImageContent.builder(Base64.getEncoder().encodeToString(encoded.bytes()), encoded.mimeType())

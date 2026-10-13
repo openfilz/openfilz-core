@@ -335,6 +335,23 @@ class ImageUtilsTest {
         assertNull(ImageUtils.toVisionImage("not an image at all".getBytes(), 1568));
     }
 
+    @Test
+    void toVisionImage_refusesADecompressionBombFromItsHeaderAlone() throws IOException {
+        // A valid PNG signature + IHDR declaring 100000 x 100000 (10 GP) and nothing else: the
+        // reader learns the size from the header, so the refusal must come before any row is read
+        ByteArrayOutputStream png = new ByteArrayOutputStream();
+        png.write(new byte[]{(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A});
+        ByteBuffer ihdr = ByteBuffer.allocate(4 + 4 + 13 + 4).order(ByteOrder.BIG_ENDIAN);
+        ihdr.putInt(13).put("IHDR".getBytes()).putInt(100_000).putInt(100_000)
+                .put((byte) 8).put((byte) 2).put((byte) 0).put((byte) 0).put((byte) 0);
+        java.util.zip.CRC32 crc = new java.util.zip.CRC32();
+        crc.update(ihdr.array(), 4, 17);
+        ihdr.putInt((int) crc.getValue());
+        png.write(ihdr.array());
+
+        assertNull(ImageUtils.toVisionImage(png.toByteArray(), 1568));
+    }
+
     private byte[] toBytes(BufferedImage image, String format) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         ImageIO.write(image, format, out);

@@ -914,8 +914,10 @@ external agents (Claude Code/Desktop, n8n, custom agents, Spring AI clients) ove
   method unchanged).
   **Images ride inline:** for an `image/*` document the `downloadDocument` result also carries an
   MCP `image` block (`ImageUtils.toVisionImage`: EXIF orientation applied, longest edge ≤
-  `openfilz.mcp.inline-image-max-dimension` = 1568, JPEG, WebP fallback; bytes via `fetchContent`,
-  so both gates apply; undecodable/oversized → no block, never a failed download). claude.ai
+  `openfilz.mcp.inline-image-max-dimension` = 1568, JPEG, WebP fallback; bytes come back from the
+  same `fetchDownload(name, maxBytes)` call that produced the link — one lookup, one access decision,
+  one storage read, no Tika pass on a photo; undecodable/oversized/>256 MP → no block, never a failed
+  download). claude.ai
   consumes neither `resource_link` nor `resources/read`, but it shows an `image` block to its
   model — the only way it sees a stored photo without an OpenFilz-side vision model.
 - **`describeImage` over MCP resolves its model like the chat** (`FailoverChatModel`, bound in
