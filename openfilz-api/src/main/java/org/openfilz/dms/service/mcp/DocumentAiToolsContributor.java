@@ -1,9 +1,13 @@
 package org.openfilz.dms.service.mcp;
 
 import lombok.RequiredArgsConstructor;
+import org.openfilz.dms.config.AiProperties;
+import org.openfilz.dms.service.ai.AiFallbackChain;
 import org.openfilz.dms.service.ai.DocumentAiTools;
 import org.openfilz.dms.service.ai.DocumentAiToolsFactory;
+import org.openfilz.dms.service.ai.FailoverChatModel;
 import org.openfilz.dms.service.ai.ToolCapability;
+import org.openfilz.dms.service.ai.UserChatClientResolver;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Lazy;
@@ -74,6 +78,14 @@ public class DocumentAiToolsContributor implements McpToolContributor {
      */
     private final ObjectProvider<ChatModel> chatModelProvider;
 
+    private final AiProperties aiProperties;
+
+    /** The caller's model (BYOK or server default), as the chat assistant resolves it. */
+    private final ObjectProvider<UserChatClientResolver> resolverProvider;
+
+    /** The failover the chat assistant gets; without it a dead primary fails every vision call. */
+    private final ObjectProvider<AiFallbackChain> fallbackChainProvider;
+
     @Override
     public Object bind(String userEmail, Authentication authentication) {
         // The definitions template (both args null) must NOT resolve a ChatModel: that happens
@@ -83,8 +95,27 @@ public class DocumentAiToolsContributor implements McpToolContributor {
         // describeImage's execution needs one, and that is the bound path below.
         ChatModel chatModel = (authentication == null && userEmail == null)
                 ? null
-                : chatModelProvider.getIfAvailable();
+                : visionModel(userEmail);
         return toolsFactory.create(chatModel, userEmail, authentication);
+    }
+
+    /**
+     * The model {@code describeImage} calls: the caller's own model behind the fallback chain,
+     * exactly what the chat assistant would use — not the bare auto-configured bean, which in a
+     * native image is whatever provider the build compiled in (Ollama) even when the deployment's
+     * real models are a Gemini/OpenAI fallback chain. Null when the deployment has no model to
+     * offer this caller, so the tool says so instead of failing on a call.
+     */
+    private ChatModel visionModel(String userEmail) {
+        UserChatClientResolver resolver = aiProperties.isActive() ? resolverProvider.getIfAvailable() : null;
+        AiFallbackChain fallbackChain = resolver == null ? null : fallbackChainProvider.getIfAvailable();
+        if (fallbackChain == null) {
+            return chatModelProvider.getIfAvailable();
+        }
+        if (!resolver.isUserSettingsEnabled() && !resolver.hasDefaultChatModel()) {
+            return null;
+        }
+        return new FailoverChatModel(resolver, fallbackChain, userEmail);
     }
 
     @Override
