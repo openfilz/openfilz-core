@@ -301,6 +301,10 @@ Optional audit chain verification (hash chain for integrity): `openfilz.audit.ch
   - `POST /callback/{documentId}` — document save callbacks
   - `GET /status` — check if enabled
   - `GET /supported` — check file type support
+  - `GET|POST /language/{documentId}` — proofing language of a Word document: declared (`w:lang`) vs detected
+    from its text (`service/language/`: `DocxLanguage` reads/writes `styles.xml` docDefaults + runs as text,
+    `TextLanguageDetector` = function words, no model), set = new version through `replaceDocumentContent`
+  - `GET /config/{id}?lang=` — editor UI language (hidden param, `DocumentLanguages.uiLanguage`, default `en`)
 - **OnlyOfficeJwtService** — JWT token generation for OnlyOffice
 - Configuration: `onlyoffice.enabled`, `onlyoffice.document-server.url`, `onlyoffice.jwt.secret`
 
