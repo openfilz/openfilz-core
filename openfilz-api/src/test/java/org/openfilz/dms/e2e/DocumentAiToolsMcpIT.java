@@ -20,6 +20,17 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import tools.jackson.databind.JsonNode;
+
+import javax.imageio.ImageIO;
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -248,6 +259,47 @@ class DocumentAiToolsMcpIT extends AbstractMcpIT {
                 {"documentName":"dl-%s"}""".formatted(suffix))).contains("not a downloadable file");
         assertThat(callToolText("downloadDocument", """
                 {"documentName":"ghost-%s"}""".formatted(suffix))).contains("is visible to you");
+    }
+
+    @Test
+    @DisplayName("downloadDocument attaches an image as an MCP image block, re-encoded; other files get none")
+    void downloadDocumentAttachesImages() throws Exception {
+        String suffix = suffix();
+        FolderResponse folder = createFolder("img-" + suffix, null);
+        BufferedImage photo = new BufferedImage(3200, 2400, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = photo.createGraphics();
+        g.setColor(Color.ORANGE);
+        g.fillRect(0, 0, 3200, 2400);
+        g.dispose();
+        ByteArrayOutputStream png = new ByteArrayOutputStream();
+        ImageIO.write(photo, "png", png);
+        upload("photo-" + suffix + ".png", png.toByteArray(), folder.id());
+        upload("notes-" + suffix + ".txt", "plain notes".getBytes(), folder.id());
+
+        JsonNode result = expectResult(rpc(3, "tools/call", """
+                {"name":"downloadDocument","arguments":{"documentName":"photo-%s.png"}}""".formatted(suffix)));
+        List<String> types = new ArrayList<>();
+        JsonNode image = null;
+        for (JsonNode block : result.path("content")) {
+            types.add(block.path("type").asString());
+            if ("image".equals(block.path("type").asString())) {
+                image = block;
+            }
+        }
+        assertThat(types).containsExactly("resource_link", "image", "text");
+        assertThat(image.path("mimeType").asString()).isEqualTo("image/jpeg");
+        BufferedImage decoded = ImageIO.read(new ByteArrayInputStream(
+                Base64.getDecoder().decode(image.path("data").asString())));
+        assertThat(decoded.getWidth()).isEqualTo(1568);
+        assertThat(decoded.getHeight()).isEqualTo(1176);
+        assertThat(result.path("content").get(2).path("text").asString())
+                .contains("attached to this result").contains("1568x1176");
+
+        JsonNode textResult = expectResult(rpc(4, "tools/call", """
+                {"name":"downloadDocument","arguments":{"documentName":"notes-%s.txt"}}""".formatted(suffix)));
+        List<String> textTypes = new ArrayList<>();
+        textResult.path("content").forEach(block -> textTypes.add(block.path("type").asString()));
+        assertThat(textTypes).containsExactly("resource_link", "text");
     }
 
     @Test

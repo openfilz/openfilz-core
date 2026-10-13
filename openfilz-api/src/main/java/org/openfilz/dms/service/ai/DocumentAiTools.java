@@ -43,8 +43,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.MimeType;
 import reactor.core.publisher.Mono;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -1546,6 +1549,23 @@ public class DocumentAiTools {
      *         URL — or an {@code error} message, in which case every other field is null
      */
     public DocumentDownload fetchDownload(String documentName) {
+        return fetchDownload(documentName, 0L);
+    }
+
+    /**
+     * {@link #fetchDownload(String)}, optionally carrying an image's bytes for a front-end that
+     * will hand the picture itself over (the MCP {@code image} block).
+     * <p>
+     * When {@code inlineImageMaxBytes} is positive and the document is an image a vision model
+     * can take ({@link #VISION_MIME_TYPES}) no larger than that, the file is read <em>once</em>
+     * into {@code imageBytes} and text extraction is skipped: a photo has no text for Tika to
+     * find, and the storage {@code Resource} can only be consumed once anyway. Everything else
+     * (gates, link, hint) is unchanged, so the front-end never needs a second lookup, a second
+     * access decision or a second storage fetch to attach the image.
+     *
+     * @param inlineImageMaxBytes 0 (or less) for the plain text-extraction behaviour
+     */
+    public DocumentDownload fetchDownload(String documentName, long inlineImageMaxBytes) {
         String roleDenial = denyIfNotAllowed("downloadDocument", ToolCapability.DOCUMENT_READ);
         if (roleDenial != null) {
             return DocumentDownload.failure(roleDenial);
@@ -1569,11 +1589,50 @@ public class DocumentAiTools {
                 ? "link valid about %d minutes, no sign-in needed"
                         .formatted(Math.max(1, downloadTokenService.ttlSeconds() / 60))
                 : "browser, signed-in user";
+        String downloadUrl = tokenizedDownloadUrl(id, token);
+        if (inlineImageMaxBytes > 0 && isVisionImage(doc) && sizeOf(doc) <= inlineImageMaxBytes) {
+            byte[] bytes = readAtMost(resource, inlineImageMaxBytes);
+            // Oversized (the stored size can lie) or unreadable: the resource is spent, and an
+            // image has no text to fall back to — the link and the download URL still answer
+            return new DocumentDownload(doc, null, downloadUrl, hint, bytes, null);
+        }
         // The extracted text is fenced for both front-ends (chat text, MCP text block): it is
         // document data, not instructions — see UntrustedContent
         String extracted = extractText(resource);
         return new DocumentDownload(doc, extracted == null ? null : UntrustedContent.fence(id, doc.getName(), extracted),
-                tokenizedDownloadUrl(id, token), hint, null);
+                downloadUrl, hint, null, null);
+    }
+
+    /** Whether {@code describeImage} would accept this document's type as an image (not SVG, HEIC…). */
+    private static boolean isVisionImage(Document doc) {
+        String contentType = doc.getContentType();
+        if (contentType == null) {
+            return false;
+        }
+        int semicolon = contentType.indexOf(';');
+        String mime = (semicolon < 0 ? contentType : contentType.substring(0, semicolon)).trim().toLowerCase(Locale.ROOT);
+        return VISION_MIME_TYPES.contains(mime);
+    }
+
+    /**
+     * The whole resource as bytes, or null when it is larger than {@code maxBytes} (the read stops
+     * there instead of buffering the rest) or cannot be read.
+     */
+    private byte[] readAtMost(Resource resource, long maxBytes) {
+        if (resource == null) {
+            return null;
+        }
+        try (InputStream in = resource.getInputStream()) {
+            byte[] bytes = in.readNBytes((int) Math.min(maxBytes + 1, Integer.MAX_VALUE - 8));
+            if (bytes.length > maxBytes) {
+                log.debug("[AI-TOOL] image above the {}-byte inline limit, no bytes returned", maxBytes);
+                return null;
+            }
+            return bytes;
+        } catch (IOException e) {
+            log.warn("[AI-TOOL] could not read image bytes from {}: {}", resource, e.toString());
+            return null;
+        }
     }
 
     /**
@@ -1637,11 +1696,13 @@ public class DocumentAiTools {
      * Everything a front-end needs to hand a document over, or an error message (exactly one of
      * {@code document}/{@code error} is set). {@code downloadHint} is a ready phrase describing
      * how the URL is usable ("browser, signed-in user" vs. an expiring signed link).
+     * {@code imageBytes} is set only by {@link #fetchDownload(String, long)} for an image within
+     * the caller's limit; {@code extractedText} is then null.
      */
     public record DocumentDownload(Document document, String extractedText, String downloadUrl,
-                                   String downloadHint, String error) {
+                                   String downloadHint, byte[] imageBytes, String error) {
         static DocumentDownload failure(String error) {
-            return new DocumentDownload(null, null, null, null, error);
+            return new DocumentDownload(null, null, null, null, null, error);
         }
     }
 
