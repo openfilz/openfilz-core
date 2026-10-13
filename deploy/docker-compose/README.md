@@ -246,7 +246,7 @@ cp .env.example .env
 |----------|---------|-------------|
 | `OPENFILZ_API_IMAGE` | `ghcr.io/openfilz/openfilz-api:latest` | Docker image for the API |
 | `API_PORT` | `8081` | API exposed port |
-| `JAVA_OPTS` | `-Xmx512m -Xms256m` | JVM memory options |
+| `JAVA_TOOL_OPTIONS` | `-Xmx512m -Xms256m` | JVM options (memory, system properties). The image does not read `JAVA_OPTS`; a `JAVA_OPTS` left in an older `.env` is still used as fallback |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:4200,http://localhost:80` | Allowed CORS origins |
 | `OPENFILZ_INTERNAL_API_BASE_URL` | `http://openfilz-api:8081` | API route for internal calls (inter-pods) |
 | `OPENFILZ_PUBLIC_API_BASE_URL` | `http://localhost:8081` | API route for external calls |
@@ -419,6 +419,46 @@ After starting services, access them at:
 
 ---
 
+## Accessing from another machine (server IP or domain name)
+
+The defaults assume the browser runs **on the Docker host** (`localhost`). The web UI is an
+Angular app running in the visitor's browser, and it is the **browser** that calls the API and
+Keycloak — so every public URL below must be an address the browser can reach. Left at
+`localhost`, the browser calls its own machine: the UI loads but every action fails (e.g.
+*"Folder creation failed"*), and nothing shows up in the server logs because no request ever
+reaches the server.
+
+Set these in `.env` (example for a server reachable at `http://192.168.1.50`), then
+`docker compose up -d` again — the web container rewrites its runtime config at startup:
+
+| Variable | Example | Why |
+|----------|---------|-----|
+| `NG_APP_API_URL` | `http://192.168.1.50:8081/api/v1` | REST API, called by the browser |
+| `NG_APP_GRAPHQL_URL` | `http://192.168.1.50:8081/graphql/v1` | GraphQL API, called by the browser |
+| `CORS_ALLOWED_ORIGINS` | `http://192.168.1.50:4200` | Origin of the web UI **exactly as in the address bar** (scheme, host, port, no trailing slash). Any other origin is rejected with a 403 before reaching OpenFilz code |
+| `OPENFILZ_PUBLIC_API_BASE_URL` | `http://192.168.1.50:8081` | API URL written into URLs the API returns to the browser (resumable-upload locations, thumbnails, MCP discovery…) |
+
+With authentication (`docker-compose.auth.yml`), also:
+
+| Variable | Example | Why |
+|----------|---------|-----|
+| `NG_APP_AUTHENTICATION_AUTHORITY` | `http://192.168.1.50:8180/realms/openfilz` | Keycloak realm the browser logs in to |
+| `KEYCLOAK_PUBLIC_URL` | `http://192.168.1.50:8180` | Keycloak `frontendUrl` (issuer, login pages) — applied at **realm import**, i.e. first start |
+| `OPENFILZ_WEB_ROOT_URL` | `http://192.168.1.50:4200` | Allowed redirect URIs of the `openfilz-web` client — applied at realm import |
+
+Leave `KEYCLOAK_REALM_URL` (`http://keycloak:8080/...`) and `OPENFILZ_INTERNAL_API_BASE_URL`
+on their Docker-internal values: they are used container-to-container. With OnlyOffice, also
+set `NG_APP_ONLYOFFICE_URL` and `ONLYOFFICE_URL` to the public OnlyOffice address.
+
+> Keycloak only imports the realm on first start. If it already ran with `localhost` values,
+> update the realm `Frontend URL` and the `openfilz-web` client URLs in the Keycloak admin
+> console, or reset its database.
+
+For production, put a reverse proxy with TLS in front of the stack and use `https://` URLs
+(see [`dokploy/`](dokploy/) for a complete example).
+
+---
+
 ## Common Scenarios
 
 ### Development (No Auth)
@@ -478,13 +518,43 @@ Then configure your API with `GOTENBERG_URL=http://localhost:8083` (Gotenberg li
 
 ### View Logs
 
+All services log to **stdout** (no log file inside the containers):
+
 ```bash
 # All services
 make logs
 
 # Specific service
-docker-compose logs -f openfilz-api
+docker compose logs -f openfilz-api
 ```
+
+At startup the API prints the CORS origins it actually applies (`Created Cors bean with ...`);
+`org.openfilz` already logs at DEBUG.
+
+**An action fails in the UI but the API logs show nothing?** The request most likely never
+reached OpenFilz code. Open the browser developer tools (Network + Console tabs):
+
+- request sent to `localhost` or failing with no HTTP status → wrong `NG_APP_API_URL` /
+  `NG_APP_GRAPHQL_URL` (see [Accessing from another machine](#accessing-from-another-machine-server-ip-or-domain-name));
+- *CORS* error or a `403` on the `OPTIONS` preflight → the page origin is missing from
+  `CORS_ALLOWED_ORIGINS`.
+
+**More detail** — raise Spring log levels with standard `LOGGING_LEVEL_<logger>` variables and
+enable an HTTP access log, in a `docker-compose.override.yml` next to `docker-compose.yml`
+(picked up automatically by `docker compose up`; with the Makefile, add `-f docker-compose.override.yml`
+to `COMPOSE`):
+
+```yaml
+services:
+  openfilz-api:
+    environment:
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB_CORS: DEBUG    # rejected CORS requests
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: DEBUG    # authentication / authorization
+      # One line per HTTP request. Keep your JVM memory flags: this replaces JAVA_TOOL_OPTIONS.
+      JAVA_TOOL_OPTIONS: "-Xmx512m -Xms256m -Dreactor.netty.http.server.accessLogEnabled=true"
+```
+
+The `openfilz-web` container (nginx) only logs the delivery of the UI's static files, not API calls.
 
 ### Reset Everything
 
