@@ -112,8 +112,9 @@ services:
       # Server configuration
       SERVER_PORT: 8081
 
-      # Java options
-      JAVA_OPTS: ${JAVA_OPTS:--Xmx512m -Xms256m}
+      # JVM options. The image (built by Jib) does not read JAVA_OPTS: the JVM itself
+      # picks up JAVA_TOOL_OPTIONS. JAVA_OPTS is still accepted from older .env files.
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:-${JAVA_OPTS:--Xmx512m -Xms256m}}
 
       # Flyway configuration - ensure migrations run from V1_0
       SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"
