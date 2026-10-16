@@ -4,6 +4,7 @@ import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.entity.SignatureEnvelope;
 import reactor.core.publisher.Mono;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -16,6 +17,15 @@ public interface SignatureAccessPolicy {
 
     /** May {@code userEmail} send {@code document} for signature? */
     Mono<Boolean> canInitiate(Document document, String userEmail);
+
+    /**
+     * May {@code document} be sent to these recipient e-mails by {@code userEmail}? Called when an
+     * envelope is created, after {@link #canInitiate}. Complete empty to accept, or with an error
+     * (its status and message reach the caller) to refuse the envelope. Default: any recipient.
+     */
+    default Mono<Void> checkRecipients(Document document, String userEmail, List<String> recipientEmails) {
+        return Mono.empty();
+    }
 
     /** May {@code userEmail} read / manage this envelope? Default: the initiator only. */
     default Mono<Boolean> canManage(SignatureEnvelope envelope, String userEmail) {
