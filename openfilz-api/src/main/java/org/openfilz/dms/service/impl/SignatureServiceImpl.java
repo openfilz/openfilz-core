@@ -198,6 +198,9 @@ public class SignatureServiceImpl implements SignatureService {
                 .flatMap(doc -> accessPolicy.canInitiate(doc, actor.email())
                         .flatMap(ok -> Boolean.TRUE.equals(ok) ? Mono.just(doc)
                                 : Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, SIGN_NOT_AUTHORIZED_MESSAGE))))
+                .flatMap(doc -> accessPolicy.checkRecipients(doc, actor.email(),
+                                req.recipients().stream().map(SignatureRecipientInput::email).toList())
+                        .thenReturn(doc))
                 .flatMap(doc -> {
                     if (!isPdf(doc)) {
                         return Mono.error(new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
