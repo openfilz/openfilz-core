@@ -268,8 +268,7 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
 
     /** Names: "<token> folder", "<token> alpha.pdf" (131 KB), "<token> beta.png" (2.7 KB), "<token> gamma.txt" (74 B). */
     protected SearchFixture createSearchFixture() {
-        String token = "qz" + UUID.randomUUID().toString().replace("-", "").replaceAll("[0-9]", "g").substring(0, 6)
-                + UUID.randomUUID().toString().replace("-", "").replaceAll("[0-9]", "g").substring(0, 4);
+        String token = "qz" + randomLetters(10);
         FolderResponse folder = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/folders")
                 .body(BodyInserters.fromValue(new CreateFolderRequest(token + " folder", null)))
                 .exchange()
@@ -280,6 +279,20 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
         UploadResponse png = uploadAs("test-image.png", token + " beta.png", MediaType.IMAGE_PNG);
         UploadResponse txt = uploadAs("test.txt", token + " gamma.txt", MediaType.TEXT_PLAIN);
         return new SearchFixture(token, folder, pdf, png, txt);
+    }
+
+    /**
+     * Letters only (the name analyzer splits on digits) and drawn from the whole alphabet: tokens built
+     * from hex with every digit turned into "g" looked alike ("qzggggggeggg" / "qzggegggcggg"), and the
+     * fuzzy name match of the OpenSearch path then returned another fixture's files.
+     */
+    protected static String randomLetters(int length) {
+        java.util.concurrent.ThreadLocalRandom random = java.util.concurrent.ThreadLocalRandom.current();
+        StringBuilder letters = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            letters.append((char) ('a' + random.nextInt(26)));
+        }
+        return letters.toString();
     }
 
     protected UploadResponse uploadAs(String resource, String filename, MediaType contentType) {
@@ -406,7 +419,7 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
 
     @Test
     void testSearchMetadataPatternFilters() {
-        String t = "qm" + UUID.randomUUID().toString().replace("-", "").replaceAll("[0-9]", "h").substring(0, 10);
+        String t = "qm" + randomLetters(10);
         List<UUID> ids = new java.util.ArrayList<>();
         for (String project : List.of("Beta-1", "beta-2", "gamma")) {
             MultipartBodyBuilder builder = new MultipartBodyBuilder();
