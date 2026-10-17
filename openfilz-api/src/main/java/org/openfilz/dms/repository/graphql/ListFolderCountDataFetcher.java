@@ -68,7 +68,9 @@ public class ListFolderCountDataFetcher  extends AbstractListDataFetcher<Long> {
     }
 
     protected DatabaseClient.GenericExecuteSpec prepareQuery(DataFetchingEnvironment environment, ListFolderRequest filter, StringBuilder query) {
-        return criteria.bindCriteria(super.prepareQuery(environment, filter, query), filter);
+        // A count joins the favorites for the favorite filter only (see get), so it binds :email only then — not
+        // because the selection selects `favorite`: a search counts with its hits' environment, whose hits may
+        return criteria.bindCriteria(bindFavoritesToNewQuery(environment, query, filter != null && filter.favorite() != null), filter);
     }
 
 

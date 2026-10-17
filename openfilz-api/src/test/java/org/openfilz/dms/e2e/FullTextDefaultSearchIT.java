@@ -323,7 +323,7 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
             query search($query: String, $filters: [FilterInput!], $sort: SortInput) {
               searchDocuments(query: $query, filters: $filters, sort: $sort, page: 1, size: 20) {
                 totalHits
-                documents { id name extension contentType size createdBy contentSnippet }
+                documents { id name extension contentType size createdBy contentSnippet favorite }
               }
             }""";
 
@@ -387,6 +387,31 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
             Assertions.assertEquals(4, search(t, List.of(filter("createdAtAfter", yesterday)), null).totalHits());
             Assertions.assertEquals(0, search(t, List.of(filter("createdAtBefore", yesterday)), null).totalHits());
         } finally {
+            deleteSearchFixture(fx);
+        }
+    }
+
+    /** Every hit says whether the caller has it in their favorites, so the results page can offer the toggle. */
+    @Test
+    void testSearchHitsCarryFavorite() {
+        SearchFixture fx = createSearchFixture();
+        try {
+            awaitSearchable(fx);
+            getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/favorites/" + fx.png().id())
+                    .exchange()
+                    .expectStatus().isOk();
+
+            Map<String, Object> favorites = new java.util.HashMap<>();
+            search(fx.token(), List.of(), null).documents()
+                    .forEach(d -> favorites.put((String) d.get("name"), d.get("favorite")));
+            Assertions.assertEquals(Map.of(
+                    fx.token() + " folder", false,
+                    fx.token() + " alpha.pdf", false,
+                    fx.token() + " beta.png", true,
+                    fx.token() + " gamma.txt", false), favorites);
+        } finally {
+            getWebTestClient().delete().uri(RestApiVersion.API_PREFIX + "/favorites/" + fx.png().id())
+                    .exchange();
             deleteSearchFixture(fx);
         }
     }

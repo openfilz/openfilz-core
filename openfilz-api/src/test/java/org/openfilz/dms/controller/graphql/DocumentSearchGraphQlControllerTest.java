@@ -8,12 +8,16 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.openfilz.dms.dto.response.DocumentSearchInfo;
 import org.openfilz.dms.dto.response.DocumentSearchResult;
 import org.openfilz.dms.enums.DocumentType;
+import org.openfilz.dms.repository.UserFavoriteRepository;
 import org.openfilz.dms.service.DocumentSearchService;
 import org.openfilz.dms.service.ThumbnailUrlResolver;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.*;
@@ -26,12 +30,14 @@ class DocumentSearchGraphQlControllerTest {
     private DocumentSearchService documentSearchService;
     @Mock
     private ThumbnailUrlResolver thumbnailUrlResolver;
+    @Mock
+    private UserFavoriteRepository userFavoriteRepository;
 
     private DocumentSearchGraphQlController controller;
 
     @BeforeEach
     void setUp() {
-        controller = new DocumentSearchGraphQlController(documentSearchService, thumbnailUrlResolver);
+        controller = new DocumentSearchGraphQlController(documentSearchService, thumbnailUrlResolver, userFavoriteRepository);
     }
 
     @Test
@@ -79,5 +85,28 @@ class DocumentSearchGraphQlControllerTest {
         StepVerifier.create(controller.documentSearchInfoThumbnailUrl(file))
                 .expectNext("img-url")
                 .verifyComplete();
+    }
+
+    @Test
+    void favorite_resolvesThePageWithOneLookup() {
+        UUID fav = UUID.randomUUID();
+        UUID other = UUID.randomUUID();
+        DocumentSearchInfo favInfo = new DocumentSearchInfo(fav, "a.pdf", "pdf", null, null, null, null, null, null, null);
+        DocumentSearchInfo otherInfo = new DocumentSearchInfo(other, "b.pdf", "pdf", null, null, null, null, null, null, null);
+        when(userFavoriteRepository.findFavoriteDocIds(eq("anonymousUser"), eq(Set.of(fav, other))))
+                .thenReturn(Flux.just(fav));
+
+        StepVerifier.create(controller.documentSearchInfoFavorite(List.of(favInfo, otherInfo)))
+                .expectNext(Map.of(favInfo, true, otherInfo, false))
+                .verifyComplete();
+        verify(userFavoriteRepository, times(1)).findFavoriteDocIds(any(), any());
+    }
+
+    @Test
+    void favorite_emptyPage_queriesNothing() {
+        StepVerifier.create(controller.documentSearchInfoFavorite(List.of()))
+                .expectNext(Map.of())
+                .verifyComplete();
+        verifyNoInteractions(userFavoriteRepository);
     }
 }

@@ -17,6 +17,8 @@ type DocumentSearchInfo {
     contentSnippet: String # return a snippet instead of the full content
     "URL to fetch the thumbnail image, null if not available"
     thumbnailUrl: String
+    "Whether the caller has this document in their favorites (one batched lookup per page of hits)"
+    favorite: Boolean
 }
 
 # The response object containing results and pagination info

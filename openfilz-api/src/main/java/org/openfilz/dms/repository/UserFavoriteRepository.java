@@ -1,9 +1,12 @@
 package org.openfilz.dms.repository;
 
 import org.openfilz.dms.entity.UserFavorite;
+import org.springframework.data.r2dbc.repository.Query;
 import org.springframework.data.repository.reactive.ReactiveCrudRepository;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.Collection;
 import java.util.UUID;
 
 /**
@@ -28,4 +31,14 @@ public interface UserFavoriteRepository extends ReactiveCrudRepository<UserFavor
      * @return Void when deleted
      */
     Mono<Void> deleteByEmailAndDocId(String email, UUID docId);
+
+    /**
+     * The documents among {@code docIds} that the user has in their favorites (one query for a page of hits)
+     *
+     * @param email  User email
+     * @param docIds Document IDs to check (must not be empty)
+     * @return the favorited document IDs
+     */
+    @Query("SELECT doc_id FROM user_favorites WHERE email = :email AND doc_id IN (:docIds)")
+    Flux<UUID> findFavoriteDocIds(String email, Collection<UUID> docIds);
 }

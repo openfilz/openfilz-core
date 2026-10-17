@@ -474,6 +474,10 @@ correction read; `PropertiesCategoryTaxonomy` in core). Also: the per-user Inbox
   relevance. The id breaks ties so pages stay stable.
 - With a text query, the OpenSearch path highlights `content` and returns the extract as `contentSnippet` (matches in
   `<mark>`, ~160 characters); the database path returns none.
+- `favorite` (whether the caller has the hit in their favorites) is resolved for both back ends by one
+  `@BatchMapping` per page in `DocumentSearchGraphQlController` (`UserFavoriteRepository.findFavoriteDocIds`). The
+  database path counts with the hits' `DataFetchingEnvironment`, so `ListFolderCountDataFetcher` binds `:email` only
+  for the favorite *filter* (the only case it joins `user_favorites`), never because the selection holds `favorite`.
 - Tests: `FullTextDefaultSearchIT` (database) — `FullTextOpenSearchIT` extends it, so every filter / sort test runs on both.
 
 ### Dashboard Statistics
