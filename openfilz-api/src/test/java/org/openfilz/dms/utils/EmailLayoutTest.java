@@ -34,4 +34,22 @@ class EmailLayoutTest {
     void code_isEscaped() {
         assertThat(EmailLayout.code("<1>")).contains("&lt;1&gt;").doesNotContain("<1>");
     }
+
+    @Test
+    void noneMeansNoLogo() {
+        String html = EmailLayout.page("en", false, "T", "body", "", "Acme", " None ");
+
+        assertThat(html).doesNotContain("<img").doesNotContain(EmailLayout.DEFAULT_LOGO_URL).contains("Acme");
+    }
+
+    @Test
+    void blankKeepsHostedLogo() {
+        assertThat(EmailLayout.page("en", false, "T", "body", "", null, "")).contains(EmailLayout.DEFAULT_LOGO_URL);
+    }
+
+    @Test
+    void customUrlUsed() {
+        assertThat(EmailLayout.page("en", false, "T", "body", "", null, "https://intranet.example/logo.png"))
+                .contains("https://intranet.example/logo.png");
+    }
 }

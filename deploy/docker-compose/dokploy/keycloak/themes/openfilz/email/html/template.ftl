@@ -1,4 +1,9 @@
 <#macro emailLayout icon title>
+<#-- Image / link settings come from theme.properties (env-driven). Empty = hosted OpenFilz default (a compose
+     "${VAR:-}" passes an empty string); "none" = no image / no link, for an air-gapped site. -->
+<#assign logoHeader = (properties.logoHeaderUrl!"")?trim?has_content?then((properties.logoHeaderUrl)?trim, "https://openfilz.com/assets/img/logo-email-header.png")>
+<#assign logoFooter = (properties.logoFooterUrl!"")?trim?has_content?then((properties.logoFooterUrl)?trim, "https://openfilz.com/assets/img/logo-email-footer.png")>
+<#assign brandLink = (properties.brandUrl!"")?trim?has_content?then((properties.brandUrl)?trim, "https://openfilz.com")>
 <!DOCTYPE html>
 <html>
 <head>
@@ -13,13 +18,17 @@
 <!-- Header with gradient -->
 <tr>
 <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 40px 30px 40px; text-align: center;">
+<#if logoHeader?lower_case != "none">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto 20px auto;">
 <tr>
 <td align="center" valign="middle" width="80" height="80" style="width: 80px; height: 80px; background-color: rgba(255,255,255,0.8); border-radius: 50%; text-align: center; vertical-align: middle;">
-<img src="https://openfilz.com/assets/img/logo-email-header.png" alt="OpenFilz" width="64" height="49" style="display:block;border:0;margin:0 auto;" />
+<img src="${logoHeader}" alt="OpenFilz" width="64" height="49" style="display:block;border:0;margin:0 auto;" />
 </td>
 </tr>
 </table>
+<#else>
+<p style="margin: 0 0 20px 0;"><span style="font-size: 18px; font-weight: 700; color: #ffffff; letter-spacing: 0.08em;">OPENFILZ</span></p>
+</#if>
 <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #ffffff; letter-spacing: -0.5px;">${title}</h1>
 </td>
 </tr>
@@ -33,18 +42,21 @@
 <tr>
 <td style="padding: 30px 40px; background-color: #f8fafc; border-top: 1px solid #e5e7eb; text-align: center;">
 <p style="margin: 0 0 10px 0; font-size: 13px; color: #9ca3af;">${msg("emailFooterSentVia")}</p>
-<a href="https://openfilz.com" style="text-decoration: none;">
+<#assign showBrandLink = brandLink?lower_case != "none">
+<#if showBrandLink><a href="${brandLink}" style="text-decoration: none;"></#if>
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto;">
 <tr>
+<#if logoFooter?lower_case != "none">
 <td valign="middle" style="padding-right: 6px;">
-<img src="https://openfilz.com/assets/img/logo-email-footer.png" alt="OpenFilz" width="37" height="28" style="display:block;border:0;" />
+<img src="${logoFooter}" alt="OpenFilz" width="37" height="28" style="display:block;border:0;" />
 </td>
+</#if>
 <td valign="middle">
 <span style="font-size: 15px; font-weight: 700; color: #667eea; letter-spacing: 0.08em;">OPENFILZ</span>
 </td>
 </tr>
 </table>
-</a>
+<#if showBrandLink></a></#if>
 </td>
 </tr>
 </table>
