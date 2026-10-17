@@ -98,19 +98,24 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
                     Assertions.assertEquals(3, indexedSuggestions.size());
                 });
 
+        // The third file can still be indexing once the first query sees its three hits: poll this one too
+        await().atMost(Duration.ofSeconds(45))
+                .pollInterval(Duration.ofMillis(500))
+                .untilAsserted(() -> {
+                    List<Suggest> meeting = getWebTestClient().get().uri(uri ->
+                                    uri.path(RestApiVersion.API_PREFIX + "/suggestions")
+                                            .queryParam("q", getSuggestionQuery2())
+                                            .build())
+                            .exchange()
+                            .expectBody(new ParameterizedTypeReference<List<Suggest>>() {
+                            })
+                            .returnResult().getResponseBody();
+
+                    Assertions.assertNotNull(meeting);
+                    Assertions.assertEquals(1, meeting.size());
+                });
+
         List<Suggest> suggestions = getWebTestClient().get().uri(uri ->
-                        uri.path(RestApiVersion.API_PREFIX + "/suggestions")
-                                .queryParam("q", getSuggestionQuery2())
-                                .build())
-                .exchange()
-                .expectBody(new ParameterizedTypeReference<List<Suggest>>() {
-                })
-                .returnResult().getResponseBody();
-
-        Assertions.assertNotNull(suggestions);
-        Assertions.assertEquals(1, suggestions.size());
-
-        suggestions = getWebTestClient().get().uri(uri ->
                         uri.path(RestApiVersion.API_PREFIX + "/suggestions")
                                 .queryParam("q", "")
                                 .build())
