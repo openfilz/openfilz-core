@@ -44,13 +44,39 @@ public class SqlUtils {
         return query.bind(criteria, "%" + value.toUpperCase() + "%");
     }
 
-    public DatabaseClient.GenericExecuteSpec bindMetadata(Map<String, Object> metadata, DatabaseClient.GenericExecuteSpec query) {
-        try {
-            String criteriaJson = objectMapper.writeValueAsString(metadata);
-            return query.bind("criteria", criteriaJson);
-        } catch (JacksonException e) {
-            throw new RuntimeException(e);
+    /** Bind name of the exact (containment) part of a metadata filter. */
+    public static final String METADATA_CRITERIA = "criteria";
+    /** Bind name of the keys a metadata pattern filter requires ({@code text[]}). */
+    public static final String METADATA_PATTERN_KEYS = "mkeys";
+    /** Bind-name prefix of the metadata pattern keys / values, suffixed with their index. */
+    public static final String METADATA_PATTERN_KEY = "mk_";
+    public static final String METADATA_PATTERN_VALUE = "mv_";
+
+    /**
+     * Binds the parameters of {@link #appendMetadataCriteria(String, String, Map, StringBuilder)}
+     * for the same criteria.
+     */
+    public DatabaseClient.GenericExecuteSpec bindMetadataCriteria(Map<String, Object> metadata, DatabaseClient.GenericExecuteSpec query) {
+        MetadataCriteria criteria = MetadataCriteria.of(metadata);
+        if (criteria.hasExact()) {
+            try {
+                query = query.bind(METADATA_CRITERIA, objectMapper.writeValueAsString(criteria.exact()));
+            } catch (JacksonException e) {
+                throw new RuntimeException(e);
+            }
         }
+        List<MetadataCriteria.Pattern> patterns = criteria.patterns();
+        if (!patterns.isEmpty()) {
+            query = query.bind(METADATA_PATTERN_KEYS, patterns.stream().map(MetadataCriteria.Pattern::key).toArray(String[]::new));
+            for (int i = 0; i < patterns.size(); i++) {
+                MetadataCriteria.Pattern pattern = patterns.get(i);
+                if (!pattern.anyValue()) {
+                    query = query.bind(METADATA_PATTERN_KEY + i, pattern.key())
+                            .bind(METADATA_PATTERN_VALUE + i, pattern.like());
+                }
+            }
+        }
+        return query;
     }
 
     public void appendEqualsCriteria(String prefix, String criteria, StringBuilder sql) {
@@ -109,8 +135,39 @@ public class SqlUtils {
         appendPrefix(prefix, sql).append(criteria).append(" is null ");
     }
 
-    public void appendJsonEqualsCriteria(String prefix, String criteria, StringBuilder sql) {
-        appendPrefix(prefix, sql).append(criteria).append(" @> :criteria::jsonb ");
+    /**
+     * Appends the predicate of a metadata filter (see {@link MetadataCriteria}), without a leading
+     * {@code AND} / {@code WHERE}:
+     * <pre>
+     * col @> :criteria::jsonb                                   -- exact values (GIN-indexed)
+     * AND col ?& :mkeys                                         -- keys of the patterns (GIN-indexed)
+     * AND col ->> :mk_0 ILIKE :mv_0 ESCAPE '\'                -- one recheck per pattern
+     * </pre>
+     * Keys and patterns are bound, never concatenated. The key-existence test keeps the GIN index
+     * in play, so the pattern is only evaluated on the documents carrying the key. A bare
+     * wildcard needs no recheck. Bind with {@link #bindMetadataCriteria(Map, DatabaseClient.GenericExecuteSpec)}.
+     */
+    public void appendMetadataCriteria(String prefix, String column, Map<String, Object> metadata, StringBuilder sql) {
+        MetadataCriteria criteria = MetadataCriteria.of(metadata);
+        String col = prefix == null ? column : prefix + column;
+        boolean and = false;
+        if (criteria.hasExact()) {
+            sql.append(col).append(" @> :").append(METADATA_CRITERIA).append("::jsonb ");
+            and = true;
+        }
+        List<MetadataCriteria.Pattern> patterns = criteria.patterns();
+        if (!patterns.isEmpty()) {
+            if (and) {
+                sql.append(AND);
+            }
+            sql.append(col).append(" ?& :").append(METADATA_PATTERN_KEYS).append(SPACE);
+            for (int i = 0; i < patterns.size(); i++) {
+                if (!patterns.get(i).anyValue()) {
+                    sql.append(AND).append(col).append(" ->> :").append(METADATA_PATTERN_KEY).append(i)
+                            .append(" ILIKE :").append(METADATA_PATTERN_VALUE).append(i).append(" ESCAPE '\\' ");
+                }
+            }
+        }
     }
 
     /**

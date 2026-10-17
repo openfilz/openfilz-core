@@ -69,7 +69,7 @@ input ListFolderRequest {
     name : String
     "name of the elements to filter (like clause)"
     nameLike : String
-    "metadata of the elements to filter (contains clause)"
+    "metadata of the elements to filter: exact values (contains clause), or case-insensitive patterns for string values containing % or * (any characters), ? = one character, _ and backslash are literal; a bare % means the key exists. At most 10 criteria."
     metadata : JSON
     size : Long
     createdAtAfter : DateTime
@@ -100,7 +100,7 @@ input FavoriteRequest {
     name : String
     "name of the elements to filter (like clause)"
     nameLike : String
-    "metadata of the elements to filter (contains clause)"
+    "metadata of the elements to filter: exact values (contains clause), or case-insensitive patterns for string values containing % or * (any characters), ? = one character, _ and backslash are literal; a bare % means the key exists. At most 10 criteria."
     metadata : JSON
     size : Long
     createdAtAfter : DateTime

@@ -454,6 +454,18 @@ correction read; `PropertiesCategoryTaxonomy` in core). Also: the per-user Inbox
   comma-separated patterns, exact or prefix with `%`, like `ListFolderRequest.contentTypes`), `extension`, `createdBy`,
   `updatedBy`, `parentId`, `size`, `createdAt|updatedAt` + `After|Before` (ISO date bounds), `metadata.<key>`, the insight
   facets `category` / `language`. On OpenSearch any other field keeps the generic `<field>.keyword` term clause (EE fields).
+- **Metadata patterns** (`utils/MetadataCriteria`): a metadata criterion whose value is a string holding `%` or `*` is a
+  case-insensitive pattern (`?` = one character, `_` / `\` literal, bare `%` = key exists) on all three paths — REST
+  `ids-by-metadata` + AI `searchByMetadata`, GraphQL `metadata` (`ListFolderCriteria`), `searchDocuments` `metadata.<key>`.
+  SQL = `metadata @> :criteria` for the exact part + `metadata ?& :mkeys` (GIN) + one bound `->> :mk_i ILIKE :mv_i` per
+  pattern (`SqlUtils.appendMetadataCriteria` / `bindMetadataCriteria`); OpenSearch = `wildcard` (case-insensitive) on
+  `metadata.<key>.keyword`, `exists` for a bare wildcard. Limits: 10 criteria, 100-char keys, 200-char patterns (400).
+- **Metadata key suggestions**: `GET /documents/metadata-keys` (`MetadataKeyController` → `MetadataKeySuggestionService`
+  → `DocumentDAO.listMetadataKeys`): most frequent keys of the active documents the caller sees, under `SET LOCAL
+  statement_timeout` (timeout → `[]`, cached too), Caffeine `AsyncCache` (one load per scope at a time) per `DocumentDAO.metadataKeysCacheScope()` (core: one entry; an
+  extension with per-user documents overrides it and `metadataKeysAccessPredicate()`). `openfilz.metadata.key-suggestions.*`
+  (`enabled` read per request → 404, `max-keys` 200, `cache-ttl` 2m, `statement-timeout` 3s, `excluded-keys` [sha256]).
+  Tests: `MetadataPatternSearchIT`, `MetadataCriteriaTest`, `MetadataKeySuggestionServiceTest`, `FullTextDefaultSearchIT.testSearchMetadataPatternFilters`.
 - The index stores `contentType` (keyword) since 2026-09; `DefaultIndexNameProvider` adds the mapping to older indexes at
   startup (`IndexMappingsProvider.additiveProperties()`), but entries indexed before carry none: the `contentType` filter
   also matches them by extension (`ContentTypeMapper.extensionsMatching`).

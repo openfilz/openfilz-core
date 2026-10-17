@@ -11,6 +11,7 @@ import org.openfilz.dms.dto.response.AncestorInfo;
 import org.openfilz.dms.dto.response.ChildElementInfo;
 import org.openfilz.dms.dto.response.DocumentPosition;
 import org.openfilz.dms.dto.response.FolderElementInfo;
+import org.openfilz.dms.dto.response.MetadataKeySuggestion;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.entity.SqlColumnMapping;
 import org.openfilz.dms.enums.AccessType;
@@ -18,6 +19,7 @@ import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.repository.DocumentDAO;
 import org.openfilz.dms.repository.DocumentRepository;
 import org.openfilz.dms.repository.SqlQueryUtils;
+import org.openfilz.dms.utils.MetadataCriteria;
 import org.openfilz.dms.utils.SqlUtils;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.r2dbc.core.DatabaseClient;
@@ -47,7 +49,9 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
     protected static final String IS_NULL = " is null";
     protected static final String EQUALS_TYPE = " and type = :type";
 
-    protected static final String SELECT_ID_FROM_DOCUMENTS = "SELECT id FROM " + DOCUMENT;
+    // active = true: soft-deleted documents never match, and the partial GIN index on metadata
+    // (WHERE active = true) applies
+    protected static final String SELECT_ID_FROM_DOCUMENTS = "SELECT id FROM " + DOCUMENT + " WHERE active = true ";
 
 
     private static final String SELECT_ALL_FOLDER_ELEMENT_INFO = """
@@ -177,6 +181,37 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
         this.selectDocumentPrefix = null;
     }
 
+    /**
+     * Keys of the active documents' metadata, most frequent first. Reads every active document
+     * carrying metadata — no index can enumerate JSON keys — so the caller caps and times it.
+     */
+    private static final String SELECT_METADATA_KEYS = """
+            SELECT k AS meta_key, count(*) AS n
+            FROM documents d
+            CROSS JOIN LATERAL jsonb_object_keys(d.metadata) AS k
+            WHERE d.active = true
+              AND jsonb_typeof(d.metadata) = 'object' AND d.metadata <> '{}'::jsonb
+              AND NOT (k = ANY(:excludedKeys))""";
+    private static final String METADATA_KEYS_ORDER = " GROUP BY k ORDER BY n DESC, k LIMIT :limit";
+
+    @Override
+    public Flux<MetadataKeySuggestion> listMetadataKeys(int limit, List<String> excludedKeys) {
+        String sql = SELECT_METADATA_KEYS + metadataKeysAccessPredicate() + METADATA_KEYS_ORDER;
+        DatabaseClient.GenericExecuteSpec query = databaseClient.sql(sql)
+                .bind("excludedKeys", (excludedKeys == null ? List.<String>of() : excludedKeys).toArray(new String[0]))
+                .bind("limit", limit);
+        return executeSearchDocumentIdsQuery(query,
+                row -> new MetadataKeySuggestion(row.get("meta_key", String.class), row.get("n", Long.class)));
+    }
+
+    /**
+     * Restriction of {@link #listMetadataKeys} to the documents the caller can see, on the
+     * {@code d} alias, starting with {@code AND}. Core: none — every document is visible.
+     */
+    protected String metadataKeysAccessPredicate() {
+        return "";
+    }
+
     @Override
     public Flux<UUID> listDocumentIds(SearchByMetadataRequest request) {
         boolean metadataCriteria = request.metadataCriteria() != null && !request.metadataCriteria().isEmpty();
@@ -192,12 +227,17 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
                 && !metadataCriteria) {
             return Flux.error(new IllegalArgumentException("All criteria cannot be empty."));
         }
+        try {
+            MetadataCriteria.validate(request.metadataCriteria());
+        } catch (IllegalArgumentException e) {
+            return Flux.error(e);
+        }
         return queryDocumentIds(request, metadataCriteria, nameCriteria, typeCriteria, parentFolderCriteria, rootOnlyCriteria);
     }
 
     protected Flux<UUID> queryDocumentIds(SearchByMetadataRequest request, boolean metadataCriteria, boolean nameCriteria, boolean typeCriteria, boolean parentFolderCriteria, boolean rootOnlyCriteria) {
         StringBuilder sql = new StringBuilder(selectDocumentIds);
-        appendMetadataFilter(sql, metadataCriteria, nameCriteria, typeCriteria, parentFolderCriteria, rootOnlyCriteria);
+        appendMetadataFilter(request, sql, metadataCriteria, nameCriteria, typeCriteria, parentFolderCriteria, rootOnlyCriteria);
         DatabaseClient.GenericExecuteSpec query = databaseClient.sql(sql.toString());
         query = bindMetadataFilter(request, query, metadataCriteria, nameCriteria, typeCriteria, parentFolderCriteria);
         return executeSearchDocumentIdsQuery(query, mapId());
@@ -205,7 +245,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
 
     protected DatabaseClient.GenericExecuteSpec bindMetadataFilter(SearchByMetadataRequest request, DatabaseClient.GenericExecuteSpec query, boolean metadataCriteria, boolean nameCriteria, boolean typeCriteria, boolean parentFolderCriteria) {
         if(metadataCriteria) {
-            query = sqlUtils.bindMetadata(request.metadataCriteria(), query);
+            query = sqlUtils.bindMetadataCriteria(request.metadataCriteria(), query);
         }
         if(nameCriteria) {
             query = sqlUtils.bindCriteria(NAME, request.name(), query);
@@ -219,11 +259,11 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
         return query;
     }
 
-    protected void appendMetadataFilter(StringBuilder sql, boolean metadataCriteria, boolean nameCriteria, boolean typeCriteria, boolean parentFolderCriteria, boolean rootOnlyCriteria) {
+    protected void appendMetadataFilter(SearchByMetadataRequest request, StringBuilder sql, boolean metadataCriteria, boolean nameCriteria, boolean typeCriteria, boolean parentFolderCriteria, boolean rootOnlyCriteria) {
         boolean first = isWhereNotInSelect();
         if(metadataCriteria) {
             first = isFirst(first, sql);
-            sqlUtils.appendJsonEqualsCriteria(selectDocumentPrefix, METADATA, sql);
+            sqlUtils.appendMetadataCriteria(selectDocumentPrefix, METADATA, request.metadataCriteria(), sql);
         }
         if(nameCriteria) {
             first = isFirst(first, sql);
@@ -244,7 +284,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
     }
 
     protected boolean isWhereNotInSelect() {
-        return true;
+        return false;
     }
 
 
