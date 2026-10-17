@@ -115,14 +115,21 @@ public record MetadataCriteria(Map<String, Object> exact, List<Pattern> patterns
 
     /**
      * Translates a user pattern to an OpenSearch {@code wildcard} pattern: {@code %}/{@code *} →
-     * {@code *}, {@code ?} kept, {@code \} escaped ({@code _} has no meaning there).
+     * {@code *}, {@code ?} kept, {@code \} escaped ({@code _} has no meaning there). Runs of
+     * wildcards collapse into one {@code *}, as in {@link #toLikePattern}: a needlessly long
+     * {@code **…} run only makes the query's automaton bigger.
      */
     public static String toWildcardPattern(String pattern) {
         StringBuilder wildcard = new StringBuilder(pattern.length() + 4);
         for (int i = 0; i < pattern.length(); i++) {
             char c = pattern.charAt(i);
             switch (c) {
-                case '%', '*' -> wildcard.append('*');
+                case '%', '*' -> {
+                    // a literal '*' is never produced, so a trailing '*' is always a wildcard
+                    if (wildcard.isEmpty() || wildcard.charAt(wildcard.length() - 1) != '*') {
+                        wildcard.append('*');
+                    }
+                }
                 case '\\' -> wildcard.append("\\\\");
                 default -> wildcard.append(c);
             }

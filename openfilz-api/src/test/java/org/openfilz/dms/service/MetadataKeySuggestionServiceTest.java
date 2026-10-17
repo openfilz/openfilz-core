@@ -10,8 +10,11 @@ import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
+import reactor.util.context.Context;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -63,17 +66,53 @@ class MetadataKeySuggestionServiceTest {
     }
 
     @Test
-    void aStatementTimeout_answersAnEmptyList() {
+    void aStatementTimeout_answersAnEmptyList_andIsCachedLikeAnyResult() {
         when(dao.listMetadataKeys(anyInt(), anyList()))
                 .thenReturn(Flux.error(new R2dbcTimeoutException("canceling statement due to statement timeout", "57014")));
 
         assertTrue(service.getSuggestions().block().isEmpty());
+        assertTrue(service.getSuggestions().block().isEmpty());
+
+        // a library that cannot be listed in time is scanned once per TTL, not once per request
+        verify(dao, times(1)).listMetadataKeys(anyInt(), anyList());
     }
 
     @Test
-    void anotherError_isNotHidden() {
-        when(dao.listMetadataKeys(anyInt(), anyList())).thenReturn(Flux.error(new IllegalStateException("boom")));
+    void concurrentCallersOfAScope_shareOneLoad() {
+        Sinks.Many<MetadataKeySuggestion> pending = Sinks.many().replay().all();
+        when(dao.listMetadataKeys(anyInt(), anyList())).thenReturn(pending.asFlux());
+        AtomicReference<List<MetadataKeySuggestion>> first = new AtomicReference<>();
+        AtomicReference<List<MetadataKeySuggestion>> second = new AtomicReference<>();
+
+        service.getSuggestions().subscribe(first::set);
+        service.getSuggestions().subscribe(second::set);
+        pending.tryEmitNext(new MetadataKeySuggestion("project", 3));
+        pending.tryEmitComplete();
+
+        verify(dao, times(1)).listMetadataKeys(anyInt(), anyList());
+        assertEquals(List.of(new MetadataKeySuggestion("project", 3)), first.get());
+        assertEquals(List.of(new MetadataKeySuggestion("project", 3)), second.get());
+    }
+
+    @Test
+    void theLoadRunsUnderTheCallersReactorContext() {
+        // the enterprise access predicate reads the caller's security context from the Reactor context
+        when(dao.listMetadataKeys(anyInt(), anyList())).thenReturn(
+                Mono.deferContextual(ctx -> Mono.just(new MetadataKeySuggestion(ctx.get("user"), 1))).flux());
+
+        List<MetadataKeySuggestion> keys = service.getSuggestions().contextWrite(Context.of("user", "alice")).block();
+
+        assertEquals(List.of(new MetadataKeySuggestion("alice", 1)), keys);
+    }
+
+    @Test
+    void anotherError_isNotHidden_andIsNotCached() {
+        when(dao.listMetadataKeys(anyInt(), anyList()))
+                .thenReturn(Flux.error(new IllegalStateException("boom")))
+                .thenReturn(Flux.just(new MetadataKeySuggestion("project", 3)));
 
         reactor.test.StepVerifier.create(service.getSuggestions()).expectError(IllegalStateException.class).verify();
+
+        assertEquals(List.of(new MetadataKeySuggestion("project", 3)), service.getSuggestions().block());
     }
 }

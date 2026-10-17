@@ -407,7 +407,8 @@ characters, patterns up to 200 characters (400 Bad Request beyond).
 `GET /documents/metadata-keys` answers `[{"key": "project", "count": 1532}, …]` — at most
 `openfilz.metadata.key-suggestions.max-keys` (200) keys, cached for
 `openfilz.metadata.key-suggestions.cache-ttl` (2 min), computed under a
-`openfilz.metadata.key-suggestions.statement-timeout` (3 s) after which it answers `[]`. Disable it
+`openfilz.metadata.key-suggestions.statement-timeout` (3 s) after which it answers `[]` (cached for the TTL like
+any result, so an oversized library is scanned once per TTL, not once per request). Disable it
 with `openfilz.metadata.key-suggestions.enabled=false` (`OPENFILZ_METADATA_KEYSUGGESTIONS_ENABLED`,
 the endpoint then answers 404).
 

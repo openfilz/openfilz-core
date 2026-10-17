@@ -1,6 +1,6 @@
 package org.openfilz.dms.service;
 
-import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.AsyncCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.MetadataKeySuggestionProperties;
@@ -21,7 +21,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * One aggregation per cache scope ({@link DocumentDAO#metadataKeysCacheScope()}: the whole
  * library, or the caller when documents are visible per user) per TTL window, under a statement
  * timeout: a library too large to list in time degrades to "no suggestions" rather than to a
- * slow database. Keys created meanwhile appear when the entry expires — fine for suggestions.
+ * slow database. Callers of the same scope share one load at a time, and a timed-out listing is
+ * cached as an empty list like any other result — otherwise every request to a library that cannot
+ * be listed in time would run the whole scan up to the timeout again. Keys created meanwhile appear
+ * when the entry expires — fine for suggestions.
  */
 @Slf4j
 @Service
@@ -34,7 +37,7 @@ public class MetadataKeySuggestionService {
     private final DatabaseClient databaseClient;
     private final TransactionalOperator tx;
     private final MetadataKeySuggestionProperties properties;
-    private final Cache<String, List<MetadataKeySuggestion>> cache;
+    private final AsyncCache<String, List<MetadataKeySuggestion>> cache;
     private final AtomicBoolean timeoutLogged = new AtomicBoolean();
 
     public MetadataKeySuggestionService(DocumentDAO documentDAO, DatabaseClient databaseClient, TransactionalOperator tx,
@@ -46,7 +49,7 @@ public class MetadataKeySuggestionService {
         this.cache = Caffeine.newBuilder()
                 .expireAfterWrite(properties.getCacheTtl())
                 .maximumSize(properties.getCacheMaxEntries())
-                .build();
+                .buildAsync();
     }
 
     public boolean isEnabled() {
@@ -56,13 +59,14 @@ public class MetadataKeySuggestionService {
     /** The suggested keys, most frequent first; empty when the listing timed out. */
     public Mono<List<MetadataKeySuggestion>> getSuggestions() {
         return documentDAO.metadataKeysCacheScope()
-                .flatMap(scope -> {
-                    List<MetadataKeySuggestion> cached = cache.getIfPresent(scope);
-                    if (cached != null) {
-                        return Mono.just(cached);
-                    }
-                    return load().doOnNext(keys -> cache.put(scope, keys));
-                });
+                .flatMap(scope -> Mono.deferContextual(ctx ->
+                        // The async cache hands every concurrent caller of a scope the same future
+                        // (one load at a time) and keeps its value — an empty list after a timeout
+                        // included — for the TTL; a failed load is dropped and retried next time.
+                        // The load runs under the first caller's Reactor context: the access
+                        // predicate reads the security context of the user the scope stands for.
+                        // A caller giving up must not cancel the future the others wait on.
+                        Mono.fromFuture(cache.get(scope, (key, executor) -> load().contextWrite(c -> c.putAll(ctx)).toFuture()), true)));
     }
 
     private Mono<List<MetadataKeySuggestion>> load() {

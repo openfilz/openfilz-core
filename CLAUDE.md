@@ -462,7 +462,7 @@ correction read; `PropertiesCategoryTaxonomy` in core). Also: the per-user Inbox
   `metadata.<key>.keyword`, `exists` for a bare wildcard. Limits: 10 criteria, 100-char keys, 200-char patterns (400).
 - **Metadata key suggestions**: `GET /documents/metadata-keys` (`MetadataKeyController` → `MetadataKeySuggestionService`
   → `DocumentDAO.listMetadataKeys`): most frequent keys of the active documents the caller sees, under `SET LOCAL
-  statement_timeout` (timeout → `[]`), Caffeine-cached per `DocumentDAO.metadataKeysCacheScope()` (core: one entry; an
+  statement_timeout` (timeout → `[]`, cached too), Caffeine `AsyncCache` (one load per scope at a time) per `DocumentDAO.metadataKeysCacheScope()` (core: one entry; an
   extension with per-user documents overrides it and `metadataKeysAccessPredicate()`). `openfilz.metadata.key-suggestions.*`
   (`enabled` read per request → 404, `max-keys` 200, `cache-ttl` 2m, `statement-timeout` 3s, `excluded-keys` [sha256]).
   Tests: `MetadataPatternSearchIT`, `MetadataCriteriaTest`, `MetadataKeySuggestionServiceTest`, `FullTextDefaultSearchIT.testSearchMetadataPatternFilters`.

@@ -32,6 +32,7 @@ class MetadataCriteriaTest {
         assertEquals("*be?a*", MetadataCriteria.toWildcardPattern("%be?a*"));
         assertEquals("INV_2024*", MetadataCriteria.toWildcardPattern("INV_2024%"));
         assertEquals("C:\\\\d*", MetadataCriteria.toWildcardPattern("C:\\d%"));
+        assertEquals("*be?a*", MetadataCriteria.toWildcardPattern("%*be?a**%"));
     }
 
     @Test
