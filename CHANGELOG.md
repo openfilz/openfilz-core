@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[6b8f53e6d32bc05](https://github.com/openfilz/openfilz-core/commit/6b8f53e6d32bc05) maven-release-bot[bot] *2026-10-16 18:03:16*
+[3990c9762f9b820](https://github.com/openfilz/openfilz-core/commit/3990c9762f9b820) maven-release-bot[bot] *2026-10-17 13:16:57*
 
 
-## v1.3.48
+## v1.3.49
 ### No issue
 
-**[maven-release-plugin] prepare release v1.3.48**
+**[maven-release-plugin] prepare release v1.3.49**
 
 
-[a0be0a719e23e11](https://github.com/openfilz/openfilz-core/commit/a0be0a719e23e11) maven-release-bot[bot] *2026-10-16 18:03:13*
+[ba2818244fe2e5c](https://github.com/openfilz/openfilz-core/commit/ba2818244fe2e5c) maven-release-bot[bot] *2026-10-17 13:16:54*
 
-**Merge pull request #335 from openfilz/develop**
+**Merge pull request #338 from openfilz/develop**
 
- * Implement SignatureAccessPolicy for recipient email validation
+ * Enhance email logo options and improve metadata search functionality
 
-[c588a1de19a4cf0](https://github.com/openfilz/openfilz-core/commit/c588a1de19a4cf0) Yann Demel *2026-10-16 17:58:55*
+[0787d357728d218](https://github.com/openfilz/openfilz-core/commit/0787d357728d218) Yann Demel *2026-10-17 13:14:01*
 
 
