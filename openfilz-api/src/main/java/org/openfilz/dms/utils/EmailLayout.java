@@ -16,6 +16,8 @@ public final class EmailLayout {
 
     /** Hosted OpenFilz logo used when a deployment configures none. */
     public static final String DEFAULT_LOGO_URL = "https://www.openfilz.com/assets/img/logo-email-header.png";
+    /** Logo value that switches the logo off: no {@code <img>} (nothing is fetched), the brand name as text. */
+    public static final String NO_LOGO = "none";
     public static final String BRAND_URL = "https://www.openfilz.com";
 
     private static final String FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
@@ -34,12 +36,14 @@ public final class EmailLayout {
      * @param content    body fragments built with the helpers of this class
      * @param footerNote small print above the brand (localised, escaped; may be blank)
      * @param brandName  product name shown in the footer (white label; blank = OpenFilz)
-     * @param logoUrl    absolute logo URL (blank = {@link #DEFAULT_LOGO_URL})
+     * @param logoUrl    absolute logo URL (blank = {@link #DEFAULT_LOGO_URL}; {@link #NO_LOGO} = no image,
+     *                   the brand name is shown as a text wordmark instead)
      */
     public static String page(String lang, boolean rtl, String title, String content,
                               String footerNote, String brandName, String logoUrl) {
         String dir = rtl ? "rtl" : "ltr";
         String align = rtl ? "right" : "left";
+        boolean noLogo = logoUrl != null && NO_LOGO.equalsIgnoreCase(logoUrl.trim());
         String logo = isBlank(logoUrl) ? DEFAULT_LOGO_URL : logoUrl;
         String brand = esc(isBlank(brandName) ? "OpenFilz" : brandName);
         return "<!DOCTYPE html><html lang=\"" + esc(isBlank(lang) ? "en" : lang) + "\" dir=\"" + dir + "\">"
@@ -52,11 +56,13 @@ public final class EmailLayout {
                 + "style=\"max-width:600px;margin:0 auto;background-color:#ffffff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,0.08);overflow:hidden;\">"
                 // Header: logo in a white disc over the brand gradient, then the title
                 + "<tr><td align=\"center\" bgcolor=\"" + PRIMARY + "\" style=\"background:" + PRIMARY + ";background-image:" + GRADIENT + ";padding:36px 40px 30px;text-align:center;\">"
-                + "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:0 auto 18px;\"><tr>"
+                + (noLogo
+                    ? "<p style=\"margin:0 0 18px;\"><span style=\"font-size:18px;font-weight:700;color:#ffffff;letter-spacing:0.08em;\">" + brand + "</span></p>"
+                    : "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:0 auto 18px;\"><tr>"
                 + "<td align=\"center\" valign=\"middle\" width=\"80\" height=\"80\" bgcolor=\"#ffffff\" "
                 + "style=\"width:80px;height:80px;background-color:rgba(255,255,255,0.85);border-radius:50%;text-align:center;vertical-align:middle;\">"
                 + "<img src=\"" + esc(logo) + "\" alt=\"" + brand + "\" width=\"64\" height=\"49\" style=\"display:block;border:0;margin:0 auto;max-width:64px;height:auto;\" />"
-                + "</td></tr></table>"
+                + "</td></tr></table>")
                 + "<h1 style=\"margin:0;font-size:24px;line-height:1.3;font-weight:600;color:#ffffff;letter-spacing:-0.3px;\">" + title + "</h1>"
                 + "</td></tr>"
                 // Body
@@ -68,7 +74,7 @@ public final class EmailLayout {
                 + (isBlank(footerNote) ? "" : "<p style=\"margin:0 0 12px;font-size:12px;line-height:1.5;color:#9ca3af;\">" + footerNote + "</p>")
                 + "<a href=\"" + BRAND_URL + "\" style=\"text-decoration:none;\">"
                 + "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:0 auto;\"><tr>"
-                + "<td valign=\"middle\" style=\"padding:0 6px;\"><img src=\"" + esc(logo) + "\" alt=\"\" width=\"37\" height=\"28\" style=\"display:block;border:0;max-width:37px;height:auto;\" /></td>"
+                + (noLogo ? "" : "<td valign=\"middle\" style=\"padding:0 6px;\"><img src=\"" + esc(logo) + "\" alt=\"\" width=\"37\" height=\"28\" style=\"display:block;border:0;max-width:37px;height:auto;\" /></td>")
                 + "<td valign=\"middle\"><span style=\"font-size:15px;font-weight:700;color:" + PRIMARY + ";letter-spacing:0.08em;text-transform:uppercase;\">" + brand + "</span></td>"
                 + "</tr></table></a>"
                 + "</td></tr>"
