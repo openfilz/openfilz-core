@@ -5,6 +5,7 @@ import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.enums.OpenSearchDocumentKey;
 import org.openfilz.dms.utils.ContentTypeMapper;
 import org.openfilz.dms.utils.DocumentSearchUtil;
+import org.openfilz.dms.utils.MetadataCriteria;
 import org.opensearch.client.json.JsonData;
 import org.opensearch.client.opensearch._types.FieldValue;
 import org.opensearch.client.opensearch._types.query_dsl.BoolQuery;
@@ -46,6 +47,11 @@ public interface OpenSearchQueryService {
                 // Any other field (metadata.*, fields an extension indexes itself): exact match on
                 // its '.keyword' sub-field, as dynamically mapped strings get one.
                 String fieldName = filter.field().endsWith(KEYWORD) ? filter.field() : filter.field() + KEYWORD;
+
+                if (filter.field().startsWith(DocumentSearchUtil.FILTER_METADATA) && MetadataCriteria.isPattern(filter.value())) {
+                    addMetadataPatternClause(fieldName, filter.value(), boolQueryBuilder);
+                    continue;
+                }
 
                 boolQueryBuilder.filter(f -> f.term(t -> t
                         .field(fieldName)
@@ -99,6 +105,23 @@ public interface OpenSearchQueryService {
             }
         }
         return true;
+    }
+
+    /**
+     * A {@code metadata.<key>} filter whose value is a pattern ({@link MetadataCriteria}): a
+     * case-insensitive {@code wildcard} query on the key's keyword sub-field, or an {@code exists}
+     * query for a bare wildcard ("the key is set").
+     */
+    static void addMetadataPatternClause(String keywordField, String value, BoolQuery.Builder boolQueryBuilder) {
+        if (value.length() > MetadataCriteria.MAX_PATTERN_LENGTH) {
+            throw new IllegalArgumentException("A metadata pattern cannot exceed " + MetadataCriteria.MAX_PATTERN_LENGTH + " characters");
+        }
+        String wildcard = MetadataCriteria.toWildcardPattern(value);
+        if (wildcard.chars().allMatch(c -> c == '*')) {
+            boolQueryBuilder.filter(f -> f.exists(e -> e.field(keywordField)));
+        } else {
+            boolQueryBuilder.filter(f -> f.wildcard(w -> w.field(keywordField).value(wildcard).caseInsensitive(true)));
+        }
     }
 
     /**

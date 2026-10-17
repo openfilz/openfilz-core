@@ -98,19 +98,24 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
                     Assertions.assertEquals(3, indexedSuggestions.size());
                 });
 
+        // The third file can still be indexing once the first query sees its three hits: poll this one too
+        await().atMost(Duration.ofSeconds(45))
+                .pollInterval(Duration.ofMillis(500))
+                .untilAsserted(() -> {
+                    List<Suggest> meeting = getWebTestClient().get().uri(uri ->
+                                    uri.path(RestApiVersion.API_PREFIX + "/suggestions")
+                                            .queryParam("q", getSuggestionQuery2())
+                                            .build())
+                            .exchange()
+                            .expectBody(new ParameterizedTypeReference<List<Suggest>>() {
+                            })
+                            .returnResult().getResponseBody();
+
+                    Assertions.assertNotNull(meeting);
+                    Assertions.assertEquals(1, meeting.size());
+                });
+
         List<Suggest> suggestions = getWebTestClient().get().uri(uri ->
-                        uri.path(RestApiVersion.API_PREFIX + "/suggestions")
-                                .queryParam("q", getSuggestionQuery2())
-                                .build())
-                .exchange()
-                .expectBody(new ParameterizedTypeReference<List<Suggest>>() {
-                })
-                .returnResult().getResponseBody();
-
-        Assertions.assertNotNull(suggestions);
-        Assertions.assertEquals(1, suggestions.size());
-
-        suggestions = getWebTestClient().get().uri(uri ->
                         uri.path(RestApiVersion.API_PREFIX + "/suggestions")
                                 .queryParam("q", "")
                                 .build())
@@ -263,8 +268,7 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
 
     /** Names: "<token> folder", "<token> alpha.pdf" (131 KB), "<token> beta.png" (2.7 KB), "<token> gamma.txt" (74 B). */
     protected SearchFixture createSearchFixture() {
-        String token = "qz" + UUID.randomUUID().toString().replace("-", "").replaceAll("[0-9]", "g").substring(0, 6)
-                + UUID.randomUUID().toString().replace("-", "").replaceAll("[0-9]", "g").substring(0, 4);
+        String token = "qz" + randomLetters(10);
         FolderResponse folder = getWebTestClient().post().uri(RestApiVersion.API_PREFIX + "/folders")
                 .body(BodyInserters.fromValue(new CreateFolderRequest(token + " folder", null)))
                 .exchange()
@@ -275,6 +279,20 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
         UploadResponse png = uploadAs("test-image.png", token + " beta.png", MediaType.IMAGE_PNG);
         UploadResponse txt = uploadAs("test.txt", token + " gamma.txt", MediaType.TEXT_PLAIN);
         return new SearchFixture(token, folder, pdf, png, txt);
+    }
+
+    /**
+     * Letters only (the name analyzer splits on digits) and drawn from the whole alphabet: tokens built
+     * from hex with every digit turned into "g" looked alike ("qzggggggeggg" / "qzggegggcggg"), and the
+     * fuzzy name match of the OpenSearch path then returned another fixture's files.
+     */
+    protected static String randomLetters(int length) {
+        java.util.concurrent.ThreadLocalRandom random = java.util.concurrent.ThreadLocalRandom.current();
+        StringBuilder letters = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            letters.append((char) ('a' + random.nextInt(26)));
+        }
+        return letters.toString();
     }
 
     protected UploadResponse uploadAs(String resource, String filename, MediaType contentType) {
@@ -396,6 +414,39 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
             }
         } finally {
             deleteSearchFixture(fx);
+        }
+    }
+
+    @Test
+    void testSearchMetadataPatternFilters() {
+        String t = "qm" + randomLetters(10);
+        List<UUID> ids = new java.util.ArrayList<>();
+        for (String project : List.of("Beta-1", "beta-2", "gamma")) {
+            MultipartBodyBuilder builder = new MultipartBodyBuilder();
+            builder.part("file", new ClassPathResource("test.txt")).filename(t + " " + project + ".txt").contentType(MediaType.TEXT_PLAIN);
+            builder.part("metadata", Map.of("project", project));
+            ids.add(getUploadResponse(builder).id());
+        }
+        try {
+            await().atMost(Duration.ofSeconds(45))
+                    .pollInterval(Duration.ofMillis(500))
+                    .untilAsserted(() -> Assertions.assertEquals(3, search(t, List.of(), null).totalHits()));
+
+            Assertions.assertEquals(Set.of(t + " Beta-1.txt", t + " beta-2.txt"),
+                    Set.copyOf(search(t, List.of(filter("metadata.project", "BETA%")), null).names()));
+            Assertions.assertEquals(Set.of(t + " Beta-1.txt", t + " beta-2.txt"),
+                    Set.copyOf(search(t, List.of(filter("metadata.project", "*eta-?")), null).names()));
+            Assertions.assertEquals(List.of(t + " gamma.txt"),
+                    search(t, List.of(filter("metadata.project", "%mm%")), null).names());
+            Assertions.assertEquals(3, search(t, List.of(filter("metadata.project", "*")), null).totalHits());
+            // exact values keep the exact match
+            Assertions.assertEquals(List.of(t + " gamma.txt"),
+                    search(t, List.of(filter("metadata.project", "gamma")), null).names());
+        } finally {
+            getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/files")
+                    .body(BodyInserters.fromValue(new DeleteRequest(ids)))
+                    .exchange()
+                    .expectStatus().isNoContent();
         }
     }
 
