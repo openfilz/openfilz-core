@@ -7,6 +7,7 @@ import org.openfilz.dms.dto.response.AncestorInfo;
 import org.openfilz.dms.dto.response.ChildElementInfo;
 import org.openfilz.dms.dto.response.DocumentPosition;
 import org.openfilz.dms.dto.response.FolderElementInfo;
+import org.openfilz.dms.dto.response.MetadataKeySuggestion;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.AccessType;
 import org.openfilz.dms.enums.DocumentType;
@@ -18,6 +19,20 @@ import java.util.UUID;
 
 public interface DocumentDAO {
     Flux<UUID> listDocumentIds(SearchByMetadataRequest request);
+
+    /**
+     * The metadata keys of the active documents the caller can see, most frequent first (ties by
+     * key), at most {@code limit}, without the {@code excludedKeys}.
+     */
+    Flux<MetadataKeySuggestion> listMetadataKeys(int limit, List<String> excludedKeys);
+
+    /**
+     * Identifies whose documents {@link #listMetadataKeys} lists, to cache its result: a constant
+     * when every caller sees the same documents, the caller otherwise.
+     */
+    default Mono<String> metadataKeysCacheScope() {
+        return Mono.just("*");
+    }
 
     Flux<ChildElementInfo> getChildren(UUID folderId);
 

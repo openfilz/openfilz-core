@@ -399,6 +399,39 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
         }
     }
 
+    @Test
+    void testSearchMetadataPatternFilters() {
+        String t = "qm" + UUID.randomUUID().toString().replace("-", "").replaceAll("[0-9]", "h").substring(0, 10);
+        List<UUID> ids = new java.util.ArrayList<>();
+        for (String project : List.of("Beta-1", "beta-2", "gamma")) {
+            MultipartBodyBuilder builder = new MultipartBodyBuilder();
+            builder.part("file", new ClassPathResource("test.txt")).filename(t + " " + project + ".txt").contentType(MediaType.TEXT_PLAIN);
+            builder.part("metadata", Map.of("project", project));
+            ids.add(getUploadResponse(builder).id());
+        }
+        try {
+            await().atMost(Duration.ofSeconds(45))
+                    .pollInterval(Duration.ofMillis(500))
+                    .untilAsserted(() -> Assertions.assertEquals(3, search(t, List.of(), null).totalHits()));
+
+            Assertions.assertEquals(Set.of(t + " Beta-1.txt", t + " beta-2.txt"),
+                    Set.copyOf(search(t, List.of(filter("metadata.project", "BETA%")), null).names()));
+            Assertions.assertEquals(Set.of(t + " Beta-1.txt", t + " beta-2.txt"),
+                    Set.copyOf(search(t, List.of(filter("metadata.project", "*eta-?")), null).names()));
+            Assertions.assertEquals(List.of(t + " gamma.txt"),
+                    search(t, List.of(filter("metadata.project", "%mm%")), null).names());
+            Assertions.assertEquals(3, search(t, List.of(filter("metadata.project", "*")), null).totalHits());
+            // exact values keep the exact match
+            Assertions.assertEquals(List.of(t + " gamma.txt"),
+                    search(t, List.of(filter("metadata.project", "gamma")), null).names());
+        } finally {
+            getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/files")
+                    .body(BodyInserters.fromValue(new DeleteRequest(ids)))
+                    .exchange()
+                    .expectStatus().isNoContent();
+        }
+    }
+
     /** Sort fields both back ends accept, whose order the fixture cannot tell apart. */
     protected List<String> sortFieldsWithoutOrderCheck() {
         return List.of("type", "createdBy", "updatedBy");

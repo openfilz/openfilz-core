@@ -218,6 +218,7 @@ The Swagger UI provides interactive documentation where you can try out every en
 | `PUT` | `/documents/{id}/metadata` | Update metadata (merge) |
 | `DELETE` | `/documents/{id}/metadata` | Delete metadata keys |
 | `POST` | `/documents/search/ids-by-metadata` | Find documents by metadata |
+| `GET` | `/documents/metadata-keys` | Metadata keys of the visible documents, most frequent first |
 
 #### Favorites
 
@@ -382,8 +383,33 @@ curl -X DELETE "http://localhost:8081/api/v1/documents/<id>/metadata" \
 curl -X POST "http://localhost:8081/api/v1/documents/search/ids-by-metadata" \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
-  -d '{"project": "beta"}'
+  -d '{"metadataCriteria": {"project": "beta"}}'
+
+# Search by metadata with a wildcard: project starting with "beta" (beta-1, Beta_2…)
+curl -X POST "http://localhost:8081/api/v1/documents/search/ids-by-metadata" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"metadataCriteria": {"project": "beta%"}}'
+
+# List the metadata keys of the documents you can see (most frequent first, for autocompletion)
+curl -H "Authorization: Bearer <token>" \
+  "http://localhost:8081/api/v1/documents/metadata-keys"
 ```
+
+**Metadata criteria values.** A string value containing `%` or `*` is a **pattern**, matched
+case-insensitively: `%` / `*` = any characters, `?` = exactly one character, `_` and `\` are
+literal, and a bare `%` means "the key is set, whatever its value". Any other value (string,
+number, boolean, object) is matched exactly, case-sensitively, as before. The same rules apply to
+the GraphQL `metadata` filter of `listFolder` / `listAllFolder` / `listFavorites` and to the
+`metadata.<key>` filters of `searchDocuments`. At most 10 criteria per request, keys up to 100
+characters, patterns up to 200 characters (400 Bad Request beyond).
+
+`GET /documents/metadata-keys` answers `[{"key": "project", "count": 1532}, …]` — at most
+`openfilz.metadata.key-suggestions.max-keys` (200) keys, cached for
+`openfilz.metadata.key-suggestions.cache-ttl` (2 min), computed under a
+`openfilz.metadata.key-suggestions.statement-timeout` (3 s) after which it answers `[]`. Disable it
+with `openfilz.metadata.key-suggestions.enabled=false` (`OPENFILZ_METADATA_KEYSUGGESTIONS_ENABLED`,
+the endpoint then answers 404).
 
 ### Favorites
 

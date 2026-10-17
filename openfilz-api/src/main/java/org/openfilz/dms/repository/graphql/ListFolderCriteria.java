@@ -2,6 +2,7 @@ package org.openfilz.dms.repository.graphql;
 
 import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.dto.request.ListFolderRequest;
+import org.openfilz.dms.utils.MetadataCriteria;
 import org.openfilz.dms.utils.SqlUtils;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.r2dbc.core.DatabaseClient;
@@ -41,8 +42,8 @@ public class ListFolderCriteria {
         if(filter.contentTypes() != null && !filter.contentTypes().isEmpty()) {
             query = sqlUtils.bindLikeAnyCriteria(CONTENT_TYPE, filter.contentTypes(), query);
         }
-        if(filter.metadata() != null) {
-            query = sqlUtils.bindMetadata(filter.metadata(), query);
+        if(filter.metadata() != null && !filter.metadata().isEmpty()) {
+            query = sqlUtils.bindMetadataCriteria(filter.metadata(), query);
         }
         if(filter.size() != null) {
             query = sqlUtils.bindCriteria(SIZE, filter.size(), query);
@@ -93,6 +94,7 @@ public class ListFolderCriteria {
         if(filter.name() != null && filter.nameLike() != null) {
             throw new IllegalArgumentException("name and nameLike cannot be used simultaneously : choose name or nameLike in your filter");
         }
+        MetadataCriteria.validate(filter.metadata());
     }
 
     public void applyFilter(String prefix, StringBuilder query, ListFolderRequest request) {
@@ -122,7 +124,7 @@ public class ListFolderCriteria {
             appendAnd = true;
         }
         if(request.metadata() != null && !request.metadata().isEmpty()) {
-            sqlUtils.appendJsonEqualsCriteria(prefix, METADATA, appendAnd(query, appendAnd));
+            sqlUtils.appendMetadataCriteria(prefix, METADATA, request.metadata(), appendAnd(query, appendAnd));
             appendAnd = true;
         }
         if(request.size() != null) {

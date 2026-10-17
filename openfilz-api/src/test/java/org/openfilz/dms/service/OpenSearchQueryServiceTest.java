@@ -53,6 +53,31 @@ class OpenSearchQueryServiceTest {
     }
 
     @Test
+    void addFilterClauses_metadataPattern_isACaseInsensitiveWildcard() {
+        BoolQuery query = service.addFilterClauses(List.of(new FilterInput("metadata.project", "beta%")), new BoolQuery.Builder())
+                .block().build();
+        org.junit.jupiter.api.Assertions.assertEquals(1, query.filter().size());
+        var wildcard = query.filter().getFirst().wildcard();
+        org.junit.jupiter.api.Assertions.assertEquals("metadata.project.keyword", wildcard.field());
+        org.junit.jupiter.api.Assertions.assertEquals("beta*", wildcard.value());
+        org.junit.jupiter.api.Assertions.assertEquals(Boolean.TRUE, wildcard.caseInsensitive());
+    }
+
+    @Test
+    void addFilterClauses_metadataBareWildcard_isAnExistsQuery() {
+        BoolQuery query = service.addFilterClauses(List.of(new FilterInput("metadata.project", "*")), new BoolQuery.Builder())
+                .block().build();
+        org.junit.jupiter.api.Assertions.assertEquals("metadata.project.keyword", query.filter().getFirst().exists().field());
+    }
+
+    @Test
+    void addFilterClauses_metadataExactValue_staysATerm() {
+        BoolQuery query = service.addFilterClauses(List.of(new FilterInput("metadata.project", "INV_2024")), new BoolQuery.Builder())
+                .block().build();
+        org.junit.jupiter.api.Assertions.assertTrue(query.filter().getFirst().isTerm());
+    }
+
+    @Test
     void getNameSuggestQuery_buildsMultiMatch() {
         org.junit.jupiter.api.Assertions.assertNotNull(service.getNameSuggestQuery("term"));
     }
