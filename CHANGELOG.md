@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[3990c9762f9b820](https://github.com/openfilz/openfilz-core/commit/3990c9762f9b820) maven-release-bot[bot] *2026-10-17 13:16:57*
+[f2402ea1353df71](https://github.com/openfilz/openfilz-core/commit/f2402ea1353df71) maven-release-bot[bot] *2026-10-18 16:17:26*
 
 
-## v1.3.49
+## v1.3.50
 ### No issue
 
-**[maven-release-plugin] prepare release v1.3.49**
+**[maven-release-plugin] prepare release v1.3.50**
 
 
-[ba2818244fe2e5c](https://github.com/openfilz/openfilz-core/commit/ba2818244fe2e5c) maven-release-bot[bot] *2026-10-17 13:16:54*
+[abbc8706c87d128](https://github.com/openfilz/openfilz-core/commit/abbc8706c87d128) maven-release-bot[bot] *2026-10-18 16:17:24*
 
-**Merge pull request #338 from openfilz/develop**
+**Merge pull request #341 from openfilz/develop**
 
- * Enhance email logo options and improve metadata search functionality
+ * Develop
 
-[0787d357728d218](https://github.com/openfilz/openfilz-core/commit/0787d357728d218) Yann Demel *2026-10-17 13:14:01*
+[bb9dfda67bf62eb](https://github.com/openfilz/openfilz-core/commit/bb9dfda67bf62eb) Yann Demel *2026-10-18 16:13:19*
 
 
