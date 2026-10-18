@@ -25,6 +25,7 @@ This guide is intended for developers who want to **integrate with OpenFilz** �
   - [AI Chat](#ai-chat)
   - [MCP Server](#mcp-server)
   - [e-Sign (Electronic Signature)](#e-sign-electronic-signature)
+  - [PDF Tools](#pdf-tools)
 - [GraphQL API](#graphql-api)
   - [Endpoint and Explorer](#endpoint-and-explorer)
   - [Queries](#queries)
@@ -695,8 +696,55 @@ curl -X POST "$API/api/v1/signatures"   -H "Authorization: Bearer $TOKEN" -H 'Co
 Field coordinates are normalised to the page media box (`0..1`, PDF origin bottom-left) and
 `page` is 0-based, so a placement survives the PDF being re-exported at another size.
 
-> **Full reference:** [e-Sign Guide](esign.md) — every property, the three seal providers, the
-> security model behind the signing tokens, and the seven extension points for integrators.
+> **Full reference:** [e-Sign Guide](esign.md) — every property, the seal providers and the
+> security model behind the signing tokens.
+
+---
+
+### PDF Tools
+
+> **On by default** (`openfilz.pdf-tools.active=true`). Every endpoint below answers `404` when the
+> feature is disabled.
+
+Merge, split, rotate and re-arrange the pages of PDFs already stored in OpenFilz. `READER` can read
+`/info`; every `POST` needs `CONTRIBUTOR`. Results are written back like any upload — as a new
+document or a new version — so versioning, audit, quotas, thumbnails and indexing all apply.
+
+| Method | Path | Body | Description |
+|--------|------|------|-------------|
+| GET | `/pdf/{documentId}/info` | — | Page count, page sizes and rotations, outline, whether the PDF is encrypted, signed or in an active e-Sign envelope |
+| POST | `/pdf/merge` | `{ sources: [{documentId, pages?}], addOutline, output }` | Merge several PDFs (or page ranges of them) into one |
+| POST | `/pdf/split` | `{ documentId, mode, n?, pages?, ranges?, outlineLevel?, output }` | Split into several PDFs. `mode`: `EVERY_N_PAGES`, `AT_PAGES`, `PAGE_RANGES`, `EVERY_PAGE`, `BY_OUTLINE_LEVEL` |
+| POST | `/pdf/organize` | `{ documentId, pages: [{documentId?, page, rotation}], output }` | The generic call: the output is exactly the listed pages — reorder, delete, duplicate, rotate, extract, or insert pages from another PDF |
+| POST | `/pdf/rotate` | `{ documentIds: [], angle: 90\|180\|270, pages?, output }` | Rotate pages of one or several PDFs (scans) |
+
+`output` chooses where the result goes:
+
+```json
+{ "mode": "NEW_DOCUMENT", "folderId": null, "name": "Contract (signed pages).pdf",
+  "allowDuplicateFileNames": false, "acknowledgeSignatureLoss": false }
+```
+
+`mode` is `NEW_DOCUMENT` or `NEW_VERSION` (in place); `folderId: null` means the folder of the
+(first) source. A split names its parts with `namePattern` (`{name}`, `{index}`, `{first}`,
+`{last}`; default `{name}-{index}`). Page selections accept `1-3,7,10-`, `odd`, `even`, `all`.
+Every call answers `{ outputs: [{documentId, name, pageCount, size, versionId?}] }`.
+
+```bash
+curl -X POST "$API/api/v1/pdf/merge" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{
+  "sources": [ { "documentId": "6f1e0f2c-1f2a-4b7d-9d4e-2a5c0e7b1a33" },
+               { "documentId": "0b7d9a41-2c3e-4f5a-8b6c-7d8e9f0a1b2c", "pages": "1-2" } ],
+  "addOutline": true,
+  "output": { "mode": "NEW_DOCUMENT" }
+}'
+```
+
+Errors: `400` bad page selection, `413` input too large, `422` not a usable PDF, `409` when the
+change would break something that must be acknowledged, `503` when the server is busy. The message
+of a `422`/`409`/`503` starts with a stable code you can match on: `NOT_A_PDF`, `PDF_ENCRYPTED`,
+`PDF_INVALID`, `PDF_TOO_MANY_PAGES`, `PDF_NO_OUTLINE`, `TOO_MANY_OUTPUTS` (422); `PDF_SIGNED` (resend
+with `acknowledgeSignatureLoss: true`), `ACTIVE_SIGNATURE_ENVELOPE`, `WORM_MODE` (409); `BUSY` (503).
+Limits are set by the administrator — see [Admin guide → PDF Tools](admin-guide.md#pdf-tools).
 
 ---
 
