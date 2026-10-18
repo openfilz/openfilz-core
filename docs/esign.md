@@ -7,7 +7,7 @@ the DMS next to the original — versions, permissions, search, thumbnails and a
 Everything on this page is part of the open-source core (`openfilz-api`, AGPL-3.0) and works
 offline: no call to any `*.openfilz.com` service is made unless you explicitly configure the
 `openfilz-cloud` seal provider. What the Enterprise Edition adds is listed in
-[§9](#9-what-the-enterprise-edition-adds).
+[§8](#8-what-the-enterprise-edition-adds).
 
 ---
 
@@ -50,19 +50,14 @@ spring:
     password: ${SMTP_PASSWORD}
 ```
 
-* **`openfilz.signature.active`** is the master switch and defaults to `false`. It is read at
-  runtime (never as a bean condition), so a single GraalVM native image serves deployments
-  with the feature on or off. When off, `/api/v1/signatures/**`,
-  `/api/v1/signature-templates/**` and `/api/v1/public/signatures/**` answer `404`, the
-  public security chain matches an unreachable sentinel path, the sweeper idles, and
-  `GET /api/v1/settings` reports `signatureActive: false` so the web app hides the menu.
-  Flipping it requires a restart (the security chain reads it once at startup).
+* **`openfilz.signature.active`** is the master switch and defaults to `false`. When off, every
+  e-Sign endpoint answers `404` and the web app hides the menu. Changing it requires a restart.
 * **`web-public-base-url`** is where the signing links point. Signer links are built as
   `{base}sign?token=<token>`; a trailing `/` is added if missing. Set
   `openfilz.signature.web-base-url` instead if e-Sign links must go somewhere different from
   the rest of the app. If both are empty the link falls back to `http://localhost:4200/`.
-* **Without SMTP** (`spring.mail.host` empty — the shipped default) the context wires
-  `LoggingSignatureMailer` instead of `SmtpSignatureMailer` and logs a warning at startup:
+* **Without SMTP** (`spring.mail.host` empty — the shipped default) nothing is e-mailed, and a
+  warning is logged at startup:
 
   ```
   [e-sign] spring.mail.host is not set — signing links will only be LOGGED, not emailed
@@ -89,24 +84,24 @@ Boot relaxed binding, using the canonical uppercase form of the property name.
 
 | Property | Env var | Default | What it does |
 |---|---|---|---|
-| `openfilz.signature.active` | `OPENFILZ_SIGNATURE_ACTIVE` | `false` | Master switch: endpoints, public chain, sweeper, `Settings.signatureActive`. |
-| `openfilz.signature.require-requester-role` | `OPENFILZ_SIGNATURE_REQUIRE_REQUESTER_ROLE` | `false` | When `true`, initiating signature requests (envelope / template writes) additionally requires the `SIGN_REQUESTER` realm role (or `/OPENFILZ/SIGN_REQUESTER` group in groups mode), so the feature can be granted per user. Reads and the signer-facing public chain are never gated by it. Surfaced as `Settings.signatureRequesterRoleRequired` so the frontend hides the request/template actions from users without the role. Off = every CONTRIBUTOR may initiate (pre-existing behaviour; realms that predate the role keep working unchanged). |
+| `openfilz.signature.active` | `OPENFILZ_SIGNATURE_ACTIVE` | `false` | Master switch for the whole feature. |
+| `openfilz.signature.require-requester-role` | `OPENFILZ_SIGNATURE_REQUIRE_REQUESTER_ROLE` | `false` | When `true`, initiating signature requests (envelope / template writes) additionally requires the `SIGN_REQUESTER` realm role (or `/OPENFILZ/SIGN_REQUESTER` group in groups mode), so the feature can be granted per user. Reading and signing are never gated by it; the web app hides the request actions from users without the role. Off = every CONTRIBUTOR may initiate. |
 | `openfilz.signature.default-expiry-days` | `OPENFILZ_SIGNATURE_DEFAULT_EXPIRY_DAYS` | `30` | Envelope TTL when the create request omits `expiresInDays` (which itself accepts 1..365). |
 | `openfilz.signature.web-base-url` | `OPENFILZ_SIGNATURE_WEB_BASE_URL` | *(empty)* | Overrides `openfilz.common.web-public-base-url` for signing links only. |
 | `openfilz.common.web-public-base-url` | `OPENFILZ_WEB_PUBLIC_BASE_URL` | `http://localhost:4200/` | Public URL of the web app; base of every signing link. |
 | `openfilz.signature.max-image-bytes` † | `OPENFILZ_SIGNATURE_MAX_IMAGE_BYTES` | `524288` (512 KiB) | Cap on a submitted base64 field image. Enforced on the *encoded* string as `max-image-bytes × 4/3 + 64`, so it is a decoded-size budget. |
-| `openfilz.signature.sweep.cron` | `OPENFILZ_SIGNATURE_SWEEP_CRON` | `0 0 * * * ?` (hourly) | Expiry sweeper cadence (Spring 6-field cron). Bound through the `@Scheduled` placeholder, not `SignatureProperties`. |
+| `openfilz.signature.sweep.cron` | `OPENFILZ_SIGNATURE_SWEEP_CRON` | `0 0 * * * ?` (hourly) | Expiry job cadence (Spring 6-field cron). |
 | `openfilz.signature.quota.envelopes-per-month` | `OPENFILZ_SIGNATURE_QUOTA_ENVELOPES_PER_MONTH` | `0` (unlimited) | Fair-use ceiling: envelopes **one initiator** may create per calendar month. Beyond it, `POST /signatures` answers `429`. Drafts count — they can be sent later, so excluding them would make the limit meaningless. Intended for deployments that expose e-Sign to people who have not paid for it (a public demo, a trial tenant); leave it at `0` on a normal self-hosted instance, where the query is then never run. |
 
 ### 3.2 Recipient OTP
 
-Applies to `EMAIL_OTP` (CE) and `SMS_OTP` (EE).
+Applies to recipients with a one-time code (`EMAIL_OTP`).
 
 | Property | Env var † | Default | What it does |
 |---|---|---|---|
 | `openfilz.signature.otp.length` | `OPENFILZ_SIGNATURE_OTP_LENGTH` | `6` | Number of digits in the generated code. |
 | `openfilz.signature.otp.valid-minutes` | `OPENFILZ_SIGNATURE_OTP_VALID_MINUTES` | `10` | Validity window; after that a new code must be requested. |
-| `openfilz.signature.otp.max-attempts` | `OPENFILZ_SIGNATURE_OTP_MAX_ATTEMPTS` | `5` | Verification attempts per code before it is locked out (`429`) and must be re-requested. The counter is reserved atomically, so parallel guesses share the same budget. |
+| `openfilz.signature.otp.max-attempts` | `OPENFILZ_SIGNATURE_OTP_MAX_ATTEMPTS` | `5` | Verification attempts per code before it is locked out (`429`) and must be re-requested. |
 | `openfilz.signature.otp.request-cooldown` | `OPENFILZ_SIGNATURE_OTP_REQUEST_COOLDOWN` | `60s` | Minimum delay between two `/otp/request` calls on the same link (`429` with the remaining wait). `0` = none. |
 | `openfilz.signature.otp.max-requests` | `OPENFILZ_SIGNATURE_OTP_MAX_REQUESTS` | `10` | Codes one link may request in its lifetime; past it `/otp/request` answers `429` and the signer needs a new link (resend). Reset whenever the token is re-issued. `0` = unlimited. |
 | `openfilz.signature.otp.verified-for` | `OPENFILZ_SIGNATURE_OTP_VERIFIED_FOR` | `24h` | How long a passed OTP step keeps unlocking the document and `/sign` on that link; afterwards the signer verifies a code again. `0` = for as long as the link lives. |
@@ -118,7 +113,7 @@ values, so overriding them goes through relaxed binding; the other three have en
 
 | Property | Env var | Default | What it does |
 |---|---|---|---|
-| `openfilz.signature.seal.provider` | `OPENFILZ_SIGNATURE_SEAL_PROVIDER` | `self-signed-dev` | `self-signed-dev` \| `pkcs12` \| `openfilz-cloud`. Only `openfilz-cloud` is matched explicitly; any other value selects the in-process sealer. |
+| `openfilz.signature.seal.provider` | `OPENFILZ_SIGNATURE_SEAL_PROVIDER` | `self-signed-dev` | `self-signed-dev` \| `pkcs12` \| `openfilz-cloud`. Any value other than `openfilz-cloud` selects a local seal. |
 | `openfilz.signature.seal.keystore-path` | `OPENFILZ_SIGNATURE_SEAL_KEYSTORE_PATH` | *(empty)* | PKCS#12 keystore holding the seal key + certificate. **This is what actually selects `pkcs12`** — see the note below. |
 | `openfilz.signature.seal.keystore-password` | `OPENFILZ_SIGNATURE_SEAL_KEYSTORE_PASSWORD` | *(empty)* | Used for both the store and the key entry — they must be identical. |
 | `openfilz.signature.seal.keystore-alias` | `OPENFILZ_SIGNATURE_SEAL_KEYSTORE_ALIAS` | `openfilz-seal` | Alias of the key entry inside the keystore. |
@@ -127,9 +122,8 @@ values, so overriding them goes through relaxed binding; the other three have en
 | `openfilz.signature.seal.cloud.api-key` | `OPENFILZ_SIGNATURE_CLOUD_API_KEY` | *(empty)* | Tenant API key; sealing fails fast with a clear error when the `openfilz-cloud` provider is selected and this is blank. |
 | `openfilz.signature.seal.cloud.timeout` † | `OPENFILZ_SIGNATURE_SEAL_CLOUD_TIMEOUT` | `15s` | Per-call timeout for `/api/v1/cert` and `/api/v1/sign-hash`. |
 
-> **`keystore-path` wins over `provider` for the in-process sealer.** `SignatureConfig` uses
-> `provider` only to decide between the cloud sealer and the in-process one; the in-process
-> sealer then reports itself as `pkcs12` if `keystore-path` is set and `self-signed-dev`
+> **`keystore-path` wins over `provider`.** `provider` only chooses between the cloud seal and a
+> local one; the local seal is `pkcs12` when `keystore-path` is set and `self-signed-dev`
 > otherwise. So `provider: pkcs12` with no keystore silently produces an ephemeral dev seal,
 > and `provider: self-signed-dev` with a keystore path loads the keystore. Trust the startup
 > log line, not the property:
@@ -150,7 +144,7 @@ values, so overriding them goes through relaxed binding; the other three have en
 | `openfilz.signature.mail.from-name` | `OPENFILZ_SIGNATURE_MAIL_FROM_NAME` | `OpenFilz e-Sign` | Display name in the `From` header. |
 | `openfilz.signature.mail.product-name` | `OPENFILZ_SIGNATURE_PRODUCT_NAME` | `OpenFilz` | Product name used in subjects and bodies (white-labelling). |
 | `openfilz.signature.mail.logo-url` | `OPENFILZ_SIGNATURE_LOGO_URL` | *(empty)* | Logo rendered in the header and footer of the HTML e-mails (absolute URL, ideally a ~135×104 PNG). Empty = the hosted OpenFilz logo. |
-| `spring.mail.host` | `SMTP_HOST` | *(empty)* | **Empty ⇒ no mail is sent at all** (`LoggingSignatureMailer`). |
+| `spring.mail.host` | `SMTP_HOST` | *(empty)* | **Empty ⇒ no mail is sent at all** (links are only logged). |
 | `spring.mail.port` | `SMTP_PORT` | `587` | |
 | `spring.mail.username` | `SMTP_USER` | *(empty)* | |
 | `spring.mail.password` | `SMTP_PASSWORD` | *(empty)* | |
@@ -164,8 +158,7 @@ values, so overriding them goes through relaxed binding; the other three have en
 The seal is a **detached CMS/PKCS#7 PAdES signature (SHA-256 with RSA)** applied with PDFBox +
 Bouncy Castle as an incremental save, over the stamped document (visible marks and Certificate
 of Completion already rendered). In the Community Edition every provider produces
-**PAdES-B-B**: no PDF/A conversion, no embedded RFC-3161 timestamp and no LTV material. The
-PDF/A-2b + timestamped path is Enterprise (`archiving-api`).
+**PAdES-B-B**: no PDF/A conversion, no embedded RFC-3161 timestamp and no LTV material.
 
 | Provider | Identity in the PDF | What a recipient sees in Acrobat | Pick it when |
 |---|---|---|---|
@@ -196,91 +189,29 @@ previously sealed PDFs keep verifying against the old certificate.
 
 ## 5. Security model
 
-**Signing links.** Each recipient gets `{web-base-url}sign?token=<token>`, where the token is
-32 bytes from `SecureRandom`, base64url without padding. Only `sha256(token)` is stored on the
-recipient row — the raw token exists in the e-mail and nowhere else. The lookup is
-`findByTokenHash(sha256(raw))`; an unknown token is `404`.
-
-**What a link may show.** The view endpoints (`GET` and `POST /viewed`) answer in three
-shapes, decided by `SignatureServiceImpl.publicView`:
-
-* **Open envelope, OTP passed (or none required)** — the full view: the recipient's own
-  fields with their values, and the other recipients' already-filled fields as *placements*
-  (`id`, `recipientId`, `type`, position, `filledAt`) with `value` and `valueImage` **null**.
-  Another signer's signature image or typed text never crosses a link that is not theirs.
-* **OTP recipient who has not passed the step** (or whose verification has aged past
-  `otp.verified-for`) — a status-only view: envelope title, initiator, the recipient's own
-  name / e-mail, statuses, `otpRequired: true`, `otpVerified: false`; `documentName`,
-  `message`, `fields` and `otherFields` are empty. `GET /document` answers `403` until the
-  code is verified. The signing page shows the code step from this view before it ever asks
-  for the PDF.
-* **Closed envelope** (`COMPLETED` / `DECLINED` / `CANCELLED` / `EXPIRED`, an envelope past
-  `expiresAt` the sweeper has not flipped yet, or a revoked token) — the same status-only
-  view, so the page can say "completed" / "cancelled", and nothing else: no document, no
-  fields. The completed PDF reaches the parties through the completion e-mail (attachment)
-  and the initiator through `GET /signatures/{id}/document`, never through a dead link.
-
-The response of the recipient's **own** `/sign`, `/decline` and `/otp/verify` call is the full
-view even when that call just closed the envelope, so the signer sees what they signed once.
-
-**Actions on a closed link.** `GET /document`, `POST /otp/request`, `/otp/verify`, `/sign` and
-`/decline` answer `410 Gone` for a terminal or expired envelope and for a revoked token, `409`
-for a draft. `/decline` requires the passed OTP step like `/sign` (voiding the envelope is as
-consequential as signing it).
-
-**Revocation.** When an envelope reaches a terminal state — completion, decline, cancel, the
-expiry sweeper — every recipient's `token_revoked` is set in the same transaction, so no link
-of that envelope can act again whatever its hash. Sending a draft, resending a link, advancing
-a sequential envelope to the next group, sending a scheduled reminder and minting an
-embedded-signing URL (EE) all go through one helper (`issueToken`) that **overwrites the stored
-hash with a fresh one**, lifts the revocation and restarts the per-link OTP request throttle —
-which is what makes the previous link stop resolving. Resend, next-group advance and scheduled
-reminders also clear `otpVerifiedAt`, so the OTP step must be passed again on the new link; the
-EE `embed-url` rotation does not.
-
-**OTP.** For `EMAIL_OTP`, `POST /otp/request` generates an all-digit code, stores only its
-SHA-256, and mails it — under two throttles enforced by one conditional `UPDATE`
-(`SignatureRecipientRepository.issueOtp`): a cooldown between requests on the same link
-(`otp.request-cooldown`, `429` with the remaining wait) and a lifetime cap per link
-(`otp.max-requests`, `429` telling the signer to ask for a new link); a new code resets the
-failed-attempt counter. `POST /otp/verify` first **reserves an attempt** with an atomic
-conditional increment (`reserveOtpAttempt`: `otp_attempts + 1 WHERE otp_attempts < max`, its
-own statement, so a wrong guess keeps its slot consumed) — parallel guesses can never exceed
-`max-attempts` together, the overflow answers `429` — then compares in constant time
-(`MessageDigest.isEqual`); a wrong code is `403`, a missing or expired code `410`. On success
-`otpHash` is cleared and `otpVerifiedAt` is set; the unlock lasts `otp.verified-for`. `/sign`
-and `GET /document` answer `403` until then. An `authMethod` that this deployment cannot
-deliver is refused **at envelope creation** (`422`) rather than stranding a signer who could
-never pass the step.
-
-**Public chain.** `/api/v1/public/signatures/**` gets its own `@Order(-3)`
-`SecurityWebFilterChain` (`SignaturePublicSecurityConfig`) with CSRF disabled and
-`permitAll()` — the token in the query string is the authenticator. When the feature is off
-the chain's matcher points at `/_disabled-public-signatures-chain`, so it stays in the context
-(native-image safe) while matching nothing.
-
-**Roles.** `AbstractSecurityService.isSignatureAuthorized` maps `GET` on `/signatures/**` and
-`/signature-templates/**` to `READER` *or* `CONTRIBUTOR`, and every other method to
-`CONTRIBUTOR` — plus `SIGN_REQUESTER` when `openfilz.signature.require-requester-role=true`
-(see §3.1), which lets a deployment restrict per user who may initiate signature requests.
-Which documents a user may send is a separate decision, delegated to
-`SignatureAccessPolicy`: the CE default (`DefaultSignatureAccessPolicy`) allows any
-CONTRIBUTOR to send any active document, because core has no per-document permission model.
-Envelope management (`canManage`) is restricted to the initiator's e-mail.
-
-**Audit attribution.** e-Sign writes audit rows from contexts that have no logged-in user (the
-signer has no Keycloak session; completion and expiry run in a scheduler). There is
-deliberately no "log as an arbitrary string" API. `SignatureActorResolver` builds a synthetic
-`JwtAuthenticationToken` whose `email` claim comes from a source the caller cannot forge — the
-recipient row resolved by a *validated* token hash for a signer, the stored `initiatorEmail`
-for the requester — marked with `azp: openfilz-signature-link` / `openfilz-signature-service`.
-Audit rows are therefore never attributed to `anonymousUser`.
-
-**Other guardrails.** Recipient e-mails must be unique per envelope; a SIGNER needs at least
-one `SIGNATURE` or `INITIALS` field; field boxes must stay inside the page (`x+w ≤ 1`,
-`y+h ≤ 1`) and inside the real page count; submitted field ids must belong to the recipient;
-images must be `data:image/…` or base64 and under the size cap; client IP comes from
-`X-Forwarded-For` (first hop) when present.
+- **Signing links are single-purpose secrets.** Each recipient gets a link with a random token;
+  only its SHA-256 hash is stored, so the raw link exists in the e-mail and nowhere else. An
+  unknown token answers `404`.
+- **A link shows only what its recipient needs.** The recipient sees their own fields, and where
+  other signers have already signed — never another signer's signature image or typed text.
+- **With e-mail OTP, nothing is revealed before the code.** Until the recipient verifies the code,
+  the link shows only the envelope title and statuses: no document, no fields, no signing. Code
+  requests are throttled (cooldown + a cap per link), verification attempts are capped, and the
+  unlock expires after `otp.verified-for`.
+- **Closed means closed.** Once an envelope is completed, declined, cancelled or expired, every link
+  of it is revoked: the page can only say so (`410 Gone` on every action). The signed PDF reaches
+  the parties by e-mail, never through a dead link.
+- **Resending kills the previous link.** A resend, the next group of a sequential envelope and a
+  reminder all issue a fresh token; the old one stops working immediately, and the OTP step must be
+  passed again.
+- **Roles.** Reading envelopes and templates needs `READER` or `CONTRIBUTOR`; creating or changing
+  them needs `CONTRIBUTOR` — plus `SIGN_REQUESTER` when `require-requester-role` is on. In the
+  Community Edition any contributor may send any active PDF (there are no per-document
+  permissions); only the initiator can manage an envelope.
+- **Every audit entry names a real person.** Signers have no account, yet their actions are
+  attributed to their verified e-mail address, never to an anonymous user.
+- **Input checks.** Recipient e-mails are unique per envelope, every signer needs a signature or
+  initials field, fields must lie inside a real page, and submitted images are size-capped.
 
 ---
 
@@ -346,103 +277,39 @@ curl -X POST "$API/api/v1/signatures" \
 }'
 ```
 
-Returns a `SignatureEnvelopeDTO` with `status: "SENT"`. Add `"send": false` to get a `DRAFT`
-instead, or `"reminderDays": 3` to arm the Enterprise reminder scheduler (the field is
-persisted in CE but nothing acts on it there).
+Returns the envelope with `status: "SENT"`. Add `"send": false` to get a `DRAFT` instead.
 
 ---
 
 ## 7. Operations
 
-* **Sweeper.** `openfilz.signature.sweep.cron`, hourly by default. It self-guards on
-  `openfilz.signature.active`, logs `[e-sign] sweeper expired N envelope(s)` when it does
-  something, and writes an `ENVELOPE_EXPIRED` event plus a `SIGNATURE_ENVELOPE_EXPIRED` audit
-  row per envelope.
-* **Mail locales.** Bodies come from `resources/signature-mail/messages_*.properties`:
-  `en`, `fr`, `de`, `es`, `it`, `nl`, `pt`, `ar` (plus a default bundle). The locale is
-  resolved per message as *recipient locale → envelope locale → English*, normalised to the
-  language subtag (`fr-CA` → `fr`). Sending is fire-and-forget on the bounded-elastic
-  scheduler: a broken SMTP server logs `[e-sign] failed to send mail …` and never fails the
-  signing flow — which also means a bounced invitation is invisible to the initiator.
-* **Audit actions.** `SIGNATURE_ENVELOPE_CREATED`, `_SENT`, `_COMPLETED`, `_DECLINED`,
+- **Expiry.** An hourly job (`openfilz.signature.sweep.cron`) marks envelopes past their deadline as
+  expired and revokes their links. Links stop working at the deadline whatever the job's timing.
+- **E-mail languages.** Invitations, codes and completion mails exist in English, French, German,
+  Spanish, Italian, Dutch, Portuguese and Arabic, picked from the recipient's language, then the
+  envelope's, then English. A failing SMTP server is logged (`[e-sign] failed to send mail …`) and
+  never blocks signing — which also means the initiator does not see a bounced invitation.
+- **Audit actions.** `SIGNATURE_ENVELOPE_CREATED`, `_SENT`, `_COMPLETED`, `_DECLINED`,
   `_CANCELLED`, `_EXPIRED`, plus `SIGNATURE_DOCUMENT_SIGNED`, `SIGNATURE_REMINDER_SENT`,
   `SIGNATURE_TEMPLATE_CREATED`, `SIGNATURE_TEMPLATE_DELETED`.
-* **Finalization and the audit chain.** A signature is one transaction: recipient + fields +
-  `RECIPIENT_SIGNED` event, then — when it was the last one — stamp, seal (an HTTP call on the
-  EE archiving / cloud providers), store, the signed document row, `COMPLETED`, link
-  revocation and the completion listener; **the audit rows (`SIGNATURE_DOCUMENT_SIGNED`,
-  then `SIGNATURE_ENVELOPE_COMPLETED`) are written last**, right before the commit. The
-  chained audit insert takes the instance-wide advisory lock until the commit, so putting it
-  first would have held every other audited write (uploads, moves, downloads…) behind a seal
-  call. Notifications, the completion mails and post-processing run after the commit. A seal
-  or completion-listener failure still fails the whole signature, so the recipient stays
-  actionable and simply retries; an envelope wedged by the historical partial commit is
-  re-finalised when a signer re-opens their link (standalone transaction, then audit, then
-  mails). The envelope row is locked (`SELECT … FOR UPDATE`) for the signing transaction, so
-  two last signers finishing together serialise and the second one completes the envelope.
-  The lock wait itself is bounded by `openfilz.audit.chain.lock-timeout` (`5s`; `0` = forever):
-  a holder stuck in slow work fails the waiting audit insert with a logged
-  `Audit chain lock not acquired within …` instead of queueing the instance behind it.
-* **Event types** (envelope trail, rendered into the Certificate of Completion):
-  `ENVELOPE_CREATED`, `ENVELOPE_SENT`, `RECIPIENT_VIEWED`, `RECIPIENT_OTP_VERIFIED`,
-  `RECIPIENT_SIGNED`, `RECIPIENT_DECLINED`, `RECIPIENT_REMINDED`, `RECIPIENT_LINK_RESENT`,
-  `ENVELOPE_COMPLETED`, `ENVELOPE_CANCELLED`, `ENVELOPE_EXPIRED`.
-* **`GET /api/v1/settings`** exposes the e-Sign fields the web app depends on:
-  `signatureActive` (boolean) drives the *Signatures* menu and the *Request signature*
-  document action; `signatureAuthMethods` (string list) is the set of recipient
-  authentication methods this deployment can actually deliver — always `NONE`, plus
-  `EMAIL_OTP` and/or `SMS_OTP` when a matching `SignatureOtpSender` bean is registered *and*
-  configured. The UI offers only those, which keeps it from proposing a channel the API would
-  refuse at create time. `sealProvider` (string, null when e-Sign is off) reports the seal
-  identity that will actually sign completed envelopes, via the protected
-  `SettingsServiceImpl.effectiveSealProvider()` hook (the EE overrides it to report
-  archiving-api's provider): while it is `self-signed-dev` the web app shows a dismissible
-  "untrusted demo seal" notice on the signature screens. `signatureCloudActive` turns on the
-  Cloud Signing subscription card on the Settings page. Unrelated to e-Sign but delivered on
-  the same endpoint: `demoMode` (`openfilz.demo-mode` / `OPENFILZ_DEMO_MODE`, default false)
-  marks shared public demo deployments — the web app then shows the demo disclaimers
-  (shared-visibility warning on CE, demo note + trial CTA on EE).
-* **Schema.** Flyway `V1_7__create_signature_schema.sql`, fully idempotent
-  (`CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS`): `signature_envelope`,
-  `signature_recipient`, `signature_field`, `signature_template`, `signature_event`.
-* **Dependencies added for this feature.** `spring-boot-starter-mail` and Bouncy Castle
-  (`bcpkix-jdk18on`). `SHA256withRSA` is resolved from the default JDK provider rather than
-  `"BC"` — forcing the BC provider breaks in GraalVM native images.
+- **Envelope trail** (shown in the Certificate of Completion): `ENVELOPE_CREATED`, `ENVELOPE_SENT`,
+  `RECIPIENT_VIEWED`, `RECIPIENT_OTP_VERIFIED`, `RECIPIENT_SIGNED`, `RECIPIENT_DECLINED`,
+  `RECIPIENT_REMINDED`, `RECIPIENT_LINK_RESENT`, `ENVELOPE_COMPLETED`, `ENVELOPE_CANCELLED`,
+  `ENVELOPE_EXPIRED`.
+- **A failed signature is retried safely.** If sealing fails, the signature is not recorded and the
+  signer simply tries again; two last signers finishing at the same moment cannot both complete the
+  envelope.
+- **Untrusted demo seal notice.** While the seal provider is `self-signed-dev`, the web app shows a
+  notice on the signature screens — a reminder to configure a real certificate before production.
 
 ---
 
-## 8. Extension points
+## 8. What the Enterprise Edition adds
 
-Seven interfaces in `org.openfilz.dms.service.signature`. Each has a permissive or no-op core
-default; register your own bean `@Primary` to take over.
+The same envelope engine and API, plus:
 
-| Seam | Core default | What you would override it for |
-|---|---|---|
-| `SignatureAccessPolicy` | any CONTRIBUTOR may send any active document; signed copy next to the source; no post-persist hook | plug your own per-document permission model, and choose where the signed copy lands |
-| `SignatureActorResolver` | synthetic JWT built from the trusted stored e-mail | attribute audit to a real IdP principal (e.g. an OIDC token exchange) |
-| `SignatureNotifier` | no-op | push in-app notifications on request / completed / declined |
-| `SignatureMailer` | `SmtpSignatureMailer`, or `LoggingSignatureMailer` with no SMTP host | template engine, transactional-mail provider, per-tenant branding |
-| `SignatureSealer` | `InProcessSignatureSealer` or `CloudSignatureSealer`, chosen at runtime by `SignatureConfig` | HSM / KMS / PKCS#11 keys, PDF/A conversion, timestamping. The core bean stays available as `@Qualifier(SignatureConfig.CORE_SEALER)` so you can delegate to it as a fallback. |
-| `SignatureOtpSender` | `EmailSignatureOtpSender` (`EMAIL_OTP`) | add a channel — `supports(method)` is what makes it appear in `Settings.signatureAuthMethods` |
-| `SignatureCompletionListener` | no-op | record compliance metadata after the signed document row is inserted (runs inside the completion transaction) |
-
-`SignatureSealer` is also the fallback seam: if the `@Primary` sealer fails, the core sealer is
-tried automatically, so envelope completion never blocks on an external signing service.
-
----
-
-## 9. What the Enterprise Edition adds
-
-Same envelope engine, same API, same database — the EE registers `@Primary` implementations of
-the seams above (gated on `openfilz.features.custom-access=true`) plus a few extra endpoints:
-
-* **PDF/A-2b + a trusted, timestamped seal.** `ArchivingSignatureSealer` hands the stamped PDF
-  to `archiving-api`, which converts it to PDF/A-2b, seals it with an AATL certificate (PKCS#12,
-  Azure Key Vault or `sign.openfilz.com`), adds an RFC-3161 timestamp and validates the result
-  with veraPDF. Falls back to the core sealer on outage.
-* **Automatic reminders** on the envelope's `reminderDays` cadence, **bulk send** from
-  template × rows, **embedded signing** URLs for iframe/SDK integration.
-* **SMS one-time codes** (`SMS_OTP`) through a pluggable gateway.
-* **In-app notifications**, **owner/write-share authorisation** for who may send a document,
-  and **Keycloak token-exchange** audit attribution.
-* **`signature.*` webhook events** dispatched by `webhooks-api`.
+- **PDF/A-2b archiving with a trusted, timestamped seal**, validated with veraPDF.
+- **Automatic reminders**, **bulk send** from a template, and **embedded signing** for integrations.
+- **SMS one-time codes.**
+- **In-app notifications**, and per-document control over who may send a document.
+- **Webhook events** for every step of an envelope.

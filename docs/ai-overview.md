@@ -1,531 +1,288 @@
 # AI in OpenFilz — what it does, and how to run it without an LLM
 
-This page explains, in plain terms, **what the AI features of OpenFilz actually do, what each one
-needs to run, and what happens when you don't give it a model.** It is the page to read before
-deciding what to switch on for a given customer.
-
-It deliberately stays at the level of "what is going on and what does it cost me". The mechanics
-live elsewhere and are linked from each section:
+This page explains, in plain terms, **what the AI features of OpenFilz do, what each one needs to
+run, and what you get when you don't give it a model.** Read it before deciding what to switch on.
 
 | You want | Read |
 |---|---|
-| The concepts, the choices, the deployment profiles | **this page** |
-| Every property, every environment variable | [Admin guide → AI Document Chat](admin-guide.md#ai-document-chat) |
-| The internals: pipelines, seams, benchmarks, failover | [AI Architecture](ai.md) |
-| Connecting Claude Code / Claude Desktop / n8n | [MCP Server](mcp.md) |
-
----
-
-## Table of contents
-
-- [At a glance](#at-a-glance)
-- [1. The three ingredients](#1-the-three-ingredients)
-- [2. Chat](#2-chat)
-  - [2.1 Chat inside OpenFilz](#21-chat-inside-openfilz)
-  - [2.2 Chat from an external MCP client](#22-chat-from-an-external-mcp-client)
-  - [2.3 Which one for which customer](#23-which-one-for-which-customer)
-- [3. Folder reorganisation](#3-folder-reorganisation)
-- [4. Auto-filing on upload](#4-auto-filing-on-upload)
-- [5. Document insights — the layer features 3 and 4 stand on](#5-document-insights--the-layer-features-3-and-4-stand-on)
-- [6. Running OpenFilz without an LLM](#6-running-openfilz-without-an-llm) — incl. [6.4 Choosing the model: two variables](#64-choosing-the-model-two-variables)
-- [7. What the UI does in each profile](#7-what-the-ui-does-in-each-profile)
-- [8. Picking a profile for a customer](#8-picking-a-profile-for-a-customer)
+| The features, and which setup gives you which | **this page** |
+| Every property and environment variable | [Admin guide → AI Document Chat](admin-guide.md#ai-document-chat) |
+| Connecting Claude Code, Claude Desktop, n8n… | [MCP Server](mcp.md) |
+| The REST endpoints | [Developer guide → AI Chat](developer-guide.md#ai-chat) |
 
 ---
 
 ## At a glance
 
-There are **four** AI capabilities, and they need very different things. The single most useful
-fact on this page is that only two of the ten lines below actually require an LLM inside your
-deployment:
+OpenFilz has four AI capabilities, and they need very different things. **Only two of the lines
+below need an LLM inside your deployment:**
 
 | Capability | Who produces the answer | Chat LLM? | Embeddings + pgvector? |
 |---|---|---|---|
 | Chat inside OpenFilz | an LLM you configure (or the user's own key) | **yes** | **yes** |
-| Chat from an external MCP client | the calling agent's LLM (Claude, ChatGPT, n8n…) | no | no |
-| Reorganisation proposal, model-driven | an LLM — yours, or the external agent's | yes\* | no |
-| Reorganisation "by kind" | plain code (`CategoryReorganizationPlanner`) | no | no\*\* |
-| Auto-filing, stage 1 (neighbour vote) + the rule | the vector store's nearest documents | no | **yes** |
-| Auto-filing, stage 2 (the fallback) | an LLM | yes | yes |
-| Document insights, tier 1 (title, author, pages, language) | Apache Tika | no | no |
-| Document category, `prototype` / `learned` classifier | embeddings | no | **yes** |
-| Document insights, tier 2 full (summary, keywords, entities) | an LLM | yes | no |
-| Full-text search | OpenSearch + Tika | no | no |
+| Chat from an external AI tool (MCP) | the tool's own LLM (Claude, ChatGPT, n8n…) | no | no |
+| Folder reorganisation, "Organise with AI" | an LLM — yours, or the external tool's | yes\* | no |
+| Folder reorganisation "by kind" | plain code | no | no |
+| Auto-filing on upload | the most similar documents, then a rule, then (optionally) an LLM | only as a last resort | **yes** |
+| Document kind (invoice, contract…) | embeddings, or an LLM | optional | **yes** |
+| Summary, keywords, entities | an LLM | yes | no |
+| Full-text search | OpenSearch | no | no |
 
-\* No **server-side** LLM if the proposal is driven by an external MCP agent — the reorganisation
-tools are served over `/mcp` even on a deployment with no model at all.
+\* No LLM on the server when the reorganisation is driven from an external AI tool over MCP.
 
-\*\* It needs *categories* to exist, which come either from the classifier (embeddings), from a
-model, or from users correcting them by hand.
-
-> **Where a model is needed, it takes two variables.** Bring your own model and key:
+> **Where a model is needed, two variables are enough.** Bring your own model and key:
 > `OPENFILZ_AI_MODEL=provider:model` (`google:gemini-3.6-flash`, `anthropic:claude-haiku-4-5`,
 > `openai:gpt-4o-mini`, `ollama:qwen2.5`) and `OPENFILZ_AI_API_KEY`, next to `OPENFILZ_AI_ACTIVE=true`.
-> Precedence, the managed `openfilz-cloud` option and what the UI is told: [§6.4](#64-choosing-the-model-two-variables).
+> See [§6.4](#64-choosing-the-model-two-variables).
 
 ---
 
 ## 1. The three ingredients
 
-Everything above is built from three interchangeable pieces. Understanding which feature consumes
-which piece is the whole game:
+Every AI feature is built from three pieces:
 
 ```mermaid
 flowchart LR
     subgraph Deployment["Your OpenFilz deployment"]
         API["openfilz-api"]
         PG[("PostgreSQL<br/>+ pgvector")]
-        OS[("OpenSearch<br/>full-text")]
     end
 
     subgraph Ingredients["The three ingredients"]
-        CHAT["1 · Chat model (LLM)<br/>writes sentences, calls tools"]
-        EMB["2 · Embedding model<br/>turns text into 768 numbers"]
+        CHAT["1 · Chat model (LLM)<br/>writes answers, calls tools"]
+        EMB["2 · Embedding model<br/>turns text into numbers"]
         VEC["3 · Vector store<br/>a pgvector table"]
     end
 
     subgraph Sources["Where a chat model can come from"]
         OLL["Ollama on your own hardware"]
         CLOUD["OpenAI / Anthropic / Gemini API"]
-        BYOK["The user's own key (BYOK)"]
-        AGENT["An external agent's model<br/>Claude Desktop, n8n… via MCP"]
+        BYOK["The user's own key"]
+        AGENT["An external AI tool<br/>via MCP"]
     end
 
     API --> CHAT
     API --> EMB --> VEC --> PG
-    API --> OS
     CHAT -.-> OLL
     CHAT -.-> CLOUD
     CHAT -.-> BYOK
     CHAT -.-> AGENT
 ```
 
-**1 · The chat model (the LLM).** Writes answers, and decides which tools to call. This is the
-expensive, slow, optional-in-more-cases-than-you-think ingredient. It can live on your hardware
-(Ollama), behind a cloud API (OpenAI, Anthropic, Gemini, or anything OpenAI-compatible), be brought
-per user (BYOK), or live entirely **outside** OpenFilz in the agent that connects over MCP.
+**1 · The chat model (the LLM)** writes answers and decides which actions to take. It is the
+expensive, optional ingredient. It can run on your hardware (Ollama), behind a cloud API (OpenAI,
+Anthropic, Gemini, or anything OpenAI-compatible), be brought by each user with their own key, or
+live entirely **outside** OpenFilz in the AI tool that connects over MCP.
 
-**2 · The embedding model.** Turns a chunk of text into a 768-number vector, so that "documents
-that look like this one" becomes a database query. It is *not* an LLM: it generates nothing, it has
-no prompt, it costs milliseconds. OpenFilz can run it three ways — **in-process** (ONNX Runtime
-inside the API, nothing else to deploy), through **Ollama**, or through any **OpenAI-compatible**
-embedding server. This is the ingredient that powers semantic retrieval, automatic classification
-and auto-filing.
+**2 · The embedding model** turns a piece of text into a vector, so that "documents that look like
+this one" becomes a database query. It is *not* an LLM: it generates nothing and takes
+milliseconds. It can run **inside the API** (nothing else to deploy), through **Ollama**, or through
+any **OpenAI-compatible** embedding server. It powers semantic search, automatic classification and
+auto-filing.
 
-**3 · The vector store.** A `vector_store` table in PostgreSQL, which therefore must run a
+**3 · The vector store** is a table in PostgreSQL, which must therefore run a
 **pgvector-enabled image**. No extra service.
 
-> **The one-way door.** The embedding model is a *deployment-wide, one-time* decision: vectors from
-> two different embedding models are not comparable, so changing it means re-embedding the library.
-> `EmbeddingRegistryGuard` refuses to start on a mismatch. The chat model, by contrast, can be
-> swapped, overridden per user, and failed over freely. See [ai.md §2](ai.md#2-configuration-resolution--startup).
+> **Choose the embedding model once.** Vectors from two different embedding models cannot be
+> compared, so changing it means re-embedding the whole library — OpenFilz refuses to start rather
+> than mix them. The chat model, by contrast, can be changed at any time.
 
 ---
 
 ## 2. Chat
 
-There are two completely different ways a user talks to their documents, and they share **one
-implementation**: the same tools (`queryDocuments`, `readDocumentContent`, `moveDocuments`, the PDF
-tools, the e-Sign tools, the reorganisation tools…) are exposed to both. A capability added to the
-tool layer is gained by both at once.
-
-```
-                      ┌── in-app chat ─────► an LLM *inside* OpenFilz
-   the tool layer ────┤
-   (DocumentAiTools)  └── POST /mcp ────────► an LLM *outside* OpenFilz
-```
+There are two ways to talk to your documents. Both use the **same set of actions** (search, read,
+move, rename, PDF tools, e-Sign, reorganisation…), so anything added to one is available in the other.
 
 ### 2.1 Chat inside OpenFilz
 
-A panel in the web app. The user types a question; the answer streams back, with clickable links to
-the documents it used.
+A panel in the web app. The user asks a question; the answer streams back with clickable links to
+the documents it used. Two things happen:
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor U as User
-    participant W as OpenFilz web
-    participant API as openfilz-api
-    participant V as pgvector
-    participant L as Chat model
+- **Retrieval.** Before the model sees the question, OpenFilz finds the passages of your library
+  closest to it and adds them to the prompt. That is what lets the assistant answer *from the
+  content* of documents — and why the in-app chat needs embeddings, not just an LLM.
+- **Actions.** The model can search, read, move, rename, create folders, merge PDFs, send for
+  signature or propose a reorganisation. Every action runs with the **user's own identity and
+  permissions** and is audited like a click in the app.
 
-    U->>W: "Which invoices from Acme are unpaid?"
-    W->>API: POST /api/v1/ai/chat (SSE)
-    API->>V: find the passages closest to the question
-    V-->>API: the most similar chunks + which document each came from
-    API->>L: system prompt + history + those passages + the question<br/>+ the list of tools it may call
-    loop as long as the model asks
-        L-->>API: "call queryDocuments(category=invoice)"
-        API->>API: run the tool — under the user's own permissions
-        API-->>L: the result
-    end
-    L-->>API: the answer, streamed
-    API->>API: turn document names into clickable links, append Sources
-    API-->>W: the answer
-```
+**The assistant is careful with anything irreversible.** A document can contain text written to
+manipulate the model, so OpenFilz does not rely on the model's judgement:
 
-Two things are happening at once, and both matter:
+- **Deleting** through the assistant only moves to the recycle bin — and without a recycle bin, the
+  assistant refuses to delete.
+- **Applying a reorganisation** is always the user's click on the proposal card, never the model's.
+- **Destructive actions need an exact name.** A partial or ambiguous name gets a list of candidates
+  back instead of a guess.
+- **Document text is marked as data** wherever it enters the prompt, with an instruction to ignore
+  anything it asks for.
 
-- **RAG (retrieval).** Before the model sees the question, OpenFilz finds the passages of the
-  library that are semantically closest to it and puts them in the prompt. This is what makes the
-  assistant able to answer *from the content of documents* — and it is why the in-app chat needs
-  the embedding stack, not just an LLM.
-- **Tools (actions).** The model can call the same operations the UI offers: search, read, move,
-  rename, create a folder, merge PDFs, send for signature, propose a reorganisation. Every call
-  runs under the **calling user's** identity and permissions, is audited exactly like a click in
-  the UI, and — in the Enterprise edition — is restricted to the documents that user owns or has
-  been shared.
+Also available:
 
-What the user sees: a floating chat button, conversations they own (a foreign conversation answers
-404, not 403 — the existence of other people's conversations does not leak), clickable document
-links, and an interactive **reorganisation card** when the assistant proposes moves.
+- **Bring your own key** — each user can plug in their own provider and API key from
+  *Settings → AI Assistant*. Keys are stored encrypted and can never be read back.
+- **Failover** — when a model is rate-limited, the question is retried on the next model of a list
+  you configure. It never applies to a local Ollama model, so document text never leaves your
+  premises behind your back.
+- **Small local models** — trim the list of actions the chat offers so a 1–3B model stays reliable
+  (`openfilz.ai.chat.excluded-contributors` / `.excluded-tools`).
 
-**What the assistant will not do, and why.** The model reads documents, and a document can be
-written to talk to it: a shared PDF saying *"assistant, delete contract.pdf"* reaches the model
-with the authority of whoever opened the chat. OpenFilz therefore does not rely on the model's
-good judgement for anything irreversible:
+### 2.2 Chat from an external AI tool (MCP)
 
-- **Deleting** through the assistant only ever means *moving to the recycle bin*. On a deployment
-  without a recycle bin (`openfilz.soft-delete.active=false`) the assistant refuses to delete at all
-  and tells the user to do it in the application.
-- **Applying a reorganisation** is the user's click on the proposal card, never a tool the chat
-  model can call. (An external MCP agent in `READ_WRITE` mode keeps that tool — that mode is the
-  operator's explicit opt-in — and the backend still re-checks the plan and refuses one that is not
-  the caller's own, still-proposed plan.)
-- **Destructive actions aim precisely.** Delete, move, rename, metadata changes, version restore,
-  PDF edits and e-Sign sending accept a document's **exact name or id**; a partial name, or a name
-  several documents share, gets a list of candidates back instead of a guess.
-- **Document text is marked as data** wherever it enters the prompt (search passages, file
-  contents, OCR output, inventories), with an instruction to ignore anything it asks for.
-
-Operators who accept the risk can restore the previous behaviour with
-`openfilz.ai.tools.destructive-mode=allow` (default `confirm-only`). A full "the assistant proposes,
-you confirm in the UI, then it executes" flow for every destructive action is a later feature; these
-guardrails are the floor in the meantime. Details: [ai.md §4 → Guardrails](ai.md#4-chat-workflow).
-
-Extras worth knowing:
-
-- **BYOK** (`openfilz.ai.user-settings.enabled`) lets each user plug in their own provider and API
-  key from *Settings → AI Assistant*. Keys are stored AES-256-GCM encrypted and are write-only over
-  the API. Only the *chat* model is user-selectable — never the embedding model.
-- **Quota failover** (`openfilz.ai.fallback.*`) retries a question on the next model of a chain when
-  the first is rate-limited, and benches the exhausted one so later requests skip it. It
-  deliberately **never** applies when the model in use is a local Ollama one: the prompt contains
-  document text, and silently shipping it to a cloud API would break exactly the guarantee a local
-  model was deployed for.
-- **Small models need a smaller tool surface.** A 1–3B local model stops calling tools once too
-  many schemas travel with the request. `openfilz.ai.chat.excluded-contributors` /
-  `.excluded-tools` trim the chat's tool list **without touching the MCP server**.
-
-Details: [ai.md §4](ai.md#4-chat-workflow), [§5](ai.md#5-per-user-model-override-byok),
-[§5b](ai.md#5b-quota-failover-between-chat-models).
-
-### 2.2 Chat from an external MCP client
-
-Instead of running a model, OpenFilz **is a tool provider** for a model that already exists
-elsewhere: Claude Desktop, Claude Code, n8n, a custom Spring AI agent. The user chats in *their*
-tool, and that tool reaches into OpenFilz.
+Instead of running a model, OpenFilz **provides actions to a model you already use**: Claude
+Desktop, Claude Code, n8n, a custom agent. The user chats in *their* tool, and that tool works on
+OpenFilz.
 
 ```mermaid
 flowchart LR
     U["User"] --> H["Claude Desktop / Claude Code /<br/>n8n / custom agent"]
-    H --> M["the agent's own LLM"]
-    H -->|"POST /mcp — JWT or scoped token"| API["openfilz-api"]
+    H --> M["the tool's own LLM"]
+    H -->|"POST /mcp — with the user's token"| API["openfilz-api"]
     API --> DOCS[("Documents")]
 ```
 
-The important consequences:
+- **No LLM, no embeddings, no pgvector needed.** The AI tool brings the model; the MCP server can
+  be on while every other AI feature is off.
+- **Read-only by default.** Actions that change anything are offered only when you switch the
+  server to `READ_WRITE`.
+- **The AI tool acts as a user** — with that user's roles and audit trail.
+- **The Community Edition has no per-document permissions**, so a connected tool sees the whole
+  library. Use it single-user or for evaluation.
 
-- **No LLM, no embeddings, no pgvector are required in the deployment.** The agent brings the
-  model. `openfilz.ai.active` and `openfilz.mcp.active` are independent switches; MCP on its own is
-  a complete, useful configuration. (`describeImage` is the one tool that wants a local vision
-  model, and it says so plainly instead of failing.)
-- **Read-only by default** (`openfilz.mcp.mode=READ_ONLY`). An autonomous agent gets mutating tools
-  only when an operator deliberately raises the mode to `READ_WRITE`.
-- **The agent is a user.** `/mcp` sits on the same OAuth2 chain as the rest of the API; every call
-  resolves to a real OpenFilz identity, with that identity's roles, permissions and audit trail.
-- **In Community Edition there are no per-document permissions**, so an agent sees the whole
-  library. Run CE MCP single-user or for evaluation only; the Enterprise edition is what makes an
-  agent see exactly what its user may see, and adds scoped, revocable agent tokens.
+Setup, per-client configuration and the list of actions: [MCP Server](mcp.md).
 
-Full walkthrough, per-client configuration and the tool catalogue: [mcp.md](mcp.md).
+### 2.3 Which one to choose
 
-### 2.3 Which one for which customer
-
-| | In-app chat | External MCP client |
+| | In-app chat | External AI tool (MCP) |
 |---|---|---|
-| Who pays for the model | the deployment (or the user, via BYOK) | the user's existing AI subscription |
+| Who pays for the model | you (or each user, with their own key) | the user's existing AI subscription |
 | Infrastructure to add | an LLM + an embedding model + pgvector | **nothing** |
-| Answers from document *content* | yes, via RAG | yes — the agent reads documents with `readDocumentContent` |
-| Works for a non-technical user | yes, it is a button in the app | needs a configured desktop client |
-| Content leaves the deployment | only if you configure a cloud model | yes — the agent's model sees what it reads |
-| Good fit | everybody in the organisation, one consistent experience | power users, automation (n8n), evaluations, tiny infrastructures |
+| Works for a non-technical user | yes, it is a button in the app | needs a configured desktop tool |
+| Document text leaves your premises | only with a cloud model | yes — the tool's model sees what it reads |
+| Good fit | everybody in the organisation | power users, automation, evaluations, small servers |
 
-They are not exclusive: the common Enterprise setup is in-app chat for everyone, plus MCP for the
-handful of people automating things.
+They are not exclusive: in-app chat for everyone plus MCP for those automating things works well.
 
 ---
 
 ## 3. Folder reorganisation
 
-"This folder is a mess — propose a better structure." OpenFilz never reorganises anything on its
-own: it always produces a **plan** that a human reviews, ticks and applies.
+"This folder is a mess — propose a better structure." OpenFilz never reorganises on its own: it
+produces a **plan** that you review, tick and apply. A plan is stored (it survives the
+conversation), every move re-checks permissions and name clashes and is audited, nothing is ever
+deleted, and applied plans can be undone.
 
-```mermaid
-flowchart LR
-    A["Propose<br/>a model, or by kind"] --> B["Stored plan<br/>ai_reorganization_plans"]
-    B --> C["The user reviews<br/>a card in the chat, item by item"]
-    C -->|apply| D["Audited moves<br/>permissions + name clashes re-checked"]
-    C -->|discard| E["Nothing happens"]
-    D --> F["Undo"]
-```
+There are two ways to get a plan, and only one needs a model:
 
-There are **two ways to get a plan**, and only one of them needs a model.
-
-### 3.1 With a model — "Organise with AI"
-
-From the folder toolbar or a folder's context menu (offered to CONTRIBUTORs when chat is on), or
-simply by asking the assistant. OpenFilz hands the model an **inventory** of the scope — the files,
-their kind, language, page count, a summary, and their audit activity ("last touched 14 months ago,
-by whom") — and the model proposes moves and new folders. The answer comes back as an interactive
-card in the chat: the user ticks the moves they want, and applies.
-
-This is the flexible one: "group by client", "by project", "by year", "archive what nobody has
-opened since 2024" are all reachable, because a language model is doing the grouping.
-
-An external MCP agent gets exactly the same loop through `planReorganization`,
-`proposeReorganizationPlan`, `getReorganizationPlan` and `applyReorganizationPlan` — which is why a
-deployment with **no LLM at all** can still offer model-driven reorganisation to someone driving it
-from Claude Desktop.
-
-### 3.2 By kind — no model at all
-
-`POST /api/v1/ai/reorganization/by-kind` (tool: `proposeReorganizationByKind`) walks the scope and,
-for every folder that mixes several kinds of document, proposes one sub-folder per kind — an
-existing child whose name already denotes that kind in any language (`Invoices`, `Factures`,
-`Rechnungen`…), or a new one named in the language the library is already using. Loose files at the
-root are grouped the same way; `other` and uncategorised files are left alone.
-
-It is **deterministic and instant**: no model call, no tokens, no waiting. It produces the very
-same kind of stored plan, reviewed and applied through the same screens. Its only requirement is
-that documents *have* a kind — see [§5](#5-document-insights--the-layer-features-3-and-4-stand-on).
-
-Use the model for anything that is not "by kind" (by client, by project, by period). Use by-kind
-when the customer has no model, or simply wants the obvious tidy-up for free.
-
-### 3.3 Safety properties (both paths)
-
-- A plan is **stored**, so it survives the conversation and can be inspected, applied partially,
-  and undone.
-- Applying re-checks **permissions** and **name clashes** for every move, and writes ordinary audit
-  entries — the same ones a manual move writes.
-- **The user applies, not the model.** In the app the only way to apply a plan is the proposal card;
-  the chat model has no apply tool (see [§2.1](#21-chat-inside-openfilz)). Over MCP the agent may
-  apply in `READ_WRITE` mode, but only its own user's plan, only while it is still `PROPOSED`.
-- Nothing is ever deleted by a reorganisation. Documents move; that is all.
+- **"Organise with AI"** — from the folder toolbar or by asking the assistant. The model sees the
+  folder's files (kind, language, summary, last activity) and proposes moves and new folders: by
+  client, by project, by year, "archive what nobody opened since 2024"… The same loop is available
+  to an external AI tool over MCP, so it works even on a server with no model.
+- **By kind — no model at all.** Every folder that mixes several kinds of document gets one
+  sub-folder per kind (`Invoices`, `Contracts`…), reusing an existing folder whose name already
+  means that kind in any language. Instant and free. It only needs documents to *have* a kind —
+  see [§5](#5-document-insights).
 
 ---
 
 ## 4. Auto-filing on upload
 
-"Drop a file anywhere, OpenFilz puts it where it belongs." Also called *smart filing*
-(`openfilz.ai.auto-file.active`).
+"Drop a file anywhere, OpenFilz puts it where it belongs." It runs only when the user asks — the
+*"Let OpenFilz choose the folder"* switch in the upload area — and every filing comes with **Undo**.
 
-It is **never** silent or automatic-by-default: it runs on the user's explicit request — either the
-remembered *"Let OpenFilz choose the folder"* switch in the upload area, or `autoFile=true` on the
-upload call. The upload response returns immediately with a job id; the filing happens seconds
-later, and the user gets a toast with **Undo**.
+OpenFilz decides in stages, and stops at the first one that is sure:
 
-```mermaid
-flowchart TD
-    U["Upload with autoFile"] --> E{"Eligible?<br/>a file, and the user may move it"}
-    E -->|no| SK["SKIPPED, with the reason"]
-    E -->|yes| S0["Stage 0 — the policy<br/>filing rules: re-scope, rule folders out,<br/>or decide outright"]
-    S0 -->|"a rule decided"| DONE["Move + audit + Undo"]
-    S0 -->|"no rule decided"| S1["Stage 1 — the neighbour vote<br/>which folders hold the most similar documents?"]
-    S1 -->|"a clear, coherent winner"| DONE
-    S1 -->|"no winner"| S1B["Stage 1b — the rule<br/>a known kind goes to the scope's folder<br/>for that kind, created if needed"]
-    S1B -->|"decided"| DONE
-    S1B -->|"undecided"| S2["Stage 2 — ask the model<br/>the folder inventory + what we know of the file"]
-    S2 -->|"confident enough"| DONE
-    S2 -->|"not confident"| SK
-```
+1. **Your rules** — for example the **Inbox**: an optional per-user folder whose content is filed
+   against the whole library (`OPENFILZ_AI_AUTO_FILE_INBOX_ENABLED=true`).
+2. **The neighbours** — the folders that already hold the most similar documents of the same kind.
+   No model.
+3. **The kind** — a known kind with no obvious home goes to the folder for that kind, created if
+   needed. No model.
+4. **The model** — only if nothing above decided, and only when a model is configured. Below its
+   confidence threshold, nothing moves and the reason is shown.
 
-**Stage 0, the policy — no model.** Before anything is compared, the *filing rules* have their
-say: a rule may widen or narrow the scope, rule folders out as destinations, or name the
-destination outright (the outcome then says *filed by policy*, or what the rule *would* have done
-when it runs dry). The core ships one rule, the **Inbox** (below); an extension can add its own —
-organisation-level routing, team policies. A rule that names nothing lets the stages below decide.
-
-**Stage 1, the neighbour vote — no model.** The vector store answers "which documents are most like
-this one?"; those documents are resolved to the folders they *currently* live in, and the leading
-folder wins — but only if three guards agree: the neighbours must be of the same kind as the new
-document, they must be close enough relative to the best match, and the winning folder must
-actually be a *home* for that kind rather than a grab-bag. Those guards are the difference between
-92 % correct filing and a folder that swallows everything because it happens to hold the most
-files. Measured, not guessed — the numbers are in [ai.md §3b](ai.md#3b-document-insights--smart-filing).
-
-**Stage 1b, the rule — no model.** A document of a known kind whose neighbours offer no home goes
-to the scope's folder for that kind (`Invoices`, `Factures`…), created in the right language if it
-does not exist. When the neighbours are split between two legitimate folders (two clients'
-invoices), the rule stays out — that is a judgement call, and it goes to the model.
-
-**Stage 2, the model.** Only reached when neither the vote nor the rule decided. The model sees the
-folder inventory of the scope and what OpenFilz knows about the file, and may propose an existing
-folder or — above a confidence threshold, within a depth limit, if the user allows it — a new one.
-
-**Stage 3, apply.** The decision becomes a one-item reorganisation plan and goes through exactly the
-same validation and audit as a chat proposal. Below the thresholds nothing moves, and the reason is
-recorded.
-
-**The Inbox — a folder that means "file this for me".** Off by default
-(`OPENFILZ_AI_AUTO_FILE_INBOX_ENABLED=true` turns it on, because the folder is visible to users
-and deserves a word of explanation first). Each user may have one, created from the AI
-preferences in their own language (*Inbox*, *Boîte de réception*, *Eingang*…) at the root of
-their library; turning it off only forgets it, nothing is deleted. Whatever is dropped there is
-filed against the **whole library**, not the Inbox, and the Inbox itself is never a destination —
-so what is still in it afterwards is exactly what needs a human decision. *File my Inbox*
-(`POST /api/v1/ai/auto-file/inbox`) files whatever still lies loose in it, in one job with the
-usual toast and undo.
-
-**Corrections teach the vote.** Every undo is handed to a feedback seam that, in the core, does
-nothing; an extension can turn it into per-folder weights (bounded, never silencing a folder nor
-promoting a distant match) so a folder the user keeps moving documents out of gradually loses its
-pull.
-
-What the user sees: the switch in the upload area, a toast once the batch is done — *"X filed · Y
-left in place"* — whose action opens **where your documents went**: the files grouped by the folder
-they landed in, the ones that stayed put with the reason they did, and an undo per row as well as
-one for the whole batch. Plus a *"Filed by OpenFilz"* chip on the document with the reason, and the
-ability to file existing documents from a selection (`POST /api/v1/ai/auto-file`).
-
-> **Read that flow again with the "no model" question in mind:** on a well-embedded library, the
-> vote and the rule between them decide the large majority of uploads. The model is the *fallback*,
-> not the engine.
+On a library that is already well organised, steps 2 and 3 decide most uploads: the model is the
+fallback, not the engine. After a batch, a toast shows how many files were filed and opens the list
+of where each one went, with an undo per file.
 
 ---
 
-## 5. Document insights — the layer features 3 and 4 stand on
+## 5. Document insights
 
-Both reorganisation and filing lean on knowing **what kind of document** a file is. That knowledge
-lives in `ai_document_insights`, separate from the user-owned metadata (it is derived, recomputable,
-and never merged into what a user typed).
+Reorganisation and filing both rely on knowing **what kind of document** a file is.
 
-**Tier 1 — the file's own metadata.** Title, author, creation/modification dates, page count,
-language, captured from the Tika parse that indexing already performs. Free, deterministic, no
-model, and it happens whenever full-text or embedding runs. (Note: the rows are written even on a
-deployment with AI off, but the details panel only *displays* them when tier 2 is enabled — the UI
-has a single Insights switch.)
+- **File metadata** — title, author, dates, page count, language — is read from the file itself
+  during indexing. Free, no model.
+- **Enrichment** (`openfilz.ai.insights.active`) adds a **kind** from a list you control (invoice,
+  contract, report, CV…), and with an LLM a summary, keywords and entities.
 
-**Tier 2 — the enrichment** (`openfilz.ai.insights.active`): a **category** from a closed list
-(invoice, contract, report, cv, …), a one-sentence summary, keywords, the language and a few
-entities. Who produces the *category* is configurable, and this is the knob that decides whether the
-whole feature needs an LLM:
+Who decides the kind is up to you, and it is what decides whether the feature needs an LLM:
 
 | `openfilz.ai.insights.classifier` | Who decides the kind | Cost per document | Also produces |
 |---|---|---|---|
-| `llm` *(default)* | the chat model | one generation — seconds; on a small CPU model, many seconds | summary, keywords, language, entities |
-| `prototype` | one embedded description per category, nearest wins | **one embedding — tens of ms** | the category only |
-| `learned` | the library's own already-labelled documents vote (k-NN), descriptions as cold start | **one vector query — tens of ms** | the category only |
-| `auto` | `learned` when it is confident, the model otherwise | mostly local | model rows are complete |
+| `llm` *(default)* | the chat model | seconds | summary, keywords, entities |
+| `learned` | your already-classified documents vote | **tens of milliseconds** | the kind only |
+| `prototype` | the closest description of each kind | **tens of milliseconds** | the kind only |
+| `auto` | `learned` when confident, the model otherwise | mostly local | everything, when the model answers |
 
-On a *real* library (not a clean synthetic corpus), the measured result is blunt and useful:
-descriptions alone reach ~47 % accuracy, a small local model ~53 % at fifty times the latency, and
-**the library teaching its own classifier reaches 84–88 %** — because your documents describe your
-categories better than any prose could. Full numbers, and the benchmark to run on the customer's own
-documents: [ai.md §3c](ai.md#3c-the-category-without-a-model-the-prototype-classifier).
+On a real library, letting your own documents teach the classifier (`learned`) was measured at
+**84–88 % accuracy** — better than a small local LLM, and fifty times faster.
 
-**Users teach it.** The category chip in the details panel is an editor: a correction is recorded as
-the user's, never overwritten by a backfill, and from then on it votes for its neighbours in
-`learned` / `auto` mode and counts for by-kind reorganisation and the filing rule. A person icon
-marks a kind a human set.
-
-**Search facets.** The category and the language are search facets: the GraphQL `searchDocuments`
-takes `category` and `language` filters (one key or several, `"invoice,quote"`), on both the
-OpenSearch and the database search paths, and `GET /api/v1/ai/insights/facets` answers how many
-files carry each kind and each language (`{"categories":[{"key":"invoice","count":41},…],
-"languages":[{"key":"fr","count":12},…]}`) so a UI can offer the values that exist. The AI/MCP tools
-filter the same way (`queryDocuments(category=…)`). The kinds themselves come from a single
-**taxonomy** (the `OPENFILZ_AI_INSIGHTS_CATEGORIES` list in the core, each kind with a built-in
-multilingual description the prompt and the local classifier both use; an extension may manage it at
-runtime), and a **policy seam** decides, per document, whether it is enriched at all, whether a model
-may read it, and which kinds — identity documents, say — must never leave the premises: those are
-classified locally and stored without a model call. The core permits everything; the Enterprise
-Edition is where the organisation-level rules live. Details: [ai.md §3b](ai.md#3b-document-insights--smart-filing).
+**Users can correct the kind** from the details panel; a correction is never overwritten and teaches
+the `learned` classifier. The kind and the language are also **search filters**.
 
 ---
 
 ## 6. Running OpenFilz without an LLM
 
-**Yes — and there are three different ways to do it,** which is why this question needs a table
-rather than a yes/no. Everything else in OpenFilz (upload, versioning, sharing, search, e-Sign, PDF
-tools, audit, retention) is untouched by all of this: **no AI switch is ever required for the DMS
-itself.**
+**Yes — in three different ways.** And none of this affects the rest of OpenFilz (upload,
+versioning, search, e-Sign, PDF tools, audit…): **no AI switch is ever required for the document
+management itself.**
 
 ### 6.1 The five profiles
 
-| | **A · No AI** | **B · Bring your own agent** | **C · Light AI (no LLM)** | **D · Full AI, local** | **E · Full AI, cloud** |
+| | **A · No AI** | **B · Bring your own AI tool** | **C · Light AI (no LLM)** | **D · Full AI, local** | **E · Full AI, cloud** |
 |---|---|---|---|---|---|
-| Switches | `AI_ACTIVE=false` | `AI_ACTIVE=false`<br/>`MCP_ACTIVE=true` | `AI_ACTIVE=true`<br/>`AI_CHAT_ACTIVE=false`<br/>`TRANSFORMERS_EMBEDDING_ENABLED=true`<br/>`INSIGHTS_CLASSIFIER=learned` | `AI_ACTIVE=true`<br/>`OPENFILZ_AI_MODEL=ollama:<model>`<br/>`OLLAMA_EMBEDDING_ENABLED=true` | `AI_ACTIVE=true`<br/>`OPENFILZ_AI_MODEL=<provider>:<model>`<br/>`OPENFILZ_AI_API_KEY=…`<br/>+ an embedding provider |
-| Extra services to run | — | — | — (embeddings run **inside** the API) | **Ollama** — and a GPU to be usable | — |
-| pgvector image required | no | no | **yes** | **yes** | **yes** |
-| Document text leaves the premises | never | yes — the agent's model reads it | **never** | never | yes |
-| Fits a 2 vCPU / 4 GB VPS | yes | yes | yes — see the memory note below | no | yes |
+| What you set | nothing | `OPENFILZ_MCP_ACTIVE=true` | see [§6.5](#65-recipes) | `OPENFILZ_AI_MODEL=ollama:<model>` | `OPENFILZ_AI_MODEL` + `OPENFILZ_AI_API_KEY` |
+| Extra services | — | — | — (embeddings run **inside** the API) | **Ollama** — and a GPU to be usable | — |
+| pgvector image | no | no | **yes** | **yes** | **yes** |
+| Document text leaves your premises | never | yes — the tool's model reads it | **never** | never | yes |
+| Fits a 2 vCPU / 4 GB server | yes | yes | yes (budget a few hundred MB more memory) | no | yes |
 
-### 6.2 What each profile can actually do
+How to choose:
+
+- **Just a document manager** → **A**.
+- **A small server, and users who already pay for Claude or ChatGPT** → **B**: nothing to install.
+- **Automatic classification and filing, and nothing may leave your premises** → **C**: no LLM, no
+  GPU, no extra container.
+- **The full assistant without sending data to a third party** → **D**: budget a GPU.
+- **The full assistant with a cloud model** → **E**; combine with C (local embeddings) so only the
+  chat a user opens reaches the cloud.
+
+> A small local LLM is usually the worst of both worlds: it classified *worse* than the library's
+> own classifier, and much slower. If the LLM cannot be a good one, prefer C or E.
+
+### 6.2 What each profile can do
 
 | Capability | A | B | C | D / E |
 |---|---|---|---|---|
-| Full-text search and every DMS feature | ✅ | ✅ | ✅ | ✅ |
-| Tier-1 insights recorded (title, author, pages, language) | ✅¹ | ✅¹ | ✅ | ✅ |
-| Chat in the OpenFilz web app | ❌ | ❌ | ❌ *(switched off — §6.3)* | ✅ |
+| Full-text search and every document management feature | ✅ | ✅ | ✅ | ✅ |
+| Chat in the OpenFilz web app | ❌ | ❌ | ❌ | ✅ |
 | Chat from Claude Desktop / Claude Code / n8n | ❌ | ✅ | ✅ | ✅ |
 | Semantic search ("documents like this one") | ❌ | ❌ | ✅ | ✅ |
-| Automatic document category | ❌ | ❌ | ✅ (`learned` / `prototype`) | ✅ — plus summary, keywords, entities |
+| Automatic document kind | ❌ | ❌ | ✅ | ✅ |
 | Summary / keywords / entities | ❌ | ❌ | ❌ | ✅ |
-| Auto-filing on upload | ❌ | ❌ | ✅ stages 1 + 1b, no model fallback | ✅ all stages |
-| Reorganisation "by kind" | ❌ | ⚠️² | ✅ | ✅ |
-| Reorganisation, model-driven | ❌ | ✅ *the agent's model* | ❌ *unless driven over MCP* | ✅ |
-| PDF tools, e-Sign, sharing, comments over MCP | ❌ | ✅ | ✅ | ✅ |
-
-¹ Tier-1 rows are written by the Tika pass that indexing performs, so they need full-text
-search (or embeddings) to be on; and the details panel only *displays* them when tier 2 is
-enabled — the UI has a single Insights switch.
-
-² The by-kind tool is served over `/mcp` even with AI off, but it groups by *category*, and
-nothing has a category on a deployment with no classifier — unless categories were set through
-`PATCH /api/v1/documents/{id}/insights`.
-
-> **Profile C is the interesting one.** It is the only configuration that gives automatic
-> classification, semantic neighbours and auto-filing **with no LLM, no extra container, no GPU and
-> no document text ever leaving the machine** — the embedding model (~140 MB of ONNX, ~170 ms per
-> document on a plain CPU) runs inside the API process, so it scales with the API replicas and there
-> is nothing extra to size, place or keep alive. For a customer with a small VPS and a
-> data-residency requirement, this is the answer.
-
-**Memory note for profile C.** The embedding model is ~140 MB on disk (cache it on a volume:
-it is downloaded once). ONNX Runtime loads it into the API process, so budget a few hundred MB
-of additional memory per API replica on top of your usual heap — measure on the target machine
-before sizing a 4 GB VPS tightly. Nothing else is added: no container, no GPU, no daemon.
+| Auto-filing on upload | ❌ | ❌ | ✅ without the model step | ✅ |
+| Reorganisation by kind | ❌ | ⚠️ needs kinds | ✅ | ✅ |
+| "Organise with AI" | ❌ | ✅ from the AI tool | ✅ from an AI tool only | ✅ |
 
 ### 6.3 The chat kill switch
 
-`openfilz.ai.active` turns the AI feature on as a whole. **`openfilz.ai.chat.active`
-(`OPENFILZ_AI_CHAT_ACTIVE`, default `true`) turns the in-app chat assistant off on its own** — which
-is what makes profile C expressible rather than merely almost-expressible:
-
-| | with the chat on | `OPENFILZ_AI_CHAT_ACTIVE=false` |
-|---|---|---|
-| `POST /api/v1/ai/chat**`, `GET /ai/conversations**` | serve | **404**, as if never deployed |
-| `GET/PUT/DELETE /api/v1/settings/ai` (BYOK) | serve | **404** — BYOK only ever overrides the chat model |
-| Chat button, chat panel, *Organise with AI* | shown | **hidden** (`Settings.aiChatActive`) |
-| Embeddings, semantic retrieval, insights, smart filing, by-kind reorganisation | work | **work** |
-| `POST /mcp` and every tool on it | works | **works** |
-| `Settings.aiActive` | true | **still true** |
-| `Settings.aiChatUnavailableReason` | `null` (or `NO_MODEL`, see [§6.4](#64-choosing-the-model-two-variables)) | **`DISABLED`** |
-
-With the `prototype` or `learned` classifier, nothing in that bottom half ever calls a chat model.
-So the two switches together give a deployment with **no LLM at all**:
+`OPENFILZ_AI_ACTIVE` turns AI on as a whole. **`OPENFILZ_AI_CHAT_ACTIVE=false` turns off the in-app
+chat alone**: the chat button, the chat API, the bring-your-own-key page and "Organise with AI"
+disappear, while embeddings, insights, auto-filing, reorganisation by kind and the MCP server keep
+working. With the `learned` or `prototype` classifier nothing calls a chat model any more, so you
+can run with **no LLM at all**:
 
 ```bash
 OPENFILZ_AI_ACTIVE=true
@@ -534,202 +291,100 @@ OPENFILZ_AI_INSIGHTS_CLASSIFIER=learned
 SPRING_AI_MODEL_CHAT=none          # no chat model is built at all
 ```
 
-`SPRING_AI_MODEL_CHAT=none` is the last step, and it is supported: the chat-model resolver holds
-its model through a provider, so the insight and smart-filing services — which depend on it only
-for the model stages they may never reach — exist without one. Anything that genuinely needs a
-model then fails **per call**, with a message naming what needs one and what does not: the `llm`
-classifier and smart-filing stage 2 do, the prototype/learned classifier, the neighbour vote, the
-rule stage, the by-kind reorganisation and the MCP server do not. `AiChatDisabledIT` pins the whole
-shape end to end — chat and BYOK 404, `aiActive` true with `aiChatActive` false, and the by-kind
-reorganisation still answering with no `ChatModel` bean in the context.
-
-Turning the chat off is not the only way to keep a light deployment sane: **profile C + E** (local
-embeddings for everything automatic, a cheap cloud model for the chat a user explicitly opens) is
-often the better product. The switch is there for when a chat model is genuinely unavailable or
-unwanted — no budget, no egress, no GPU.
-
 ### 6.4 Choosing the model: two variables
 
-OpenFilz has no model of its own to sell you: the default, in the Community and the Enterprise
-edition alike, is **bring your own model and key**. One pair of variables configures it:
+The default is **bring your own model and key**. One pair of variables configures it:
 
 ```bash
-OPENFILZ_AI_ACTIVE=true                         # still the master switch — the pair never implies it
+OPENFILZ_AI_ACTIVE=true                         # the master switch — the pair does not turn AI on
 OPENFILZ_AI_MODEL=google:gemini-3.6-flash       # provider:model
 OPENFILZ_AI_API_KEY=AIza-…                      # that provider's key
 ```
 
-| `OPENFILZ_AI_MODEL` provider | Aliases | What it configures | Key |
-|---|---|---|---|
-| `google` | `gemini`, `google-genai` | the chat model (Gemini Developer API) | required |
-| `anthropic` | `claude` | the chat model | required |
-| `openai` | `openai-compatible` | the chat model; any OpenAI-compatible server through `OPENAI_BASE_URL` | required |
-| `ollama` | — | the chat model on your Ollama (`ollama:qwen2.5:1.5b` keeps the tag) | none |
-| `openfilz-cloud` | `openfilz_cloud` | **document insights + smart filing only** — never the chat | the tenant key |
-
-A vendor model becomes the **chat model**, and also the model document insights and smart filing
-use unless `OPENFILZ_AI_INSIGHTS_MODEL` names another one. Embeddings are not affected: they keep
-their own provider (§1).
-
-**Precedence.** The pair is the simplest layer, not the strongest:
-
-| Decides | Wins first … | … then | … then | … last |
-|---|---|---|---|---|
-| the chat **provider** | `SPRING_AI_MODEL_CHAT` | a `<PROVIDER>_CHAT_ENABLED` switch | `OPENFILZ_AI_MODEL` | the first `AI_FALLBACK_CHAIN` entry, then Ollama |
-| a provider's **key** / **model** | `GOOGLE_API_KEY`, `GOOGLE_CHAT_MODEL`, … | `OPENFILZ_AI_API_KEY` / `OPENFILZ_AI_MODEL` | the chain's first entry (model only) | the built-in default |
-| the **insights model** / **gateway key** | `OPENFILZ_AI_INSIGHTS_MODEL` / `OPENFILZ_AI_CLOUD_API_KEY` | `OPENFILZ_AI_MODEL=openfilz-cloud:…` / `OPENFILZ_AI_API_KEY` | — | the chat model / none |
-
-So existing deployments that set switches and vendor variables behave exactly as before. When the
-pair names the primary, a fallback chain still supplies the *fallbacks* — it just no longer names
-the primary. A malformed value (`gemini-3.6-flash`, `mistral:small`, `google:`) is ignored with a
-startup warning naming the problem.
-
-**`openfilz-cloud` — the managed model.** `OPENFILZ_AI_MODEL=openfilz-cloud:default` with the tenant
-key sends the insight and smart-filing prompts to the OpenFilz AI gateway (only those: the gateway
-refuses tools and streaming, so it can never be the chat model). It is an **Enterprise addon
-(CLOUD_AI) that is not commercially available yet**. With it, the chat has **no model** — OpenFilz
-does not fall back to an Ollama nobody deployed — unless a `<PROVIDER>_CHAT_ENABLED` switch or a
-fallback chain with a vendor entry names one.
-
-**What the web app is told.** `GET /api/v1/settings` reports why the chat is missing, so the UI can
-say so instead of offering a chat that fails on its first message:
-
-| `aiChatActive` | `aiChatUnavailableReason` | Meaning |
+| Provider | Also accepted | Key |
 |---|---|---|
-| `true` | `null` | the chat works |
-| `false` | `"DISABLED"` | `OPENFILZ_AI_CHAT_ACTIVE=false` (§6.3) |
-| `false` | `"NO_MODEL"` | the chat is on but the server has no chat model — e.g. `openfilz-cloud` alone, or `SPRING_AI_MODEL_CHAT=none` |
-| `false` | `null` | the AI feature itself is off — the whole AI section is hidden |
+| `google` | `gemini` | required |
+| `anthropic` | `claude` | required |
+| `openai` | `openai-compatible` (any compatible server, through `OPENAI_BASE_URL`) | required |
+| `ollama` | — (`ollama:qwen2.5:1.5b` keeps the tag) | none |
 
-`aiUserSettingsEnabled` (the per-user key page) follows `aiChatActive` in every case. When per-user keys are
-enabled (`AI_USER_SETTINGS_ENABLED=true`) the server never reports `NO_MODEL`: each user can bring their own
-key, so the chat stays offered even without a server model.
+The model becomes the chat model, and the model used for insights and filing unless
+`OPENFILZ_AI_INSIGHTS_MODEL` names another one. Embeddings keep their own provider. Provider-specific
+variables (`GOOGLE_API_KEY`, `GOOGLE_CHAT_MODEL`, …) still work and take precedence — see the
+[admin guide](admin-guide.md#model-one-pair-recommended). A malformed value is ignored with a
+warning at startup.
 
 ### 6.5 Recipes
 
 ```bash
-# A — No AI. This is the default; nothing to set.
+# A — No AI. This is the default.
 OPENFILZ_AI_ACTIVE=false
 
-# B — Bring your own agent. No model, no pgvector, no Ollama anywhere.
-OPENFILZ_AI_ACTIVE=false
+# B — Bring your own AI tool. No model, no pgvector.
 OPENFILZ_MCP_ACTIVE=true
 OPENFILZ_MCP_MODE=READ_ONLY                         # raise to READ_WRITE deliberately
 
 # C — Light AI: classification + auto-filing, no LLM, nothing extra to deploy.
 #     PostgreSQL must run a pgvector-enabled image.
 OPENFILZ_AI_ACTIVE=true
-OPENFILZ_AI_CHAT_ACTIVE=false                       # no chat assistant, no BYOK page (§6.3)
-SPRING_AI_MODEL_CHAT=none                           # and no chat model is built at all
-TRANSFORMERS_EMBEDDING_ENABLED=true                 # embeddings inside the API, through ONNX
+OPENFILZ_AI_CHAT_ACTIVE=false
+SPRING_AI_MODEL_CHAT=none
+TRANSFORMERS_EMBEDDING_ENABLED=true                 # embeddings inside the API
 TRANSFORMERS_EMBEDDING_CACHE_DIR=/data/onnx         # mount it: ~140 MB, downloaded once
 OPENFILZ_AI_INSIGHTS_ACTIVE=true
-OPENFILZ_AI_INSIGHTS_CLASSIFIER=learned             # the library teaches its own classifier
-OPENFILZ_AI_AUTO_FILE_ACTIVE=true                   # stages 1 + 1b decide; no model fallback
+OPENFILZ_AI_INSIGHTS_CLASSIFIER=learned
+OPENFILZ_AI_AUTO_FILE_ACTIVE=true
 
-# D — Full AI on your own hardware (add the ollama service; a GPU makes it usable).
+# D — Full AI on your own hardware (deploy Ollama; a GPU makes it usable).
 OPENFILZ_AI_ACTIVE=true
 OPENFILZ_AI_MODEL=ollama:qwen2.5
 OLLAMA_EMBEDDING_ENABLED=true
 
-# E — Full AI with a cloud model and local embeddings (a good default for a small VPS).
+# E — Full AI with a cloud model and local embeddings.
 OPENFILZ_AI_ACTIVE=true
-OPENFILZ_AI_MODEL=anthropic:claude-haiku-4-5        # bring your own model …
-OPENFILZ_AI_API_KEY=sk-ant-…                        # … and key (§6.4)
+OPENFILZ_AI_MODEL=anthropic:claude-haiku-4-5
+OPENFILZ_AI_API_KEY=sk-ant-…
 TRANSFORMERS_EMBEDDING_ENABLED=true
 OPENFILZ_AI_INSIGHTS_ACTIVE=true
-OPENFILZ_AI_INSIGHTS_CLASSIFIER=auto                # local when confident, the model otherwise
-
-# C + the managed model (EE CLOUD_AI addon, not commercially available yet): on top of profile C,
-#     the gateway writes the full insights and backs smart-filing stage 2; the chat stays off.
-OPENFILZ_AI_MODEL=openfilz-cloud:default
-OPENFILZ_AI_API_KEY=<tenant key>
 OPENFILZ_AI_INSIGHTS_CLASSIFIER=auto
 ```
 
-Every variable, with its defaults: [admin guide → AI Document Chat](admin-guide.md#ai-document-chat).
+Every variable, with its default: [admin guide → AI Document Chat](admin-guide.md#ai-document-chat).
+Deploying Ollama: [admin guide → Deploying Ollama](admin-guide.md#deploying-ollama-with-openfilz).
 
 ### 6.6 Moving between profiles
 
-- **A → B**: flip one switch. Nothing to migrate.
-- **A/B → C/D/E**: PostgreSQL must be a pgvector image (**never** swap `postgres:*-alpine` for the
-  Debian-based pgvector image on an existing volume — dump and restore), then run the embedding
-  backfill (`POST /api/v1/ai/embeddings/backfill`, or the *AI maintenance* button in Settings) to
-  index the documents uploaded before.
-- **Changing the embedding provider** (C ↔ D, or ONNX ↔ Ollama ↔ a TEI server) means **re-embedding
-  the library**: the two vector spaces are close but not identical (mean cosine 0.94), and
-  `EmbeddingRegistryGuard` refuses to start rather than let them mix silently.
-- **Changing the chat model** costs nothing at all.
-- **Turning tier 2 on later**: `POST /api/v1/ai/insights/backfill` labels the existing library.
+- **A → B**: one switch, nothing to migrate.
+- **A/B → C/D/E**: PostgreSQL must be a pgvector image (do not switch an existing `postgres:*-alpine`
+  volume to the Debian-based pgvector image — dump and restore), then index the existing documents
+  from *Settings → AI maintenance* (or `POST /api/v1/ai/embeddings/backfill`).
+- **Changing the embedding provider** means re-embedding the library.
+- **Changing the chat model** costs nothing.
+- **Turning insights on later**: *AI maintenance* (or `POST /api/v1/ai/insights/backfill`) labels the
+  existing library.
 
 ---
 
-## 7. What the UI does in each profile
+## 7. What you see in the app
 
-The web app takes no guesses: it reads `GET /api/v1/settings` at start-up and shows only what the
-backend says exists. The backend also answers **404** on every `/api/v1/ai/**` endpoint that is off,
-so an out-of-date frontend cannot call a feature into existence.
+The web app shows only what the server has switched on — a feature that is off is simply absent,
+never greyed out.
 
-| Element in the app | Shown when | A | B | C | D / E |
-|---|---|---|---|---|---|
-| Chat button (floating, bottom right) | `aiChatActive` | hidden | hidden | hidden | shown |
-| *Organise with AI* — folder toolbar + folder context menu | `aiChatActive` **and** the CONTRIBUTOR role | hidden | hidden | hidden | shown |
-| *Insights* section of the details panel (kind, summary, keywords) | `aiInsightsActive` | hidden | hidden | shown — kind only | shown |
-| The **kind** chip and its editor | `aiInsightsActive` + the deployment's category list | hidden | hidden | shown | shown |
-| *"Let OpenFilz choose the folder"* switch in the upload area | `aiAutoFileActive` | hidden | hidden | shown | shown |
-| *Filed by OpenFilz* chip + Undo | `aiAutoFileActive` | hidden | hidden | shown | shown |
-| Settings → **AI Assistant** (bring your own key) | `aiUserSettingsEnabled` (implies `aiChatActive`) | hidden | hidden | hidden | shown if enabled |
-| Settings → **AI maintenance** (re-embed / re-enrich) | `aiActive` + CONTRIBUTOR | hidden | hidden | shown | shown |
-| Settings → **Connect your AI tool** (MCP) | `mcpActive` — *independent of every AI flag* | hidden | **shown** | if enabled | if enabled |
-
-The chat rows follow `aiChatActive` — false also when the chat is on but the server has no chat
-model, with `aiChatUnavailableReason` saying which (`DISABLED` / `NO_MODEL`, [§6.4](#64-choosing-the-model-two-variables)) —
-everything else follows its own flag — which is exactly what
-lets profile C keep insights, filing and maintenance while dropping the assistant ([§6.3](#63-the-chat-kill-switch)).
-
-Two consequences worth remembering when demoing:
-
-- **Nothing is ever greyed out with a "buy AI" nag.** A feature that is off is simply absent — the
-  app looks like a DMS that never had it.
-- **The MCP panel is deliberately independent.** A deployment can offer "connect your own AI tool"
-  while running no model of its own, and the Settings page says so, with the URL, the mode and the
-  client id to paste.
-
----
-
-## 8. Picking a profile for a customer
-
-| The customer… | Profile | Why |
-|---|---|---|
-| has a 2 vCPU / 4 GB VPS and wants "just a DMS" | **A** | AI adds nothing they asked for; keep the footprint |
-| has a small VPS but power users with Claude / ChatGPT subscriptions | **B** | zero infrastructure; the users already pay for the model |
-| wants documents classified and filed automatically, and nothing may leave the premises | **C** | the only no-LLM profile that classifies and files — no GPU, no extra container |
-| wants the full assistant and cannot send data to a third party | **D** | Ollama on their hardware — budget a GPU, or accept slow answers |
-| wants the full assistant and accepts a cloud model | **E** | best quality per euro; add BYOK so power users bring their own key |
-| is regulated but wants summaries too | **C + E** | local embeddings for everything automatic, a cloud model only where a human asked for it |
-
-Rules of thumb:
-
-1. **Embeddings before an LLM.** Almost everything users find magical (classification, filing,
-   "documents like this one") is embedding work, not LLM work — and embeddings are cheap, local and
-   fast. Sell the LLM as the conversation layer on top, not as the entry ticket.
-2. **A small local LLM is usually the worst of both worlds.** Measured on a real library, a 1.5B
-   local model classified *worse* than the library's own k-NN classifier, and took fifty times
-   longer. If the LLM cannot be a good one, prefer no LLM (profile C) or a cloud one (E).
-3. **MCP costs nothing and demos brilliantly.** It is the cheapest AI story to switch on for any
-   customer with a technical user, at any size of infrastructure.
-4. **The embedding model is a one-way door; the chat model is not.** Choose the embedding provider
-   deliberately at install time, and stop worrying about the chat model — it can change any day,
-   and `OPENFILZ_AI_CHAT_ACTIVE=false` removes it from the product entirely without touching
-   anything else.
+| Element in the app | A | B | C | D / E |
+|---|---|---|---|---|
+| Chat button | hidden | hidden | hidden | shown |
+| *Organise with AI* (folder toolbar, contributors only) | hidden | hidden | hidden | shown |
+| *Insights* in the details panel, with the kind | hidden | hidden | kind only | shown |
+| *"Let OpenFilz choose the folder"* + *Filed by OpenFilz* + Undo | hidden | hidden | shown | shown |
+| Settings → **AI Assistant** (bring your own key) | hidden | hidden | hidden | if enabled |
+| Settings → **AI maintenance** (re-embed / re-enrich) | hidden | hidden | shown | shown |
+| Settings → **Connect your AI tool** (MCP) | hidden | **shown** | if enabled | if enabled |
 
 ---
 
 ## Where to go next
 
-- [AI Architecture](ai.md) — the internals: selector derivation, ingestion, RAG, insights,
-  classifiers, filing, BYOK, failover, benchmarks.
-- [MCP Server](mcp.md) — enabling it, the security model, the tool catalogue, and a per-client
-  connection walkthrough.
+- [MCP Server](mcp.md) — enabling it, security, the list of actions, connecting each client.
 - [Admin guide → AI Document Chat](admin-guide.md#ai-document-chat) — every property and variable.
 - [Developer guide → AI Chat](developer-guide.md#ai-chat) — the REST endpoints.
+- [User guide → AI Document Chat](user-guide.md#ai-document-chat) — using the assistant.
