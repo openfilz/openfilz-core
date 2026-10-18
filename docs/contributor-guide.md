@@ -295,14 +295,16 @@ Roles are extracted from the JWT token by `DefaultJwtTokenParser`, reading eithe
 
 ### Feature deep dives
 
-Two features have their own architecture document — read them before changing anything in
+These features have their own architecture document — read them before changing anything in
 those packages:
 
 | Feature | Document | Covers |
 |---------|----------|--------|
 | AI Document Chat | [AI Architecture](ai.md) | Configuration resolution at startup, ingestion → indexing (OpenSearch + pgvector), the chat pipeline (RAG + tool calling), BYOK |
-| Electronic Signature | [e-Sign Guide](esign.md) | Envelope lifecycle, the 12 field types, seal providers, the security model of the signing tokens, and the seven extension seams |
-| Workflows | [Workflows Guide](workflows.md) | Statuses / transitions / tasks engine, the JSON spec and its validator, the instance lifecycle, the REST API, the role model and the five extension seams |
+| Electronic Signature | [e-Sign Guide](esign.md) + [e-Sign internals](internals/esign.md) | Envelope lifecycle, the 12 field types, seal providers; internals: the security model of the signing tokens, finalization and the audit chain, schema, and the seven extension seams |
+| Workflows | [Workflows Guide](workflows.md) + [Workflows internals](internals/workflows.md) | Statuses / transitions / tasks, the JSON spec, the REST API; internals: the engine lifecycle, data model, security seams, web implementation files, the extension seams and tests |
+| MCP Server | [MCP Server](mcp.md) + [MCP internals](internals/mcp.md) | Enabling and connecting clients; internals: the shared tool layer, stateless transport and identity, role parity with REST, the contributors and where to look in the code |
+| PDF Tools | [PDF Tools design](pdf-tools.md) | The page-composition engine, REST and AI/MCP design, access control, audit and the delivery plan |
 
 ---
 

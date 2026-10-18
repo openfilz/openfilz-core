@@ -574,6 +574,31 @@ build-time conditions are untouched; native-image-safe). Built models are cached
 per-conversation-turn state, and per-request tools also route the vision tool (`describeImage`)
 to the user's own model.
 
+#### Insights, Smart Filing and Reorganisation
+
+Each group answers `404` while its own switch is off (`openfilz.ai.insights.active`,
+`openfilz.ai.auto-file.active`); see [AI Overview](ai-overview.md) for what each feature does.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/documents/{id}/insights` | What OpenFilz derived from a file: kind, summary, keywords, language, file metadata |
+| PATCH | `/documents/{id}/insights` | `{"category": "invoice"}` — correct the kind (a user correction is never overwritten) |
+| GET | `/ai/insights/facets` | How many files carry each kind and each language: `{"categories":[{"key":"invoice","count":41}],"languages":[…]}` |
+| POST | `/ai/insights/backfill` · GET `/ai/insights/backfill/{jobId}` | Enrich the existing library; job progress |
+| POST | `/ai/embeddings/backfill` · GET `/ai/embeddings/backfill/{jobId}` | Index the existing library for semantic search (`force` re-embeds everything); job progress |
+| POST | `/ai/auto-file` | Let OpenFilz choose the folder of existing documents; returns a job |
+| POST | `/ai/auto-file/inbox` | File what is still in the caller's Inbox |
+| GET | `/ai/auto-file/{jobId}` · POST `/ai/auto-file/{jobId}/undo` | A filing job's outcome (where each file went, or why it stayed); undo the batch |
+| GET | `/ai/auto-file/document/{documentId}` · POST `/ai/auto-file/filing/{planId}/undo` | How one document was filed; undo that one filing |
+| GET / PUT | `/settings/ai/preferences` | The caller's AI preferences (the remembered "Let OpenFilz choose the folder" switch, the Inbox) |
+| POST | `/ai/reorganization/by-kind` | Propose one sub-folder per kind for mixed folders — no model needed. Returns a stored plan |
+| GET | `/ai/reorganization/{planId}` | A plan: its moves and their status |
+| POST | `/ai/reorganization/{planId}/apply` · `/discard` | Apply the plan (all moves or a selection) or discard it |
+
+Uploads accept `autoFile=true` (`/documents/upload`, `/upload-multiple`, TUS finalize) to file the
+new document right after it is saved. `searchDocuments` (GraphQL) takes `category` and `language`
+filters (one value or several, `"invoice,quote"`).
+
 #### AI Function Calling
 
 The AI assistant can invoke the following document management tools during a conversation:
