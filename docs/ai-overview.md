@@ -13,8 +13,6 @@ live elsewhere and are linked from each section:
 | Every property, every environment variable | [Admin guide → AI Document Chat](admin-guide.md#ai-document-chat) |
 | The internals: pipelines, seams, benchmarks, failover | [AI Architecture](ai.md) |
 | Connecting Claude Code / Claude Desktop / n8n | [MCP Server](mcp.md) |
-| The design of insights, filing and reorganisation | `openfilz-enterprise/docs/smart-reorganization.md` |
-| What the Enterprise edition changes | `openfilz-enterprise/docs/ai-enterprise.md` |
 
 ---
 
@@ -735,5 +733,3 @@ Rules of thumb:
   connection walkthrough.
 - [Admin guide → AI Document Chat](admin-guide.md#ai-document-chat) — every property and variable.
 - [Developer guide → AI Chat](developer-guide.md#ai-chat) — the REST endpoints.
-- `openfilz-enterprise/docs/ai-enterprise.md` — per-user document scoping, agent tokens and seats,
-  webhook events, governance.
