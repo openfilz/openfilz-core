@@ -8,7 +8,7 @@ Everything on this page is part of the open-source core (`openfilz-api`, AGPL-3.
 offline: no call to any `*.openfilz.com` service is made unless you explicitly configure the
 `openfilz-cloud` seal provider. What the Enterprise Edition adds is listed in
 [§9](#9-what-the-enterprise-edition-adds); the architecture decision behind the split is
-`openfilz-enterprise/docs/esign-ce-ee-split.md`.
+recorded in the Enterprise edition documentation.
 
 ---
 
@@ -449,4 +449,4 @@ the seams above (gated on `openfilz.features.custom-access=true`) plus a few ext
 * **`signature.*` webhook events** dispatched by `webhooks-api`.
 
 Full configuration reference and the CE-vs-EE capability table:
-**`openfilz-enterprise/docs/signing.md`**.
+**Enterprise edition documentation** (signing).
