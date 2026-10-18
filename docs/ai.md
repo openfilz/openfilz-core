@@ -284,8 +284,6 @@ sequenceDiagram
 
 ## 3b. Document insights & smart filing
 
-Design: Enterprise edition documentation (§4 insights, §5 inventory, §13 smart filing).
-
 **Document insights** (`ai_document_insights`, Flyway `V1_9`) are what OpenFilz derives from a
 file's content, kept apart from the user-owned metadata JSON (recomputable, never PATCH-merged,
 no metadata audit):

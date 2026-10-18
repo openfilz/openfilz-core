@@ -13,8 +13,6 @@ live elsewhere and are linked from each section:
 | Every property, every environment variable | [Admin guide → AI Document Chat](admin-guide.md#ai-document-chat) |
 | The internals: pipelines, seams, benchmarks, failover | [AI Architecture](ai.md) |
 | Connecting Claude Code / Claude Desktop / n8n | [MCP Server](mcp.md) |
-| The design of insights, filing and reorganisation | Enterprise edition documentation |
-| What the Enterprise edition changes | Enterprise edition documentation |
 
 ---
 
@@ -735,5 +733,3 @@ Rules of thumb:
   connection walkthrough.
 - [Admin guide → AI Document Chat](admin-guide.md#ai-document-chat) — every property and variable.
 - [Developer guide → AI Chat](developer-guide.md#ai-chat) — the REST endpoints.
-- Enterprise edition documentation — per-user document scoping, agent tokens and seats,
-  webhook events, governance.
