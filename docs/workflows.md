@@ -7,9 +7,8 @@ to act, every **transition** is a button those people see, and reaching a status
 **actions** on the document (move it to a folder, stamp metadata, notify people).
 
 Everything on this page is part of the open-source core (`openfilz-api`, AGPL-3.0). The
-Enterprise Edition plugs into the seams listed in [§9](#9-extension-points-and-what-the-enterprise-edition-adds)
-(in-app notifications, comments, user picker, document-permission scoping) — the engine, the
-designer, the monitor and *My tasks* are the same in both editions.
+engine, the designer, the monitor and *My tasks* are the same in the Enterprise Edition, which adds
+the features listed in [§8](#8-what-the-enterprise-edition-adds).
 
 ---
 
@@ -89,7 +88,7 @@ approval*. The approver finds it under **Workflows → My tasks** (and in their 
 }
 ```
 
-| Field | Rules (enforced by `WorkflowSpecValidator`, mirrored client-side) |
+| Field | Rules (checked on save) |
 |---|---|
 | `states[].key` | `^[a-z0-9_]{1,40}$`, unique. |
 | `kind` | Exactly one `START`; at least one `END`. `END` states have no assignees, no transitions and no due delay. Every state must be reachable from `START`, and every non-`END` state must reach an `END`. |
@@ -119,7 +118,7 @@ status' transitions and leaves their own comment, and everyone involved sees the
 ```
 
 `approveTransition` is the approval; every other transition is a rejection of some kind. The rule
-turns the votes into the one transition the document takes (`WorkflowReviewDecider`):
+turns the votes into the one transition the document takes:
 
 | `rule` | Designer label | Outcome |
 |---|---|---|
@@ -143,56 +142,37 @@ archive*, *Two-step approval*, *Parallel review*) that produce this JSON — nob
 ## 4. Life of an instance
 
 1. **Start** — `POST /workflows/instances {definitionId, documentId, assignments?, transitionKey?, comment?}`.
-   The document must be an active file the caller may read (`WorkflowAccessPolicy.canStart`).
+   The document must be an active file the caller may read.
    The spec is snapshotted, the instance enters the `START` state (a task for the initiator),
    and if `transitionKey` names one of the `START` state's transitions it is applied at once —
    the start dialog shows those transitions as buttons (*Start & submit for approval*).
 2. **Enter a state** — a task is created for the state's candidates (resolved from the
    assignment: initiator, listed e-mails, role, or the starter's choice), `dueAt` is computed,
-   `onEnter` actions run, every candidate is notified (`WorkflowNotifier` + `WorkflowMailer`).
+   `onEnter` actions run, every candidate is notified by e-mail.
    For an `END` state no task is created: the instance becomes `COMPLETED`, the initiator is
    notified.
 3. **Act** — `POST /workflows/tasks/{id}/complete {transitionKey, comment?}`. The caller must be
    a candidate (e-mail in the candidate list, or holding the candidate role), the task must be
    `OPEN`, the transition must belong to the current state; a `requireComment` transition
    without a comment is `400`. The task is closed, a `TRANSITIONED` history entry (with the
-   comment) is written, the `WorkflowCommentBridge` seam is told, and step 2 repeats for the
-   target state. Everything up to the target state's task is one transaction; notifications
-   and actions run after it. On a parallel review the task is one reviewer's vote: it is closed,
-   a `REVIEWED` entry (+ `WORKFLOW_REVIEWED` audit) records it, and the document moves only once
-   the rule decides. Completions lock the instance row, so two reviewers voting at the same
-   moment are serialised and the last vote always sees all the others.
+   comment) is written, and step 2 repeats for the target state. On a parallel review the task
+   is one reviewer's vote: it is recorded (`REVIEWED`), and the document moves only once the
+   review rule decides. Two reviewers voting at the same moment are handled one after the other,
+   so the last vote always sees all the others.
 4. **Reassign** — `POST /workflows/tasks/{id}/reassign {emails}` by the initiator or a current
    candidate (audit + `REASSIGNED`).
-5. **Cancel** — `POST /workflows/instances/{id}/cancel` by the initiator (or anyone
-   `WorkflowAccessPolicy.canManage` allows). Open tasks (all of a review round) closed as `CANCELLED`.
+5. **Cancel** — `POST /workflows/instances/{id}/cancel` by the initiator. Open tasks (all of a review round) closed as `CANCELLED`.
 6. **Sweeper** — `openfilz.workflows.sweep.cron` (hourly): open tasks past `dueAt` and not yet
    reminded get one reminder (`REMINDED`, `remindedAt`).
 
 Auto-start: after every successful upload (`/documents/upload`, `/upload-multiple`, TUS
-finalize) `WorkflowTriggerService.afterUpload` starts the active definitions whose
+finalize) OpenFilz starts the active definitions whose
 `triggerFolderIds` contain the file's parent — as the uploader. Smart filing (if on) runs
 first, so the trigger sees the final folder.
 
 ---
 
-## 5. Data model (`V1_11__create_workflow_schema.sql`)
-
-| Table | Columns (abridged) |
-|---|---|
-| `workflow_definition` | `id`, `name` (unique, case-insensitive), `description`, `active`, `spec JSONB`, `trigger_folder_ids JSONB`, `version`, `created_by`, `created_at`, `updated_at` |
-| `workflow_instance` | `id`, `definition_id`, `definition_name`, `definition_version`, `spec JSONB` (snapshot), `document_id`, `document_name`, `status` (`RUNNING\|COMPLETED\|CANCELLED`), `current_state_key`, `current_state_label`, `started_by`, `assignments JSONB`, `locale`, `started_at`, `updated_at`, `completed_at`. Partial unique index on `document_id WHERE status = 'RUNNING'`. |
-| `workflow_task` | `id`, `instance_id`, `state_key`, `state_label`, `candidate_role`, `status` (`OPEN\|DONE\|CANCELLED`), `due_at`, `reminded_at`, `created_at`, `completed_at`, `completed_by`, `transition_key`, `comment`, `review_group` (`V1_14`: shared by the tasks of one parallel review round, null otherwise) |
-| `workflow_task_candidate` | `task_id`, `email` (lower-cased) — one row per candidate, indexed on `email` for *My tasks* |
-| `workflow_event` | `id`, `instance_id`, `event_type`, `from_state`, `to_state`, `transition_key`, `actor`, `comment`, `details JSONB`, `created_at` |
-
-Nothing references `documents` with a foreign key on purpose: an instance must survive the
-document being moved to the recycle bin (the monitor shows it as such), and the schema stays
-idempotent for enterprise databases.
-
----
-
-## 6. REST API — `/api/v1/workflows` (OIDC)
+## 5. REST API — `/api/v1/workflows` (OIDC)
 
 Roles: every `GET` needs `READER` or `CONTRIBUTOR`; definition writes need `CONTRIBUTOR`
 (plus `WORKFLOW_DESIGNER` when `openfilz.workflows.require-designer-role=true`); starting,
@@ -202,7 +182,7 @@ candidate** (`READER` is enough — an approver does not have to be a contributo
 ### Definitions
 | Method | Path | Notes |
 |---|---|---|
-| `GET` | `/definitions?active=&mine=` | The definitions the caller may see (`WorkflowAccessPolicy.visibleDefinitions`; core: all), with `runningCount` and `canEdit`. `mine=true` = created by the caller. |
+| `GET` | `/definitions?active=&mine=` | The definitions, with `runningCount` and `canEdit`. `mine=true` = created by the caller. |
 | `POST` | `/definitions` | `{name, description?, active?, spec, triggerFolderIds?}` → `201`; `400` with the list of problems when invalid; `409` on a duplicate name. |
 | `GET` | `/definitions/{id}` | `404` for a definition the caller may not see, as for one that does not exist — likewise `PUT`, `DELETE` and starting it. |
 | `PUT` | `/definitions/{id}` | Same body; bumps `version`. Running instances keep their snapshot. |
@@ -226,36 +206,26 @@ candidate** (`READER` is enough — an approver does not have to be a contributo
 | `POST` | `/tasks/{id}/complete` | `{transitionKey, comment?}` → the updated instance. `403` not a candidate, `409` already done, `400` comment required. |
 | `POST` | `/tasks/{id}/reassign` | `{emails}` |
 
-`GET /api/v1/settings` gains `workflowsActive` and `workflowDesignerRoleRequired`.
+---
+
+## 6. Security model
+
+* All endpoints need a signed-in user; the roles are listed in [§5](#5-rest-api--apiv1workflows-oidc).
+* In the Community Edition any user may start a workflow on an active file, everyone may follow an
+  instance, and only its initiator may cancel it.
+* **Task completion** is bound to the candidate list, not to the document's permissions: an
+  approver may be someone who cannot otherwise see the file.
+* **On-enter actions** (`MOVE_TO_FOLDER`, `SET_METADATA`) run as the person who made the
+  transition, so the audit log names them. A failed action is recorded in the history instead of
+  blocking the transition.
+* Assignee e-mails are compared case-insensitively to the user's e-mail.
+* Audit: `WORKFLOW_STARTED`, `WORKFLOW_TRANSITIONED`, `WORKFLOW_REVIEWED`, `WORKFLOW_COMPLETED`,
+  `WORKFLOW_CANCELLED`, `WORKFLOW_TASK_REASSIGNED`, `WORKFLOW_DEFINITION_CREATED / _UPDATED /
+  _DELETED`.
 
 ---
 
-## 7. Security model
-
-* All endpoints sit behind the OIDC chain; `AbstractSecurityService.isWorkflowAuthorized` is
-  the role hook (editions override it). Path constant `RestApiVersion.ENDPOINT_WORKFLOWS`.
-* **Document access** is delegated to `WorkflowAccessPolicy`: `canStart(document, email)`
-  (core: the document is an active file), `canView(instance, email)` (core: everyone),
-  `canManage(instance, email)` (core: the initiator). The EE policy answers from its
-  ownership/share model.
-* **Definition access** too: `visibleDefinitions(email, roles)` is the test the catalogue, the
-  start dialog and every definition id handed to the API go through (core: every definition is
-  visible; an invisible one answers `404`), `canEditDefinition(definition, email, roles)` decides
-  who may change a visible one (core: everyone). A hot folder is not asked — an upload into it
-  starts its workflow whoever uploads, as the designer set it up.
-* **Task completion** is bound to the candidate list, never to the document's permissions: an
-  approver may be someone who cannot otherwise see the file. Actions (`MOVE_TO_FOLDER`,
-  `SET_METADATA`) run through the normal `DocumentService` under the actor's `Authentication`,
-  so the audit log names the real person and edition-specific ownership checks still apply —
-  which is exactly why an action can fail and is recorded rather than swallowed.
-* Assignee e-mails are stored lower-cased and compared case-insensitively to the `email` claim.
-* Audit: `WORKFLOW_STARTED`, `WORKFLOW_TRANSITIONED`, `WORKFLOW_COMPLETED`, `WORKFLOW_CANCELLED`,
-  `WORKFLOW_TASK_REASSIGNED`, `WORKFLOW_DEFINITION_CREATED / _UPDATED / _DELETED`, always on the
-  document (or the definition id for definition changes).
-
----
-
-## 8. Web app
+## 7. Web app
 
 * **Sidebar → Workflows** (badge = my open tasks, red when any is overdue). Page `/workflows`
   with three tabs, deep-linkable with `?tab=` / `?task=` / `?instance=`:
@@ -271,7 +241,7 @@ candidate** (`READER` is enough — an approver does not have to be a contributo
     editor: name / description / trigger folders on the left, one card per status (label,
     colour, kind, assignees, due delay, transitions as chips → target picker, on-enter
     actions), and the live diagram on the right. Validation problems are shown inline before
-    save (client-side mirror of `WorkflowSpecValidator`, then `/definitions/validate`).
+    save.
 * **Start workflow** — item action on files (menu, toolbar, details panel): choose a
   definition, name the *chosen at start* people, optional comment, then either *Start* or
   one of the first transitions (*Start & submit for approval*).
@@ -280,45 +250,26 @@ candidate** (`READER` is enough — an approver does not have to be a contributo
   no instance.
 * **Dashboard** — a *My tasks* card (count + first entries) when the feature is on.
 
-All UI strings live under `workflow.*` in the 8 locales. Everything is in dedicated files
-(`models/workflow.models.ts`, `services/workflow*.ts`, `pages/workflows/**`,
-`dialogs/start-workflow-dialog`, `components/workflow-diagram`, `components/metadata-panel/document-workflow`)
-so the enterprise fork only mirrors the descriptor entries and the route.
+---
+
+## 8. What the Enterprise Edition adds
+
+* In-app notifications when a task is assigned, overdue, completed or cancelled.
+* Access based on document ownership and sharing; workflow definitions scoped to their author and
+  their teams.
+* Decision comments mirrored into the document's threaded comments.
+* A user and team picker in the designer and the start dialog (the Community Edition takes e-mails).
+* Webhook events on every transition.
 
 ---
 
-## 9. Extension points, and what the Enterprise Edition adds
-
-| Seam (`service/workflow/`) | Core default | Enterprise |
-|---|---|---|
-| `WorkflowNotifier` | `NoopWorkflowNotifier` | In-app notifications (`WORKFLOW_TASK_ASSIGNED`, `WORKFLOW_TASK_OVERDUE`, `WORKFLOW_COMPLETED`, `WORKFLOW_CANCELLED`) through the bell / SSE |
-| `WorkflowMailer` | `SmtpWorkflowMailer` / `LoggingWorkflowMailer` (`workflow-mail/messages_*.properties`) | unchanged |
-| `WorkflowAccessPolicy` | active file / everyone / initiator; every definition visible and editable | ownership & share model; monitor scoped to what the user may see; definitions scoped to the user's own and their teams', changed by their author or an admin |
-| `WorkflowCommentBridge` | no-op | echoes each decision comment into the document's threaded comments (replies, @mentions) |
-| `WorkflowActorResolver` | synthetic `JwtAuthenticationToken` from the stored e-mail (sweeper, auto-start) | resolves the `users` row |
-| `AbstractSecurityService.isWorkflowAuthorized` | roles above | richer role model |
-
-Also on the EE side: a user/team picker in the designer and the start dialog (the CE types
-e-mails), webhook events on every transition, and later SLA escalation / delegation.
-
-Follow-ups not in this version: AI/MCP tools (`startWorkflow`, `listMyTasks`, `completeTask`),
-conditions on metadata, and per-folder default workflows in the upload dialog.
-
----
-
-## 10. Configuration reference
+## 9. Configuration reference
 
 | Property | Env var | Default | What it does |
 |---|---|---|---|
-| `openfilz.workflows.active` | `OPENFILZ_WORKFLOWS_ACTIVE` | `false` | Master switch (endpoints, sweeper, `Settings.workflowsActive`). |
-| `openfilz.workflows.require-designer-role` | `OPENFILZ_WORKFLOWS_REQUIRE_DESIGNER_ROLE` | `false` | Definition writes also need the `WORKFLOW_DESIGNER` realm role (`/OPENFILZ/WORKFLOW_DESIGNER` group in groups mode). Surfaced as `Settings.workflowDesignerRoleRequired`. |
+| `openfilz.workflows.active` | `OPENFILZ_WORKFLOWS_ACTIVE` | `false` | Master switch for the whole feature. |
+| `openfilz.workflows.require-designer-role` | `OPENFILZ_WORKFLOWS_REQUIRE_DESIGNER_ROLE` | `false` | Definition writes also need the `WORKFLOW_DESIGNER` realm role (`/OPENFILZ/WORKFLOW_DESIGNER` group in groups mode). |
 | `openfilz.workflows.web-base-url` | `OPENFILZ_WORKFLOWS_WEB_BASE_URL` | *(empty)* | Overrides `openfilz.common.web-public-base-url` for the links in workflow e-mails (`{base}workflows?task=…`). |
 | `openfilz.workflows.sweep.cron` | `OPENFILZ_WORKFLOWS_SWEEP_CRON` | `0 0 * * * ?` | Overdue reminder cadence. |
 | `openfilz.workflows.mail.from` / `from-name` | `OPENFILZ_WORKFLOWS_MAIL_FROM` / `_FROM_NAME` | `no-reply@openfilz.com` / `OpenFilz Workflows` | Sender of workflow e-mails. |
 | `openfilz.workflows.max-states` | `OPENFILZ_WORKFLOWS_MAX_STATES` | `30` | Size guard on a definition. |
-
-Tests: `e2e/workflow/WorkflowDefinitionIT` (CRUD + validation), `WorkflowInstanceIT`
-(start / act / actions / history / cancel / reassign / role candidates / auto-start),
-`WorkflowSecurityIT` (roles, non-candidate `403`, designer role), `WorkflowDisabledIT`
-(everything `404`, settings flag off), `WorkflowSpecValidatorTest` (unit). The ITs capture
-mails through a `@Primary` `CapturingWorkflowMailer`, like e-Sign.

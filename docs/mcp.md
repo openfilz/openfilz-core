@@ -4,43 +4,17 @@ OpenFilz can act as an **MCP server** ([Model Context Protocol](https://modelcon
 letting agents that live *outside* OpenFilz — Claude Code, Claude Desktop, n8n, LangChain, custom
 Spring AI clients — search, read and organise documents on the user's behalf.
 
-It exposes **the same tools the built-in AI assistant uses**, over `POST /mcp`.
+It exposes **the same tools the built-in AI assistant uses**, over `POST /mcp`, so anything the
+assistant can do, an external agent can do too. It needs **no LLM of its own**: the MCP server can be
+on with every other AI feature off — no chat model, no embeddings, no pgvector — because the calling
+agent brings its own model. (Only `describeImage` uses a model on the OpenFilz side, and it says so
+plainly when there isn't one.)
 
-```
-                    ┌── AiChatService ──► ChatClient   (an LLM inside OpenFilz)
-DocumentAiTools ────┤
-  + AiAccessPolicy  └── MCP server ─────► POST /mcp    (an LLM outside OpenFilz)
-```
-
-Two consequences worth internalising before reading on:
-
-- **The MCP server is not a second implementation.** Any capability added to the tool layer is
-  gained by the chat assistant and every external agent at once.
-- **It does not need an LLM of its own.** `openfilz.ai.active` and `openfilz.mcp.active` are
-  independent switches. A deployment can run the MCP server with no chat model, no embeddings and
-  no pgvector at all — the calling agent brings its own model. (Only `describeImage` uses a local
-  model, and it says so plainly when there isn't one.)
-
-### Community vs Enterprise
-
-MCP itself is **open source** and works in Community Edition out of the box — no licence, no extra
-service. What differs is how it is *scoped and managed*, and that difference is the reason to run it
-on Enterprise for anything multi-user:
-
-| | Community (CE) | Enterprise (EE) |
-|---|---|---|
-| `/mcp` endpoint, the document tools | ✅ | ✅ |
-| Per-user document scoping | **permit-all** — an agent sees *every* document | ownership + sharing enforced; an agent sees only its user's documents |
-| Share / comment tools | — | ✅ |
-| Scoped, revocable agent tokens | — | ✅ (`/api/v1/admin/mcp/tokens`) |
-| Roles / seats | READER/CONTRIBUTOR gate | full role model; write agents are licensed seats |
-
-> **Run CE MCP only single-user or in evaluation.** Because CE has no per-document permissions, an
-> agent there can read across all documents. For any multi-user or production deployment, Enterprise
-> is what makes an agent see exactly what its user may — see the security model below.
+> **Run it single-user or for evaluation.** The Community Edition has no per-document permissions,
+> so an agent can read every document in the library — see the security model below.
 
 > **Related:** [AI Overview](ai-overview.md) for what the AI features do and how MCP compares to the
-> in-app chat (including the no-LLM deployment profiles) · [AI Architecture](ai.md) for how the shared tool layer works internally ·
+> in-app chat (including the no-LLM deployment profiles) ·
 > [Admin guide → MCP Server](admin-guide.md#mcp-server-external-ai-agents) for the property tables ·
 > [Developer guide → MCP Server](developer-guide.md#mcp-server) for the raw JSON-RPC calls.
 
@@ -80,13 +54,11 @@ never saw — *and* refused if called anyway, so a client holding a cached tool 
 
 ## 2. Security model
 
-**Every request carries its own bearer token.** The transport is *stateless*
-(`spring.ai.mcp.server.protocol=STATELESS`), so no server-side MCP session can outlive the JWT that
-opened it, and horizontal scaling needs no sticky sessions.
+**Every request carries its own bearer token.** There is no server-side MCP session that could
+outlive the token, and scaling needs no sticky sessions.
 
 - **Identity comes from the token, never from tool arguments.** An agent cannot ask to act as
-  someone else. The already-validated `Authentication` is carried onto the tool thread, and a call
-  that arrives without one is refused rather than run unbound.
+  someone else, and a call without a valid identity is refused.
 - **Your roles apply, unchanged.** An MCP call is authorised exactly as the equivalent REST call
   is — a READER may search and read, only a CONTRIBUTOR may write. This is not a parallel rule set:
   a test drives both the MCP capability check and the REST security chain and fails the build if
@@ -99,19 +71,13 @@ opened it, and horizontal scaling needs no sticky sessions.
   | `CLEANER` | delete (`deleteDocument`) |
   | `AUDITOR` | read the audit trail *(no tool yet)* |
   | `SIGN_REQUESTER` | initiate e-Sign requests (`sendForSignature`), together with `CONTRIBUTOR` — only when `openfilz.signature.require-requester-role=true`; otherwise `CONTRIBUTOR` alone suffices |
-  | `VIEW_SHARE` / `EDIT_SHARE` *(Enterprise)* | read / manage shares *(no tool yet)* |
-  | `COMMENTER` *(Enterprise)* | read and add comments (`listComments`, `addComment`) |
 
   Because `tools/list` is built once per deployment rather than per caller, a READER still *sees*
   the write tools advertised and is refused when calling one — the same behaviour as `READ_ONLY`
   mode.
-- **Tools are bound to the calling user per call.** Every document the tools touch is checked
-  against the same access policy the chat assistant uses. In OpenFilz Community that policy permits
-  all documents (CE has no per-document permissions); in Enterprise it is backed by the real
-  ownership/share model, so **an agent sees exactly what its user can see** — no extra
-  configuration.
-  <br>Roles and document scope are **two independent gates and both must pass**: roles decide
-  *what kind* of operation is allowed, the access policy decides *which documents* it may touch.
+- **Document scope.** Every document the tools touch goes through the same access check as the
+  chat assistant. The Community Edition has no per-document permissions, so that check lets every
+  document through: an agent with the right role can reach the whole library.
 - **Mutations stay traceable.** The audit trail records the authentic user, so MCP-driven changes
   are attributed like any other action.
 - **No token, no access.** A request without a bearer token — or with an invalid one — gets `401`
@@ -125,8 +91,8 @@ opened it, and horizontal scaling needs no sticky sessions.
 
 ## 3. The tool surface
 
-Nineteen document tools, seven PDF tools, four reorganisation tools and four e-Sign tools, curated rather than generated. (A 60-operation auto-generated tool list from the
-OpenAPI spec would make agents *worse*, not better — the small, well-described surface is the point.)
+A small, curated set of tools — document, PDF, reorganisation, e-Sign and AI tools — rather than one
+tool per API endpoint, so agents pick the right one.
 
 | Tool | Mode | What it does |
 |---|---|---|
@@ -205,8 +171,7 @@ app (its fields are already placed; the agent only binds the template's roles to
 | `listSignatureEnvelopes` | read | Envelopes the caller sent (optionally by status), or with `to-sign` those awaiting the caller's own signature. |
 | `getSignatureStatus` | read | Who has viewed, signed or declined, expiry, and where the signed PDF is once completed. |
 
-Only PDFs the caller can read are accepted, the per-document e-Sign access policy of the deployment
-applies (Enterprise: ownership / EDITOR share), and the invitation emails are the same as from the
+Only PDFs the caller can read are accepted, and the invitation emails are the same as from the
 app — an agent never sees a signing link.
 
 The server also advertises usage guidance in its `initialize` response (the MCP `instructions`
@@ -215,7 +180,7 @@ is scoped to the caller's permissions.
 
 ### Smart filing tool
 
-`FilingAiToolsContributor` (chat + MCP, `READ_WRITE` only), on when `openfilz.ai.auto-file.active`:
+Available in `READ_WRITE` mode when `openfilz.ai.auto-file.active` is on:
 
 | Tool | Kind | What it does |
 |---|---|---|
@@ -226,32 +191,13 @@ documents whose AI-derived insight carries that category.
 
 ### Embedding backfill tools
 
-`EmbeddingAiToolsContributor` (chat + MCP), the conversational side of
-`POST /api/v1/ai/embeddings/backfill` (see `ai.md` §2, re-embedding a library):
+The conversational side of `POST /api/v1/ai/embeddings/backfill` (indexing the existing library
+after AI is turned on, or after a change of embedding model):
 
 | Tool | Kind | What it does |
 |---|---|---|
 | `backfillEmbeddings` | write | Start a backfill: embed the documents that have no vector (or every document with `force`), optionally under one folder (`folder` by name or id). Returns the job id; nothing is moved or changed |
 | `getEmbeddingBackfillStatus` | read | Progress of a job: queued / embedded / skipped / failed, done or running |
-
-### Enterprise tools
-
-The Enterprise edition adds tools for its collaboration features, advertised automatically
-alongside the document tools (no configuration — they appear when the enterprise API is running):
-
-| Tool | Mode | What it does | Role needed |
-|---|---|---|---|
-| `shareDocument` | write | Share a document with a user by email as READER / COMMENTER / EDITOR | CONTRIBUTOR + EDIT_SHARE |
-| `unshareDocument` | write | Revoke a user's access to a document | CONTRIBUTOR + EDIT_SHARE |
-| `addComment` | write | Add a comment to a document | CONTRIBUTOR or COMMENTER |
-| `listComments` | read | List a document's comments | READER or CONTRIBUTOR or COMMENTER |
-| `getDocumentPermissions` | read | A document's permissions: owner, who it is shared with, and each grantee's access level (READER / COMMENTER / EDITOR) | the document's **owner** (no share role needed), or VIEW_SHARE / EDIT_SHARE for a document shared with the caller |
-
-A client discovers these at runtime through `tools/list` — an agent talking to a Community
-deployment simply sees fewer tools. They carry the same per-user scoping as the document tools: an
-agent can only share or comment on documents its user may act on, and permissions are only
-inspectable by the owner or a share-role holder the document is shared with (the same owner
-bypass the GraphQL `listDocShares` query applies).
 
 ---
 
@@ -268,13 +214,7 @@ this section:
   [Remote connectors that log in for themselves](#remote-connectors-that-log-in-for-themselves-oauth-21).
 
 The snippets below assume the API at `http://localhost:8081`; in production use your real hostname
-over HTTPS (e.g. `https://openfilz-api.yourdomain.com/mcp` or `https://yourdomain-api.openfilz.com/mcp`).
-
-> **`api.openfilz.com` is the OpenFilz demo environment, not your endpoint.** On-prem
-> deployments choose their own hostname on their own DNS (e.g. `openfilz-api.yourdomain.com`);
-> Cloud-Prem deployments get an assigned `yourdomain-api.openfilz.com` hostname. Either way,
-> your agents connect to *your deployment's* API hostname — the snippets below use
-> `openfilz-api.yourdomain.com` as a stand-in; substitute your own.
+over HTTPS — the snippets use `openfilz-api.yourdomain.com` as a stand-in for your own API hostname.
 
 ### Quick start — pick your tool
 
@@ -297,9 +237,8 @@ export TOKEN=$(curl -s -X POST \
 ```
 
 Any Keycloak access token for a real user works too. The full setup — creating the
-service-account client, assigning roles, and the long-lived, revocable Enterprise
-[scoped agent tokens](#scoped-agent-tokens-enterprise) — is in
-[Getting a bearer token](#getting-a-bearer-token) just below.
+service-account client and assigning roles — is in [Getting a bearer token](#getting-a-bearer-token)
+just below.
 
 </details>
 
@@ -410,36 +349,6 @@ The full walkthrough — creating the client, assigning roles, verifying the map
 Tokens are short-lived (5 min by default); a long-running agent refreshes, which its MCP client
 library handles, or re-mints.
 
-### Scoped agent tokens (Enterprise)
-
-For long-running agents, the Enterprise edition can mint a **scoped, revocable OpenFilz token**
-instead of using a raw Keycloak credential. It is bound to a dedicated OpenFilz user (so audit and
-document scope resolve to that user, exactly as for a human), carries a **capability cap**
-(`READ_ONLY` or `READ_WRITE`), is long-lived, and can be **revoked** without touching Keycloak.
-
-```bash
-# an admin mints one; the token is returned once
-curl -X POST https://openfilz-api.yourdomain.com/api/v1/admin/mcp/tokens \
-  -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
-  -d '{"subjectEmail":"research-agent@acme.com","mode":"READ_ONLY","label":"research bot"}'
-# → { "token": "…", "jti": "…", "expiresAt": "…" }
-```
-
-Give the returned `token` to the agent as its bearer credential on `/mcp`. Enable the feature with
-`openfilz.mcp.tokens.enabled=true` and a `signing-secret`; list/revoke at
-`GET`/`DELETE /api/v1/admin/mcp/tokens[/{jti}]` (admin only).
-
-> **Licence note:** a scoped token binds to a real user, so the seat model applies unchanged — a
-> `READ_WRITE` agent's user must be `LICENSED` (one seat); a `READ_ONLY` agent can be a `FREE` user
-> (no seat). The token adds revocability and a capability cap; it is not a way around seats.
-
-### Claude Code
-
-```bash
-claude mcp add --transport http openfilz https://openfilz-api.yourdomain.com/mcp \
-  --header "Authorization: Bearer $TOKEN"
-```
-
 ### `mcp.json` (config-file hosts)
 
 For any host configured from an `mcp.json`-style file that lets you set a static header:
@@ -535,11 +444,6 @@ find the exact callback URL in that provider's connector documentation.
 > to `openfilz-mcp` (optional is fine) or be deleted if unused — a leftover scope nothing
 > references still appears in the realm's `scopes_supported` and breaks the login.
 
-### n8n
-
-Use the **MCP Client** node: transport `HTTP Streamable`, URL `https://openfilz-api.yourdomain.com/mcp`,
-with an `Authorization: Bearer …` header credential.
-
 ### Spring AI
 
 ```xml
@@ -567,7 +471,7 @@ npx -y @modelcontextprotocol/inspector --cli http://localhost:8081/mcp \
   --transport http --header "Authorization: Bearer $TOKEN" --method tools/list
 ```
 
-It should list 24 tools in `READ_WRITE` mode, 10 in `READ_ONLY` (Community counts; Enterprise adds the share/comment/permissions tools). Dropping the `--header` must fail
+In `READ_ONLY` mode only the read tools are listed. Dropping the `--header` must fail
 with `401` — if it does not, `/mcp` is not protected and something is very wrong.
 
 ---
@@ -583,31 +487,5 @@ with `401` — if it does not, `/mcp` is not protected and something is very wro
 | *"Not permitted: your OpenFilz role does not allow this operation"* | The user lacks the role — e.g. a READER calling `createFolder`. Grant CONTRIBUTOR, or use a `READ_ONLY` deployment. |
 | *"Not authenticated: this MCP server requires a bearer token…"* | The token did not reach the tool. Check that a proxy in front of OpenFilz forwards the `Authorization` header. |
 | *"Vision analysis is unavailable…"* from `describeImage` | No chat model configured. Either enable one (`openfilz.ai.active=true` + a provider) or let the calling agent analyse the file itself. |
-| *"model '…' not found"* from `describeImage` | Fixed in the release after 1.3.44: the MCP route used the bare compiled `ChatModel` (in the EE native image, Ollama with `OLLAMA_CHAT_MODEL`, default `llama3`) instead of the fallback chain. On an older server, pull a vision model into Ollama or let the agent read the image through `downloadDocument`. |
-| The agent says it cannot see an image | It needs the `image` block of `downloadDocument` (release after 1.3.44). Formats ImageIO cannot decode (HEIC, SVG), files above `openfilz.mcp.inline-image-max-source-bytes` (30 MB) and images declaring more than 256 MP get no block. The image is read once, on the same fetch as the link — no Tika pass, no second storage round trip. |
-| Agent keeps saying a document does not exist | It is scoped to the caller's permissions. In Enterprise, the document may simply not be shared with that user. |
-
----
-
-## 6. Notes for operators of the Enterprise edition
-
-- **Nothing extra to configure for security.** The enterprise access policy is picked up
-  automatically, so MCP agents are constrained by the same ownership and sharing rules as the web
-  UI.
-- The enterprise API ships as a **GraalVM native image**, and the MCP layer is compiled into it.
-  The endpoint is verified end to end against that native artifact — booted, with every tool
-  driven — and not only against a JVM build, so `/mcp` behaves identically on the image you deploy.
-
----
-
-## 7. Where to look in the code
-
-| Concern | Class |
-|---|---|
-| Feature toggle + mode + advertised OAuth scopes | `config/McpProperties.java` |
-| OAuth 2.1 discovery (RFC 9728 protected-resource metadata) | `controller/rest/McpDiscoveryController.java` |
-| Transport wiring, carries the caller's identity | `config/McpConfig.java` |
-| Lifts `Authentication` into the exchange | `service/mcp/McpAuthenticationWebFilter.java` |
-| Per-call user binding, read-only enforcement | `service/mcp/McpToolCallbackProvider.java` |
-| The tools themselves (shared with the chat assistant) | `service/ai/DocumentAiTools.java` |
-| Native-image hints | `config/McpRuntimeHints.java` |
+| The agent says it cannot see an image | Images reach the agent through `downloadDocument`. Formats that cannot be decoded (HEIC, SVG), files above `openfilz.mcp.inline-image-max-source-bytes` (30 MB) and images above 256 megapixels are not sent as pictures. |
+| Agent keeps saying a document does not exist | Check the name with `queryDocuments`: most tools need an exact name or an id. |

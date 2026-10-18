@@ -561,9 +561,8 @@ OpenFilz includes an optional AI assistant that can answer questions about your 
 > from "no AI at all" to "full cloud model" including a **no-LLM setup that still classifies and
 > files documents**, and what the web app shows or hides in each.
 >
-> **Developer deep-dive:** [AI Architecture](ai.md) explains how the configuration is resolved at
-> startup, the ingestion → indexing pipeline (full-text + vectors), the chat workflow, and BYOK —
-> with architecture and sequence diagrams.
+> **Contributors:** the internals (configuration resolution, ingestion pipeline, chat workflow)
+> are described in [AI Architecture](ai.md) in the source repository.
 
 #### Prerequisites
 
@@ -835,6 +834,28 @@ cd deploy/docker-compose
 make up-ai
 ```
 
+#### Deploying Ollama with OpenFilz
+
+Running Ollama needs an Ollama server and its models next to the API. Each deployment channel
+provides one, driven by the same provider switches:
+
+| Channel | How Ollama is deployed |
+|---------|------------------------|
+| Docker Compose (local) | `docker-compose.ai.yml` overlay (`make up-ai`): adds `ollama` + `ollama-init` (pulls the models) and switches Postgres to the `pgvector/pgvector` image |
+| Dokploy compose | `ollama` + `ollama-init` start only when `OLLAMA_CHAT_ENABLED` or `OLLAMA_EMBEDDING_ENABLED` is `true` (with `COMPOSE_PROFILES=true`) |
+| Kubernetes (Helm) | `ai.ollama.deploy.enabled=true` (with `ai.active=true`) adds an in-cluster Ollama (Deployment, `ollama` Service, PVC) and a Job that pulls the enabled models. To use an external or GPU Ollama instead, set `ai.ollama.baseUrl` and leave `deploy.enabled=false` |
+
+Good to know:
+
+- **pgvector is required.** Postgres must run a pgvector-enabled image (`pgvector/pgvector:pgXX`).
+  Do not switch an **existing** `postgres:*-alpine` volume to the Debian-based pgvector image
+  (the collation changes): dump and restore instead.
+- **Model pulls are idempotent** — they run again on every deploy; a model already present is skipped.
+- **Choose the embedding model once.** Vectors from different embedding models cannot be compared,
+  so OpenFilz refuses to start when the embedding model changes while vectors exist. Enable
+  `OLLAMA_EMBEDDING_ENABLED` with the model you intend to keep, or plan a re-embedding
+  (`POST /api/v1/ai/embeddings/backfill`).
+
 #### Quick Setup — OpenAI (Cloud)
 
 Set the following in your `.env`:
@@ -1088,7 +1109,7 @@ openfilz:
 > only *new documents* can be produced (in-place edits answer `409`). Password-protected PDFs are
 > refused (`422 PDF_ENCRYPTED`); digitally signed PDFs can only be edited in place with
 > `acknowledgeSignatureLoss=true` (`409 PDF_SIGNED` otherwise), and never while an e-Sign envelope
-> is active on them. See [PDF Tools](pdf-tools.md) for the API and design.
+> is active on them. See [Developer guide → PDF Tools](developer-guide.md#pdf-tools) for the API.
 
 ### ZIP Extraction (Unzip)
 
