@@ -47,7 +47,14 @@ Traefik), and open https://ce-demo.openfilz.com.
   `access-key`/`secret-key`) before productionizing.
 - `openfilz-api.features.fulltext=true` (index-per-tenant on the shared
   OpenSearch) and optionally `global.onlyoffice.enabled=true` (shared
-  OnlyOffice, JWT per tenant).
+  OnlyOffice, JWT per tenant). OnlyOffice then calls the api back
+  server-to-server (file download + save callbacks), so the chart adds a
+  `<release>-allow-onlyoffice-to-api` NetworkPolicy admitting the OnlyOffice
+  pods of `networkPolicy.sharedNamespace` (default `openfilz-shared`) on 8080.
+  Set it to the namespace of your openfilz-shared release. Without it the
+  namespace default-deny drops those calls: the OnlyOffice logs show
+  `downloadFile … ETIMEDOUT` and every document takes minutes to open, then
+  fails (chart ≤ 0.2.0 — on those, add the policy by hand).
 - One Keycloak realm per tenant on the shared Keycloak.
 - ResourceQuota + LimitRange on the namespace (provisioner applies them).
 - `backup.enabled=true` + `backup.s3.*` (per-tenant Scaleway backup bucket +

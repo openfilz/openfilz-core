@@ -7,7 +7,7 @@ description: >-
   (Keycloak, Gotenberg, OpenSearch, OnlyOffice) are consumed from an
   openfilz-shared release via values.
 type: application
-version: 0.2.0
+version: 0.2.1
 appVersion: "latest"
 keywords:
   - openfilz

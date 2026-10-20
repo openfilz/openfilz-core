@@ -170,3 +170,7 @@ networkPolicy:
   #   - network.openshift.io/policy-group: ingress            # openshift-sdn
   #   - policy-group.network.openshift.io/host-network: ""    # OVN-Kubernetes, host-networked router
   ingressFromNamespaceLabels: []
+  # Namespace of the openfilz-shared release. When OnlyOffice is enabled, its
+  # Document Server pods there are allowed into the api on 8080 (file download
+  # + save callbacks). Empty = no such allow (OnlyOffice then times out).
+  sharedNamespace: openfilz-shared
