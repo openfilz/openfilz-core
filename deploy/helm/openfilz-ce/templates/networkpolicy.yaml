@@ -44,6 +44,38 @@ spec:
         {{- end }}
       ports:
         - port: 8080
+{{- /* Same resolution as the api subchart: openfilz-api.onlyoffice.enabled wins over global.onlyoffice.enabled. */}}
+{{- $ooApi := dig "onlyoffice" "enabled" nil (index .Values "openfilz-api" | default dict) }}
+{{- $onlyoffice := ternary (dig "onlyoffice" "enabled" false (.Values.global | default dict)) $ooApi (kindIs "invalid" $ooApi) }}
+{{- if and $onlyoffice .Values.networkPolicy.sharedNamespace }}
+---
+# Shared OnlyOffice → api. The Document Server fetches the file
+# (/api/v1/documents/{id}/onlyoffice-download) and posts save callbacks
+# (/api/v1/onlyoffice/callback/{id}) server-to-server; without this allow the
+# default-deny drops them and every editor open hangs on connect timeouts.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-allow-onlyoffice-to-api
+  labels:
+    {{- include "openfilz-ce.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: api
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        # One entry = OnlyOffice pods IN the shared namespace (AND, not OR).
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.sharedNamespace }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: onlyoffice
+      ports:
+        - port: 8080
+{{- end }}
 ---
 # api → postgres (only the api may reach the database)
 apiVersion: networking.k8s.io/v1

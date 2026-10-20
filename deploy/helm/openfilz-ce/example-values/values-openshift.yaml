@@ -60,6 +60,9 @@ networkPolicy:
   ingressFromNamespaceLabels:
     - network.openshift.io/policy-group: ingress            # openshift-sdn
     - policy-group.network.openshift.io/host-network: ""    # OVN-Kubernetes, host-networked router
+  # Project of the openfilz-shared release: with global.onlyoffice.enabled,
+  # its OnlyOffice pods may call the api back (download + save callbacks).
+  sharedNamespace: openfilz-shared
 
 # Air-gapped / proxied registries: point the images at your internal proxy.
 # global:
