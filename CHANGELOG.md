@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[3521f4860392692](https://github.com/openfilz/openfilz-core/commit/3521f4860392692) maven-release-bot[bot] *2026-10-27 18:03:19*
+[3147c1e58189f2f](https://github.com/openfilz/openfilz-core/commit/3147c1e58189f2f) maven-release-bot[bot] *2026-10-27 23:39:51*
 
 
-## v1.3.53
+## v1.3.54
 ### No issue
 
-**[maven-release-plugin] prepare release v1.3.53**
+**[maven-release-plugin] prepare release v1.3.54**
 
 
-[454942809d7789d](https://github.com/openfilz/openfilz-core/commit/454942809d7789d) maven-release-bot[bot] *2026-10-27 18:03:16*
+[a9090c3bc002b55](https://github.com/openfilz/openfilz-core/commit/a9090c3bc002b55) maven-release-bot[bot] *2026-10-27 23:39:48*
 
-**Merge pull request #351 from openfilz/develop**
+**Merge pull request #353 from openfilz/develop**
 
- * Fix race condition in LocalFullTextServiceImplTest
+ * Enhance metadata filters to support typed values and improve search
 
-[36533f904b85c95](https://github.com/openfilz/openfilz-core/commit/36533f904b85c95) Yann Demel *2026-10-27 18:00:02*
+[03ee7e3e91a24b3](https://github.com/openfilz/openfilz-core/commit/03ee7e3e91a24b3) Yann Demel *2026-10-27 23:36:20*
 
 
