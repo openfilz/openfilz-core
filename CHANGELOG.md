@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[ed3097f86e4df0b](https://github.com/openfilz/openfilz-core/commit/ed3097f86e4df0b) maven-release-bot[bot] *2026-10-20 16:28:22*
+[3521f4860392692](https://github.com/openfilz/openfilz-core/commit/3521f4860392692) maven-release-bot[bot] *2026-10-27 18:03:19*
 
 
-## v1.3.52
+## v1.3.53
 ### No issue
 
-**[maven-release-plugin] prepare release v1.3.52**
+**[maven-release-plugin] prepare release v1.3.53**
 
 
-[7ed1721177d9d77](https://github.com/openfilz/openfilz-core/commit/7ed1721177d9d77) maven-release-bot[bot] *2026-10-20 16:28:19*
+[454942809d7789d](https://github.com/openfilz/openfilz-core/commit/454942809d7789d) maven-release-bot[bot] *2026-10-27 18:03:16*
 
-**Merge pull request #345 from openfilz/develop**
+**Merge pull request #351 from openfilz/develop**
 
- * Allow OnlyOffice to access tenant API in shared namespace
+ * Fix race condition in LocalFullTextServiceImplTest
 
-[6862e9f4f0fda31](https://github.com/openfilz/openfilz-core/commit/6862e9f4f0fda31) Yann Demel *2026-10-20 16:24:13*
+[36533f904b85c95](https://github.com/openfilz/openfilz-core/commit/36533f904b85c95) Yann Demel *2026-10-27 18:00:02*
 
 
