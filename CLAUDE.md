@@ -462,8 +462,11 @@ correction read; `PropertiesCategoryTaxonomy` in core). Also: the per-user Inbox
   `@> lower(:criteria)::jsonb` for the exact part + `?& :mkeys` + one bound `->> :mk_i ILIKE :mv_i` per pattern
   (`SqlUtils.appendMetadataCriteria` / `bindMetadataCriteria`); OpenSearch = case-insensitive `term` / `wildcard` on
   `metadata.<key>.keyword`, `exists` for a bare wildcard, over every spelling of the key the documents use
-  (`OpenSearchQueryService.metadataKeySpellings` seam → `DocumentDAO.findMetadataKeySpellings`; field names are
-  case-sensitive there). Limits: 10 criteria, 100-char keys, 200-char patterns (400).
+  (field names are case-sensitive there): the `OpenSearchQueryService.metadataKeySpellings(keys)` seam, answered by
+  `IndexedMetadataKeys` (`OpenSearchMetadataKeys`: the keys of the index **mapping** — `metadata` is a dynamic object, so
+  one cluster-state read per search lists every spelling ever indexed, whatever the corpus size; never a scan of the
+  documents carrying the key). An EE query service overrides the seam the same way. Limits: 10 criteria, 100-char keys,
+  200-char patterns (400).
 - **Name search** (`nameLike`, the database `searchDocuments` / suggestions): `name ILIKE '%…%' ESCAPE '\'` with the
   value escaped (`SqlUtils.escapeLike`) — `_` and `%` in a name are literal. On OpenSearch, `name_suggest` is indexed
   through `DocumentSearchUtil.splitWithSpaces` (`_` / `-` / camelCase → words), so the name clauses split the query the

@@ -14,7 +14,6 @@ import org.opensearch.client.opensearch._types.query_dsl.Query;
 import org.opensearch.client.opensearch._types.query_dsl.QueryVariant;
 import org.opensearch.client.opensearch._types.query_dsl.TextQueryType;
 import org.springframework.util.CollectionUtils;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.OffsetDateTime;
@@ -22,8 +21,12 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
 import static org.openfilz.dms.service.OpenSearchService.*;
 
@@ -59,25 +62,32 @@ public interface OpenSearchQueryService {
                 ));
             }
         }
+        if (metadataFilters.isEmpty()) {
+            return Mono.just(boolQueryBuilder);
+        }
         // Metadata keys match case-insensitively, but index field names do not: each key is
-        // expanded to the spellings the documents actually use.
-        return Flux.fromIterable(metadataFilters)
-                .concatMap(filter -> {
-                    String key = metadataKey(filter.field());
-                    return metadataKeySpellings(key)
-                            .defaultIfEmpty(List.of(key))
-                            .doOnNext(keys -> addMetadataClause(keys, filter.value(), boolQueryBuilder));
-                })
-                .then(Mono.just(boolQueryBuilder));
+        // expanded to the spellings the documents actually use — one lookup for all the keys.
+        Set<String> keys = new LinkedHashSet<>();
+        metadataFilters.forEach(filter -> keys.add(metadataKey(filter.field())));
+        return metadataKeySpellings(keys)
+                .defaultIfEmpty(Map.of())
+                .map(spellings -> {
+                    for (FilterInput filter : metadataFilters) {
+                        String key = metadataKey(filter.field());
+                        addMetadataClause(spellings.getOrDefault(key, List.of(key)), filter.value(), boolQueryBuilder);
+                    }
+                    return boolQueryBuilder;
+                });
     }
 
     /**
-     * The spellings of a metadata key the indexed documents use, whatever their case
-     * ({@code project} → {@code [project, Project]}), so that a metadata filter matches the key
-     * case-insensitively. Default: the key as given.
+     * The spellings of the given metadata keys the indexed documents use, whatever their case
+     * ({@code project} → {@code [project, Project]}), so that a metadata filter matches its key
+     * case-insensitively; a key absent from the result is used as given. Default: none known
+     * (see {@code IndexedMetadataKeys} for the index-backed answer).
      */
-    default Mono<List<String>> metadataKeySpellings(String key) {
-        return Mono.just(List.of(key));
+    default Mono<Map<String, List<String>>> metadataKeySpellings(Collection<String> keys) {
+        return Mono.just(Map.of());
     }
 
     /** The metadata key of a {@code metadata.<key>} filter field (an explicit {@code .keyword} suffix dropped). */

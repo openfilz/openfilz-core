@@ -1,13 +1,16 @@
 package org.openfilz.dms.service.impl;
 
 import lombok.RequiredArgsConstructor;
-import org.openfilz.dms.repository.DocumentDAO;
+import org.openfilz.dms.service.IndexedMetadataKeys;
 import org.openfilz.dms.service.OpenSearchQueryService;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -16,7 +19,8 @@ public class DefaultOpenSearchQueryService implements OpenSearchQueryService {
 
     public static final String[] OTHER_EXCLUSIONS = {"metadata", "content"};
 
-    private final DocumentDAO documentDAO;
+    /** Absent when full-text search is off (this bean exists regardless; it is then never asked). */
+    private final ObjectProvider<IndexedMetadataKeys> indexedMetadataKeys;
 
     @Override
     public String[] getSourceOtherExclusions() {
@@ -24,8 +28,8 @@ public class DefaultOpenSearchQueryService implements OpenSearchQueryService {
     }
 
     @Override
-    public Mono<List<String>> metadataKeySpellings(String key) {
-        return documentDAO.findMetadataKeySpellings(key).collectList()
-                .filter(spellings -> !spellings.isEmpty());
+    public Mono<Map<String, List<String>>> metadataKeySpellings(Collection<String> keys) {
+        IndexedMetadataKeys index = indexedMetadataKeys.getIfAvailable();
+        return index == null ? Mono.just(Map.of()) : index.spellings(keys);
     }
 }

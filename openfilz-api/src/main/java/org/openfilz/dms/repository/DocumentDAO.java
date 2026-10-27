@@ -27,13 +27,6 @@ public interface DocumentDAO {
     Flux<MetadataKeySuggestion> listMetadataKeys(int limit, List<String> excludedKeys);
 
     /**
-     * The spellings of a metadata key the active documents use, whatever their case
-     * ({@code project} → {@code project}, {@code Project}): what a case-insensitive key filter
-     * expands to where keys are case-sensitive (OpenSearch field names).
-     */
-    Flux<String> findMetadataKeySpellings(String key);
-
-    /**
      * Identifies whose documents {@link #listMetadataKeys} lists, to cache its result: a constant
      * when every caller sees the same documents, the caller otherwise.
      */

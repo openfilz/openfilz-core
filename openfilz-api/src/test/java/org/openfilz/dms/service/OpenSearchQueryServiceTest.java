@@ -81,6 +81,7 @@ class OpenSearchQueryServiceTest {
 
     @Test
     void addFilterClauses_metadataKey_matchesEverySpellingOfTheKey() {
+        List<List<String>> asked = new java.util.ArrayList<>();
         OpenSearchQueryService spellings = new OpenSearchQueryService() {
             @Override
             public String[] getSourceOtherExclusions() {
@@ -88,13 +89,16 @@ class OpenSearchQueryServiceTest {
             }
 
             @Override
-            public reactor.core.publisher.Mono<List<String>> metadataKeySpellings(String key) {
-                return reactor.core.publisher.Mono.just(List.of("client", "Client"));
+            public reactor.core.publisher.Mono<java.util.Map<String, List<String>>> metadataKeySpellings(java.util.Collection<String> keys) {
+                asked.add(List.copyOf(keys));
+                return reactor.core.publisher.Mono.just(java.util.Map.of("CLIENT", List.of("client", "Client"), "client", List.of("client", "Client")));
             }
         };
         BoolQuery.Builder builder = new BoolQuery.Builder();
         spellings.addFilterClauses(List.of(new FilterInput("metadata.CLIENT", "acme"), new FilterInput("metadata.client.keyword", "a%")), builder).block();
         BoolQuery query = builder.build();
+        // one lookup for every key of the request
+        org.junit.jupiter.api.Assertions.assertEquals(List.of(List.of("CLIENT", "client")), asked);
         org.junit.jupiter.api.Assertions.assertEquals(2, query.filter().size());
         var exact = query.filter().get(0).bool();
         org.junit.jupiter.api.Assertions.assertEquals("1", exact.minimumShouldMatch());
@@ -113,7 +117,7 @@ class OpenSearchQueryServiceTest {
             }
 
             @Override
-            public reactor.core.publisher.Mono<List<String>> metadataKeySpellings(String key) {
+            public reactor.core.publisher.Mono<java.util.Map<String, List<String>>> metadataKeySpellings(java.util.Collection<String> keys) {
                 return reactor.core.publisher.Mono.empty();
             }
         };
