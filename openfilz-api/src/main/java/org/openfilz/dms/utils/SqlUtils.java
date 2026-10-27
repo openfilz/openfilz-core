@@ -64,6 +64,21 @@ public class SqlUtils {
 
     /** Bind name of the exact (containment) part of a metadata filter. */
     public static final String METADATA_CRITERIA = "criteria";
+    /**
+     * Bind-name prefix of the alternatives of a string criterion, suffixed with its index: one JSON
+     * array each ({@code malt_0}), or one containment each in the OR-ed form ({@code malt_0_1}).
+     */
+    public static final String METADATA_ALTERNATIVES = "malt_";
+    /**
+     * From this many string criteria, each is written as OR-ed containments instead of
+     * {@code @> ANY(ARRAY(SELECT …))}. The planner cannot see inside the array, so from 5 such
+     * criteria it gives up the index for a sequential scan that grows with the library; with
+     * every spelling a bound value it indexes the selective criteria and filters the others.
+     * Below it the array form is kept: its recheck evaluates the column expression once, not once
+     * per spelling, which halves the cost of a non-selective criterion (measured on 500k
+     * documents: 10 criteria 230 ms → 3 ms; one broad criterion 55 ms array, 99 ms OR-ed).
+     */
+    static final int METADATA_OR_FORM_FROM = 5;
     /** Bind name of the keys a metadata pattern filter requires ({@code text[]}). */
     public static final String METADATA_PATTERN_KEYS = "mkeys";
     /** Bind-name prefix of the metadata pattern keys / values, suffixed with their index. */
@@ -80,6 +95,23 @@ public class SqlUtils {
             try {
                 // lower-cased in SQL (see appendMetadataCriteria), like the column
                 query = query.bind(METADATA_CRITERIA, objectMapper.writeValueAsString(criteria.exact()));
+            } catch (JacksonException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        List<MetadataCriteria.Alternative> alternatives = criteria.alternatives();
+        boolean orForm = alternatives.size() >= METADATA_OR_FORM_FROM;
+        for (int i = 0; i < alternatives.size(); i++) {
+            List<Map<String, Object>> containments = alternatives.get(i).containments();
+            try {
+                // lower-cased in SQL like the exact part
+                if (orForm) {
+                    for (int j = 0; j < containments.size(); j++) {
+                        query = query.bind(METADATA_ALTERNATIVES + i + UNDERSCORE + j, objectMapper.writeValueAsString(containments.get(j)));
+                    }
+                } else {
+                    query = query.bind(METADATA_ALTERNATIVES + i, objectMapper.writeValueAsString(containments));
+                }
             } catch (JacksonException e) {
                 throw new RuntimeException(e);
             }
@@ -171,10 +203,19 @@ public class SqlUtils {
      * Appends the predicate of a metadata filter (see {@link MetadataCriteria}), without a leading
      * {@code AND} / {@code WHERE}; keys and values match case-insensitively:
      * <pre>
-     * (lower(col::text)::jsonb) @> lower(:criteria)::jsonb      -- exact values (GIN-indexed)
+     * (lower(col::text)::jsonb) @> lower(:criteria)::jsonb      -- typed values (GIN-indexed)
+     * AND (lower(col::text)::jsonb) @> ANY(ARRAY(SELECT jsonb_array_elements(lower(:malt_0)::jsonb)))
+     *                                                           -- one per string value (GIN-indexed)
      * AND (lower(col::text)::jsonb) ?& :mkeys                   -- keys of the patterns (GIN-indexed)
      * AND (lower(col::text)::jsonb) ->> :mk_0 ILIKE :mv_0 ESCAPE '\'   -- one recheck per pattern
      * </pre>
+     * A string value is matched by any of its spellings ({@link MetadataCriteria.Alternative#containments()}):
+     * {@code "true"} also finds {@code true} and {@code ["true"]}. They are bound as one JSON array
+     * per criterion, so the lower-casing stays Postgres's own {@code lower()}, identical to the
+     * index expression; the {@code ARRAY(SELECT …)} is evaluated once and the planner still uses
+     * the GIN index, one search per spelling. From {@value #METADATA_OR_FORM_FROM} string criteria
+     * each is written {@code (col @> lower(:malt_0_0)::jsonb OR col @> lower(:malt_0_1)::jsonb …)}
+     * instead, so the planner keeps the index (see {@link #METADATA_OR_FORM_FROM}).
      * Keys and patterns are bound, never concatenated. The key-existence test keeps the GIN index
      * in play, so the pattern is only evaluated on the documents carrying the key. A bare
      * wildcard needs no recheck. Bind with {@link #bindMetadataCriteria(Map, DatabaseClient.GenericExecuteSpec)}.
@@ -185,6 +226,29 @@ public class SqlUtils {
         boolean and = false;
         if (criteria.hasExact()) {
             sql.append(col).append(" @> lower(:").append(METADATA_CRITERIA).append(")::jsonb ");
+            and = true;
+        }
+        List<MetadataCriteria.Alternative> alternatives = criteria.alternatives();
+        boolean orForm = alternatives.size() >= METADATA_OR_FORM_FROM;
+        for (int i = 0; i < alternatives.size(); i++) {
+            if (and) {
+                sql.append(AND);
+            }
+            if (orForm) {
+                int count = alternatives.get(i).containments().size();
+                sql.append("(");
+                for (int j = 0; j < count; j++) {
+                    if (j > 0) {
+                        sql.append("OR ");
+                    }
+                    sql.append(col).append(" @> lower(:").append(METADATA_ALTERNATIVES).append(i)
+                            .append(UNDERSCORE).append(j).append(")::jsonb ");
+                }
+                sql.append(") ");
+            } else {
+                sql.append(col).append(" @> ANY(ARRAY(SELECT jsonb_array_elements(lower(:")
+                        .append(METADATA_ALTERNATIVES).append(i).append(")::jsonb))) ");
+            }
             and = true;
         }
         List<MetadataCriteria.Pattern> patterns = criteria.patterns();
