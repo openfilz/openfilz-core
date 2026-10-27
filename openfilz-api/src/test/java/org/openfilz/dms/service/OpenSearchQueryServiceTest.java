@@ -67,7 +67,36 @@ class OpenSearchQueryServiceTest {
     void addFilterClauses_metadataBareWildcard_isAnExistsQuery() {
         BoolQuery query = service.addFilterClauses(List.of(new FilterInput("metadata.project", "*")), new BoolQuery.Builder())
                 .block().build();
-        org.junit.jupiter.api.Assertions.assertEquals("metadata.project.keyword", query.filter().getFirst().exists().field());
+        // on the field itself: a key mapped boolean or numeric has no keyword sub-field
+        org.junit.jupiter.api.Assertions.assertEquals("metadata.project", query.filter().getFirst().exists().field());
+    }
+
+    @Test
+    void addFilterClauses_metadataValueSpellingABoolean_alsoMatchesTheTypedField() {
+        BoolQuery query = service.addFilterClauses(List.of(new FilterInput("metadata._readOnly", "TRUE")), new BoolQuery.Builder())
+                .block().build();
+        var anyOf = query.filter().getFirst().bool();
+        org.junit.jupiter.api.Assertions.assertEquals("1", anyOf.minimumShouldMatch());
+        org.junit.jupiter.api.Assertions.assertEquals(2, anyOf.should().size());
+        org.junit.jupiter.api.Assertions.assertEquals("metadata._readOnly.keyword", anyOf.should().get(0).term().field());
+        var typed = anyOf.should().get(1).bool();
+        org.junit.jupiter.api.Assertions.assertEquals("metadata._readOnly.keyword", typed.mustNot().getFirst().exists().field());
+        var match = typed.filter().getFirst().match();
+        org.junit.jupiter.api.Assertions.assertEquals("metadata._readOnly", match.field());
+        org.junit.jupiter.api.Assertions.assertEquals("true", match.query().stringValue());
+        org.junit.jupiter.api.Assertions.assertEquals(Boolean.TRUE, match.lenient());
+    }
+
+    @Test
+    void typedQueryText_isTheBooleanOrThePlainNumber() {
+        org.junit.jupiter.api.Assertions.assertEquals("false", OpenSearchQueryService.typedQueryText("False"));
+        org.junit.jupiter.api.Assertions.assertEquals("42", OpenSearchQueryService.typedQueryText("42.0"));
+        org.junit.jupiter.api.Assertions.assertEquals("1000", OpenSearchQueryService.typedQueryText("1e3"));
+        org.junit.jupiter.api.Assertions.assertEquals("-1.5", OpenSearchQueryService.typedQueryText("-1.50"));
+        org.junit.jupiter.api.Assertions.assertEquals("0", OpenSearchQueryService.typedQueryText("0.00"));
+        org.junit.jupiter.api.Assertions.assertNull(OpenSearchQueryService.typedQueryText("007"));
+        org.junit.jupiter.api.Assertions.assertNull(OpenSearchQueryService.typedQueryText("null"));
+        org.junit.jupiter.api.Assertions.assertNull(OpenSearchQueryService.typedQueryText("acme"));
     }
 
     @Test

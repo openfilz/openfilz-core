@@ -142,10 +142,17 @@ public interface OpenSearchQueryService {
     }
 
     /**
-     * A {@code metadata.<key>} filter, on the keyword sub-field of each spelling of the key (any
-     * of them matches), values compared case-insensitively: a {@code term} for an exact value, a
-     * {@code wildcard} for a pattern ({@link MetadataCriteria}), an {@code exists} query for a
-     * bare wildcard ("the key is set").
+     * A {@code metadata.<key>} filter over each spelling of the key (any of them matches), values
+     * compared case-insensitively: a {@code term} on the keyword sub-field for an exact value, a
+     * {@code wildcard} on it for a pattern ({@link MetadataCriteria}), an {@code exists} query on
+     * the field for a bare wildcard ("the key is set", whatever its mapped type).
+     * <p>
+     * {@code metadata} is a dynamic object, so a key first indexed as a boolean or a number is
+     * mapped {@code boolean} / {@code long} / {@code float}, with no keyword sub-field. A value
+     * that spells one ({@code true}, {@code 42}, {@link MetadataCriteria#typedValue(String)}) is
+     * therefore also matched on the field itself, through a lenient {@code match} (a typed field
+     * of another type answers no hit instead of failing the search), and only where the document
+     * has no keyword value: a string field keeps the exact keyword comparison, never the analysed one.
      */
     static void addMetadataClause(List<String> keys, String value, BoolQuery.Builder boolQueryBuilder) {
         boolean pattern = MetadataCriteria.isPattern(value);
@@ -154,21 +161,45 @@ public interface OpenSearchQueryService {
         }
         String wildcard = pattern ? MetadataCriteria.toWildcardPattern(value) : null;
         boolean anyValue = wildcard != null && wildcard.chars().allMatch(c -> c == '*');
-        List<Query> anyOf = keys.stream().map(key -> {
-            String field = DocumentSearchUtil.FILTER_METADATA + key + KEYWORD;
+        String typed = pattern ? null : typedQueryText(value);
+        List<Query> anyOf = new ArrayList<>();
+        for (String key : keys) {
+            String base = DocumentSearchUtil.FILTER_METADATA + key;
+            String field = base + KEYWORD;
             if (anyValue) {
-                return Query.of(q -> q.exists(e -> e.field(field)));
+                anyOf.add(Query.of(q -> q.exists(e -> e.field(base))));
+            } else if (pattern) {
+                anyOf.add(Query.of(q -> q.wildcard(w -> w.field(field).value(wildcard).caseInsensitive(true))));
+            } else {
+                anyOf.add(Query.of(q -> q.term(t -> t.field(field).value(FieldValue.of(value)).caseInsensitive(true))));
+                if (typed != null) {
+                    anyOf.add(Query.of(q -> q.bool(b -> b
+                            .mustNot(m -> m.exists(e -> e.field(field)))
+                            .filter(f -> f.match(mq -> mq.field(base).query(FieldValue.of(typed)).lenient(true))))));
+                }
             }
-            if (pattern) {
-                return Query.of(q -> q.wildcard(w -> w.field(field).value(wildcard).caseInsensitive(true)));
-            }
-            return Query.of(q -> q.term(t -> t.field(field).value(FieldValue.of(value)).caseInsensitive(true)));
-        }).toList();
+        }
         if (anyOf.size() == 1) {
             boolQueryBuilder.filter(anyOf.getFirst());
         } else {
             boolQueryBuilder.filter(f -> f.bool(b -> b.should(anyOf).minimumShouldMatch("1")));
         }
+    }
+
+    /**
+     * The text a boolean / numeric field is queried with when an exact value spells a boolean or
+     * a number: {@code true} / {@code false}, or the number in plain notation ({@code 1e3} →
+     * {@code 1000}, {@code 42.0} → {@code 42}); {@code null} when the value spells neither.
+     */
+    static String typedQueryText(String value) {
+        Object typed = MetadataCriteria.typedValue(value);
+        if (typed instanceof Boolean b) {
+            return b.toString();
+        }
+        if (typed instanceof java.math.BigDecimal number) {
+            return number.signum() == 0 ? "0" : number.stripTrailingZeros().toPlainString();
+        }
+        return null;
     }
 
     /**

@@ -180,6 +180,139 @@ class MetadataPatternSearchIT extends TestContainersBaseConfig {
         searchExchange(Map.of("k", "%" + "x".repeat(200))).expectStatus().isBadRequest();
     }
 
+    // ==================== typed values, REST ====================
+
+    @Test
+    void whenStringCriterionSpellsABoolean_thenTheBooleanIsFound() {
+        String key = newKey();
+        UUID flagged = upload(Map.of(key, true));
+        UUID cleared = upload(Map.of(key, false));
+
+        Assertions.assertEquals(Set.of(flagged), search(Map.of(key, "true")));
+        Assertions.assertEquals(Set.of(flagged), search(Map.of(key, "TRUE")));
+        Assertions.assertEquals(Set.of(cleared), search(Map.of(key, "false")));
+        // a typed criterion keeps its exact behaviour
+        Assertions.assertEquals(Set.of(flagged), search(Map.of(key, true)));
+        Assertions.assertEquals(Set.of(), search(Map.of(key, "yes")));
+    }
+
+    @Test
+    void whenStringCriterionSpellsANumber_thenTheNumberIsFound() {
+        String key = newKey();
+        UUID answer = upload(Map.of(key, 42));
+        UUID price = upload(Map.of(key, 1.5));
+        upload(Map.of(key, 43));
+
+        Assertions.assertEquals(Set.of(answer), search(Map.of(key, "42")));
+        Assertions.assertEquals(Set.of(answer), search(Map.of(key, "42.0")));
+        Assertions.assertEquals(Set.of(answer), search(Map.of(key, "4.2e1")));
+        Assertions.assertEquals(Set.of(answer), search(Map.of(key, 42)));
+        Assertions.assertEquals(Set.of(price), search(Map.of(key, "1.50")));
+        // not a JSON number literal: a plain string, which no document holds
+        Assertions.assertEquals(Set.of(), search(Map.of(key, "042")));
+        Assertions.assertEquals(Set.of(), search(Map.of(key, "+42")));
+    }
+
+    @Test
+    void whenStoredAsTheStringItSpells_thenBothSpellingsAreFound() {
+        String key = newKey();
+        UUID text = upload(Map.of(key, "true"));
+        UUID bool = upload(Map.of(key, true));
+        UUID digits = upload(Map.of(key, "007"));
+
+        // by design: "true" denotes the string and the boolean alike
+        Assertions.assertEquals(Set.of(text, bool), search(Map.of(key, "true")));
+        // a typed criterion does not reach the string
+        Assertions.assertEquals(Set.of(bool), search(Map.of(key, true)));
+        Assertions.assertEquals(Set.of(digits), search(Map.of(key, "007")));
+        Assertions.assertEquals(Set.of(), search(Map.of(key, "7")));
+    }
+
+    @Test
+    void whenStringCriterionIsAListMember_thenTheListIsFound() {
+        String key = newKey();
+        UUID tagged = upload(Map.of(key, List.of("urgent", "Q4")));
+        UUID numbers = upload(Map.of(key, List.of(1, 2)));
+        upload(Map.of(key, "urgent-ish"));
+
+        Assertions.assertEquals(Set.of(tagged), search(Map.of(key, "q4")));
+        Assertions.assertEquals(Set.of(tagged), search(Map.of(key, "urgent")));
+        Assertions.assertEquals(Set.of(numbers), search(Map.of(key, "2")));
+        Assertions.assertEquals(Set.of(), search(Map.of(key, "urgent-")));
+    }
+
+    @Test
+    void whenStringCriterionSpellsNull_thenOnlyTheKeySetToNullIsFound() {
+        String key = newKey();
+        String marker = newKey();
+        Map<String, Object> withNull = new HashMap<>();
+        withNull.put(key, null);
+        withNull.put(marker, "m");
+        UUID nullValue = upload(withNull);
+        UUID noKey = upload(Map.of(marker, "m"));
+
+        Set<UUID> found = search(Map.of(key, "null", marker, "m"));
+        Assertions.assertFalse(found.contains(noKey), "a document without the key never matches");
+        Assertions.assertEquals(Set.of(nullValue), found);
+    }
+
+    @Test
+    void whenTypedStringAndPatternCriteriaMixed_thenAllMustHold() {
+        String flag = newKey();
+        String amount = newKey();
+        String project = newKey();
+        String label = newKey();
+        UUID match = upload(Map.of(flag, true, amount, 42, project, "beta-1", label, "x"));
+        upload(Map.of(flag, false, amount, 42, project, "beta-2", label, "x"));
+        upload(Map.of(flag, true, amount, 7, project, "beta-3", label, "x"));
+        UUID deleted = upload(Map.of(flag, true, amount, 42, project, "beta-4", label, "x"));
+        deleteFile(deleted);
+
+        Map<String, Object> criteria = new LinkedHashMap<>();
+        criteria.put(project, "beta%");
+        criteria.put(flag, "true");
+        criteria.put(amount, "42");
+        criteria.put(label, "X");
+        Assertions.assertEquals(Set.of(match), search(criteria));
+
+        // with a typed criterion in the same request
+        criteria.put(amount, 42);
+        Assertions.assertEquals(Set.of(match), search(criteria));
+    }
+
+    @Test
+    void whenFiveOrMoreStringCriteria_thenTheOrFormMatchesTheSame() {
+        // from 5 string criteria SqlUtils writes OR-ed containments instead of ANY(ARRAY(...))
+        String flag = newKey();
+        String amount = newKey();
+        String tags = newKey();
+        String label = newKey();
+        String status = newKey();
+        String extra = newKey();
+        UUID match = upload(Map.of(flag, true, amount, 42, tags, List.of("q4", "urgent"), label, "Alpha", status, "null-ish", extra, 7));
+        upload(Map.of(flag, true, amount, 42, tags, List.of("q4"), label, "Alpha", status, "null-ish", extra, 7));
+        UUID deleted = upload(Map.of(flag, true, amount, 42, tags, List.of("urgent"), label, "Alpha", status, "null-ish", extra, 7));
+        deleteFile(deleted);
+
+        Map<String, Object> criteria = new LinkedHashMap<>();
+        criteria.put(flag, "TRUE");
+        criteria.put(amount, "42.0");
+        criteria.put(tags, "urgent");
+        criteria.put(label, "alpha");
+        criteria.put(status, "NULL-ISH");
+        Assertions.assertEquals(Set.of(match), search(criteria));
+
+        // six string criteria
+        criteria.put(extra, "7");
+        Assertions.assertEquals(Set.of(match), search(criteria));
+        // five string criteria with a pattern alongside
+        criteria.put(label, "al%");
+        Assertions.assertEquals(Set.of(match), search(criteria));
+        // back to four string criteria (ANY form), with a typed criterion alongside
+        criteria.put(amount, 42);
+        Assertions.assertEquals(Set.of(match), search(criteria));
+    }
+
     // ==================== wildcards, GraphQL ====================
 
     @Test
@@ -206,6 +339,33 @@ class MetadataPatternSearchIT extends TestContainersBaseConfig {
         List<Map<String, Object>> rows = response.field("listAllFolder").getValue();
         Assertions.assertNotNull(rows);
         Assertions.assertEquals(Set.of(beta.toString()),
+                rows.stream().map(r -> (String) r.get("id")).collect(Collectors.toSet()));
+    }
+
+    @Test
+    void whenListAllFolderWithTypedValueAsText_thenMatchingDocuments() {
+        String key = newKey();
+        UUID flagged = upload(Map.of(key, true));
+        upload(Map.of(key, false));
+
+        Map<String, Object> request = new HashMap<>();
+        request.put("metadata", Map.of(key, "true"));
+        request.put("pageInfo", Map.of("sortBy", "name", "sortOrder", "ASC", "pageNumber", 1, "pageSize", 100));
+
+        ClientGraphQlResponse response = graphQl()
+                .document("""
+                        query listAllFolder($request:ListFolderRequest!) {
+                            listAllFolder(request:$request) { id name }
+                        }""")
+                .variable("request", request)
+                .execute()
+                .block();
+
+        Assertions.assertNotNull(response);
+        Assertions.assertTrue(response.getErrors().isEmpty(), () -> response.getErrors().toString());
+        List<Map<String, Object>> rows = response.field("listAllFolder").getValue();
+        Assertions.assertNotNull(rows);
+        Assertions.assertEquals(Set.of(flagged.toString()),
                 rows.stream().map(r -> (String) r.get("id")).collect(Collectors.toSet()));
     }
 

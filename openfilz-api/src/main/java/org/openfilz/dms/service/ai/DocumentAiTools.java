@@ -1409,7 +1409,8 @@ public class DocumentAiTools {
     public String searchByMetadata(
             @ToolParam(description = "The metadata to match, as a JSON object of key/value pairs, "
                     + "e.g. {\"status\":\"reviewed\"}; a value with % matches as a pattern, "
-                    + "e.g. {\"project\":\"beta%\"}") String metadataJson,
+                    + "e.g. {\"project\":\"beta%\"}; a text value also matches the true/false or number "
+                    + "it spells and a list containing it") String metadataJson,
             @ToolParam(required = false, description = "Optional: restrict to FILE or FOLDER") String type,
             @ToolParam(required = false, description = "Optional: the folder name to search within") String folderName) {
         String roleDenial = denyIfNotAllowed("searchByMetadata", ToolCapability.DOCUMENT_READ);
