@@ -81,7 +81,9 @@ class MetadataCriteriaTest {
 
     @Test
     void stringsSpellingNothing_stayPlainStrings() {
-        for (String plain : List.of("007", "1.", "+1", "0x1", " 42", "42 ", "yes", "", "1e", ".5", "1e99999", "truee")) {
+        // 1e2147483648 / 1e-2147483649: BigDecimal would throw on the int-overflowing exponent
+        for (String plain : List.of("007", "1.", "+1", "0x1", " 42", "42 ", "yes", "", "1e", ".5", "1e99999", "truee",
+                "1e2147483648", "1e-2147483649", "1e99999999999999999999")) {
             assertEquals(List.of(plain), MetadataCriteria.spellings(plain), plain);
         }
     }

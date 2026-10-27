@@ -85,9 +85,13 @@ public record MetadataCriteria(Map<String, Object> exact, List<Alternative> alte
         }
     }
 
-    /** A JSON number literal: no leading zero, no leading {@code +}, no trailing {@code .}. */
+    /**
+     * A JSON number literal: no leading zero, no leading {@code +}, no trailing {@code .}. The
+     * exponent is capped at 4 digits: {@link #MAX_NUMBER_SCALE} rejects anything larger anyway,
+     * and {@code BigDecimal} throws on an exponent that overflows an {@code int} ({@code 1e2147483648}).
+     */
     private static final java.util.regex.Pattern JSON_NUMBER =
-            java.util.regex.Pattern.compile("-?(0|[1-9]\\d*)(\\.\\d+)?([eE][+-]?\\d+)?");
+            java.util.regex.Pattern.compile("-?(0|[1-9]\\d*)(\\.\\d+)?([eE][+-]?\\d{1,4})?");
     /** Beyond this scale a literal stays a string: Postgres's numeric would refuse it. */
     private static final int MAX_NUMBER_SCALE = 1000;
     private static final int MAX_NUMBER_LENGTH = 100;
@@ -159,7 +163,13 @@ public record MetadataCriteria(Map<String, Object> exact, List<Alternative> alte
         if (value.isEmpty() || value.length() > MAX_NUMBER_LENGTH || !JSON_NUMBER.matcher(value).matches()) {
             return null;
         }
-        BigDecimal number = new BigDecimal(value);
+        BigDecimal number;
+        try {
+            number = new BigDecimal(value);
+        } catch (NumberFormatException e) {
+            // a client's search value must never fail the request: it is a plain string then
+            return null;
+        }
         return Math.abs(number.scale()) > MAX_NUMBER_SCALE ? null : number;
     }
 
