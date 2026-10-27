@@ -457,11 +457,21 @@ correction read; `PropertiesCategoryTaxonomy` in core). Also: the per-user Inbox
 - **Metadata patterns** (`utils/MetadataCriteria`): a metadata criterion whose value is a string holding `%` or `*` is a
   case-insensitive pattern (`?` = one character, `_` / `\` literal, bare `%` = key exists) on all three paths — REST
   `ids-by-metadata` + AI `searchByMetadata`, GraphQL `metadata` (`ListFolderCriteria`), `searchDocuments` `metadata.<key>`.
-  **Keys and values always match case-insensitively** (exact values too). SQL reads `(lower(metadata::text)::jsonb)`
+  **Keys and values always match case-insensitively** (exact values too). **A string criterion without wildcard also
+  matches the typed value it spells and a list containing it** (`MetadataCriteria.Alternative`: `"true"`/`"false"`/`"null"`
+  any case, a strict JSON number literal — `"42"` finds `42`, `"042"` stays a string; clients send strings, machine writers
+  such as e-Sign `_readOnly`, migration columns or workflow `SET_METADATA` store typed JSON); a criterion already typed
+  (boolean / number / object / list / null from an API client) stays one exact containment. SQL reads `(lower(metadata::text)::jsonb)`
   (`SqlUtils.caseInsensitiveMetadata`, GIN-indexed by `V1_19` — keep the expression identical to the index):
-  `@> lower(:criteria)::jsonb` for the exact part + `?& :mkeys` + one bound `->> :mk_i ILIKE :mv_i` per pattern
+  `@> lower(:criteria)::jsonb` for the typed part + one `@> ANY(ARRAY(SELECT jsonb_array_elements(lower(:malt_i)::jsonb)))`
+  per string criterion (a bound JSON array of its spellings, scalar and one-element-list forms — still one GIN search
+  each; **from `SqlUtils.METADATA_OR_FORM_FROM` = 5 string criteria, `(col @> lower(:malt_i_0)::jsonb OR …)` instead**:
+  the planner can't see inside the array and falls to a seq scan from 5 of them, ~230 ms at 500 k documents, linear;
+  the OR-ed form keeps the index; below 5 the array form is kept, its recheck evaluating the column expression once) + `?& :mkeys` + one bound `->> :mk_i ILIKE :mv_i` per pattern
   (`SqlUtils.appendMetadataCriteria` / `bindMetadataCriteria`); OpenSearch = case-insensitive `term` / `wildcard` on
-  `metadata.<key>.keyword`, `exists` for a bare wildcard, over every spelling of the key the documents use
+  `metadata.<key>.keyword`, plus a lenient `match` on the field itself (where the document has no keyword value) for a
+  value spelling a boolean / number — such keys are mapped `boolean` / `long` / `float` with no `.keyword`; `exists` on
+  the field for a bare wildcard; a pattern on a boolean / numeric key finds nothing there (the database path does) — all over every spelling of the key the documents use
   (field names are case-sensitive there): the `OpenSearchQueryService.metadataKeySpellings(keys)` seam, answered by
   `IndexedMetadataKeys` (`OpenSearchMetadataKeys`: the keys of the index **mapping** — `metadata` is a dynamic object, so
   one cluster-state read per search lists every spelling ever indexed, whatever the corpus size; never a scan of the

@@ -450,6 +450,50 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
         }
     }
 
+    /**
+     * Values typed as text find booleans and numbers. Keys of their own, so the index maps them
+     * from these documents only ({@code boolean} / {@code long}, no keyword sub-field).
+     */
+    @Test
+    void testSearchMetadataTypedValueFilters() {
+        String t = "qv" + randomLetters(10);
+        String flag = "flag" + randomLetters(8);
+        String amount = "amount" + randomLetters(8);
+        List<UUID> ids = new java.util.ArrayList<>();
+        for (Map<String, Object> metadata : List.of(Map.<String, Object>of(flag, true, amount, 42),
+                Map.<String, Object>of(flag, false, amount, 7))) {
+            MultipartBodyBuilder builder = new MultipartBodyBuilder();
+            builder.part("file", new ClassPathResource("test.txt")).filename(t + " " + metadata.get(amount) + ".txt").contentType(MediaType.TEXT_PLAIN);
+            builder.part("metadata", metadata);
+            ids.add(getUploadResponse(builder).id());
+        }
+        try {
+            await().atMost(Duration.ofSeconds(45))
+                    .pollInterval(Duration.ofMillis(500))
+                    .untilAsserted(() -> Assertions.assertEquals(2, search(t, List.of(), null).totalHits()));
+
+            Assertions.assertEquals(List.of(t + " 42.txt"),
+                    search(t, List.of(filter("metadata." + flag, "true")), null).names());
+            Assertions.assertEquals(List.of(t + " 7.txt"),
+                    search(t, List.of(filter("metadata." + flag, "FALSE")), null).names());
+            Assertions.assertEquals(List.of(t + " 42.txt"),
+                    search(t, List.of(filter("metadata." + amount, "42")), null).names());
+            Assertions.assertEquals(List.of(t + " 42.txt"),
+                    search(t, List.of(filter("metadata." + amount, "42.0")), null).names());
+            // a value of another type finds nothing, and does not fail the search
+            Assertions.assertEquals(0, search(t, List.of(filter("metadata." + flag, "42")), null).totalHits());
+            Assertions.assertEquals(0, search(t, List.of(filter("metadata." + amount, "true")), null).totalHits());
+            Assertions.assertEquals(0, search(t, List.of(filter("metadata." + amount, "4.2")), null).totalHits());
+            // bare wildcard on a boolean key
+            Assertions.assertEquals(2, search(t, List.of(filter("metadata." + flag, "%")), null).totalHits());
+        } finally {
+            getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/files")
+                    .body(BodyInserters.fromValue(new DeleteRequest(ids)))
+                    .exchange()
+                    .expectStatus().isNoContent();
+        }
+    }
+
     @Test
     void testSearchNameWithUnderscore() {
         String t = "qu" + randomLetters(10);
