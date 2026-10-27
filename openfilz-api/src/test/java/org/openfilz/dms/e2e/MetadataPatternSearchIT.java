@@ -89,9 +89,24 @@ class MetadataPatternSearchIT extends TestContainersBaseConfig {
         UUID doc = upload(Map.of(key, "Beta-Release"));
 
         Assertions.assertEquals(Set.of(doc), search(Map.of(key, "BETA%")));
-        // exact values stay case-sensitive
-        Assertions.assertEquals(Set.of(), search(Map.of(key, "beta-release")));
+        // exact values match case-insensitively too
+        Assertions.assertEquals(Set.of(doc), search(Map.of(key, "beta-release")));
         Assertions.assertEquals(Set.of(doc), search(Map.of(key, "Beta-Release")));
+        Assertions.assertEquals(Set.of(), search(Map.of(key, "beta-releas")));
+    }
+
+    @Test
+    void whenKeyInOtherCase_thenMatchesCaseInsensitively() {
+        String key = newKey();
+        UUID lower = upload(Map.of(key, "Acme", "n", 7));
+        UUID upper = upload(Map.of(key.toUpperCase(), "ACME"));
+        upload(Map.of(key, "Other"));
+
+        Assertions.assertEquals(Set.of(lower, upper), search(Map.of(key, "acme")));
+        Assertions.assertEquals(Set.of(lower, upper), search(Map.of(key.toUpperCase(), "aCmE")));
+        Assertions.assertEquals(Set.of(lower, upper), search(Map.of(key.substring(0, 1).toUpperCase() + key.substring(1), "ac%")));
+        Assertions.assertEquals(Set.of(lower), search(Map.of(key.toUpperCase(), "ACME", "N", 7)));
+        Assertions.assertEquals(Set.of(), search(Map.of(key, "acme", "n", 8)));
     }
 
     @Test

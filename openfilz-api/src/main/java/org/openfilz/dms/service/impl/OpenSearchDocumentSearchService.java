@@ -13,6 +13,7 @@ import org.openfilz.dms.service.DocumentSearchService;
 import org.openfilz.dms.service.IndexNameProvider;
 import org.openfilz.dms.service.OpenSearchQueryService;
 import org.openfilz.dms.service.OpenSearchService;
+import org.openfilz.dms.utils.DocumentSearchUtil;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.opensearch._types.FieldValue;
 import org.opensearch.client.opensearch._types.query_dsl.*;
@@ -25,6 +26,8 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -117,26 +120,31 @@ public class OpenSearchDocumentSearchService implements DocumentSearchService, O
         // 3. Add Full-Text Search Clause (must)
         // This clause contributes to the relevance score.
         if (trimQuery != null) {
-            // --- 3. Build the Multi-Match Bool-Prefix Query ---
-            MultiMatchQuery multiMatchQuery = MultiMatchQuery.of(m -> m
-                    .query(trimQuery)
-                    .type(TextQueryType.BoolPrefix)
-                    .fields(
-                            CONTENT,
-                            SUGGEST_OTHERS_2
-                    )
-            );
-
-            // --- 4. Build the Fuzzy Match Query ---
-            MatchQuery fuzzyMatchQuery = MatchQuery.of(m -> m
-                    .field(NAME_SUGGEST)
-                    .query(FieldValue.of(trimQuery))
-                    .fuzziness("AUTO")
-                    .operator(Operator.And)
-            );
-            boolQueryBuilder.should(multiMatchQuery.toQuery(),
-                    fuzzyMatchQuery.toQuery()).minimumShouldMatch("1");
-
+            // --- 3. Build the Multi-Match Bool-Prefix Query (content + name) ---
+            List<Query> should = new ArrayList<>(List.of(
+                    MultiMatchQuery.of(m -> m
+                            .query(trimQuery)
+                            .type(TextQueryType.BoolPrefix)
+                            .fields(CONTENT)
+                    ).toQuery()));
+            // name_suggest is indexed with '_' / '-' / camelCase split into words: the name clauses
+            // read the query as typed and, when it differs, split the same way ("abc_123" → "abc 123")
+            String nameQuery = DocumentSearchUtil.splitWithSpaces(trimQuery);
+            for (String q : nameQuery.equals(trimQuery) ? List.of(trimQuery) : List.of(trimQuery, nameQuery)) {
+                should.add(MultiMatchQuery.of(m -> m
+                        .query(q)
+                        .type(TextQueryType.BoolPrefix)
+                        .fields(Arrays.asList(SUGGEST_OTHERS_2))
+                ).toQuery());
+                // --- 4. Build the Fuzzy Match Query ---
+                should.add(MatchQuery.of(m -> m
+                        .field(NAME_SUGGEST)
+                        .query(FieldValue.of(q))
+                        .fuzziness("AUTO")
+                        .operator(Operator.And)
+                ).toQuery());
+            }
+            boolQueryBuilder.should(should).minimumShouldMatch("1");
         }
         return boolQueryBuilder;
     }

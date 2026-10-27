@@ -7,6 +7,7 @@ import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @RequiredArgsConstructor
@@ -40,8 +41,25 @@ public class SqlUtils {
     public DatabaseClient.GenericExecuteSpec bindCriteria(String criteria, Object value, DatabaseClient.GenericExecuteSpec query) {
         return query.bind(criteria, value);
     }
+    /**
+     * Binds the "contains" pattern of {@link #appendLikeCriteria(String, String, StringBuilder)}: the
+     * value is matched literally, so a {@code _} or a {@code %} in a file name is not a wildcard.
+     */
     public DatabaseClient.GenericExecuteSpec bindLikeCriteria(String criteria, String value, DatabaseClient.GenericExecuteSpec query) {
-        return query.bind(criteria, "%" + value.toUpperCase() + "%");
+        return query.bind(criteria, "%" + escapeLike(value) + "%");
+    }
+
+    /** Escapes the {@code LIKE} wildcards ({@code %}, {@code _}) and the escape character ({@code \}) of a literal value. */
+    public static String escapeLike(String value) {
+        StringBuilder escaped = new StringBuilder(value.length() + 8);
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c == '%' || c == '_' || c == '\\') {
+                escaped.append('\\');
+            }
+            escaped.append(c);
+        }
+        return escaped.toString();
     }
 
     /** Bind name of the exact (containment) part of a metadata filter. */
@@ -60,6 +78,7 @@ public class SqlUtils {
         MetadataCriteria criteria = MetadataCriteria.of(metadata);
         if (criteria.hasExact()) {
             try {
+                // lower-cased in SQL (see appendMetadataCriteria), like the column
                 query = query.bind(METADATA_CRITERIA, objectMapper.writeValueAsString(criteria.exact()));
             } catch (JacksonException e) {
                 throw new RuntimeException(e);
@@ -67,11 +86,11 @@ public class SqlUtils {
         }
         List<MetadataCriteria.Pattern> patterns = criteria.patterns();
         if (!patterns.isEmpty()) {
-            query = query.bind(METADATA_PATTERN_KEYS, patterns.stream().map(MetadataCriteria.Pattern::key).toArray(String[]::new));
+            query = query.bind(METADATA_PATTERN_KEYS, patterns.stream().map(p -> p.key().toLowerCase(Locale.ROOT)).toArray(String[]::new));
             for (int i = 0; i < patterns.size(); i++) {
                 MetadataCriteria.Pattern pattern = patterns.get(i);
                 if (!pattern.anyValue()) {
-                    query = query.bind(METADATA_PATTERN_KEY + i, pattern.key())
+                    query = query.bind(METADATA_PATTERN_KEY + i, pattern.key().toLowerCase(Locale.ROOT))
                             .bind(METADATA_PATTERN_VALUE + i, pattern.like());
                 }
             }
@@ -90,8 +109,12 @@ public class SqlUtils {
         return sql;
     }
 
+    /**
+     * Case-insensitive "contains" on a column: {@code col ILIKE :criteria ESCAPE '\' }. Bind with
+     * {@link #bindLikeCriteria(String, String, DatabaseClient.GenericExecuteSpec)}.
+     */
     public void appendLikeCriteria(String prefix, String criteria, StringBuilder sql) {
-        sql.append("UPPER(").append(prefix == null ? criteria : prefix + criteria).append(") LIKE :").append(criteria).append(SPACE);
+        appendPrefix(prefix, sql).append(criteria).append(" ILIKE :").append(criteria).append(" ESCAPE '\\' ");
     }
 
     /**
@@ -136,12 +159,21 @@ public class SqlUtils {
     }
 
     /**
+     * The expression every metadata filter reads: the column with its keys and string values
+     * lower-cased, so that keys and values match case-insensitively. It is GIN-indexed
+     * ({@code idx_documents_metadata_ci}, V1_19) — keep it textually identical to the index.
+     */
+    public static String caseInsensitiveMetadata(String column) {
+        return "(lower(" + column + "::text)::jsonb)";
+    }
+
+    /**
      * Appends the predicate of a metadata filter (see {@link MetadataCriteria}), without a leading
-     * {@code AND} / {@code WHERE}:
+     * {@code AND} / {@code WHERE}; keys and values match case-insensitively:
      * <pre>
-     * col @> :criteria::jsonb                                   -- exact values (GIN-indexed)
-     * AND col ?& :mkeys                                         -- keys of the patterns (GIN-indexed)
-     * AND col ->> :mk_0 ILIKE :mv_0 ESCAPE '\'                -- one recheck per pattern
+     * (lower(col::text)::jsonb) @> lower(:criteria)::jsonb      -- exact values (GIN-indexed)
+     * AND (lower(col::text)::jsonb) ?& :mkeys                   -- keys of the patterns (GIN-indexed)
+     * AND (lower(col::text)::jsonb) ->> :mk_0 ILIKE :mv_0 ESCAPE '\'   -- one recheck per pattern
      * </pre>
      * Keys and patterns are bound, never concatenated. The key-existence test keeps the GIN index
      * in play, so the pattern is only evaluated on the documents carrying the key. A bare
@@ -149,10 +181,10 @@ public class SqlUtils {
      */
     public void appendMetadataCriteria(String prefix, String column, Map<String, Object> metadata, StringBuilder sql) {
         MetadataCriteria criteria = MetadataCriteria.of(metadata);
-        String col = prefix == null ? column : prefix + column;
+        String col = caseInsensitiveMetadata(prefix == null ? column : prefix + column);
         boolean and = false;
         if (criteria.hasExact()) {
-            sql.append(col).append(" @> :").append(METADATA_CRITERIA).append("::jsonb ");
+            sql.append(col).append(" @> lower(:").append(METADATA_CRITERIA).append(")::jsonb ");
             and = true;
         }
         List<MetadataCriteria.Pattern> patterns = criteria.patterns();

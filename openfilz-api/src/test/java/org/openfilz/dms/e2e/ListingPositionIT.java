@@ -147,20 +147,20 @@ public class ListingPositionIT extends TestContainersBaseConfig {
             addFavorite(id);
         }
 
-        ListFolderRequest favoriteImages = allRequest(prefix + "%", IMAGES, true, 1, 1);
-        Assertions.assertEquals(2L, countAll(allRequest(prefix + "%", IMAGES, true, null, null)));
+        ListFolderRequest favoriteImages = allRequest(prefix, IMAGES, true, 1, 1);
+        Assertions.assertEquals(2L, countAll(allRequest(prefix, IMAGES, true, null, null)));
         Assertions.assertEquals(0L, allPosition(favoriteImages, a));
         Assertions.assertEquals(1L, allPosition(favoriteImages, c));
         Assertions.assertNull(allPosition(favoriteImages, b), "a pdf is not in the images listing");
         Assertions.assertNull(allPosition(favoriteImages, notFavorite), "not a favorite");
 
         // Same order as the listing itself
-        List<Map<String, Object>> listed = listAll(allRequest(prefix + "%", IMAGES, true, 1, 100));
+        List<Map<String, Object>> listed = listAll(allRequest(prefix, IMAGES, true, 1, 100));
         Assertions.assertEquals(List.of(a.toString(), c.toString()), ids(listed));
 
         // Without the favorite filter every matching image counts, across both folders
-        Assertions.assertEquals(3L, countAll(allRequest(prefix + "%", IMAGES, null, null, null)));
-        Assertions.assertEquals(1L, allPosition(allRequest(prefix + "%", IMAGES, null, 1, 1), c));
+        Assertions.assertEquals(3L, countAll(allRequest(prefix, IMAGES, null, null, null)));
+        Assertions.assertEquals(1L, allPosition(allRequest(prefix, IMAGES, null, 1, 1), c));
     }
 
     // ==================== helpers ====================
