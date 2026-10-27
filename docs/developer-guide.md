@@ -400,7 +400,8 @@ curl -H "Authorization: Bearer <token>" \
 **Metadata criteria values.** A string value containing `%` or `*` is a **pattern**, matched
 case-insensitively: `%` / `*` = any characters, `?` = exactly one character, `_` and `\` are
 literal, and a bare `%` means "the key is set, whatever its value". Any other value (string,
-number, boolean, object) is matched exactly, case-sensitively, as before. The same rules apply to
+number, boolean, object) is matched exactly. Keys and string values are always compared
+case-insensitively: `{"Client": "ACME"}` finds a document carrying `{"client": "Acme"}`. The same rules apply to
 the GraphQL `metadata` filter of `listFolder` / `listAllFolder` / `listFavorites` and to the
 `metadata.<key>` filters of `searchDocuments`. At most 10 criteria per request, keys up to 100
 characters, patterns up to 200 characters (400 Bad Request beyond).

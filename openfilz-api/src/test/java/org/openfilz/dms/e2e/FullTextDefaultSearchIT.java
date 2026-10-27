@@ -450,6 +450,68 @@ public class FullTextDefaultSearchIT extends TestContainersBaseConfig {
         }
     }
 
+    @Test
+    void testSearchNameWithUnderscore() {
+        String t = "qu" + randomLetters(10);
+        List<UUID> ids = new java.util.ArrayList<>();
+        // "_" must be literal: as a LIKE wildcard it would also match the second name
+        for (String name : List.of(t + "_x1.txt", t + "ax1.txt")) {
+            MultipartBodyBuilder builder = new MultipartBodyBuilder();
+            builder.part("file", new ClassPathResource("test.txt")).filename(name).contentType(MediaType.TEXT_PLAIN);
+            ids.add(getUploadResponse(builder).id());
+        }
+        try {
+            await().atMost(Duration.ofSeconds(45))
+                    .pollInterval(Duration.ofMillis(500))
+                    .untilAsserted(() -> assertNameHit(t + "_x1.txt", search(t + "_x1", List.of(), null)));
+            assertNameHit(t + "_x1.txt", search(t + "_x1.txt", List.of(), null));
+            assertNameHit(t + "_x1.txt", search(t.toUpperCase() + "_X1", List.of(filter("type", "FILE")), null));
+        } finally {
+            getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/files")
+                    .body(BodyInserters.fromValue(new DeleteRequest(ids)))
+                    .exchange()
+                    .expectStatus().isNoContent();
+        }
+    }
+
+    /**
+     * The database matches the name exactly: the only hit. The index also matches names fuzzily
+     * (one typo away), so there it is the best hit.
+     */
+    protected void assertNameHit(String expected, SearchPage page) {
+        Assertions.assertEquals(List.of(expected), page.names());
+    }
+
+    @Test
+    void testSearchMetadataExactValueIgnoresCase() {
+        String t = "qc" + randomLetters(10);
+        List<UUID> ids = new java.util.ArrayList<>();
+        List<Map<String, Object>> metadata = List.of(Map.of("Client", "ACME Corp"), Map.of("client", "acme corp"), Map.of("client", "Other"));
+        for (int i = 0; i < metadata.size(); i++) {
+            MultipartBodyBuilder builder = new MultipartBodyBuilder();
+            builder.part("file", new ClassPathResource("test.txt")).filename(t + " doc" + i + ".txt").contentType(MediaType.TEXT_PLAIN);
+            builder.part("metadata", metadata.get(i));
+            ids.add(getUploadResponse(builder).id());
+        }
+        try {
+            await().atMost(Duration.ofSeconds(45))
+                    .pollInterval(Duration.ofMillis(500))
+                    .untilAsserted(() -> Assertions.assertEquals(3, search(t, List.of(), null).totalHits()));
+
+            Set<String> acme = Set.of(t + " doc0.txt", t + " doc1.txt");
+            Assertions.assertEquals(acme, Set.copyOf(search(t, List.of(filter("metadata.client", "Acme Corp")), null).names()));
+            Assertions.assertEquals(acme, Set.copyOf(search(t, List.of(filter("metadata.CLIENT", "ACME CORP")), null).names()));
+            Assertions.assertEquals(acme, Set.copyOf(search(t, List.of(filter("metadata.Client", "acme%")), null).names()));
+            Assertions.assertEquals(List.of(t + " doc2.txt"), search(t, List.of(filter("metadata.CLIENT", "other")), null).names());
+            Assertions.assertEquals(0, search(t, List.of(filter("metadata.client", "acme")), null).totalHits());
+        } finally {
+            getWebTestClient().method(HttpMethod.DELETE).uri(RestApiVersion.API_PREFIX + "/files")
+                    .body(BodyInserters.fromValue(new DeleteRequest(ids)))
+                    .exchange()
+                    .expectStatus().isNoContent();
+        }
+    }
+
     /** Sort fields both back ends accept, whose order the fixture cannot tell apart. */
     protected List<String> sortFieldsWithoutOrderCheck() {
         return List.of("type", "createdBy", "updatedBy");

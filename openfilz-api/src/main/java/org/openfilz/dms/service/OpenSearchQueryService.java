@@ -21,8 +21,12 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
 import static org.openfilz.dms.service.OpenSearchService.*;
 
@@ -32,6 +36,7 @@ public interface OpenSearchQueryService {
         // 4. Add Filter Clauses (filter)
         // These clauses are used for exact matching and do not affect the score.
         // They are generally faster and cacheable.
+        List<FilterInput> metadataFilters = new ArrayList<>();
         if (!CollectionUtils.isEmpty(filters)) {
             for (FilterInput filter : filters) {
                 if (filter.value() == null) {
@@ -44,22 +49,51 @@ public interface OpenSearchQueryService {
                 if (addKnownFilterClause(filter, boolQueryBuilder)) {
                     continue;
                 }
-                // Any other field (metadata.*, fields an extension indexes itself): exact match on
-                // its '.keyword' sub-field, as dynamically mapped strings get one.
-                String fieldName = filter.field().endsWith(KEYWORD) ? filter.field() : filter.field() + KEYWORD;
-
-                if (filter.field().startsWith(DocumentSearchUtil.FILTER_METADATA) && MetadataCriteria.isPattern(filter.value())) {
-                    addMetadataPatternClause(fieldName, filter.value(), boolQueryBuilder);
+                if (filter.field().startsWith(DocumentSearchUtil.FILTER_METADATA)) {
+                    metadataFilters.add(filter);
                     continue;
                 }
-
+                // Any other field (fields an extension indexes itself): exact match on its
+                // '.keyword' sub-field, as dynamically mapped strings get one.
+                String fieldName = filter.field().endsWith(KEYWORD) ? filter.field() : filter.field() + KEYWORD;
                 boolQueryBuilder.filter(f -> f.term(t -> t
                         .field(fieldName)
                         .value(FieldValue.of(filter.value()))
                 ));
             }
         }
-        return Mono.just(boolQueryBuilder);
+        if (metadataFilters.isEmpty()) {
+            return Mono.just(boolQueryBuilder);
+        }
+        // Metadata keys match case-insensitively, but index field names do not: each key is
+        // expanded to the spellings the documents actually use — one lookup for all the keys.
+        Set<String> keys = new LinkedHashSet<>();
+        metadataFilters.forEach(filter -> keys.add(metadataKey(filter.field())));
+        return metadataKeySpellings(keys)
+                .defaultIfEmpty(Map.of())
+                .map(spellings -> {
+                    for (FilterInput filter : metadataFilters) {
+                        String key = metadataKey(filter.field());
+                        addMetadataClause(spellings.getOrDefault(key, List.of(key)), filter.value(), boolQueryBuilder);
+                    }
+                    return boolQueryBuilder;
+                });
+    }
+
+    /**
+     * The spellings of the given metadata keys the indexed documents use, whatever their case
+     * ({@code project} → {@code [project, Project]}), so that a metadata filter matches its key
+     * case-insensitively; a key absent from the result is used as given. Default: none known
+     * (see {@code IndexedMetadataKeys} for the index-backed answer).
+     */
+    default Mono<Map<String, List<String>>> metadataKeySpellings(Collection<String> keys) {
+        return Mono.just(Map.of());
+    }
+
+    /** The metadata key of a {@code metadata.<key>} filter field (an explicit {@code .keyword} suffix dropped). */
+    static String metadataKey(String field) {
+        String key = field.substring(DocumentSearchUtil.FILTER_METADATA.length());
+        return key.endsWith(KEYWORD) ? key.substring(0, key.length() - KEYWORD.length()) : key;
     }
 
     /**
@@ -108,19 +142,32 @@ public interface OpenSearchQueryService {
     }
 
     /**
-     * A {@code metadata.<key>} filter whose value is a pattern ({@link MetadataCriteria}): a
-     * case-insensitive {@code wildcard} query on the key's keyword sub-field, or an {@code exists}
-     * query for a bare wildcard ("the key is set").
+     * A {@code metadata.<key>} filter, on the keyword sub-field of each spelling of the key (any
+     * of them matches), values compared case-insensitively: a {@code term} for an exact value, a
+     * {@code wildcard} for a pattern ({@link MetadataCriteria}), an {@code exists} query for a
+     * bare wildcard ("the key is set").
      */
-    static void addMetadataPatternClause(String keywordField, String value, BoolQuery.Builder boolQueryBuilder) {
-        if (value.length() > MetadataCriteria.MAX_PATTERN_LENGTH) {
+    static void addMetadataClause(List<String> keys, String value, BoolQuery.Builder boolQueryBuilder) {
+        boolean pattern = MetadataCriteria.isPattern(value);
+        if (pattern && value.length() > MetadataCriteria.MAX_PATTERN_LENGTH) {
             throw new IllegalArgumentException("A metadata pattern cannot exceed " + MetadataCriteria.MAX_PATTERN_LENGTH + " characters");
         }
-        String wildcard = MetadataCriteria.toWildcardPattern(value);
-        if (wildcard.chars().allMatch(c -> c == '*')) {
-            boolQueryBuilder.filter(f -> f.exists(e -> e.field(keywordField)));
+        String wildcard = pattern ? MetadataCriteria.toWildcardPattern(value) : null;
+        boolean anyValue = wildcard != null && wildcard.chars().allMatch(c -> c == '*');
+        List<Query> anyOf = keys.stream().map(key -> {
+            String field = DocumentSearchUtil.FILTER_METADATA + key + KEYWORD;
+            if (anyValue) {
+                return Query.of(q -> q.exists(e -> e.field(field)));
+            }
+            if (pattern) {
+                return Query.of(q -> q.wildcard(w -> w.field(field).value(wildcard).caseInsensitive(true)));
+            }
+            return Query.of(q -> q.term(t -> t.field(field).value(FieldValue.of(value)).caseInsensitive(true)));
+        }).toList();
+        if (anyOf.size() == 1) {
+            boolQueryBuilder.filter(anyOf.getFirst());
         } else {
-            boolQueryBuilder.filter(f -> f.wildcard(w -> w.field(keywordField).value(wildcard).caseInsensitive(true)));
+            boolQueryBuilder.filter(f -> f.bool(b -> b.should(anyOf).minimumShouldMatch("1")));
         }
     }
 

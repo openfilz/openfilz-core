@@ -66,7 +66,7 @@ class AiDocumentQueryScopeTest {
         String sql = sql(all);
 
         assertThat(sql).doesNotContain("parent_id");
-        assertThat(sql).contains("d.type = :type", "UPPER(d.name) LIKE :name", "d.active = :active");
+        assertThat(sql).contains("d.type = :type", "d.name ILIKE :name ESCAPE", "d.active = :active");
         // The remaining filters must still open the WHERE clause themselves.
         assertThat(sql).contains(" WHERE d.type").doesNotContain("WHERE AND");
         assertThat(sql.split(" WHERE ", -1)).hasSize(2);
