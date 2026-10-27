@@ -194,6 +194,28 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
               AND NOT (k = ANY(:excludedKeys))""";
     private static final String METADATA_KEYS_ORDER = " GROUP BY k ORDER BY n DESC, k LIMIT :limit";
 
+    /**
+     * Spellings of one key, case-insensitively. The key test on the lower-cased column uses its
+     * GIN index (V1_19), so only the documents carrying the key are read.
+     */
+    private static final String SELECT_METADATA_KEY_SPELLINGS = """
+            SELECT DISTINCT k
+            FROM documents d
+            CROSS JOIN LATERAL jsonb_object_keys(d.metadata) AS k
+            WHERE d.active = true
+              AND jsonb_typeof(d.metadata) = 'object'
+              AND (lower(d.metadata::text)::jsonb) ? lower(:key)
+              AND lower(k) = lower(:key)
+            LIMIT 20""";
+
+    @Override
+    public Flux<String> findMetadataKeySpellings(String key) {
+        return databaseClient.sql(SELECT_METADATA_KEY_SPELLINGS)
+                .bind("key", key)
+                .map(row -> row.get(0, String.class))
+                .all();
+    }
+
     @Override
     public Flux<MetadataKeySuggestion> listMetadataKeys(int limit, List<String> excludedKeys) {
         String sql = SELECT_METADATA_KEYS + metadataKeysAccessPredicate() + METADATA_KEYS_ORDER;

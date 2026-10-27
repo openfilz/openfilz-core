@@ -5,6 +5,7 @@ import org.openfilz.dms.dto.request.FilterInput;
 import org.openfilz.dms.dto.request.SortInput;
 import org.openfilz.dms.dto.response.Suggest;
 import org.openfilz.dms.exception.OpenSearchException;
+import org.openfilz.dms.utils.DocumentSearchUtil;
 import org.openfilz.dms.utils.FileUtils;
 import org.openfilz.dms.service.DocumentSuggestionService;
 import org.openfilz.dms.service.IndexNameProvider;
@@ -69,6 +70,11 @@ public class OpenSearchDocumentSuggestionService implements DocumentSuggestionSe
 
         // Should: match on name_suggest (existing behavior)
         boolQueryBuilder.should(openSearchQueryService.getNameSuggestQuery(trimQuery).toQuery());
+        // ...and on the query split like the indexed names ("abc_123" → "abc 123")
+        String nameQuery = DocumentSearchUtil.splitWithSpaces(trimQuery);
+        if (!nameQuery.equals(trimQuery)) {
+            boolQueryBuilder.should(openSearchQueryService.getNameSuggestQuery(nameQuery).toQuery());
+        }
 
         // Should: match on content (full-text search inside documents)
         // The content_analyzer (asciifolding + language stemmers) handles accent folding

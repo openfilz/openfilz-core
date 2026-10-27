@@ -71,10 +71,54 @@ class OpenSearchQueryServiceTest {
     }
 
     @Test
-    void addFilterClauses_metadataExactValue_staysATerm() {
+    void addFilterClauses_metadataExactValue_isACaseInsensitiveTerm() {
         BoolQuery query = service.addFilterClauses(List.of(new FilterInput("metadata.project", "INV_2024")), new BoolQuery.Builder())
                 .block().build();
-        org.junit.jupiter.api.Assertions.assertTrue(query.filter().getFirst().isTerm());
+        var term = query.filter().getFirst().term();
+        org.junit.jupiter.api.Assertions.assertEquals("metadata.project.keyword", term.field());
+        org.junit.jupiter.api.Assertions.assertEquals(Boolean.TRUE, term.caseInsensitive());
+    }
+
+    @Test
+    void addFilterClauses_metadataKey_matchesEverySpellingOfTheKey() {
+        OpenSearchQueryService spellings = new OpenSearchQueryService() {
+            @Override
+            public String[] getSourceOtherExclusions() {
+                return new String[0];
+            }
+
+            @Override
+            public reactor.core.publisher.Mono<List<String>> metadataKeySpellings(String key) {
+                return reactor.core.publisher.Mono.just(List.of("client", "Client"));
+            }
+        };
+        BoolQuery.Builder builder = new BoolQuery.Builder();
+        spellings.addFilterClauses(List.of(new FilterInput("metadata.CLIENT", "acme"), new FilterInput("metadata.client.keyword", "a%")), builder).block();
+        BoolQuery query = builder.build();
+        org.junit.jupiter.api.Assertions.assertEquals(2, query.filter().size());
+        var exact = query.filter().get(0).bool();
+        org.junit.jupiter.api.Assertions.assertEquals("1", exact.minimumShouldMatch());
+        org.junit.jupiter.api.Assertions.assertEquals(List.of("metadata.client.keyword", "metadata.Client.keyword"),
+                exact.should().stream().map(q -> q.term().field()).toList());
+        org.junit.jupiter.api.Assertions.assertEquals(List.of("metadata.client.keyword", "metadata.Client.keyword"),
+                query.filter().get(1).bool().should().stream().map(q -> q.wildcard().field()).toList());
+    }
+
+    @Test
+    void addFilterClauses_metadataKeyNoDocumentUses_keepsTheKeyAsGiven() {
+        OpenSearchQueryService none = new OpenSearchQueryService() {
+            @Override
+            public String[] getSourceOtherExclusions() {
+                return new String[0];
+            }
+
+            @Override
+            public reactor.core.publisher.Mono<List<String>> metadataKeySpellings(String key) {
+                return reactor.core.publisher.Mono.empty();
+            }
+        };
+        BoolQuery query = none.addFilterClauses(List.of(new FilterInput("metadata.Project", "x")), new BoolQuery.Builder()).block().build();
+        org.junit.jupiter.api.Assertions.assertEquals("metadata.Project.keyword", query.filter().getFirst().term().field());
     }
 
     @Test

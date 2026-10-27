@@ -457,9 +457,17 @@ correction read; `PropertiesCategoryTaxonomy` in core). Also: the per-user Inbox
 - **Metadata patterns** (`utils/MetadataCriteria`): a metadata criterion whose value is a string holding `%` or `*` is a
   case-insensitive pattern (`?` = one character, `_` / `\` literal, bare `%` = key exists) on all three paths — REST
   `ids-by-metadata` + AI `searchByMetadata`, GraphQL `metadata` (`ListFolderCriteria`), `searchDocuments` `metadata.<key>`.
-  SQL = `metadata @> :criteria` for the exact part + `metadata ?& :mkeys` (GIN) + one bound `->> :mk_i ILIKE :mv_i` per
-  pattern (`SqlUtils.appendMetadataCriteria` / `bindMetadataCriteria`); OpenSearch = `wildcard` (case-insensitive) on
-  `metadata.<key>.keyword`, `exists` for a bare wildcard. Limits: 10 criteria, 100-char keys, 200-char patterns (400).
+  **Keys and values always match case-insensitively** (exact values too). SQL reads `(lower(metadata::text)::jsonb)`
+  (`SqlUtils.caseInsensitiveMetadata`, GIN-indexed by `V1_19` — keep the expression identical to the index):
+  `@> lower(:criteria)::jsonb` for the exact part + `?& :mkeys` + one bound `->> :mk_i ILIKE :mv_i` per pattern
+  (`SqlUtils.appendMetadataCriteria` / `bindMetadataCriteria`); OpenSearch = case-insensitive `term` / `wildcard` on
+  `metadata.<key>.keyword`, `exists` for a bare wildcard, over every spelling of the key the documents use
+  (`OpenSearchQueryService.metadataKeySpellings` seam → `DocumentDAO.findMetadataKeySpellings`; field names are
+  case-sensitive there). Limits: 10 criteria, 100-char keys, 200-char patterns (400).
+- **Name search** (`nameLike`, the database `searchDocuments` / suggestions): `name ILIKE '%…%' ESCAPE '\'` with the
+  value escaped (`SqlUtils.escapeLike`) — `_` and `%` in a name are literal. On OpenSearch, `name_suggest` is indexed
+  through `DocumentSearchUtil.splitWithSpaces` (`_` / `-` / camelCase → words), so the name clauses split the query the
+  same way (`abc_123` → `abc 123`); the content clause keeps the query as typed.
 - **Metadata key suggestions**: `GET /documents/metadata-keys` (`MetadataKeyController` → `MetadataKeySuggestionService`
   → `DocumentDAO.listMetadataKeys`): most frequent keys of the active documents the caller sees, under `SET LOCAL
   statement_timeout` (timeout → `[]`, cached too), Caffeine `AsyncCache` (one load per scope at a time) per `DocumentDAO.metadataKeysCacheScope()` (core: one entry; an

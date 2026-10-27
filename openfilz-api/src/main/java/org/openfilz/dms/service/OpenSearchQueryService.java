@@ -14,6 +14,7 @@ import org.opensearch.client.opensearch._types.query_dsl.Query;
 import org.opensearch.client.opensearch._types.query_dsl.QueryVariant;
 import org.opensearch.client.opensearch._types.query_dsl.TextQueryType;
 import org.springframework.util.CollectionUtils;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.OffsetDateTime;
@@ -32,6 +33,7 @@ public interface OpenSearchQueryService {
         // 4. Add Filter Clauses (filter)
         // These clauses are used for exact matching and do not affect the score.
         // They are generally faster and cacheable.
+        List<FilterInput> metadataFilters = new ArrayList<>();
         if (!CollectionUtils.isEmpty(filters)) {
             for (FilterInput filter : filters) {
                 if (filter.value() == null) {
@@ -44,22 +46,44 @@ public interface OpenSearchQueryService {
                 if (addKnownFilterClause(filter, boolQueryBuilder)) {
                     continue;
                 }
-                // Any other field (metadata.*, fields an extension indexes itself): exact match on
-                // its '.keyword' sub-field, as dynamically mapped strings get one.
-                String fieldName = filter.field().endsWith(KEYWORD) ? filter.field() : filter.field() + KEYWORD;
-
-                if (filter.field().startsWith(DocumentSearchUtil.FILTER_METADATA) && MetadataCriteria.isPattern(filter.value())) {
-                    addMetadataPatternClause(fieldName, filter.value(), boolQueryBuilder);
+                if (filter.field().startsWith(DocumentSearchUtil.FILTER_METADATA)) {
+                    metadataFilters.add(filter);
                     continue;
                 }
-
+                // Any other field (fields an extension indexes itself): exact match on its
+                // '.keyword' sub-field, as dynamically mapped strings get one.
+                String fieldName = filter.field().endsWith(KEYWORD) ? filter.field() : filter.field() + KEYWORD;
                 boolQueryBuilder.filter(f -> f.term(t -> t
                         .field(fieldName)
                         .value(FieldValue.of(filter.value()))
                 ));
             }
         }
-        return Mono.just(boolQueryBuilder);
+        // Metadata keys match case-insensitively, but index field names do not: each key is
+        // expanded to the spellings the documents actually use.
+        return Flux.fromIterable(metadataFilters)
+                .concatMap(filter -> {
+                    String key = metadataKey(filter.field());
+                    return metadataKeySpellings(key)
+                            .defaultIfEmpty(List.of(key))
+                            .doOnNext(keys -> addMetadataClause(keys, filter.value(), boolQueryBuilder));
+                })
+                .then(Mono.just(boolQueryBuilder));
+    }
+
+    /**
+     * The spellings of a metadata key the indexed documents use, whatever their case
+     * ({@code project} → {@code [project, Project]}), so that a metadata filter matches the key
+     * case-insensitively. Default: the key as given.
+     */
+    default Mono<List<String>> metadataKeySpellings(String key) {
+        return Mono.just(List.of(key));
+    }
+
+    /** The metadata key of a {@code metadata.<key>} filter field (an explicit {@code .keyword} suffix dropped). */
+    static String metadataKey(String field) {
+        String key = field.substring(DocumentSearchUtil.FILTER_METADATA.length());
+        return key.endsWith(KEYWORD) ? key.substring(0, key.length() - KEYWORD.length()) : key;
     }
 
     /**
@@ -108,19 +132,32 @@ public interface OpenSearchQueryService {
     }
 
     /**
-     * A {@code metadata.<key>} filter whose value is a pattern ({@link MetadataCriteria}): a
-     * case-insensitive {@code wildcard} query on the key's keyword sub-field, or an {@code exists}
-     * query for a bare wildcard ("the key is set").
+     * A {@code metadata.<key>} filter, on the keyword sub-field of each spelling of the key (any
+     * of them matches), values compared case-insensitively: a {@code term} for an exact value, a
+     * {@code wildcard} for a pattern ({@link MetadataCriteria}), an {@code exists} query for a
+     * bare wildcard ("the key is set").
      */
-    static void addMetadataPatternClause(String keywordField, String value, BoolQuery.Builder boolQueryBuilder) {
-        if (value.length() > MetadataCriteria.MAX_PATTERN_LENGTH) {
+    static void addMetadataClause(List<String> keys, String value, BoolQuery.Builder boolQueryBuilder) {
+        boolean pattern = MetadataCriteria.isPattern(value);
+        if (pattern && value.length() > MetadataCriteria.MAX_PATTERN_LENGTH) {
             throw new IllegalArgumentException("A metadata pattern cannot exceed " + MetadataCriteria.MAX_PATTERN_LENGTH + " characters");
         }
-        String wildcard = MetadataCriteria.toWildcardPattern(value);
-        if (wildcard.chars().allMatch(c -> c == '*')) {
-            boolQueryBuilder.filter(f -> f.exists(e -> e.field(keywordField)));
+        String wildcard = pattern ? MetadataCriteria.toWildcardPattern(value) : null;
+        boolean anyValue = wildcard != null && wildcard.chars().allMatch(c -> c == '*');
+        List<Query> anyOf = keys.stream().map(key -> {
+            String field = DocumentSearchUtil.FILTER_METADATA + key + KEYWORD;
+            if (anyValue) {
+                return Query.of(q -> q.exists(e -> e.field(field)));
+            }
+            if (pattern) {
+                return Query.of(q -> q.wildcard(w -> w.field(field).value(wildcard).caseInsensitive(true)));
+            }
+            return Query.of(q -> q.term(t -> t.field(field).value(FieldValue.of(value)).caseInsensitive(true)));
+        }).toList();
+        if (anyOf.size() == 1) {
+            boolQueryBuilder.filter(anyOf.getFirst());
         } else {
-            boolQueryBuilder.filter(f -> f.wildcard(w -> w.field(keywordField).value(wildcard).caseInsensitive(true)));
+            boolQueryBuilder.filter(f -> f.bool(b -> b.should(anyOf).minimumShouldMatch("1")));
         }
     }
 

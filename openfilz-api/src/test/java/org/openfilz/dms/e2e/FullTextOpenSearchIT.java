@@ -549,6 +549,12 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
     // ---------------------------------------------------------------- OpenSearch-only: snippets, legacy index entries, sort fields
 
     @Override
+    protected void assertNameHit(String expected, SearchPage page) {
+        Assertions.assertFalse(page.names().isEmpty(), "no hit for " + expected);
+        Assertions.assertEquals(expected, page.names().getFirst());
+    }
+
+    @Override
     protected List<String> sortFieldsWithoutOrderCheck() {
         // extension / contentType are index fields; an unknown field is ignored instead of failing the query
         List<String> fields = new ArrayList<>(super.sortFieldsWithoutOrderCheck());

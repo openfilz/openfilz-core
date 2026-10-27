@@ -13,9 +13,9 @@ import java.util.Map;
  * A criterion value is a <b>pattern</b> when it is a string containing {@code %} or {@code *}:
  * {@code %} / {@code *} = any sequence of characters, {@code ?} = exactly one character,
  * {@code _} and {@code \} are literal. Patterns match case-insensitively; a bare {@code %} (or
- * {@code *}) means "the key exists, whatever its value". Every other value keeps the exact,
- * case-sensitive containment semantics ({@code metadata @> criteria}), numbers, booleans and
- * nested objects included.
+ * {@code *}) means "the key exists, whatever its value". Every other value is matched exactly
+ * by JSON containment, numbers, booleans and nested objects included. Keys and string values
+ * always match case-insensitively (see {@code SqlUtils.appendMetadataCriteria}).
  *
  * @param exact    the criteria matched by JSON containment (may be empty)
  * @param patterns the criteria matched by pattern, ordered by key so the SQL text and the bind
