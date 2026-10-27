@@ -220,6 +220,7 @@ class LocalFullTextServiceImplTest {
 
         verify(storageService, timeout(2000)).loadFile("storage/doc.pdf");
         verify(tikaService, timeout(2000)).processResource(any(), any(), any());
+        verify(indexService, timeout(2000)).indexDocumentStream(any(), eq(doc.getId()));
     }
 
     @Test
@@ -299,6 +300,8 @@ class LocalFullTextServiceImplTest {
         service.indexDocument(doc);
 
         verify(tikaService, timeout(2000)).processResource(any(), any(), any());
+        // Last step of the queued pipeline: wait for it, or strict stubs may see it unused (race)
+        verify(indexService, timeout(2000)).indexDocumentStream(any(), eq(doc.getId()));
     }
 
     @Test
@@ -321,6 +324,7 @@ class LocalFullTextServiceImplTest {
         service.indexDocument(doc);
 
         verify(tikaService, timeout(2000)).processResource(any(), any(), any());
+        verify(indexService, timeout(2000)).indexDocumentStream(any(), eq(doc.getId()));
     }
 
     @Test
