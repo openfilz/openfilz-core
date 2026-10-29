@@ -23,6 +23,8 @@ import org.openfilz.dms.exception.DuplicateNameException;
 import org.openfilz.dms.exception.OperationForbiddenException;
 import org.openfilz.dms.exception.StorageException;
 import org.openfilz.dms.repository.DocumentDAO;
+import org.openfilz.dms.repository.DocumentRepository;
+import org.openfilz.dms.repository.impl.DocumentSoftDeleteDAO;
 import org.openfilz.dms.service.quota.StorageQuotaService;
 import org.openfilz.dms.service.*;
 import org.openfilz.dms.utils.BlankDocumentGenerator;
@@ -32,6 +34,8 @@ import org.openfilz.dms.utils.FileUtils;
 import org.openfilz.dms.utils.InMemoryFilePart;
 import org.openfilz.dms.utils.JsonUtils;
 import org.openfilz.dms.utils.UserInfoService;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -75,6 +79,12 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
     protected final DocumentDeleteService documentDeleteService;
     protected final BlankDocumentGenerator blankDocumentGenerator;
     protected final StorageQuotaService storageQuotaService;
+
+    // Recycle-bin download only. The soft-delete DAO exists only when openfilz.soft-delete.active=true.
+    @Autowired
+    protected ObjectProvider<DocumentSoftDeleteDAO> documentSoftDeleteDAO;
+    @Autowired
+    protected DocumentRepository documentRepository;
 
     /**
      * Validates that the file size does not exceed the configured file upload quota.
@@ -933,6 +943,27 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
     public Mono<Document> findDocumentToDownloadById(UUID documentId) {
         return documentDAO.findById(documentId, AccessType.RO)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(documentId)));
+    }
+
+    @Override
+    public Mono<Document> findDownloadableDocumentById(UUID documentId) {
+        return findDocumentToDownloadById(documentId)
+                .onErrorResume(DocumentNotFoundException.class, notFound -> findTrashedFileToDownload(documentId)
+                        .switchIfEmpty(Mono.error(notFound)));
+    }
+
+    /**
+     * A soft-deleted file, kept only if the caller sees it in their recycle bin: the same check that
+     * allows restore and purge. Folders are left out (the bin page downloads files only).
+     */
+    protected Mono<Document> findTrashedFileToDownload(UUID documentId) {
+        DocumentSoftDeleteDAO softDeleteDAO = documentSoftDeleteDAO.getIfAvailable();
+        if (softDeleteDAO == null) {
+            return Mono.empty();
+        }
+        return documentRepository.findById(documentId)
+                .filter(doc -> doc.getType() == FILE && Boolean.FALSE.equals(doc.getActive()))
+                .filterWhen(doc -> softDeleteDAO.isVisibleInRecycleBin(doc.getId()));
     }
 
     @Override
