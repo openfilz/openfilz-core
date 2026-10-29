@@ -78,6 +78,21 @@ jobs:
           path: ~/.openfilz/onnx-cache
           key: onnx-nomic-embed-text-v1.5-quantized
 
+      # A MinIO bump merges the Dockerfile and the new ghcr.io/openfilz/minio:<MINIO_REF> test
+      # references together, and build-minio.yml publishes that tag in parallel with this job:
+      # when it isn't on ghcr yet, build it here so the MinIO ITs don't race the publish
+      # (Testcontainers only pulls an image that is missing locally)
+      - name: Ensure the MinIO test image exists
+        run: |
+          MINIO_REF=$(grep -oP '^ARG MINIO_REF=\K\S+' deploy/docker/minio/Dockerfile)
+          IMAGE="ghcr.io/openfilz/minio:$MINIO_REF"
+          if docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
+            echo "$IMAGE is published"
+          else
+            echo "$IMAGE not published yet - building it locally"
+            docker build -t "$IMAGE" deploy/docker/minio
+          fi
+
       - name: Build with Maven
         run: mvn -Dmaven.wagon.http.retryHandler.count=3 -B clean install --file pom.xml
 
