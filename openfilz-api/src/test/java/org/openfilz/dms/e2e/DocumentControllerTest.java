@@ -114,7 +114,7 @@ class DocumentControllerTest {
     void downloadDocument_NotFound_ShouldReturnNotFound() {
         UUID documentId = UUID.randomUUID();
 
-        when(documentService.findDocumentToDownloadById(documentId)).thenReturn(Mono.error(new DocumentNotFoundException(documentId)));
+        when(documentService.findDownloadableDocumentById(documentId)).thenReturn(Mono.error(new DocumentNotFoundException(documentId)));
 
         StepVerifier.create(documentController.downloadDocument(documentId, false))
                 .expectError(DocumentNotFoundException.class)
