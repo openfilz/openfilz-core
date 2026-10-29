@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[3147c1e58189f2f](https://github.com/openfilz/openfilz-core/commit/3147c1e58189f2f) maven-release-bot[bot] *2026-10-27 23:39:51*
+[eccb4bda82283fc](https://github.com/openfilz/openfilz-core/commit/eccb4bda82283fc) maven-release-bot[bot] *2026-10-29 12:57:27*
 
 
-## v1.3.54
+## v1.3.55
 ### No issue
 
-**[maven-release-plugin] prepare release v1.3.54**
+**[maven-release-plugin] prepare release v1.3.55**
 
 
-[a9090c3bc002b55](https://github.com/openfilz/openfilz-core/commit/a9090c3bc002b55) maven-release-bot[bot] *2026-10-27 23:39:48*
+[e08d96b69dc4cfa](https://github.com/openfilz/openfilz-core/commit/e08d96b69dc4cfa) maven-release-bot[bot] *2026-10-29 12:57:24*
 
-**Merge pull request #353 from openfilz/develop**
+**Merge pull request #358 from openfilz/develop**
 
- * Enhance metadata filters to support typed values and improve search
+ * Fix recycle-bin download issue and update MinIO version
 
-[03ee7e3e91a24b3](https://github.com/openfilz/openfilz-core/commit/03ee7e3e91a24b3) Yann Demel *2026-10-27 23:36:20*
+[148ab1240f981c4](https://github.com/openfilz/openfilz-core/commit/148ab1240f981c4) Yann Demel *2026-10-29 12:53:45*
 
 
