@@ -72,6 +72,13 @@ public interface DocumentService {
 
     Mono<Document> findDocumentToDownloadById(UUID documentId); // Utility
 
+    /**
+     * Lookup behind {@code GET /documents/{id}/download}: an active document as
+     * {@link #findDocumentToDownloadById(UUID)} finds it, or else a soft-deleted file the caller sees
+     * in their recycle bin. Every other read path stays active-only.
+     */
+    Mono<Document> findDownloadableDocumentById(UUID documentId);
+
     Mono<DocumentInfo> getDocumentInfo(UUID documentId, Boolean withMetadata);
 
     Flux<FolderElementInfo> listFolderInfo(UUID folderId, Boolean onlyFiles, Boolean onlyFolders);
