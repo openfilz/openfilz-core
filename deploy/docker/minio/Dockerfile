@@ -16,7 +16,7 @@
 # .github/workflows/check-minio-release.yml opens an issue when a newer tag exists — then
 # update the pinned ghcr.io/openfilz/minio:<MINIO_REF> references (tests, compose, charts).
 
-ARG MINIO_REF=RELEASE.2026-09-22T19-25-18Z
+ARG MINIO_REF=RELEASE.2026-10-23T20-06-51Z
 ARG MC_REF=RELEASE.2025-08-13T08-35-41Z
 
 FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
@@ -28,7 +28,7 @@ ENV CGO_ENABLED=0 GOTOOLCHAIN=auto
 RUN apk add --no-cache git
 WORKDIR /src
 
-# RELEASE.2026-09-22T19-25-18Z -> 2026-09-22T19:25:18Z (the version format gen-ldflags expects).
+# RELEASE.2026-10-23T20-06-51Z -> 2026-10-23T20:06:51Z (the version format gen-ldflags expects).
 # gen-ldflags runs on the build platform, hence GOOS/GOARCH only on `go build`.
 RUN git clone --depth 1 --branch "$MINIO_REF" https://github.com/chainguard-forks/minio.git minio \
  && cd minio \
