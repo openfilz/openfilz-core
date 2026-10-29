@@ -24,11 +24,20 @@ public class CapturingSignatureMailer implements SignatureMailer {
     public final Map<String, String> latestLink = new ConcurrentHashMap<>();
     /** recipient email → latest OTP code. */
     public final Map<String, String> latestOtp = new ConcurrentHashMap<>();
+    /** envelope|recipient email → the language the invitation would be written in (null = English default). */
+    public final Map<String, String> latestLocale = new ConcurrentHashMap<>();
 
     @Override
     public void sendRequest(SignatureEnvelope env, SignatureRecipient r, String documentName, String link) {
         sent.add(new Sent("request", env.getId(), r.getRecipientEmail(), link, null, null, null));
         latestLink.put(key(env, r.getRecipientEmail()), link);
+        String locale = r.getLocale() != null ? r.getLocale() : env.getLocale();
+        if (locale != null) latestLocale.put(key(env, r.getRecipientEmail()), locale);
+    }
+
+    /** The language of the latest invitation sent to {@code email} for the envelope, null when none was set. */
+    public String localeFor(UUID envelopeId, String email) {
+        return latestLocale.get(envelopeId + "|" + email.toLowerCase());
     }
 
     @Override

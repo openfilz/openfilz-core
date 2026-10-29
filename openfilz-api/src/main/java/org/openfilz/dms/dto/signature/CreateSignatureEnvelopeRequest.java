@@ -41,6 +41,18 @@ public record CreateSignatureEnvelopeRequest(
         return send == null || send;
     }
 
+    /**
+     * The same request with {@code locale} taken from an {@code Accept-Language} header when the
+     * caller gave none: recipients without a language of their own are then mailed in the
+     * caller's browser language instead of English. An explicit {@code locale} always wins.
+     */
+    public CreateSignatureEnvelopeRequest withLocaleFallback(String acceptLanguage) {
+        String fallback = AcceptLanguage.firstLanguage(acceptLanguage);
+        if (fallback == null || (locale != null && !locale.isBlank())) return this;
+        return new CreateSignatureEnvelopeRequest(sourceDocId, title, message, recipients, expiresInDays,
+                sequential, reminderDays, fallback, send, templateId);
+    }
+
     public boolean isSequential() {
         return Boolean.TRUE.equals(sequential);
     }
