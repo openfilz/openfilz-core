@@ -287,8 +287,10 @@ Returns the envelope with `status: "SENT"`. Add `"send": false` to get a `DRAFT`
   expired and revokes their links. Links stop working at the deadline whatever the job's timing.
 - **E-mail languages.** Invitations, codes and completion mails exist in English, French, German,
   Spanish, Italian, Dutch, Portuguese and Arabic, picked from the recipient's language, then the
-  envelope's, then English. A failing SMTP server is logged (`[e-sign] failed to send mail …`) and
-  never blocks signing — which also means the initiator does not see a bounced invitation.
+  envelope's, then the best-ranked language of the creating request's `Accept-Language` header
+  (a browser sends its UI language; the body's `locale` always wins), then English. A failing SMTP
+  server is logged (`[e-sign] failed to send mail …`) and never blocks signing — which also means
+  the initiator does not see a bounced invitation.
 - **Audit actions.** `SIGNATURE_ENVELOPE_CREATED`, `_SENT`, `_COMPLETED`, `_DECLINED`,
   `_CANCELLED`, `_EXPIRED`, plus `SIGNATURE_DOCUMENT_SIGNED`, `SIGNATURE_REMINDER_SENT`,
   `SIGNATURE_TEMPLATE_CREATED`, `SIGNATURE_TEMPLATE_DELETED`.

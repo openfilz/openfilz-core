@@ -23,6 +23,8 @@ import org.openfilz.dms.enums.WorkflowInstanceStatus;
 import org.openfilz.dms.service.workflow.WorkflowDefinitionService;
 import org.openfilz.dms.service.workflow.WorkflowRoles;
 import org.openfilz.dms.service.workflow.WorkflowService;
+import org.openfilz.dms.utils.AcceptLanguage;
+import org.openfilz.dms.utils.AcceptLanguage;
 import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -198,15 +200,12 @@ public class WorkflowController implements UserInfoService {
     }
 
     /**
-     * The first language tag of an {@code Accept-Language} header ("fr-FR,fr;q=0.9,en;q=0.8" → "fr-FR").
+     * The best-ranked language tag of an {@code Accept-Language} header ("fr-FR,fr;q=0.9,en;q=0.8" → "fr-fr").
      * A browser sends the whole list, which overflowed {@code workflow_instance.locale} (8 chars) and
      * failed every start from the web app; the mails only ever read the primary language anyway.
      */
     static String primaryLanguage(String acceptLanguage) {
-        if (acceptLanguage == null || acceptLanguage.isBlank()) return null;
-        String tag = acceptLanguage.split("[,;]")[0].trim();
-        if (tag.isEmpty() || "*".equals(tag)) return null;
-        return tag.length() <= 8 ? tag : tag.substring(0, 8);
+        return AcceptLanguage.firstLanguage(acceptLanguage);
     }
 
     private String emailOf(org.springframework.security.core.Authentication auth) {

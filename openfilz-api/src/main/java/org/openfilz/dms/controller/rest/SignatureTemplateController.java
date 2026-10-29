@@ -1,6 +1,7 @@
 package org.openfilz.dms.controller.rest;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +14,7 @@ import org.openfilz.dms.dto.signature.SignatureTemplateRequest;
 import org.openfilz.dms.service.SignatureService;
 import org.openfilz.dms.service.SignatureTemplateService;
 import org.openfilz.dms.utils.UserInfoService;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -73,12 +76,16 @@ public class SignatureTemplateController implements UserInfoService {
 
     @PostMapping(value = "/{id}/envelopes", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Create (and send) an envelope from a template")
-    public Mono<SignatureEnvelopeDTO> instantiate(@PathVariable UUID id, @Valid @RequestBody InstantiateTemplateRequest req) {
+    public Mono<SignatureEnvelopeDTO> instantiate(@PathVariable UUID id, @Valid @RequestBody InstantiateTemplateRequest req,
+                                                  @Parameter(hidden = true)
+                                                  @RequestHeader(value = HttpHeaders.ACCEPT_LANGUAGE, required = false) String acceptLanguage) {
         requireActive();
+        // no locale in the body → the caller's browser language, so the invitation is not sent in English by default
+        InstantiateTemplateRequest request = req.withLocaleFallback(acceptLanguage);
         return getAuthenticationMono()
                 .map(auth -> SignatureService.Actor.of(getUserAttribute(auth, "sub"), getUserAttribute(auth, "email")))
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not authenticated")))
-                .flatMap(a -> service.instantiate(id, req, a));
+                .flatMap(a -> service.instantiate(id, request, a));
     }
 
     private Mono<String> email() {
