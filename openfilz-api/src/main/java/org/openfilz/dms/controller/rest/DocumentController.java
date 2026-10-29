@@ -299,7 +299,8 @@ public class DocumentController {
             // DOWNLOAD_DOCUMENT. Hidden from OpenAPI so the generated SDKs keep downloadDocument(id).
             @Parameter(hidden = true) @RequestParam(name = "open", defaultValue = "false") boolean open) {
         AuditAction action = open ? AuditAction.OPEN_DOCUMENT : AuditAction.DOWNLOAD_DOCUMENT;
-        return documentService.findDocumentToDownloadById(documentId) // First get metadata like name
+        // Also finds a trashed file the caller sees in their recycle bin (the bin page's Download)
+        return documentService.findDownloadableDocumentById(documentId) // First get metadata like name
                 .flatMap(docInfo -> documentService.downloadDocument(docInfo, action)
                         .map(resource -> sendDownloadResponse(docInfo, resource))
                 );
