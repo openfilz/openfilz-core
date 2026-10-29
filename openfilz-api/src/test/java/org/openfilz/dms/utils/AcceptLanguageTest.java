@@ -1,6 +1,9 @@
-package org.openfilz.dms.dto.signature;
+package org.openfilz.dms.utils;
 
 import org.junit.jupiter.api.Test;
+
+import org.openfilz.dms.dto.signature.CreateSignatureEnvelopeRequest;
+import org.openfilz.dms.dto.signature.SignatureRecipientInput;
 
 import java.util.List;
 import java.util.UUID;

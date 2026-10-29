@@ -1,12 +1,12 @@
-package org.openfilz.dms.dto.signature;
+package org.openfilz.dms.utils;
 
 import java.util.List;
 import java.util.Locale;
 
 /**
  * The language a caller's {@code Accept-Language} header asks for first — the e-mail language of a
- * signature request whose body names none. Browsers always send the header (their UI language),
- * API clients may send nothing; both cases end up in the same place.
+ * signature request whose body names none, of a workflow instance, … Browsers always send the header
+ * (their UI language), API clients may send nothing; both cases end up in the same place.
  */
 public final class AcceptLanguage {
 
