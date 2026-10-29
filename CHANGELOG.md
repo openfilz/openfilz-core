@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[eccb4bda82283fc](https://github.com/openfilz/openfilz-core/commit/eccb4bda82283fc) maven-release-bot[bot] *2026-10-29 12:57:27*
+[676b8227d01455b](https://github.com/openfilz/openfilz-core/commit/676b8227d01455b) maven-release-bot[bot] *2026-10-29 17:50:07*
 
 
-## v1.3.55
+## v1.3.56
 ### No issue
 
-**[maven-release-plugin] prepare release v1.3.55**
+**[maven-release-plugin] prepare release v1.3.56**
 
 
-[e08d96b69dc4cfa](https://github.com/openfilz/openfilz-core/commit/e08d96b69dc4cfa) maven-release-bot[bot] *2026-10-29 12:57:24*
+[e572cad23ea6a20](https://github.com/openfilz/openfilz-core/commit/e572cad23ea6a20) maven-release-bot[bot] *2026-10-29 17:50:04*
 
-**Merge pull request #358 from openfilz/develop**
+**Merge pull request #360 from openfilz/develop**
 
- * Fix recycle-bin download issue and update MinIO version
+ * Improve email recipient language handling for signature requests
 
-[148ab1240f981c4](https://github.com/openfilz/openfilz-core/commit/148ab1240f981c4) Yann Demel *2026-10-29 12:53:45*
+[cb1b2dbded3f1c3](https://github.com/openfilz/openfilz-core/commit/cb1b2dbded3f1c3) Yann Demel *2026-10-29 17:47:03*
 
 
