@@ -114,10 +114,16 @@ public abstract class AbstractSignatureIT extends TestContainersKeyCloakConfig {
     }
 
     protected SignatureEnvelopeDTO createEnvelope(String token, CreateSignatureEnvelopeRequest req) {
-        SignatureEnvelopeDTO dto = getWebTestClient().post().uri(SIG)
+        return createEnvelope(token, req, null);
+    }
+
+    /** @param acceptLanguage an {@code Accept-Language} header to send with the request, or null for none */
+    protected SignatureEnvelopeDTO createEnvelope(String token, CreateSignatureEnvelopeRequest req, String acceptLanguage) {
+        WebTestClient.RequestBodySpec spec = getWebTestClient().post().uri(SIG)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(req)
+                .contentType(MediaType.APPLICATION_JSON);
+        if (acceptLanguage != null) spec = spec.header(HttpHeaders.ACCEPT_LANGUAGE, acceptLanguage);
+        SignatureEnvelopeDTO dto = spec.bodyValue(req)
                 .exchange().expectStatus().isOk()
                 .expectBody(SignatureEnvelopeDTO.class).returnResult().getResponseBody();
         assertThat(dto).isNotNull();

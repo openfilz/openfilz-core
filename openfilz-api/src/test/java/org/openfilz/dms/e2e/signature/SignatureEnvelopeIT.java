@@ -199,6 +199,29 @@ class SignatureEnvelopeIT extends AbstractSignatureIT {
     }
 
     @Test
+    void invitation_language_comes_from_the_body_else_from_the_browser_language() {
+        UUID docId = uploadPdf(contributor);
+        List<SignatureRecipientInput> signers = List.of(signer("Alice", "alice@example.com", List.of(signatureField(0, 0.1, 0.1))));
+
+        // no locale in the body: the caller's Accept-Language decides (region dropped)
+        SignatureEnvelopeDTO fromBrowser = createEnvelope(contributor,
+                new CreateSignatureEnvelopeRequest(docId, "Browser language", null, signers, 10, false, null, null, true, null),
+                "fr-FR,fr;q=0.9,en;q=0.8");
+        assertThat(mails().localeFor(fromBrowser.id(), "alice@example.com")).isEqualTo("fr");
+
+        // an explicit locale wins over the header
+        SignatureEnvelopeDTO explicit = createEnvelope(contributor,
+                new CreateSignatureEnvelopeRequest(docId, "Explicit language", null, signers, 10, false, null, "de", true, null),
+                "fr-FR,fr;q=0.9");
+        assertThat(mails().localeFor(explicit.id(), "alice@example.com")).isEqualTo("de");
+
+        // nothing anywhere: the mailer's English default (no locale recorded)
+        SignatureEnvelopeDTO none = createEnvelope(contributor,
+                new CreateSignatureEnvelopeRequest(docId, "No language", null, signers, 10, false, null, null, true, null));
+        assertThat(mails().localeFor(none.id(), "alice@example.com")).isNull();
+    }
+
+    @Test
     void sequential_envelope_invites_signers_one_order_at_a_time() {
         UUID docId = uploadPdf(contributor);
         CreateSignatureEnvelopeRequest req = new CreateSignatureEnvelopeRequest(docId, "Sequential", null, List.of(

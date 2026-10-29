@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import org.openfilz.dms.utils.AcceptLanguage;
 
 import java.util.List;
 import java.util.UUID;
@@ -27,6 +28,13 @@ public record InstantiateTemplateRequest(
         @Size(max = 8) String locale,
         Boolean send
 ) {
+    /** Same rule as {@link CreateSignatureEnvelopeRequest#withLocaleFallback(String)}. */
+    public InstantiateTemplateRequest withLocaleFallback(String acceptLanguage) {
+        String fallback = AcceptLanguage.firstLanguage(acceptLanguage);
+        if (fallback == null || (locale != null && !locale.isBlank())) return this;
+        return new InstantiateTemplateRequest(sourceDocId, title, message, recipients, expiresInDays, reminderDays, fallback, send);
+    }
+
     public record RoleBinding(
             @NotBlank @Size(max = 64) String role,
             UUID userId,
