@@ -258,7 +258,6 @@ candidate** (`READER` is enough — an approver does not have to be a contributo
 * Access based on document ownership and sharing; workflow definitions scoped to their author and
   their teams.
 * Decision comments mirrored into the document's threaded comments.
-* A user and team picker in the designer and the start dialog (the Community Edition takes e-mails).
 * Webhook events on every transition.
 
 ---

@@ -1060,3 +1060,82 @@ request, well under the SDK cycle, classified `QUOTA_EXHAUSTED`).
 ## 7. Deploying the local Ollama
 
 Moved to the operator documentation: [Admin guide → Deploying Ollama with OpenFilz](admin-guide.md#deploying-ollama-with-openfilz).
+
+Implementation notes for whoever changes the deployment files:
+
+- **Dokploy compose** (`deploy/docker-compose/dokploy/compose.yaml`): `ollama` + `ollama-init` are
+  profile-gated on the provider switches — `profiles: ["${OLLAMA_CHAT_ENABLED:-false}", "${OLLAMA_EMBEDDING_ENABLED:-false}"]`
+  with the fixed activator `COMPOSE_PROFILES=true`, so the services exist iff at least one Ollama
+  provider is enabled. The API has no `depends_on` on them (profile-gated); it reaches Ollama lazily.
+- **The ollama image has no curl** — container healthchecks use `ollama list`.
+- **Embedding model guard**: `EmbeddingRegistryGuard` is what refuses to start when the embedding
+  model changes while vectors exist.
+
+---
+
+## 8. Settings flags and what the web app shows
+
+The public [AI Overview](ai-overview.md) describes the profiles in user terms; these are the flags
+behind them.
+
+### `OPENFILZ_AI_MODEL` providers and aliases
+
+| `OPENFILZ_AI_MODEL` provider | Aliases | What it configures | Key |
+|---|---|---|---|
+| `google` | `gemini`, `google-genai` | the chat model (Gemini Developer API) | required |
+| `anthropic` | `claude` | the chat model | required |
+| `openai` | `openai-compatible` | the chat model; any OpenAI-compatible server through `OPENAI_BASE_URL` | required |
+| `ollama` | — | the chat model on your Ollama (`ollama:qwen2.5:1.5b` keeps the tag) | none |
+| `openfilz-cloud` | `openfilz_cloud` | **document insights + smart filing only** — never the chat | the tenant key |
+
+### Why the chat is missing
+
+**What the web app is told.** `GET /api/v1/settings` reports why the chat is missing, so the UI can
+say so instead of offering a chat that fails on its first message:
+
+| `aiChatActive` | `aiChatUnavailableReason` | Meaning |
+|---|---|---|
+| `true` | `null` | the chat works |
+| `false` | `"DISABLED"` | `OPENFILZ_AI_CHAT_ACTIVE=false` ([AI Overview §6.3](ai-overview.md#63-the-chat-kill-switch)) |
+| `false` | `"NO_MODEL"` | the chat is on but the server has no chat model — e.g. `openfilz-cloud` alone, or `SPRING_AI_MODEL_CHAT=none` |
+| `false` | `null` | the AI feature itself is off — the whole AI section is hidden |
+
+`aiUserSettingsEnabled` (the per-user key page) follows `aiChatActive` in every case. When per-user keys are
+enabled (`AI_USER_SETTINGS_ENABLED=true`) the server never reports `NO_MODEL`: each user can bring their own
+key, so the chat stays offered even without a server model.
+
+### UI elements and the flag each one follows
+
+The web app takes no guesses: it reads `GET /api/v1/settings` at start-up and shows only what the
+backend says exists. The backend also answers **404** on every `/api/v1/ai/**` endpoint that is off,
+so an out-of-date frontend cannot call a feature into existence.
+
+| Element in the app | Shown when | A | B | C | D / E |
+|---|---|---|---|---|---|
+| Chat button (floating, bottom right) | `aiChatActive` | hidden | hidden | hidden | shown |
+| *Organise with AI* — folder toolbar + folder context menu | `aiChatActive` **and** the CONTRIBUTOR role | hidden | hidden | hidden | shown |
+| *Insights* section of the details panel (kind, summary, keywords) | `aiInsightsActive` | hidden | hidden | shown — kind only | shown |
+| The **kind** chip and its editor | `aiInsightsActive` + the deployment's category list | hidden | hidden | shown | shown |
+| *"Let OpenFilz choose the folder"* switch in the upload area | `aiAutoFileActive` | hidden | hidden | shown | shown |
+| *Filed by OpenFilz* chip + Undo | `aiAutoFileActive` | hidden | hidden | shown | shown |
+| Settings → **AI Assistant** (bring your own key) | `aiUserSettingsEnabled` (implies `aiChatActive`) | hidden | hidden | hidden | shown if enabled |
+| Settings → **AI maintenance** (re-embed / re-enrich) | `aiActive` + CONTRIBUTOR | hidden | hidden | shown | shown |
+| Settings → **Connect your AI tool** (MCP) | `mcpActive` — *independent of every AI flag* | hidden | **shown** | if enabled | if enabled |
+
+The chat rows follow `aiChatActive` — false also when the chat is on but the server has no chat
+model, with `aiChatUnavailableReason` saying which (`DISABLED` / `NO_MODEL`, [§6.4](ai-overview.md#64-choosing-the-model-two-variables)) —
+everything else follows its own flag — which is exactly what
+lets profile C (no LLM) keep insights, filing and maintenance while dropping the assistant ([§6.3](ai-overview.md#63-the-chat-kill-switch)).
+
+### Footnotes to the profile capability table
+
+¹ Tier-1 rows are written by the Tika pass that indexing performs, so they need full-text
+search (or embeddings) to be on; and the details panel only *displays* them when tier 2 is
+enabled — the UI has a single Insights switch.
+
+² The by-kind tool is served over `/mcp` even with AI off, but it groups by *category*, and
+nothing has a category on a deployment with no classifier — unless categories were set through
+`PATCH /api/v1/documents/{id}/insights`.
+
+Measured on a real library (see §3c): category descriptions alone ~47 %, a small local model
+(1.5B) ~53 % at fifty times the latency, the library's own k-NN classifier 84–88 %.
