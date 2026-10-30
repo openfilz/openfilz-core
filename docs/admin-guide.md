@@ -541,6 +541,7 @@ unlimited), its source and the per-file limit; the dashboard ring (`/dashboard/s
 | `openfilz.audit.chain.algorithm` | `SHA-256` | Hash algorithm |
 | `openfilz.audit.chain.verification-enabled` | `true` | Enable automatic chain verification |
 | `openfilz.audit.chain.verification-cron` | `0 0 3 * * ?` | Verification schedule (daily at 3 AM) |
+| `openfilz.audit.chain.lock-timeout` / `OPENFILZ_AUDIT_CHAIN_LOCK_TIMEOUT` | `5s` | Longest wait for the audit chain lock per audited write; past it the write fails with `Audit chain lock not acquired within …` instead of queueing the whole instance. `0` = wait forever |
 | `openfilz.calculate-checksum` / `OPENFILZ_CALCULATECHECKSUM` | `false` | Calculate SHA-256 checksum on upload |
 
 ### Soft Delete and Recycle Bin
@@ -804,6 +805,7 @@ Notes:
 |--------------------------|---------|-------------|
 | `openfilz.ai.chat.active` / `OPENFILZ_AI_CHAT_ACTIVE` | `true` | Kill switch for the **in-app chat assistant alone**: `false` answers 404 on `/api/v1/ai/chat**` and on the per-user BYOK settings, and hides the chat button and "Organise with AI" (`Settings.aiChatActive`) — embeddings, insights, smart filing, the by-kind reorganisation and the MCP server keep working. With `OPENFILZ_AI_INSIGHTS_CLASSIFIER=prototype\|learned` nothing calls a chat model any more, so you can add `SPRING_AI_MODEL_CHAT=none` and run the automatic AI features with no LLM at all — see [AI Overview §6](ai-overview.md#63-the-chat-kill-switch) |
 | `openfilz.ai.system-prompt` | *(built-in)* | System prompt defining the AI assistant's behavior |
+| `openfilz.ai.tools.destructive-mode` / `OPENFILZ_AI_TOOLS_DESTRUCTIVEMODE` | `confirm-only` | Guardrails of the assistant: deleting only moves to the recycle bin (and is refused without one), applying a reorganisation is always the user's click. `allow` restores the old behaviour (permanent deletion when soft-delete is off, the chat may apply plans) |
 | `openfilz.ai.embedding.chunk-size` | `1000` | **Tokens** (not characters) per text chunk when splitting documents |
 | `openfilz.ai.embedding.min-chunk-size-chars` | `200` | Minimum characters a chunk keeps before it is cut back to its last sentence boundary. Chunks do **not** overlap (Spring AI's token splitter has no overlap). Applies to documents embedded afterwards — re-embed (`POST /api/v1/ai/embeddings/backfill`, `force=true`) to apply it to the existing library |
 | `openfilz.ai.embedding.chunk-overlap` | — | **Deprecated** alias of `min-chunk-size-chars`: it never produced an overlap, its value was always the minimum chunk size. Still read when `min-chunk-size-chars` is not set |
