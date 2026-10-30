@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[676b8227d01455b](https://github.com/openfilz/openfilz-core/commit/676b8227d01455b) maven-release-bot[bot] *2026-10-29 17:50:07*
+[3711dc10946e64b](https://github.com/openfilz/openfilz-core/commit/3711dc10946e64b) maven-release-bot[bot] *2026-10-30 01:20:21*
 
 
-## v1.3.56
+## v1.3.57
 ### No issue
 
-**[maven-release-plugin] prepare release v1.3.56**
+**[maven-release-plugin] prepare release v1.3.57**
 
 
-[e572cad23ea6a20](https://github.com/openfilz/openfilz-core/commit/e572cad23ea6a20) maven-release-bot[bot] *2026-10-29 17:50:04*
+[09a1f76dc42c075](https://github.com/openfilz/openfilz-core/commit/09a1f76dc42c075) maven-release-bot[bot] *2026-10-30 01:20:18*
 
-**Merge pull request #360 from openfilz/develop**
+**Merge pull request #362 from openfilz/develop**
 
- * Improve email recipient language handling for signature requests
+ * Restore internal documentation and refine public page details
 
-[cb1b2dbded3f1c3](https://github.com/openfilz/openfilz-core/commit/cb1b2dbded3f1c3) Yann Demel *2026-10-29 17:47:03*
+[329b1d61f7a5b49](https://github.com/openfilz/openfilz-core/commit/329b1d61f7a5b49) Yann Demel *2026-10-30 01:16:50*
 
 
