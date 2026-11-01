@@ -74,7 +74,7 @@ Two Maven profiles control publishing:
 | Profile | Purpose | Applies to |
 |---------|---------|------------|
 | `publishSdk` | Publishes TypeScript (npm), Python (PyPI), C# (NuGet) | Non-Java SDK modules |
-| `publishMaven` | Publishes JARs to Maven Central with GPG signing | Java SDK modules |
+| `publishMaven` | Publishes the two Java SDK jars to Maven Central with GPG signing (nothing else: flattened POMs, no parent POM, stub `-javadoc.jar`) | Java SDK modules |
 
 ### Environment Variables
 
@@ -139,7 +139,8 @@ mvn deploy \
 
 - `--fail-at-end` ensures all SDKs are attempted even if one fails
 - `publishSdk` activates npm/PyPI/NuGet publishing and skips tests
-- `publishMaven` activates Maven Central publishing with GPG signing, source JARs, and Javadocs
+- `publishMaven` activates Maven Central publishing with GPG signing and source JARs. The `-javadoc.jar` Central insists on only holds the generated README, since Javadoc comments reach IDEs through the sources
+- Sonatype caps the organisation at 80 MB, 1 000 files and 7 releases a month: everything but the two Java SDK jars is excluded in the root `publishMaven` profile
 - Non-Java SDKs set `maven.deploy.skip=true` in their own `publishSdk` profile to prevent the Maven deploy plugin from running (they use native toolchains instead)
 
 ### Publish Only Non-Java SDKs
@@ -156,9 +157,10 @@ mvn deploy \
 ```bash
 mvn deploy \
   -PpublishMaven \
-  -pl openfilz-sdk/openfilz-sdk-java,openfilz-sdk/openfilz-sdk-java-reactive \
-  -am
+  -pl openfilz-sdk/openfilz-sdk-java,openfilz-sdk/openfilz-sdk-java-reactive
 ```
+
+Without `-am`: the parent POMs and the OpenAPI spec come from the local repository, so run `mvn install` first.
 
 ### Publish a Single SDK
 
@@ -173,10 +175,10 @@ mvn deploy -PpublishSdk -pl openfilz-sdk/openfilz-sdk-python -am
 mvn deploy -PpublishSdk -pl openfilz-sdk/openfilz-sdk-csharp -am
 
 # Java blocking only
-mvn deploy -PpublishMaven -pl openfilz-sdk/openfilz-sdk-java -am
+mvn deploy -PpublishMaven -pl openfilz-sdk/openfilz-sdk-java
 
 # Java reactive only
-mvn deploy -PpublishMaven -pl openfilz-sdk/openfilz-sdk-java-reactive -am
+mvn deploy -PpublishMaven -pl openfilz-sdk/openfilz-sdk-java-reactive
 ```
 
 ---
@@ -213,7 +215,8 @@ The `release-backend.yml` GitHub Actions workflow handles the full release lifec
 
 1. **Version bump** — Removes `-SNAPSHOT`, calculates release + next dev versions based on PR labels (`release:patch`, `release:minor`, `release:major`)
 2. **`mvn release:prepare`** — Updates pom versions, creates Git tag
-3. **`mvn release:perform`** — Builds and deploys with `-PpublishMaven,publishSdk,kube`
+3. **`mvn release:perform`** — Builds and publishes with `-Pkube,publishSdk -Dmaven.deploy.skip=true` (images, npm, PyPI, NuGet; nothing to Maven Central)
+   - **Maven Central is opt-in** — the `publish_maven_central` input of a manual run or the `publish-maven-central` label on the develop → main PR adds a separate `-pl` deploy of the two Java SDK jars
 4. **Changelog** — Generates `CHANGELOG.md` from Git history
 5. **GitHub Release** — Creates release with attached JAR artifacts
 6. **Branch sync** — Merges `main` → `develop`

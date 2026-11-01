@@ -7,7 +7,7 @@
 [![Build Backend with Maven](https://github.com/openfilz/openfilz-core/actions/workflows/build-backend.yml/badge.svg)](https://github.com/openfilz/openfilz-core/actions/workflows/build-backend.yml)
 ![Jacoco Coverage](./.github/badges/jacoco.svg)
 ![Branches Coverage](./.github/badges/branches.svg)
-![Maven Central Version](https://img.shields.io/maven-central/v/org.openfilz/openfilz-api?link=https%3A%2F%2Fcentral.sonatype.com%2Fnamespace%2Forg.openfilz)
+![Maven Central Version](https://img.shields.io/maven-central/v/org.openfilz/openfilz-sdk-java?link=https%3A%2F%2Fcentral.sonatype.com%2Fnamespace%2Forg.openfilz)
 
 OpenFilz is a modern, reactive document management API designed for scalability, security, and performance. Built on **Spring Boot 4+ / WebFlux**, it provides a centralized solution for handling document and folder-related operations through comprehensive REST and GraphQL APIs.
 

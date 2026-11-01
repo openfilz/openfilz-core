@@ -187,14 +187,56 @@
     <profiles>
         <profile>
             <id>publishMaven</id>
+            <properties>
+                <flatten.plugin.version>1.7.3</flatten.plugin.version>
+            </properties>
             <build>
                 <plugins>
+                    <!-- Flatten the parent into the published pom, so the parent POMs stay out of
+                         Central: the jars are all it receives. -->
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>flatten-maven-plugin</artifactId>
+                        <version>${flatten.plugin.version}</version>
+                        <configuration>
+                            <flattenMode>ossrh</flattenMode>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>flatten</id>
+                                <phase>process-resources</phase>
+                                <goals><goal>flatten</goal></goals>
+                            </execution>
+                            <execution>
+                                <id>flatten-clean</id>
+                                <phase>clean</phase>
+                                <goals><goal>clean</goal></goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- Central refuses a jar without a -javadoc.jar, but the rendered Javadoc of a
+                         generated client was 60 % of the bundle against an 80 MB monthly limit. The
+                         -sources.jar keeps every Javadoc comment for IDEs, so this one only carries
+                         the generated README. -->
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-javadoc-plugin</artifactId>
-                        <configuration>
-                            <sourcepath>${project.build.directory}/generated-sources/openapi/src/main/java</sourcepath>
-                        </configuration>
+                        <artifactId>maven-jar-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>attach-javadoc-stub</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                                <configuration>
+                                    <classifier>javadoc</classifier>
+                                    <classesDirectory>${project.build.directory}/generated-sources/openapi</classesDirectory>
+                                    <includes>
+                                        <include>README.md</include>
+                                    </includes>
+                                </configuration>
+                            </execution>
+                        </executions>
                     </plugin>
                 </plugins>
             </build>
