@@ -1,5 +1,9 @@
 <!-- openfilz-core/pom.xml -->
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<!-- child.*.inherit.append.path="false": Maven would otherwise append each module's path to the
+     inherited url / scm values (…/openfilz-core.git/openfilz-sdk/openfilz-sdk-java), which the
+     flattened SDK POMs publish verbatim to Maven Central. -->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd"
+         child.project.url.inherit.append.path="false">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.openfilz</groupId>
@@ -44,7 +48,9 @@
     </developers>
 
     <!-- Source Control Information, Github Stuff  -->
-    <scm>
+    <scm child.scm.connection.inherit.append.path="false"
+         child.scm.developerConnection.inherit.append.path="false"
+         child.scm.url.inherit.append.path="false">
         <!-- Should be format scm:git:git or scm:git:https -->
         <connection>scm:git:https://github.com/openfilz/openfilz-core.git</connection>
         <developerConnection>scm:git:https://github.com/openfilz/openfilz-core.git</developerConnection>
@@ -70,7 +76,6 @@
         <registry.scheme>https</registry.scheme>
         <docker.context.path>snapshots/</docker.context.path>
         <project.scm.id>github-actions@github.com</project.scm.id>
-        <delombok.output>${project.build.outputDirectory}/delombok</delombok.output>
         <logback-core.version>1.5.38</logback-core.version> <!-- aligned with Spring Boot 4.1.1 managed version -->
         <commons-compress.version>1.28.0</commons-compress.version>
         <commons-lang3.version>3.20.0</commons-lang3.version>
@@ -87,7 +92,8 @@
         <opensearch-testcontainers.version>4.1.0</opensearch-testcontainers.version>
         <spring-ai.version>2.0.1</spring-ai.version>
         <swagger-annotations.version>2.2.52</swagger-annotations.version> <!-- must match the swagger-core springdoc pulls in -->
-        <maven.javadoc.failOnError>false</maven.javadoc.failOnError>
+        <!-- Held in a property, like every third-party pin a release-version sed could collide with -->
+        <flatten.plugin.version>1.7.3</flatten.plugin.version>
         <openapi-generator.version>7.23.0</openapi-generator.version>
         <exec-maven-plugin.version>3.6.3</exec-maven-plugin.version>
     </properties>
@@ -289,11 +295,14 @@
                             <publishingServerId>central</publishingServerId>
                             <checksums>required</checksums>
                             <autoPublish>true</autoPublish>
-                            <!-- Only the Java SDKs (+ the two parent POMs they inherit from) go to
-                                 Central. The API ships as container images on ghcr, the TS / Python /
-                                 C# SDKs on npm / PyPI / NuGet, and Sonatype's monthly limits
-                                 (80 MB, 1 000 files, 7 releases) leave no room for the rest. -->
+                            <!-- Only the two Java SDK jars go to Central: the release workflow deploys
+                                 just those modules (-pl), and this list keeps everything else out if
+                                 the whole reactor is ever deployed. The API ships as container images
+                                 on ghcr, the TS / Python / C# SDKs on npm / PyPI / NuGet, and Sonatype's
+                                 monthly limits (80 MB, 1 000 files, 7 releases) leave no room for more. -->
                             <excludeArtifacts>
+                                <excludeArtifact>openfilz-core</excludeArtifact>
+                                <excludeArtifact>openfilz-sdk</excludeArtifact>
                                 <excludeArtifact>openfilz-api</excludeArtifact>
                                 <excludeArtifact>openfilz-sdk-typescript</excludeArtifact>
                                 <excludeArtifact>openfilz-sdk-python</excludeArtifact>
@@ -312,49 +321,6 @@
                                 <phase>verify</phase>
                                 <goals>
                                     <goal>jar-no-fork</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                    </plugin>
-                    <!-- https://mvnrepository.com/artifact/org.projectlombok/lombok -->
-                    <!-- https://mvnrepository.com/artifact/org.projectlombok/lombok-maven-plugin -->
-                    <plugin>
-                        <groupId>org.projectlombok</groupId>
-                        <artifactId>lombok-maven-plugin</artifactId>
-                        <version>1.18.20.0</version>
-                        <configuration>
-                            <sourceDirectory>${project.basedir}/src/main/java</sourceDirectory>
-                            <outputDirectory>${delombok.output}</outputDirectory>
-                            <addOutputDirectory>false</addOutputDirectory>
-                        </configuration>
-                        <executions>
-                            <execution>
-                                <phase>generate-sources</phase>
-                                <goals>
-                                    <goal>delombok</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                        <dependencies>
-                            <dependency>
-                                <groupId>org.projectlombok</groupId>
-                                <artifactId>lombok</artifactId>
-                                <version>${org.projectlombok.version}</version>
-                            </dependency>
-                        </dependencies>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-javadoc-plugin</artifactId>
-                        <version>3.12.0</version>
-                        <configuration>
-                            <sourcepath>${delombok.output}</sourcepath>
-                        </configuration>
-                        <executions>
-                            <execution>
-                                <id>attach-javadocs</id>
-                                <goals>
-                                    <goal>jar</goal>
                                 </goals>
                             </execution>
                         </executions>
