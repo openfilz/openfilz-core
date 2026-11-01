@@ -160,7 +160,7 @@ mvn deploy \
   -pl openfilz-sdk/openfilz-sdk-java,openfilz-sdk/openfilz-sdk-java-reactive
 ```
 
-Without `-am`: the parent POMs and the OpenAPI spec come from the local repository, so run `mvn install` first.
+Without `-am`, the OpenAPI spec (`org.openfilz:openfilz-api:json:openapi`) is resolved from the local repository. It is attached by `OpenApiSpecExtractionIT`, so install the API with that test running first (a plain `-DskipTests` install leaves it out): `mvn install -pl openfilz-api -am -Dsurefire.skip=true -Dit.test=OpenApiSpecExtractionIT -Dfailsafe.failIfNoSpecifiedTests=false`. The parent POMs are read from the checkout itself.
 
 ### Publish a Single SDK
 

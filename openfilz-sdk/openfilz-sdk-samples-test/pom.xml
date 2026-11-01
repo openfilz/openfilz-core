@@ -106,14 +106,6 @@
                     </execution>
                 </executions>
             </plugin>
-            <!-- Skip javadoc and source for test-only module -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-javadoc-plugin</artifactId>
-                <configuration>
-                    <skip>true</skip>
-                </configuration>
-            </plugin>
         </plugins>
     </build>
 

@@ -187,9 +187,6 @@
     <profiles>
         <profile>
             <id>publishMaven</id>
-            <properties>
-                <flatten.plugin.version>1.7.3</flatten.plugin.version>
-            </properties>
             <build>
                 <plugins>
                     <!-- Flatten the parent into the published pom, so the parent POMs stay out of
