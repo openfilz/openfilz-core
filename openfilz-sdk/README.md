@@ -216,7 +216,7 @@ The `release-backend.yml` GitHub Actions workflow handles the full release lifec
 1. **Version bump** — Removes `-SNAPSHOT`, calculates release + next dev versions based on PR labels (`release:patch`, `release:minor`, `release:major`)
 2. **`mvn release:prepare`** — Updates pom versions, creates Git tag
 3. **`mvn release:perform`** — Builds and publishes with `-Pkube,publishSdk -Dmaven.deploy.skip=true` (images, npm, PyPI, NuGet; nothing to Maven Central)
-   - **Maven Central is opt-in** — the `publish_maven_central` input of a manual run or the `publish-maven-central` label on the develop → main PR adds a separate `-pl` deploy of the two Java SDK jars
+   - **Maven Central** — a separate `-pl` deploy of the two Java SDK jars: automatic on a minor or major release; on a patch release only with the `publish_maven_central` input of a manual run or the `publish-maven-central` label on the develop → main PR
 4. **Changelog** — Generates `CHANGELOG.md` from Git history
 5. **GitHub Release** — Creates release with attached JAR artifacts
 6. **Branch sync** — Merges `main` → `develop`

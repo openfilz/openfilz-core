@@ -19,7 +19,7 @@ on:
           - minor
           - major
       publish_maven_central:
-        description: 'Also publish the Java SDKs to Maven Central (counts against the monthly Sonatype limits)'
+        description: 'Also publish the Java SDKs to Maven Central on a patch release (minor and major releases always do)'
         required: false
         default: false
         type: boolean
@@ -195,13 +195,14 @@ jobs:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
 
-      # Maven Central is opt-in: Sonatype caps the organisation at 80 MB, 1 000 files and 7 releases
-      # a month, and a core release ships about once a day. Only the two Java SDK jars go there, and
-      # only when asked: the `publish_maven_central` input of a manual run, or the
-      # `publish-maven-central` label on the develop -> main PR. The release is already out at this
-      # point, so a Central refusal reports an error annotation but does not stop the steps below.
+      # Sonatype caps the organisation at 80 MB, 1 000 files and 7 releases a month, and a core
+      # release ships about once a day. So only the two Java SDK jars go there, automatically on a
+      # minor or major release. A patch release publishes only when asked: the
+      # `publish_maven_central` input of a manual run, or the `publish-maven-central` label on the
+      # develop -> main PR. The release is already out at this point, so a Central refusal reports
+      # an error annotation but does not stop the steps below.
       - name: Publish the Java SDKs to Maven Central
-        if: inputs.publish_maven_central || contains(github.event.pull_request.labels.*.name, 'publish-maven-central')
+        if: steps.bump.outputs.type != 'patch' || inputs.publish_maven_central || contains(github.event.pull_request.labels.*.name, 'publish-maven-central')
         run: |
           if ! mvn -Dmaven.wagon.http.retryHandler.count=3 -B -f target/checkout/pom.xml \
                  -pl openfilz-sdk/openfilz-sdk-java,openfilz-sdk/openfilz-sdk-java-reactive \
