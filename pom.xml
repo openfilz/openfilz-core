@@ -2,13 +2,12 @@
 <!-- child.*.inherit.append.path="false": Maven would otherwise append each module's path to the
      inherited url / scm values (…/openfilz-core.git/openfilz-sdk/openfilz-sdk-java), which the
      flattened SDK POMs publish verbatim to Maven Central. -->
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd"
-         child.project.url.inherit.append.path="false">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd" child.project.url.inherit.append.path="false">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.openfilz</groupId>
     <artifactId>openfilz-core</artifactId>
-    <version>1.3.58-SNAPSHOT</version>
+    <version>1.4.1-SNAPSHOT</version>
     <packaging>pom</packaging>
     <url>https://github.com/openfilz/openfilz-core</url>
 
@@ -48,9 +47,7 @@
     </developers>
 
     <!-- Source Control Information, Github Stuff  -->
-    <scm child.scm.connection.inherit.append.path="false"
-         child.scm.developerConnection.inherit.append.path="false"
-         child.scm.url.inherit.append.path="false">
+    <scm child.scm.connection.inherit.append.path="false" child.scm.developerConnection.inherit.append.path="false" child.scm.url.inherit.append.path="false">
         <!-- Should be format scm:git:git or scm:git:https -->
         <connection>scm:git:https://github.com/openfilz/openfilz-core.git</connection>
         <developerConnection>scm:git:https://github.com/openfilz/openfilz-core.git</developerConnection>
