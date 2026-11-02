@@ -4,20 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[6518c08b347a110](https://github.com/openfilz/openfilz-core/commit/6518c08b347a110) maven-release-bot[bot] *2026-11-02 11:47:06*
+[bad8bc81d689d01](https://github.com/openfilz/openfilz-core/commit/bad8bc81d689d01) maven-release-bot[bot] *2026-11-02 16:03:00*
 
 
-## v1.4.0
+## v1.4.1
 ### No issue
 
-**[maven-release-plugin] prepare release v1.4.0**
+**[maven-release-plugin] prepare release v1.4.1**
 
 
-[1e7e8051062ceb8](https://github.com/openfilz/openfilz-core/commit/1e7e8051062ceb8) maven-release-bot[bot] *2026-11-02 11:47:03*
+[194f9d5c414cdf7](https://github.com/openfilz/openfilz-core/commit/194f9d5c414cdf7) maven-release-bot[bot] *2026-11-02 16:02:56*
 
-**[maven-release-plugin] prepare for next development iteration**
+**Merge pull request #366 from openfilz/develop**
 
+ * Update Python SDK quickstart to use correct package name
 
-[7f63c4d7467bee4](https://github.com/openfilz/openfilz-core/commit/7f63c4d7467bee4) maven-release-bot[bot] *2026-11-02 10:10:13*
+[219e66067f9d8fd](https://github.com/openfilz/openfilz-core/commit/219e66067f9d8fd) Yann Demel *2026-11-02 15:58:36*
 
 
