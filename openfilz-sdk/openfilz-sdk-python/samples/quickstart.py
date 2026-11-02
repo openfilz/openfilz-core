@@ -8,7 +8,7 @@ Demonstrates the core document management operations:
 
 Prerequisites:
     - A running OpenFilz API instance (default: http://localhost:8081)
-    - pip install openfilz-sdk-python
+    - pip install openfilz-sdk
 """
 
 import os
