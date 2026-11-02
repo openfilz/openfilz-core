@@ -19,7 +19,7 @@ on:
           - minor
           - major
       publish_maven_central:
-        description: 'Also publish the Java SDKs to Maven Central (counts against the monthly Sonatype limits)'
+        description: 'Also publish the Java SDKs to Maven Central on a patch release (minor and major releases always do)'
         required: false
         default: false
         type: boolean
@@ -185,33 +185,34 @@ jobs:
       - name: Prepare Release
         run: mvn -Dmaven.wagon.http.retryHandler.count=3 -B release:prepare -DtagNameFormat=v@{project.version} -DreleaseVersion=${{ steps.versions.outputs.releaseVersion }} -DdevelopmentVersion=${{ steps.versions.outputs.developmentVersion }} -Darguments="-Dsurefire.skip=true -Dit.test=OpenApiSpecExtractionIT -Dfailsafe.failIfNoSpecifiedTests=false"
 
-      # Maven Central is opt-in: Sonatype caps the organisation at 80 MB, 1 000 files and 7
-      # releases a month, and a core release ships about once a day. Only the Java SDKs (and their
-      # two parent POMs) go there — see excludeArtifacts in the root pom — and only when asked:
-      # the `publish_maven_central` input of a manual run, or the `publish-maven-central` label on
-      # the develop -> main PR. Without it the deploy phase still runs (npm / PyPI / NuGet publish
-      # there, jib pushes the images at install) but nothing is deployed to a Maven repository.
-      - name: Choose Maven Central publishing
-        id: central
-        env:
-          INPUT: ${{ inputs.publish_maven_central }}
-          LABELLED: ${{ contains(github.event.pull_request.labels.*.name, 'publish-maven-central') }}
-        run: |
-          if [ "$INPUT" = "true" ] || [ "$LABELLED" = "true" ]; then
-            echo "args=-Pkube,publishMaven,publishSdk" >> $GITHUB_OUTPUT
-            echo "Maven Central: publishing the Java SDKs"
-          else
-            echo "args=-Pkube,publishSdk -Dmaven.deploy.skip=true" >> $GITHUB_OUTPUT
-            echo "Maven Central: skipped (opt in with the publish_maven_central input or the publish-maven-central PR label)"
-          fi
-
+      # Everything but Maven Central: npm / PyPI / NuGet publish in the deploy phase, jib pushes the
+      # images at install, and -Dmaven.deploy.skip=true leaves Maven repositories alone.
       - name: Perform Release
-        run: mvn -Dmaven.wagon.http.retryHandler.count=3 -B release:perform -Darguments="${{ steps.central.outputs.args }} -Dmaven.test.skip=false -Dsurefire.skip=true -Dit.test=OpenApiSpecExtractionIT -Dfailsafe.failIfNoSpecifiedTests=false -Dnpm.publish.tag=latest -Dregistry.hostname=ghcr.io -Dregistry.port=443 -Ddocker.context.path=openfilz/ -Djib.to.auth.username=${{ github.actor }} -Djib.to.auth.password=${{ secrets.GITHUB_TOKEN }}"
+        run: mvn -Dmaven.wagon.http.retryHandler.count=3 -B release:perform -Darguments="-Pkube,publishSdk -Dmaven.deploy.skip=true -Dmaven.test.skip=false -Dsurefire.skip=true -Dit.test=OpenApiSpecExtractionIT -Dfailsafe.failIfNoSpecifiedTests=false -Dnpm.publish.tag=latest -Dregistry.hostname=ghcr.io -Dregistry.port=443 -Ddocker.context.path=openfilz/ -Djib.to.auth.username=${{ github.actor }} -Djib.to.auth.password=${{ secrets.GITHUB_TOKEN }}"
         env:
           # npm publish authenticates via OIDC Trusted Publishing (no token) — see .npmrc
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+
+      # Sonatype caps the organisation at 80 MB, 1 000 files and 7 releases a month, and a core
+      # release ships about once a day. So only the two Java SDK jars go there, automatically on a
+      # minor or major release. A patch release publishes only when asked: the
+      # `publish_maven_central` input of a manual run, or the `publish-maven-central` label on the
+      # develop -> main PR. The release is already out at this point, so a Central refusal marks
+      # this step failed (continue-on-error) but does not stop the steps below.
+      - name: Publish the Java SDKs to Maven Central
+        id: central
+        if: steps.bump.outputs.type != 'patch' || inputs.publish_maven_central || contains(github.event.pull_request.labels.*.name, 'publish-maven-central')
+        continue-on-error: true
+        run: |
+          mvn -Dmaven.wagon.http.retryHandler.count=3 -B -f target/checkout/pom.xml \
+              -pl openfilz-sdk/openfilz-sdk-java,openfilz-sdk/openfilz-sdk-java-reactive \
+              -PpublishMaven deploy -DskipTests \
+          || {
+            echo "::error title=Maven Central::Publishing the Java SDKs failed; the release itself is complete. To retry: check out v${{ steps.versions.outputs.releaseVersion }}, 'mvn install' it with the Perform Release arguments (OpenApiSpecExtractionIT attaches the OpenAPI spec the SDKs build from), then run the 'Publish Only Java SDKs' command of openfilz-sdk/README.md."
+            exit 1
+          }
 
       - name: Generate Changelog
         run: mvn -Dmaven.wagon.http.retryHandler.count=3 git-changelog-maven-plugin:git-changelog -PchangeLog

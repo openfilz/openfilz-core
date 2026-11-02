@@ -23,3 +23,6 @@
 # output — the openfilz-ce umbrella tracks openfilz-web via a 1.x.x OCI range)
 /deploy/helm/*/charts/*.tgz
 /deploy/helm/openfilz-ce/Chart.lock
+
+# flatten-maven-plugin output (publishMaven profile)
+**/.flattened-pom.xml
