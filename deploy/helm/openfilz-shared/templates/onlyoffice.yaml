@@ -141,6 +141,10 @@ spec:
         # the tenants as volume items would restart the editor of every tenant for each new one.
         - name: tenant-secrets-sync
           image: {{ .Values.images.onlyofficeTenantSync }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           command: ["sh", "-c"]
           args:
             - |
