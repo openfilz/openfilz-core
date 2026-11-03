@@ -97,7 +97,7 @@ spec:
             - name: JWT_HEADER
               value: Authorization
             - name: ALLOW_META_IP_ADDRESS
-              value: "true"
+              value: {{ not .Values.onlyoffice.tenancy.enabled | quote }}
             - name: ALLOW_PRIVATE_IP_ADDRESS
               value: "true"
           startupProbe:
@@ -118,8 +118,17 @@ spec:
             periodSeconds: 30
           resources:
             {{- toYaml .Values.resources.onlyoffice | nindent 12 }}
-          {{- if or .Values.onlyoffice.persistence.data.enabled .Values.onlyoffice.persistence.logs.enabled }}
+          {{- if or .Values.onlyoffice.persistence.data.enabled .Values.onlyoffice.persistence.logs.enabled .Values.onlyoffice.tenancy.enabled }}
           volumeMounts:
+            {{- if .Values.onlyoffice.tenancy.enabled }}
+            - name: tenancy-config
+              mountPath: /etc/onlyoffice/documentserver/local-production-linux.json
+              subPath: local-production-linux.json
+              readOnly: true
+            - name: tenants
+              mountPath: /var/www/onlyoffice/tenants
+              readOnly: true
+            {{- end }}
             {{- if .Values.onlyoffice.persistence.data.enabled }}
             - name: data
               mountPath: /var/www/onlyoffice/Data
@@ -129,8 +138,53 @@ spec:
               mountPath: /var/log/onlyoffice
             {{- end }}
           {{- end }}
-      {{- if or .Values.onlyoffice.persistence.data.enabled .Values.onlyoffice.persistence.logs.enabled }}
+        {{- if .Values.onlyoffice.tenancy.enabled }}
+        # The server reads <tenant>/secret.key; a Secret volume cannot hold sub-folders, and listing
+        # the tenants as volume items would restart the editor of every tenant for each new one.
+        - name: tenant-secrets-sync
+          image: {{ .Values.images.onlyofficeTenantSync }}
+          command: ["sh", "-c"]
+          args:
+            - |
+              while true; do
+                for f in /tenant-secrets/*; do
+                  [ -f "$f" ] || continue
+                  t="$(basename "$f")"
+                  mkdir -p "/tenants/$t"
+                  cmp -s "$f" "/tenants/$t/secret.key" || { cp "$f" "/tenants/$t/.secret.tmp" && mv -f "/tenants/$t/.secret.tmp" "/tenants/$t/secret.key"; }
+                done
+                for d in /tenants/*; do
+                  [ -d "$d" ] || continue
+                  [ -f "/tenant-secrets/$(basename "$d")" ] || rm -rf "$d"
+                done
+                sleep 10
+              done
+          resources:
+            requests: { cpu: 5m, memory: 8Mi }
+            limits: { memory: 32Mi }
+          volumeMounts:
+            - name: tenant-secrets
+              mountPath: /tenant-secrets
+              readOnly: true
+            - name: tenants
+              mountPath: /tenants
+        {{- end }}
+      {{- if or .Values.onlyoffice.persistence.data.enabled .Values.onlyoffice.persistence.logs.enabled .Values.onlyoffice.tenancy.enabled }}
       volumes:
+        {{- if .Values.onlyoffice.tenancy.enabled }}
+        - name: tenancy-config
+          configMap:
+            name: {{ .Release.Name }}-onlyoffice-tenancy
+        - name: tenant-secrets
+          secret:
+            secretName: {{ .Release.Name }}-onlyoffice-tenants
+            optional: true
+            defaultMode: 0444
+        - name: tenants
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
+        {{- end }}
         {{- if .Values.onlyoffice.persistence.data.enabled }}
         - name: data
           persistentVolumeClaim:
