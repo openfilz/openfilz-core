@@ -27,7 +27,7 @@ spec:
     matchExpressions:
       - key: app.kubernetes.io/component
         operator: In
-        values: ["keycloak", "onlyoffice"]
+        values: ["keycloak", "onlyoffice", "onlyoffice-router"]
   policyTypes: ["Ingress"]
   ingress:
     - from:
@@ -51,7 +51,7 @@ spec:
 {{- $tenantComponents = append $tenantComponents "opensearch" }}
 {{- end }}
 {{- if not .Values.onlyoffice.tenancy.enabled }}
-{{- $tenantComponents = append $tenantComponents "onlyoffice" }}
+{{- $tenantComponents = concat $tenantComponents (list "onlyoffice" "onlyoffice-router") }}
 {{- end }}
 # Tenant/demo namespaces (labelled by the provisioner with the tenant-access key)
 # → shared services: keycloak 8080, opensearch 9200, gotenberg 3000, onlyoffice 80.
@@ -82,6 +82,30 @@ spec:
         - port: 9200
         - port: 3000
         - port: 80
+{{- if and .Values.onlyoffice.enabled (gt (int .Values.onlyoffice.replicas) 1) }}
+---
+# router → document servers
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-allow-router-to-onlyoffice
+  labels:
+    {{- include "openfilz-shared.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: onlyoffice
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: onlyoffice-router
+      ports:
+        - port: 80
+{{- end }}
 {{- with .Values.networkPolicy.opensearchClientComponents }}
 ---
 # OpenSearch has no authentication of its own here: only the pods that index and search reach it,

@@ -133,6 +133,30 @@ set `auth.publicAuthority=https://<hosts.auth>/realms/<realm>` and
 - `Data`/logs PVCs are off by default (fonts/certs cache is rebuildable); enable via
   `onlyoffice.persistence.*.enabled` for production tenants.
 
+### Several document servers (`onlyoffice.replicas`)
+
+```bash
+helm upgrade shared . -n openfilz-shared --reuse-values --set onlyoffice.replicas=3
+```
+
+Use helm rather than `kubectl scale`: the router's list of servers comes from this value. Each server asks for
+`resources.onlyoffice` (2 GiB by default), and they spread over the nodes when possible.
+
+The Community edition keeps a document's live editing state in the memory of the server that opened it, and
+offers no way to share it. So these are not interchangeable servers behind a load balancer: above one replica, a
+small router (`onlyoffice.router.replicas`, 2 by default) hashes the document key and sends everyone editing a
+document to the same server. In practice:
+
+- More capacity, and a failed server only affects its own documents.
+- A document whose server goes away reopens on another one from its last saved version. Changes made
+  since the last save on that server are lost, as with a single server.
+- During that window a document can sit on two servers: someone who opened it on the stand-in stays there, and
+  once the original server is back, new arrivals go to it. Each saves its own copy, so the last save wins.
+  Only a server failure or a change of the number of servers can cause this.
+- Changing the number of servers moves only the documents of the servers that come or go. Do it outside busy
+  hours: those documents are affected like above.
+- Replicas are independent: their volumes (`onlyoffice.persistence`) are per server.
+
 ### One server, one secret per deployment (`onlyoffice.tenancy`)
 
 Without tenancy every consuming API holds the server's one JWT secret, so a compromised API can sign

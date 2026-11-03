@@ -1,0 +1,92 @@
+{{- if and .Values.onlyoffice.enabled (gt (int .Values.onlyoffice.replicas) 1) }}
+{{- $release := .Release.Name }}
+{{- $namespace := .Release.Namespace }}
+{{- $conf := include "openfilz-shared.onlyofficeRouterConf" . }}
+# The Community edition keeps a document's live editing state in the memory of the server that opened
+# it, so everyone editing one document must reach the same server: two servers each holding the
+# document would silently overwrite each other's changes. The document server puts the document key
+# on all its URLs (shardkey), which this router hashes. Consistent hashing: changing the number of
+# servers only moves the documents of the servers that come or go.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $release }}-onlyoffice-router
+  labels:
+    {{- include "openfilz-shared.labels" . | nindent 4 }}
+    app.kubernetes.io/component: onlyoffice-router
+data:
+  nginx.conf.template: |
+    {{- $conf | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $release }}-onlyoffice-router
+  labels:
+    {{- include "openfilz-shared.labels" . | nindent 4 }}
+    app.kubernetes.io/component: onlyoffice-router
+spec:
+  replicas: {{ int .Values.onlyoffice.router.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ $release }}
+      app.kubernetes.io/component: onlyoffice-router
+  template:
+    metadata:
+      labels:
+        {{- include "openfilz-shared.labels" . | nindent 8 }}
+        app.kubernetes.io/component: onlyoffice-router
+      annotations:
+        # The server list is in the file: a new number of servers restarts the router.
+        checksum/config: {{ $conf | sha256sum }}
+    spec:
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: router
+          image: {{ .Values.images.onlyofficeRouter }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          # nginx re-resolves the server names itself, with the cluster DNS of this pod.
+          command: ["sh", "-c"]
+          args:
+            - |
+              resolver="$(awk '/^nameserver/ {print $2; exit}' /etc/resolv.conf)"
+              sed "s/__RESOLVER__/$resolver/" /router/nginx.conf.template > /tmp/nginx.conf
+              exec nginx -c /tmp/nginx.conf -g 'daemon off;'
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /router-health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /router-health
+              port: http
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.resources.onlyofficeRouter | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /router
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $release }}-onlyoffice-router
+{{- end }}
