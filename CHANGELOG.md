@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[854b09448de4915](https://github.com/openfilz/openfilz-core/commit/854b09448de4915) maven-release-bot[bot] *2026-11-04 00:53:14*
+[7a9c108c1f4e298](https://github.com/openfilz/openfilz-core/commit/7a9c108c1f4e298) maven-release-bot[bot] *2026-11-04 01:30:12*
 
 
-## v1.4.2
+## v1.4.3
 ### No issue
 
-**[maven-release-plugin] prepare release v1.4.2**
+**[maven-release-plugin] prepare release v1.4.3**
 
 
-[2790fa22155b9fb](https://github.com/openfilz/openfilz-core/commit/2790fa22155b9fb) maven-release-bot[bot] *2026-11-04 00:53:11*
+[309ab71d65ca503](https://github.com/openfilz/openfilz-core/commit/309ab71d65ca503) maven-release-bot[bot] *2026-11-04 01:30:10*
 
-**Merge pull request #368 from openfilz/develop**
+**Merge pull request #370 from openfilz/develop**
 
- * Enhance OnlyOffice deployment with JWT secrets and scaling
+ * Develop
 
-[6f52b0fbea93906](https://github.com/openfilz/openfilz-core/commit/6f52b0fbea93906) Yann Demel *2026-11-04 00:48:58*
+[e1b157e8d6a308b](https://github.com/openfilz/openfilz-core/commit/e1b157e8d6a308b) Yann Demel *2026-11-04 01:26:56*
 
 
