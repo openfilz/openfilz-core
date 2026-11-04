@@ -291,11 +291,16 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
 
     @Override
     public Mono<? extends Resource> downloadDocument(Document doc, AuditAction action) {
-        return (doc.getType() == FILE ?
-                storageService.loadFile(doc.getStoragePath())
-                : zipFolder(documentDAO.getChildren(doc.getId())))
+        return loadDocumentContent(doc)
                 .flatMap(r -> auditService.logAction(action, FILE, doc.getId())
                         .thenReturn(r));
+    }
+
+    @Override
+    public Mono<? extends Resource> loadDocumentContent(Document doc) {
+        return doc.getType() == FILE ?
+                storageService.loadFile(doc.getStoragePath())
+                : zipFolder(documentDAO.getChildren(doc.getId()));
     }
 
     private Mono<? extends Resource> zipFolder(Flux<ChildElementInfo> children) {

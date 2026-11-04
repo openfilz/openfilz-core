@@ -64,6 +64,9 @@ public interface DocumentService {
     /** Loads the content and audits it as {@code action}: DOWNLOAD_DOCUMENT or OPEN_DOCUMENT. */
     Mono<? extends Resource> downloadDocument(Document document, AuditAction action);
 
+    /** Loads the content without auditing it, for a caller whose action is audited elsewhere. */
+    Mono<? extends Resource> loadDocumentContent(Document document);
+
     Mono<Resource> downloadMultipleDocumentsAsZip(List<UUID> documentIds); // Complex: zipping
 
     Flux<UUID> searchDocumentIdsByMetadata(SearchByMetadataRequest request);
