@@ -10,8 +10,10 @@ import okhttp3.mockwebserver.MockWebServer;
 import okio.Buffer;
 import org.junit.jupiter.api.*;
 import org.openfilz.dms.config.RestApiVersion;
+import org.openfilz.dms.dto.audit.AuditLog;
 import org.openfilz.dms.dto.request.OnlyOfficeCallbackRequest;
 import org.openfilz.dms.dto.response.UploadResponse;
+import org.openfilz.dms.enums.AuditAction;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -350,6 +352,42 @@ public class OnlyOfficeIT extends TestContainersKeyCloakConfig {
                     .jsonPath("$.config.editorConfig.callbackUrl").value(url -> assertThat((String) url).contains("/onlyoffice/callback/"))
                     .jsonPath("$.config.editorConfig.mode").isEqualTo("edit")
                     .jsonPath("$.config.documentType").isEqualTo("word");
+        }
+
+        @Test
+        @DisplayName("Should audit one open per editor config, however often the document server fetches the file")
+        void shouldAuditOneOpenPerEditorConfig() {
+            UploadResponse uploadResponse = uploadTestDocumentWithName(contributorAccessToken, "open-audit.docx");
+            assertThat(uploadResponse).isNotNull();
+
+            webTestClient.get()
+                    .uri(RestApiVersion.API_PREFIX + "/onlyoffice/config/" + uploadResponse.id())
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + contributorAccessToken)
+                    .exchange()
+                    .expectStatus().isOk();
+
+            String accessToken = generateOnlyOfficeAccessToken(uploadResponse.id(), "contributor-user", "Contributor User");
+            for (int fetch = 0; fetch < 2; fetch++) {
+                webTestClient.get()
+                        .uri(uriBuilder -> uriBuilder
+                                .path(RestApiVersion.API_PREFIX + "/documents/" + uploadResponse.id() + "/onlyoffice-download")
+                                .queryParam("token", accessToken)
+                                .build())
+                        .exchange()
+                        .expectStatus().isOk();
+            }
+
+            List<AuditAction> actions = webTestClient.get()
+                    .uri(RestApiVersion.API_PREFIX + "/audit/{id}", uploadResponse.id())
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminAccessToken)
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectBodyList(AuditLog.class)
+                    .returnResult().getResponseBody()
+                    .stream().map(AuditLog::action).toList();
+
+            assertThat(actions).containsOnlyOnce(AuditAction.OPEN_DOCUMENT);
+            assertThat(actions).doesNotContain(AuditAction.DOWNLOAD_DOCUMENT);
         }
 
         @Test

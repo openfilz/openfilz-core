@@ -349,8 +349,8 @@ public class DocumentController {
         }
 
         return documentService.findDocumentToDownloadById(documentId)
-                // OnlyOffice fetches the file to display it in the editor: an open, not a download
-                .flatMap(docInfo -> documentService.downloadDocument(docInfo, AuditAction.OPEN_DOCUMENT)
+                // Not audited: the opening was logged when the user asked for the editor config
+                .flatMap(docInfo -> documentService.loadDocumentContent(docInfo)
                         .map(resource -> sendOnlyOfficeDownloadResponse(docInfo, resource))
                 )
                 .defaultIfEmpty(ResponseEntity.notFound().build());

@@ -10,7 +10,10 @@ import org.openfilz.dms.dto.request.DocumentLanguageRequest;
 import org.openfilz.dms.dto.request.OnlyOfficeCallbackRequest;
 import org.openfilz.dms.dto.response.DocumentLanguageInfo;
 import org.openfilz.dms.dto.response.OnlyOfficeConfigResponse;
+import org.openfilz.dms.enums.AuditAction;
+import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.exception.OperationForbiddenException;
+import org.openfilz.dms.service.AuditService;
 import org.openfilz.dms.service.OnlyOfficeService;
 import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -34,6 +37,7 @@ import java.util.UUID;
 public class OnlyOfficeController implements UserInfoService {
 
     private final OnlyOfficeService onlyOfficeService;
+    private final AuditService auditService;
 
     /**
      * Get the configuration needed to initialize the OnlyOffice editor.
@@ -58,7 +62,13 @@ public class OnlyOfficeController implements UserInfoService {
 
         log.debug("Generating OnlyOffice config for document {}, canEdit={}, versionId={}, lang={}", documentId, canEdit, versionId, lang);
 
-        return onlyOfficeService.generateEditorConfig(documentId, canEdit, versionId, lang);
+        // One request per opening, made by the user. The document server's fetches of the file are
+        // not openings: it may fetch a file several times, or serve it from its cache. Viewing a
+        // stored version is not audited.
+        return onlyOfficeService.generateEditorConfig(documentId, canEdit, versionId, lang)
+                .flatMap(config -> versionId != null
+                        ? Mono.just(config)
+                        : auditService.logAction(AuditAction.OPEN_DOCUMENT, DocumentType.FILE, documentId).thenReturn(config));
     }
 
     /**
