@@ -25,7 +25,6 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
@@ -113,10 +112,11 @@ class DocumentControllerOnlyOfficeDownloadTest {
                 .id(documentId).name("doc.txt").type(DocumentType.FILE).contentType("text/plain").build();
         when(documentService.findDocumentToDownloadById(documentId)).thenReturn(Mono.just(document));
         doReturn(Mono.just(new ByteArrayResource("body".getBytes())))
-                .when(documentService).downloadDocument(any(Document.class), eq(AuditAction.OPEN_DOCUMENT));
+                .when(documentService).loadDocumentContent(any(Document.class));
 
         StepVerifier.create(controller.downloadForOnlyOffice(documentId, "tok", null))
                 .expectNextMatches(r -> r.getStatusCode() == HttpStatus.OK)
                 .verifyComplete();
+        verify(documentService, never()).downloadDocument(any(Document.class), any(AuditAction.class));
     }
 }
