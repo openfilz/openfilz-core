@@ -1,40 +1,4 @@
 {{- if .Values.onlyoffice.enabled }}
-{{- if .Values.onlyoffice.persistence.data.enabled }}
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: {{ .Release.Name }}-onlyoffice-data
-  labels:
-    {{- include "openfilz-shared.labels" . | nindent 4 }}
-    app.kubernetes.io/component: onlyoffice
-spec:
-  accessModes: ["ReadWriteOnce"]
-  {{- with .Values.onlyoffice.persistence.data.storageClassName }}
-  storageClassName: {{ . }}
-  {{- end }}
-  resources:
-    requests:
-      storage: {{ .Values.onlyoffice.persistence.data.size }}
----
-{{- end }}
-{{- if .Values.onlyoffice.persistence.logs.enabled }}
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: {{ .Release.Name }}-onlyoffice-logs
-  labels:
-    {{- include "openfilz-shared.labels" . | nindent 4 }}
-    app.kubernetes.io/component: onlyoffice
-spec:
-  accessModes: ["ReadWriteOnce"]
-  {{- with .Values.onlyoffice.persistence.logs.storageClassName }}
-  storageClassName: {{ . }}
-  {{- end }}
-  resources:
-    requests:
-      storage: {{ .Values.onlyoffice.persistence.logs.size }}
----
-{{- end }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -45,22 +9,43 @@ metadata:
 spec:
   selector:
     app.kubernetes.io/instance: {{ .Release.Name }}
+    # Above one server every request goes through the router: see onlyoffice-router.yaml
+    app.kubernetes.io/component: {{ if gt (int .Values.onlyoffice.replicas) 1 }}onlyoffice-router{{ else }}onlyoffice{{ end }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# Gives each server a stable name for the router; not-ready addresses too, so that a server still
+# starting does not change which server the other documents hash to.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-onlyoffice-pods
+  labels:
+    {{- include "openfilz-shared.labels" . | nindent 4 }}
+    app.kubernetes.io/component: onlyoffice
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/component: onlyoffice
   ports:
     - name: http
       port: 80
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: {{ .Release.Name }}-onlyoffice
   labels:
     {{- include "openfilz-shared.labels" . | nindent 4 }}
     app.kubernetes.io/component: onlyoffice
 spec:
-  replicas: 1
-  strategy:
-    type: Recreate            # RWO Data/logs PVCs (when enabled) — one pod at a time
+  replicas: {{ int .Values.onlyoffice.replicas }}
+  serviceName: {{ .Release.Name }}-onlyoffice-pods
+  podManagementPolicy: Parallel
   selector:
     matchLabels:
       app.kubernetes.io/instance: {{ .Release.Name }}
@@ -80,6 +65,19 @@ spec:
       {{- with .Values.onlyoffice.podSecurityContext }}
       securityContext: {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if gt (int .Values.onlyoffice.replicas) 1 }}
+      # Two servers on one node do not survive the loss of that node.
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: {{ .Release.Name }}
+                    app.kubernetes.io/component: onlyoffice
+      {{- end }}
       containers:
         - name: onlyoffice
           image: {{ .Values.images.onlyoffice }}
@@ -97,7 +95,7 @@ spec:
             - name: JWT_HEADER
               value: Authorization
             - name: ALLOW_META_IP_ADDRESS
-              value: "true"
+              value: {{ not .Values.onlyoffice.tenancy.enabled | quote }}
             - name: ALLOW_PRIVATE_IP_ADDRESS
               value: "true"
           startupProbe:
@@ -118,8 +116,17 @@ spec:
             periodSeconds: 30
           resources:
             {{- toYaml .Values.resources.onlyoffice | nindent 12 }}
-          {{- if or .Values.onlyoffice.persistence.data.enabled .Values.onlyoffice.persistence.logs.enabled }}
+          {{- if or .Values.onlyoffice.persistence.data.enabled .Values.onlyoffice.persistence.logs.enabled .Values.onlyoffice.tenancy.enabled }}
           volumeMounts:
+            {{- if .Values.onlyoffice.tenancy.enabled }}
+            - name: tenancy-config
+              mountPath: /etc/onlyoffice/documentserver/local-production-linux.json
+              subPath: local-production-linux.json
+              readOnly: true
+            - name: tenants
+              mountPath: /var/www/onlyoffice/tenants
+              readOnly: true
+            {{- end }}
             {{- if .Values.onlyoffice.persistence.data.enabled }}
             - name: data
               mountPath: /var/www/onlyoffice/Data
@@ -129,17 +136,71 @@ spec:
               mountPath: /var/log/onlyoffice
             {{- end }}
           {{- end }}
-      {{- if or .Values.onlyoffice.persistence.data.enabled .Values.onlyoffice.persistence.logs.enabled }}
+        {{- if .Values.onlyoffice.tenancy.enabled }}
+        # The server reads <tenant>/secret.key; a Secret volume cannot hold sub-folders, and listing
+        # the tenants as volume items would restart the editor of every tenant for each new one.
+        - name: tenant-secrets-sync
+          image: {{ .Values.images.onlyofficeTenantSync }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          command: ["sh", "-c"]
+          args:
+            - |
+              while true; do
+                for f in /tenant-secrets/*; do
+                  [ -f "$f" ] || continue
+                  t="$(basename "$f")"
+                  mkdir -p "/tenants/$t"
+                  cmp -s "$f" "/tenants/$t/secret.key" || { cp "$f" "/tenants/$t/.secret.tmp" && mv -f "/tenants/$t/.secret.tmp" "/tenants/$t/secret.key"; }
+                done
+                for d in /tenants/*; do
+                  [ -d "$d" ] || continue
+                  [ -f "/tenant-secrets/$(basename "$d")" ] || rm -rf "$d"
+                done
+                sleep 10
+              done
+          resources:
+            requests: { cpu: 5m, memory: 8Mi }
+            limits: { memory: 32Mi }
+          volumeMounts:
+            - name: tenant-secrets
+              mountPath: /tenant-secrets
+              readOnly: true
+            - name: tenants
+              mountPath: /tenants
+        {{- end }}
+      {{- if .Values.onlyoffice.tenancy.enabled }}
       volumes:
-        {{- if .Values.onlyoffice.persistence.data.enabled }}
-        - name: data
-          persistentVolumeClaim:
-            claimName: {{ .Release.Name }}-onlyoffice-data
-        {{- end }}
-        {{- if .Values.onlyoffice.persistence.logs.enabled }}
-        - name: logs
-          persistentVolumeClaim:
-            claimName: {{ .Release.Name }}-onlyoffice-logs
-        {{- end }}
+        - name: tenancy-config
+          configMap:
+            name: {{ .Release.Name }}-onlyoffice-tenancy
+        - name: tenant-secrets
+          secret:
+            secretName: {{ .Release.Name }}-onlyoffice-tenants
+            optional: true
+            defaultMode: 0444
+        - name: tenants
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
       {{- end }}
+  {{- if or .Values.onlyoffice.persistence.data.enabled .Values.onlyoffice.persistence.logs.enabled }}
+  volumeClaimTemplates:
+    {{- range $name, $volume := .Values.onlyoffice.persistence }}
+    {{- if $volume.enabled }}
+    - metadata:
+        name: {{ $name }}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with $volume.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $volume.size }}
+    {{- end }}
+    {{- end }}
+  {{- end }}
 {{- end }}

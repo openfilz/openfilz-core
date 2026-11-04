@@ -167,22 +167,22 @@ spec:
             {{- end }}
             # --- Quotas (MB) ---
             - name: OPENFILZ_QUOTA_FILE_UPLOAD
-              value: {{ .Values.quotas.fileUploadMb | quote }}
+              value: {{ .Values.quotas.fileUploadMb | int64 | quote }}
             - name: OPENFILZ_QUOTA_USER
-              value: {{ .Values.quotas.userMb | quote }}
+              value: {{ .Values.quotas.userMb | int64 | quote }}
             - name: OPENFILZ_QUOTA_TOTAL
-              value: {{ .Values.quotas.totalMb | default 0 | quote }}
+              value: {{ .Values.quotas.totalMb | default 0 | int64 | quote }}
             # --- Resumable uploads (TUS) ---
             - name: TUS_ENABLED
               value: {{ .Values.tus.enabled | quote }}
             - name: TUS_MAX_UPLOAD_SIZE
-              value: {{ .Values.tus.maxUploadSize | quote }}
+              value: {{ .Values.tus.maxUploadSize | int64 | quote }}
             - name: TUS_CHUNK_SIZE
-              value: {{ .Values.tus.chunkSize | quote }}
+              value: {{ .Values.tus.chunkSize | int64 | quote }}
             - name: TUS_UPLOAD_EXPIRATION
-              value: {{ .Values.tus.uploadExpiration | quote }}
+              value: {{ .Values.tus.uploadExpiration | int64 | quote }}
             - name: TUS_CLEANUP_INTERVAL
-              value: {{ .Values.tus.cleanupInterval | quote }}
+              value: {{ .Values.tus.cleanupInterval | int64 | quote }}
             # --- MCP server (external AI agents over POST /mcp) ---
             - name: OPENFILZ_MCP_ACTIVE
               value: {{ .Values.mcp.active | quote }}

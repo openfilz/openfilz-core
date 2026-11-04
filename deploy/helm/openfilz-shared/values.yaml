@@ -38,7 +38,10 @@ images:
   keycloakDb: postgres:17-alpine
   opensearch: opensearchproject/opensearch:2.19.1
   gotenberg: gotenberg/gotenberg:8
-  onlyoffice: onlyoffice/documentserver:latest
+  # Pinned: the tenancy below is checked against this version, re-test it before moving.
+  onlyoffice: onlyoffice/documentserver:9.4.0.1
+  onlyofficeTenantSync: busybox:1.37.0
+  onlyofficeRouter: nginxinc/nginx-unprivileged:1.29.8-alpine
   pullPolicy: Always
   # Pull secrets for the Keycloak pod (needed when images.keycloak is replaced
   # by an image from a private registry). List of {name: <secret>}.
@@ -142,6 +145,18 @@ onlyoffice:
   jwtSecret: ""
   existingSecret: ""
   podSecurityContext: {}       # OpenShift: the documentserver image needs runAsUser 0
+  # Number of document servers. Above 1 a router sends each document to one server (see the README).
+  # Change it with helm, not kubectl scale: the router's list of servers comes from this value.
+  replicas: 1
+  router:
+    replicas: 2                # only deployed when replicas > 1
+  # One server for several deployments, each with its own JWT secret and its own address,
+  # <tenant>.<baseDomain> (see the README). jwtSecret above then only serves the server's own
+  # default tenant; the APIs use their tenant's. Off: every API shares jwtSecret.
+  tenancy:
+    enabled: false
+    baseDomain: ""             # e.g. docs.example.com, with a wildcard DNS record
+    tlsSecretName: ""          # certificate for *.<baseDomain>
   persistence:
     data:
       enabled: false
@@ -176,6 +191,9 @@ networkPolicy:
   tenantAccessLabel:
     key: openfilz.com/tenant-access
     value: "true"
+  # app.kubernetes.io/component values of the pods allowed to reach OpenSearch in those
+  # namespaces. Empty = every pod of a labelled namespace.
+  opensearchClientComponents: []
 
 resources:
   keycloak:
@@ -190,6 +208,9 @@ resources:
   gotenberg:
     requests: { cpu: 100m, memory: 512Mi }
     limits: { memory: 1Gi }
-  onlyoffice:
+  onlyoffice:                  # per server
     requests: { cpu: 500m, memory: 2Gi }
     limits: { memory: 4Gi }
+  onlyofficeRouter:
+    requests: { cpu: 25m, memory: 32Mi }
+    limits: { memory: 128Mi }

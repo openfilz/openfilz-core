@@ -1,0 +1,31 @@
+{{- if and .Values.onlyoffice.enabled .Values.onlyoffice.tenancy.enabled }}
+{{- if .Values.openshift.enabled }}
+{{- fail "onlyoffice.tenancy needs a wildcard Ingress host: not available with openshift.enabled" }}
+{{- end }}
+# One document server, one JWT secret per deployment: the server picks the secret from the host the
+# browser used (<tenant>.<baseDomain>), so a token signed for one tenant is refused on another.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-onlyoffice-tenancy
+  labels:
+    {{- include "openfilz-shared.labels" . | nindent 4 }}
+    app.kubernetes.io/component: onlyoffice
+data:
+  local-production-linux.json: |
+    {"tenants":{"baseDir":"/var/www/onlyoffice/tenants","baseDomain":{{ required "Set onlyoffice.tenancy.baseDomain" .Values.onlyoffice.tenancy.baseDomain | quote }}}}
+---
+# Key = tenant name, value = its JWT secret. Written by whoever provisions the tenants, never by this
+# chart: no `data` here, so an upgrade leaves the keys alone, and `keep` so an uninstall does not cut
+# every tenant off its editor.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-onlyoffice-tenants
+  labels:
+    {{- include "openfilz-shared.labels" . | nindent 4 }}
+    app.kubernetes.io/component: onlyoffice
+  annotations:
+    helm.sh/resource-policy: keep
+type: Opaque
+{{- end }}

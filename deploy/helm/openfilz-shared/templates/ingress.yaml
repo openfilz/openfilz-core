@@ -16,10 +16,15 @@ spec:
         {{- if .Values.keycloak.enabled }}
         - {{ .Values.hosts.auth }}
         {{- end }}
-        {{- if .Values.onlyoffice.enabled }}
+        {{- if and .Values.onlyoffice.enabled (not .Values.onlyoffice.tenancy.enabled) }}
         - {{ .Values.hosts.docs }}
         {{- end }}
       secretName: {{ .Values.ingress.tlsSecretName }}
+    {{- if and .Values.onlyoffice.enabled .Values.onlyoffice.tenancy.enabled }}
+    - hosts:
+        - "*.{{ .Values.onlyoffice.tenancy.baseDomain }}"
+      secretName: {{ required "Set onlyoffice.tenancy.tlsSecretName (a certificate for *.<baseDomain>)" .Values.onlyoffice.tenancy.tlsSecretName }}
+    {{- end }}
   rules:
     {{- if .Values.keycloak.enabled }}
     - host: {{ .Values.hosts.auth }}
@@ -34,7 +39,7 @@ spec:
                   name: http
     {{- end }}
     {{- if .Values.onlyoffice.enabled }}
-    - host: {{ .Values.hosts.docs }}
+    - host: {{ if .Values.onlyoffice.tenancy.enabled }}"*.{{ .Values.onlyoffice.tenancy.baseDomain }}"{{ else }}{{ .Values.hosts.docs }}{{ end }}
       http:
         paths:
           - path: /
