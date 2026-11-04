@@ -145,6 +145,97 @@ class DocumentAiToolsMcpIT extends AbstractMcpIT {
     }
 
     @Test
+    @DisplayName("two documents of one name: every read tool asks for the id, then answers about that document")
+    void readToolsRefuseToChooseBetweenTwoDocumentsOfOneName() {
+        String suffix = suffix();
+        String name = "same-" + suffix + ".txt";
+        FolderResponse left = createFolder("left-" + suffix, null);
+        FolderResponse right = createFolder("right-" + suffix, null);
+        UUID inLeft = upload(name, "content on the left".getBytes(), left.id());
+        UUID inRight = upload(name, "content on the right".getBytes(), right.id());
+
+        // (tool, argument name) of each read tool taking a document; describeImage has no model here
+        // and getDocumentActivity needs the AUDITOR role this suite's caller holds
+        String[][] tools = {{"readDocumentContent", "documentName"}, {"getMetadata", "documentName"},
+                {"listVersions", "documentName"}, {"downloadDocument", "documentName"},
+                {"getDocumentActivity", "document"}};
+        for (String[] tool : tools) {
+            assertThat(callToolText(tool[0], """
+                    {"%s":"%s"}""".formatted(tool[1], name)))
+                    .as("%s by a name two documents bear", tool[0])
+                    .contains("matches 2 documents")
+                    .contains(inLeft.toString()).contains(inRight.toString())
+                    .contains("left-" + suffix).contains("right-" + suffix);
+            assertThat(callToolText(tool[0], """
+                    {"%s":"%s"}""".formatted(tool[1], inRight)))
+                    .as("%s by id", tool[0])
+                    .doesNotContain("matches 2 documents");
+        }
+
+        assertThat(callToolText("readDocumentContent", """
+                {"documentName":"%s"}""".formatted(inRight))).contains("content on the right");
+        assertThat(callToolText("getMetadata", """
+                {"documentName":"%s"}""".formatted(inRight))).contains(inRight.toString()).contains("right-" + suffix);
+        // An id does not need the folder hint, and is not misread as a file name inside the folder
+        assertThat(callToolText("readDocumentContent", """
+                {"documentName":"%s","folderName":"left-%s"}""".formatted(inRight, suffix))).contains("content on the right");
+        // The folder argument narrows the search down to one
+        assertThat(callToolText("readDocumentContent", """
+                {"documentName":"%s","folderName":"left-%s"}""".formatted(name, suffix))).contains("content on the left");
+
+        // queryDocuments tells the two apart
+        assertThat(callToolText("queryDocuments", """
+                {"folder":"all","nameLike":"%s"}""".formatted(name)))
+                .contains(inLeft.toString()).contains(inRight.toString())
+                .contains("in folder " + left.id() + " 'left-" + suffix + "'")
+                .contains("in folder " + right.id() + " 'right-" + suffix + "'");
+    }
+
+    @Test
+    @DisplayName("an exact name beats a partial one, one partial match is used and named, several are refused")
+    void exactBeatsPartialAndPartialIsNamed() {
+        String suffix = suffix();
+        String exact = "ledger-" + suffix;
+        upload(exact, "the exact one".getBytes(), null);
+        upload("a-" + exact + "-annual.txt", "the first partial match".getBytes(), null);
+        upload("only-" + suffix + "-unique.txt", "the only partial match".getBytes(), null);
+
+        assertThat(callToolText("readDocumentContent", """
+                {"documentName":"%s"}""".formatted(exact))).contains("the exact one");
+
+        assertThat(callToolText("readDocumentContent", """
+                {"documentName":"only-%s"}""".formatted(suffix)))
+                .contains("Content of 'only-" + suffix + "-unique.txt'").contains("the only partial match");
+
+        assertThat(callToolText("readDocumentContent", """
+                {"documentName":"edger-%s"}""".formatted(suffix))).contains("matches 2 documents");
+    }
+
+    @Test
+    @DisplayName("two folders of one name: the folder argument of a read tool asks for the id too")
+    void readToolsRefuseToChooseBetweenTwoFoldersOfOneName() {
+        String suffix = suffix();
+        String folderName = "twin-" + suffix;
+        FolderResponse parentA = createFolder("twin-parent-a-" + suffix, null);
+        FolderResponse parentB = createFolder("twin-parent-b-" + suffix, null);
+        FolderResponse twinA = createFolder(folderName, parentA.id());
+        FolderResponse twinB = createFolder(folderName, parentB.id());
+        upload("inside-" + suffix + ".txt", "x".getBytes(), twinB.id());
+
+        assertThat(callToolText("queryDocuments", """
+                {"folder":"%s"}""".formatted(folderName)))
+                .contains("matches 2 documents").contains(twinA.id().toString()).contains(twinB.id().toString());
+        assertThat(callToolText("queryDocuments", """
+                {"folder":"%s"}""".formatted(twinB.id()))).contains("inside-" + suffix);
+        assertThat(callToolText("readDocumentContent", """
+                {"documentName":"inside-%s.txt","folderName":"%s"}""".formatted(suffix, folderName)))
+                .contains("matches 2 documents");
+        assertThat(callToolText("searchByMetadata", """
+                {"metadataJson":"{\\"a\\":\\"b\\"}","folderName":"%s"}""".formatted(folderName)))
+                .contains("matches 2 documents");
+    }
+
+    @Test
     @DisplayName("createBlankDocument makes each office type and refuses what it cannot make")
     void createBlankDocumentsOfEveryType() {
         String suffix = suffix();

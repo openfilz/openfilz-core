@@ -259,6 +259,13 @@ public class DocumentAiTools {
      */
     private final Map<String, DocRef> documentRegistry = new ConcurrentHashMap<>();
 
+    /**
+     * Names the registry saw on more than one document this turn. The registry keeps one entry per
+     * name, so for these it cannot tell which document the model means: {@link #resolveForRead}
+     * ignores it and answers with the candidates.
+     */
+    private final Set<String> ambiguousRegistryNames = ConcurrentHashMap.newKeySet();
+
     public record DocRef(UUID id, UUID parentId, String type, String name) {}
 
     /** Sentinel folder id for the root level (matches the parentId encoding in doc markers). */
@@ -296,7 +303,10 @@ public class DocumentAiTools {
     }
 
     private void register(UUID id, UUID parentId, String type, String name) {
-        documentRegistry.put(name, new DocRef(id, parentId, type, name));
+        DocRef previous = documentRegistry.put(name, new DocRef(id, parentId, type, name));
+        if (previous != null && !previous.id().equals(id)) {
+            ambiguousRegistryNames.add(name);
+        }
     }
 
     private void register(Document doc) {
@@ -335,6 +345,7 @@ public class DocumentAiTools {
     /** Clear the registry before each new user message. */
     public void clearRegistry() {
         documentRegistry.clear();
+        ambiguousRegistryNames.clear();
         modifiedFolders.clear();
         performedActions.clear();
     }
@@ -448,10 +459,11 @@ public class DocumentAiTools {
                     searchAllFolders = false; // explicit root = only root level
                     folderId = null;
                 } else {
-                    folderId = resolveToId(folder);
-                    if (folderId == null) {
-                        return toolResult("queryDocuments", "No folder named '%s' found.".formatted(folder));
+                    ReadTarget target = resolveFolderForRead(folder, "No folder named '%s' found.".formatted(folder));
+                    if (target.error() != null) {
+                        return toolResult("queryDocuments", target.error());
                     }
+                    folderId = target.document().getId();
                     searchAllFolders = false;
                 }
             }
@@ -517,13 +529,16 @@ public class DocumentAiTools {
             // Register all results for doc-link enrichment
             accessible.forEach(r -> register(r.id(), r.parentId(), r.type().name(), r.name()));
 
-            // Format results
+            // Format results: the id and the folder are what tell two documents of one name apart
+            Map<UUID, String> folderNames = visibleFolderNames(accessible.stream().map(r -> r.parentId()).toList());
             String formatted = accessible.stream()
-                    .map(r -> "- [%s] %s (%s, %s)".formatted(
+                    .map(r -> "- [%s] %s (%s, %s), id %s, %s".formatted(
                             r.type().name(),
                             r.name(),
                             r.contentType() != null ? r.contentType() : "unknown type",
-                            r.createdAt() != null ? r.createdAt().toLocalDate().toString() : "unknown date"))
+                            r.createdAt() != null ? r.createdAt().toLocalDate().toString() : "unknown date",
+                            r.id(),
+                            locationOf(r.parentId(), folderNames)))
                     .collect(Collectors.joining("\n"));
 
             return toolResult("queryDocuments", "Found %d result(s):\n%s".formatted(accessible.size(), formatted));
@@ -784,32 +799,6 @@ public class DocumentAiTools {
      * user has no access to behaves exactly like a non-existent one.
      */
     /**
-     * Resolve a document reference (UUID or name) to an id the caller may read — <b>file or
-     * folder</b>. {@link #resolveToId} is folder-biased (its DB fallback matches folders only,
-     * which is correct for the folder-argument tools); the document-targeting tools below
-     * (metadata, delete, versions, download) use this instead so a file name resolves too.
-     */
-    private UUID resolveDocumentToId(String nameOrId) {
-        if (nameOrId == null || nameOrId.isBlank()) {
-            return null;
-        }
-        UUID id = parseUuid(nameOrId);
-        if (id != null) {
-            return canRead(id) ? id : null;
-        }
-        var ref = documentRegistry.get(nameOrId);
-        if (ref != null) {
-            return ref.id();
-        }
-        var found = blockWithAuth(
-                documentRepository.findTop50ByNameContainingIgnoreCaseAndActiveTrueOrderByNameAsc(nameOrId).collectList());
-        if (found == null) {
-            return null;
-        }
-        return found.stream().map(Document::getId).filter(this::canRead).findFirst().orElse(null);
-    }
-
-    /**
      * The target of a mutating tool: exactly one of {@code document} / {@code error} is set. The
      * error is a complete tool result (it names the candidates when the reference is ambiguous).
      */
@@ -826,7 +815,7 @@ public class DocumentAiTools {
     /**
      * Resolve the subject of a <b>mutating</b> tool (delete, move, rename, metadata writes, version
      * restore): by id, or by the exact (case-insensitive) full name — never by the first partial
-     * match {@link #resolveDocumentToId} falls back to for reads. The model acts on text it has read,
+     * match {@link #resolveForRead} accepts when it is the only one. The model acts on text it has read,
      * and a document can carry "delete X" for it to follow; a fuzzy match would then hit whatever
      * file sorts first. When several visible documents bear that exact name, or none does, the
      * answer is an error listing the candidates (name + id) and asking for the id.
@@ -857,12 +846,168 @@ public class DocumentAiTools {
                     + "Partial names are not accepted for this operation — use queryDocuments to find the document, "
                     + "then pass its exact name or its id.").formatted(verb, trimmed));
         }
-        String candidates = exact.stream().limit(10)
-                .map(d -> "'%s' (%s, id %s%s)".formatted(d.getName(), d.getType() == DocumentType.FOLDER ? "folder" : "file",
-                        d.getId(), d.getParentId() != null ? ", in folder " + d.getParentId() : ", at the root"))
-                .collect(Collectors.joining("; "));
         return MutationTarget.error(("You cannot %s '%s': %d documents have that name — pass the id of the one you mean "
-                + "(use getDocumentPath to tell them apart): %s.").formatted(verb, trimmed, exact.size(), candidates));
+                + "(use getDocumentPath to tell them apart): %s.").formatted(verb, trimmed, exact.size(), candidatesOf(exact)));
+    }
+
+    /**
+     * The target of a reading tool: exactly one of {@code document} / {@code error} is set. The
+     * error is a complete tool result; {@code ambiguous} tells "several documents match" from
+     * "nothing matches", for the callers whose search goes on when nothing matches.
+     */
+    record ReadTarget(Document document, String error, boolean ambiguous) {
+        static ReadTarget of(Document document) {
+            return new ReadTarget(document, null, false);
+        }
+
+        static ReadTarget notFound(String error) {
+            return new ReadTarget(null, error, false);
+        }
+
+        static ReadTarget ambiguous(String error) {
+            return new ReadTarget(null, error, true);
+        }
+    }
+
+    /** Longest answer of the partial-name search: at this size, a single visible match proves nothing. */
+    private static final int NAME_SCAN_LIMIT = 50;
+
+    /**
+     * Resolve the subject of a <b>reading</b> tool, file or folder, and never choose silently: by
+     * id; by the name registered this turn, unless two documents registered under it; by the exact
+     * (case-insensitive) name; else by a partial name when only one visible document matches. Several
+     * matches at any step are an error listing the candidates and asking for the id. The tool's answer
+     * must name the document it used, since it may not be what the caller typed.
+     *
+     * @param notFoundMessage the complete tool result when nothing matches
+     */
+    ReadTarget resolveForRead(String nameOrId, String notFoundMessage) {
+        return resolveRead(nameOrId, null, notFoundMessage);
+    }
+
+    /** {@link #resolveForRead} limited to folders, for the folder argument of a reading tool. */
+    ReadTarget resolveFolderForRead(String nameOrId, String notFoundMessage) {
+        return resolveRead(nameOrId, DocumentType.FOLDER, notFoundMessage);
+    }
+
+    private ReadTarget resolveRead(String nameOrId, DocumentType onlyType, String notFoundMessage) {
+        if (nameOrId == null || nameOrId.isBlank()) {
+            return ReadTarget.notFound(notFoundMessage);
+        }
+        String trimmed = nameOrId.trim();
+        UUID id = parseUuid(trimmed);
+        if (id != null) {
+            Document byId = canRead(id) ? blockWithAuth(documentRepository.findById(id)) : null;
+            return byId != null && (onlyType == null || byId.getType() == onlyType)
+                    ? readTarget(byId) : ReadTarget.notFound(notFoundMessage);
+        }
+        DocRef ref = documentRegistry.get(trimmed);
+        if (ref != null && !ambiguousRegistryNames.contains(trimmed)
+                && (onlyType == null || onlyType.name().equals(ref.type())) && canRead(ref.id())) {
+            Document registered = blockWithAuth(documentRepository.findById(ref.id()));
+            if (registered != null) {
+                return ReadTarget.of(registered);
+            }
+        }
+        List<Document> exact = visibleOfType(
+                blockWithAuth(documentRepository.findByNameIgnoreCaseAndActiveTrue(trimmed).collectList()), onlyType)
+                .stream().filter(d -> d.getName() != null && d.getName().equalsIgnoreCase(trimmed)).toList();
+        if (exact.size() == 1) {
+            return readTarget(exact.getFirst());
+        }
+        if (exact.size() > 1) {
+            return ambiguousRead(trimmed, exact);
+        }
+        List<Document> scanned = blockWithAuth(
+                documentRepository.findTop50ByNameContainingIgnoreCaseAndActiveTrueOrderByNameAsc(trimmed).collectList());
+        List<Document> partial = visibleOfType(scanned, onlyType);
+        if (partial.isEmpty()) {
+            return ReadTarget.notFound(notFoundMessage);
+        }
+        return partial.size() == 1 && scanned.size() < NAME_SCAN_LIMIT
+                ? readTarget(partial.getFirst()) : ambiguousRead(trimmed, partial);
+    }
+
+    private ReadTarget readTarget(Document document) {
+        register(document);
+        return ReadTarget.of(document);
+    }
+
+    private ReadTarget ambiguousRead(String name, List<Document> candidates) {
+        return ReadTarget.ambiguous("'%s' matches %s documents. Call again with the id of the one you mean: %s."
+                .formatted(name, candidates.size() >= NAME_SCAN_LIMIT ? "at least " + candidates.size() : candidates.size(),
+                        candidatesOf(candidates)));
+    }
+
+    /** Which file called {@code name} in this folder, by the rules of {@link #resolveForRead}. */
+    private ReadTarget resolveInFolder(UUID folderId, String name) {
+        String trimmed = name == null ? "" : name.trim();
+        var request = new ListFolderRequest(folderId, DocumentType.FILE, null, null, trimmed,
+                null, null, null, null, null, null, null, null, null, true,
+                new PageCriteria("name", SortOrder.ASC, 1, NAME_SCAN_LIMIT), false);
+        var rows = queryService.query(request, userEmail);
+        List<Document> matches = rows == null ? List.of() : rows.stream()
+                .filter(r -> canRead(r.id()))
+                .map(r -> Document.builder().id(r.id()).name(r.name()).type(r.type()).parentId(r.parentId())
+                        .updatedAt(r.updatedAt()).build())
+                .toList();
+        List<Document> exact = matches.stream().filter(d -> trimmed.equalsIgnoreCase(d.getName())).toList();
+        List<Document> candidates = exact.isEmpty() ? matches : exact;
+        if (candidates.isEmpty()) {
+            return ReadTarget.notFound(null);
+        }
+        if (candidates.size() > 1) {
+            return ambiguousRead(trimmed, candidates);
+        }
+        Document document = blockWithAuth(documentRepository.findById(candidates.getFirst().getId()));
+        return document != null ? readTarget(document) : ReadTarget.notFound(null);
+    }
+
+    /** The documents the caller may read, of the given type (null = any), in one policy call. */
+    private List<Document> visibleOfType(List<Document> documents, DocumentType onlyType) {
+        if (documents == null || documents.isEmpty()) {
+            return List.of();
+        }
+        List<Document> ofType = documents.stream().filter(d -> onlyType == null || d.getType() == onlyType).toList();
+        Set<UUID> readable = ofType.isEmpty() ? Set.of()
+                : accessPolicy.readable(ofType.stream().map(Document::getId).toList(), userEmail).block();
+        return readable == null ? List.of() : ofType.stream().filter(d -> readable.contains(d.getId())).toList();
+    }
+
+    /** The candidates of an ambiguous reference: what the caller needs to pick one and pass its id. */
+    private String candidatesOf(List<Document> documents) {
+        List<Document> shown = documents.stream().limit(10).toList();
+        Map<UUID, String> folderNames = visibleFolderNames(shown.stream().map(Document::getParentId).toList());
+        return shown.stream()
+                .map(d -> "'%s' (%s, id %s, %s%s)".formatted(d.getName(),
+                        d.getType() == DocumentType.FOLDER ? "folder" : "file", d.getId(),
+                        locationOf(d.getParentId(), folderNames),
+                        d.getUpdatedAt() != null ? ", updated " + d.getUpdatedAt().withNano(0).toLocalDateTime() : ""))
+                .collect(Collectors.joining("; "));
+    }
+
+    /** How an answer states which document it is about: its name, id and folder. */
+    private String describe(Document document) {
+        return "'%s' (id %s, %s)".formatted(document.getName(), document.getId(),
+                locationOf(document.getParentId(), visibleFolderNames(java.util.Collections.singletonList(document.getParentId()))));
+    }
+
+    private static String locationOf(UUID parentId, Map<UUID, String> folderNames) {
+        if (parentId == null) {
+            return "at the root";
+        }
+        String name = folderNames.get(parentId);
+        return name != null ? "in folder " + parentId + " '" + name + "'" : "in folder " + parentId;
+    }
+
+    /** The names of those folders the caller may read: a folder it cannot see stays an id. */
+    private Map<UUID, String> visibleFolderNames(List<UUID> folderIds) {
+        Set<UUID> ids = folderIds.stream().filter(java.util.Objects::nonNull).collect(Collectors.toSet());
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        List<Document> folders = visibleOfType(blockWithAuth(documentRepository.findAllById(ids).collectList()), null);
+        return folders.stream().collect(Collectors.toMap(Document::getId, Document::getName, (a, b) -> a));
     }
 
     private UUID resolveToId(String nameOrId) {
@@ -935,33 +1080,22 @@ public class DocumentAiTools {
         try {
             Document doc = null;
 
-            // If a folder is specified, list its contents and find the best match
-            if (folderName != null && !folderName.isBlank() && !"null".equalsIgnoreCase(folderName)) {
-                UUID folderId = resolveToId(folderName);
-                if (folderId == null) {
-                    // Try searching for the folder — skip candidates the user cannot see
-                    var folders = documentRepository.findTop50ByNameContainingIgnoreCaseAndActiveTrueOrderByNameAsc(folderName)
-                            .filter(d -> d.getType() == org.openfilz.dms.enums.DocumentType.FOLDER)
-                            .collectList().block();
-                    if (folders != null) {
-                        folderId = folders.stream().filter(d -> canRead(d.getId()))
-                                .findFirst().map(Document::getId).orElse(null);
-                    }
+            // A folder narrows the search by name; an id needs no narrowing
+            if (folderName != null && !folderName.isBlank() && !"null".equalsIgnoreCase(folderName)
+                    && parseUuid(documentName == null ? null : documentName.trim()) == null) {
+                ReadTarget folder = resolveFolderForRead(folderName, "No folder named '%s' found.".formatted(folderName));
+                if (folder.ambiguous()) {
+                    return toolResult("readDocumentContent", folder.error());
                 }
-                if (folderId != null) {
+                if (folder.document() != null) {
+                    UUID folderId = folder.document().getId();
                     log.debug("[AI-TOOL] readDocumentContent: searching in folder {} for '{}'", folderId, documentName);
-                    // Use queryService to search within folder by name
-                    var request = new ListFolderRequest(folderId, DocumentType.FILE, null, null, documentName,
-                            null, null, null, null, null, null, null, null, null, true,
-                            new PageCriteria("name", SortOrder.ASC, 1, 10), false);
-                    var results = queryService.query(request, userEmail);
-                    var match = results == null ? java.util.Optional.<UUID>empty()
-                            : results.stream().filter(r -> canRead(r.id())).findFirst().map(r -> r.id());
-                    if (match.isPresent()) {
-                        doc = blockWithAuth(documentRepository.findById(match.get()));
-                        log.debug("[AI-TOOL] readDocumentContent: found '{}' in folder", doc != null ? doc.getName() : "null");
-                    } else {
-                        // No match — list all (accessible) files in folder for the LLM
+                    ReadTarget inFolder = resolveInFolder(folderId, documentName);
+                    if (inFolder.ambiguous()) {
+                        return toolResult("readDocumentContent", inFolder.error());
+                    }
+                    if (inFolder.document() == null) {
+                        // No match: list the (accessible) files of the folder for the caller
                         var allInFolder = new ListFolderRequest(folderId, DocumentType.FILE, null, null, null,
                                 null, null, null, null, null, null, null, null, null, true,
                                 new PageCriteria("name", SortOrder.ASC, 1, 20), false);
@@ -972,14 +1106,17 @@ public class DocumentAiTools {
                         return toolResult("readDocumentContent",
                                 "No file matching '%s' found in folder '%s'. Files in this folder:\n%s".formatted(documentName, folderName, fileList));
                     }
+                    doc = inFolder.document();
                 }
             }
 
-            // Fallback: resolve by name globally (only ever resolves to accessible documents)
+            // Otherwise resolve across the library (only ever resolves to accessible documents)
             if (doc == null) {
-                UUID id = resolveAnyToId(documentName);
-                if (id == null) return toolResult("readDocumentContent", "Document '%s' not found.".formatted(documentName));
-                doc = blockWithAuth(documentRepository.findById(id));
+                ReadTarget target = resolveForRead(documentName, "Document '%s' not found.".formatted(documentName));
+                if (target.error() != null) {
+                    return toolResult("readDocumentContent", target.error());
+                }
+                doc = target.document();
             }
 
             if (doc == null) return toolResult("readDocumentContent", "Document not found.");
@@ -1035,25 +1172,6 @@ public class DocumentAiTools {
             log.warn("[AI-TOOL] writeFile smart filing failed for {}: {}", documentId, e.toString());
             return "Smart filing failed: " + e.getMessage();
         }
-    }
-
-    /** Resolve a name or UUID to any document (file or folder) the requesting user can read. */
-    private UUID resolveAnyToId(String nameOrId) {
-        if (nameOrId == null || nameOrId.isBlank()) return null;
-        UUID id = parseUuid(nameOrId);
-        if (id != null) return canRead(id) ? id : null;
-        var ref = documentRegistry.get(nameOrId);
-        if (ref != null) return ref.id();
-        var found = documentRepository.findTop50ByNameContainingIgnoreCaseAndActiveTrueOrderByNameAsc(nameOrId)
-                .collectList().block();
-        if (found != null) {
-            var readable = found.stream().filter(d -> canRead(d.getId())).findFirst();
-            if (readable.isPresent()) {
-                register(readable.get());
-                return readable.get().getId();
-            }
-        }
-        return null;
     }
 
     @Tool(description = "Get the full path (ancestors) of a document from root to its parent folder.")
@@ -1112,36 +1230,29 @@ public class DocumentAiTools {
         try {
             Document doc = null;
 
-            // If a folder is specified, search within it first
-            if (folderName != null && !folderName.isBlank() && !"null".equalsIgnoreCase(folderName)) {
-                UUID folderId = resolveToId(folderName);
-                if (folderId == null) {
-                    var folders = documentRepository.findTop50ByNameContainingIgnoreCaseAndActiveTrueOrderByNameAsc(folderName)
-                            .filter(d -> d.getType() == DocumentType.FOLDER)
-                            .collectList().block();
-                    if (folders != null) {
-                        folderId = folders.stream().filter(d -> canRead(d.getId()))
-                                .findFirst().map(Document::getId).orElse(null);
-                    }
+            // A folder narrows the search by name; an id needs no narrowing
+            if (folderName != null && !folderName.isBlank() && !"null".equalsIgnoreCase(folderName)
+                    && parseUuid(imageName == null ? null : imageName.trim()) == null) {
+                ReadTarget folder = resolveFolderForRead(folderName, "No folder named '%s' found.".formatted(folderName));
+                if (folder.ambiguous()) {
+                    return toolResult("describeImage", folder.error());
                 }
-                if (folderId != null) {
-                    var request = new ListFolderRequest(folderId, DocumentType.FILE, null, null, imageName,
-                            null, null, null, null, null, null, null, null, null, true,
-                            new PageCriteria("name", SortOrder.ASC, 1, 10), false);
-                    var results = queryService.query(request, userEmail);
-                    var match = results == null ? java.util.Optional.<UUID>empty()
-                            : results.stream().filter(r -> canRead(r.id())).findFirst().map(r -> r.id());
-                    if (match.isPresent()) {
-                        doc = blockWithAuth(documentRepository.findById(match.get()));
+                if (folder.document() != null) {
+                    ReadTarget inFolder = resolveInFolder(folder.document().getId(), imageName);
+                    if (inFolder.ambiguous()) {
+                        return toolResult("describeImage", inFolder.error());
                     }
+                    doc = inFolder.document();
                 }
             }
 
-            // Fallback: resolve by name globally (only ever resolves to accessible documents)
+            // Otherwise resolve across the library (only ever resolves to accessible documents)
             if (doc == null) {
-                UUID id = resolveAnyToId(imageName);
-                if (id == null) return toolResult("describeImage", "Image '%s' not found.".formatted(imageName));
-                doc = blockWithAuth(documentRepository.findById(id));
+                ReadTarget target = resolveForRead(imageName, "Image '%s' not found.".formatted(imageName));
+                if (target.error() != null) {
+                    return toolResult("describeImage", target.error());
+                }
+                doc = target.document();
             }
 
             if (doc == null) return toolResult("describeImage", "Image not found.");
@@ -1266,15 +1377,12 @@ public class DocumentAiTools {
             if (auditService == null) {
                 return toolResult("getDocumentActivity", "The audit trail is not available on this deployment.");
             }
-            UUID id = resolveAnyToId(document);
-            if (id == null) {
-                return toolResult("getDocumentActivity", "Document '%s' not found.".formatted(document));
+            ReadTarget target = resolveForRead(document, "Document '%s' not found.".formatted(document));
+            if (target.error() != null) {
+                return toolResult("getDocumentActivity", target.error());
             }
-            Document doc = blockWithAuth(documentRepository.findById(id));
-            if (doc == null || !canRead(doc.getId())) {
-                return toolResult("getDocumentActivity", "Document '%s' not found.".formatted(document));
-            }
-            register(doc);
+            Document doc = target.document();
+            UUID id = doc.getId();
             int max = limit == null || limit <= 0 ? 20 : Math.min(limit, 100);
             List<AuditLog> entries = blockWithAuth(auditService.getAuditTrail(id, SortOrder.DESC).take(max).collectList());
             if (entries == null || entries.isEmpty()) {
@@ -1282,7 +1390,7 @@ public class DocumentAiTools {
             }
             long actors = entries.stream().map(AuditLog::username).filter(u -> u != null).distinct().count();
             StringBuilder sb = new StringBuilder();
-            sb.append("Activity of '").append(doc.getName()).append("': ").append(entries.size())
+            sb.append("Activity of ").append(describe(doc)).append(": ").append(entries.size())
                     .append(" most recent entr").append(entries.size() == 1 ? "y" : "ies")
                     .append(entries.size() == max ? " (more may exist)" : "")
                     .append(", ").append(actors).append(" user").append(actors == 1 ? "" : "s")
@@ -1317,21 +1425,23 @@ public class DocumentAiTools {
             @ToolParam(description = "The name or reference of the document or folder") String documentName) {
         String roleDenial = denyIfNotAllowed("getMetadata", ToolCapability.DOCUMENT_READ);
         if (roleDenial != null) return roleDenial;
-        UUID id = resolveDocumentToId(documentName);
-        if (id == null || !canRead(id)) {
-            return toolResult("getMetadata", "No document named '%s' is visible to you.".formatted(documentName));
+        ReadTarget target = resolveForRead(documentName, "No document named '%s' is visible to you.".formatted(documentName));
+        if (target.error() != null) {
+            return toolResult("getMetadata", target.error());
         }
+        Document doc = target.document();
+        UUID id = doc.getId();
         Map<String, Object> metadata = blockWithAuth(
                 documentService.getDocumentMetadata(id, new SearchMetadataRequest(null)));
         Map<String, Object> insights = insightsOf(id);
         if ((metadata == null || metadata.isEmpty()) && insights.isEmpty()) {
-            return toolResult("getMetadata", "'%s' has no metadata.".formatted(documentName));
+            return toolResult("getMetadata", "%s has no metadata.".formatted(describe(doc)));
         }
         StringBuilder sb = new StringBuilder();
         if (metadata != null && !metadata.isEmpty()) {
-            sb.append(JSON.writeValueAsString(metadata));
+            sb.append("Metadata of ").append(describe(doc)).append(":\n").append(JSON.writeValueAsString(metadata));
         } else {
-            sb.append("'").append(documentName).append("' has no user metadata.");
+            sb.append(describe(doc)).append(" has no user metadata.");
         }
         if (!insights.isEmpty()) {
             sb.append("\nInsights (derived from the content at upload, read-only): ")
@@ -1420,7 +1530,14 @@ public class DocumentAiTools {
             return toolResult("searchByMetadata", "Provide the metadata to match as a JSON object.");
         }
         DocumentType docType = parseType(type);
-        UUID parentId = (folderName == null || folderName.isBlank()) ? null : resolveToId(folderName);
+        UUID parentId = null;
+        if (!isRootFolderName(folderName)) {
+            ReadTarget folder = resolveFolderForRead(folderName, "No folder named '%s' found.".formatted(folderName));
+            if (folder.error() != null) {
+                return toolResult("searchByMetadata", folder.error());
+            }
+            parentId = folder.document().getId();
+        }
         List<UUID> ids = blockWithAuth(documentService
                 .searchDocumentIdsByMetadata(new SearchByMetadataRequest(null, docType, parentId, null, criteria))
                 .filter(this::canRead)
@@ -1479,18 +1596,20 @@ public class DocumentAiTools {
             @ToolParam(description = "The name or reference of the document") String documentName) {
         String roleDenial = denyIfNotAllowed("listVersions", ToolCapability.DOCUMENT_READ);
         if (roleDenial != null) return roleDenial;
-        UUID id = resolveDocumentToId(documentName);
-        if (id == null || !canRead(id)) {
-            return toolResult("listVersions", "No document named '%s' is visible to you.".formatted(documentName));
+        ReadTarget target = resolveForRead(documentName, "No document named '%s' is visible to you.".formatted(documentName));
+        if (target.error() != null) {
+            return toolResult("listVersions", target.error());
         }
-        List<DocumentVersionInfo> versions = blockWithAuth(versionService.listVersions(id).collectList());
+        Document doc = target.document();
+        List<DocumentVersionInfo> versions = blockWithAuth(versionService.listVersions(doc.getId()).collectList());
         if (versions == null || versions.isEmpty()) {
-            return toolResult("listVersions", "'%s' has no stored versions (versioned storage may be off)."
-                    .formatted(documentName));
+            return toolResult("listVersions", "%s has no stored versions (versioned storage may be off)."
+                    .formatted(describe(doc)));
         }
-        StringBuilder out = new StringBuilder("Versions of '%s' (%d):\n".formatted(documentName, versions.size()));
+        StringBuilder out = new StringBuilder("%d version(s) of %s:\n".formatted(versions.size(), describe(doc)));
         for (DocumentVersionInfo v : versions) {
-            out.append("- ").append(v.versionId()).append(" — ").append(v.lastModified())
+            out.append("- ").append(v.versionId()).append(v.latest() ? " (current)" : "")
+                    .append(" — ").append(v.lastModified())
                     .append(" (").append(v.size()).append(" bytes)\n");
         }
         return toolResult("listVersions", out.toString());
@@ -1572,14 +1691,12 @@ public class DocumentAiTools {
         if (roleDenial != null) {
             return DocumentDownload.failure(roleDenial);
         }
-        UUID id = resolveDocumentToId(documentName);
-        if (id == null || !canRead(id)) {
-            return DocumentDownload.failure("No document named '%s' is visible to you.".formatted(documentName));
+        ReadTarget target = resolveForRead(documentName, "No document named '%s' is visible to you.".formatted(documentName));
+        if (target.error() != null) {
+            return DocumentDownload.failure(target.error());
         }
-        Document doc = blockWithAuth(documentRepository.findById(id));
-        if (doc == null) {
-            return DocumentDownload.failure("Document '%s' not found.".formatted(documentName));
-        }
+        Document doc = target.document();
+        UUID id = doc.getId();
         if (doc.getType() == DocumentType.FOLDER) {
             return DocumentDownload.failure("'%s' is a folder, not a downloadable file.".formatted(documentName));
         }
