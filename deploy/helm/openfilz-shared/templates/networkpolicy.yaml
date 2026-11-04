@@ -27,7 +27,7 @@ spec:
     matchExpressions:
       - key: app.kubernetes.io/component
         operator: In
-        values: ["keycloak", "onlyoffice"]
+        values: ["keycloak", "onlyoffice", "onlyoffice-router"]
   policyTypes: ["Ingress"]
   ingress:
     - from:
@@ -46,6 +46,13 @@ spec:
         - port: 80
 {{- end }}
 ---
+{{- $tenantComponents := list "keycloak" "gotenberg" }}
+{{- if not .Values.networkPolicy.opensearchClientComponents }}
+{{- $tenantComponents = append $tenantComponents "opensearch" }}
+{{- end }}
+{{- if not .Values.onlyoffice.tenancy.enabled }}
+{{- $tenantComponents = concat $tenantComponents (list "onlyoffice" "onlyoffice-router") }}
+{{- end }}
 # Tenant/demo namespaces (labelled by the provisioner with the tenant-access key)
 # → shared services: keycloak 8080, opensearch 9200, gotenberg 3000, onlyoffice 80.
 # One combined policy: a port only admits traffic to the component actually
@@ -63,7 +70,7 @@ spec:
     matchExpressions:
       - key: app.kubernetes.io/component
         operator: In
-        values: ["keycloak", "opensearch", "gotenberg", "onlyoffice"]
+        values: {{ $tenantComponents | toJson }}
   policyTypes: ["Ingress"]
   ingress:
     - from:
@@ -75,6 +82,110 @@ spec:
         - port: 9200
         - port: 3000
         - port: 80
+{{- if and .Values.onlyoffice.enabled (gt (int .Values.onlyoffice.replicas) 1) }}
+---
+# router → document servers
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-allow-router-to-onlyoffice
+  labels:
+    {{- include "openfilz-shared.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: onlyoffice
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: onlyoffice-router
+      ports:
+        - port: 80
+{{- end }}
+{{- with .Values.networkPolicy.opensearchClientComponents }}
+---
+# OpenSearch has no authentication of its own here: only the pods that index and search reach it,
+# not every pod of a tenant namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $.Release.Name }}-allow-opensearch-clients
+  labels:
+    {{- include "openfilz-shared.labels" $ | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+      app.kubernetes.io/component: opensearch
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{ $.Values.networkPolicy.tenantAccessLabel.key }}: {{ $.Values.networkPolicy.tenantAccessLabel.value | quote }}
+          podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values: {{ . | toJson }}
+      ports:
+        - port: 9200
+{{- end }}
+{{- if and .Values.onlyoffice.enabled .Values.onlyoffice.tenancy.enabled }}
+---
+# What the document server may call: DNS, the APIs of the tenant namespaces (documents and save
+# callbacks), and the Internet (images pasted in a document). No other private address: a forged
+# document URL reaches neither a database nor another shared service.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-onlyoffice-egress
+  labels:
+    {{- include "openfilz-shared.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: onlyoffice
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              {{ .Values.networkPolicy.tenantAccessLabel.key }}: {{ .Values.networkPolicy.tenantAccessLabel.value | quote }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: api
+      ports:
+        - port: 8080
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+              - 169.254.0.0/16
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - port: 80
+        - port: 443
+{{- end }}
 {{- if .Values.keycloak.enabled }}
 ---
 # keycloak → keycloak-db (only Keycloak may reach its database)
