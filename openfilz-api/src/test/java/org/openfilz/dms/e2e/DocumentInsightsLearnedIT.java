@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.response.DocumentInsightView;
 import org.openfilz.dms.dto.response.UploadResponse;
+import org.springframework.ai.vectorstore.SearchRequest;
+import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.io.ByteArrayResource;
@@ -21,8 +23,10 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
@@ -41,8 +45,11 @@ class DocumentInsightsLearnedIT extends TestContainersBaseConfig {
 
     private static final String DOCUMENTS = RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_DOCUMENTS;
 
-    DocumentInsightsLearnedIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
+    private final VectorStore vectorStore;
+
+    DocumentInsightsLearnedIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder, VectorStore vectorStore) {
         super(webTestClient, customJacksonJsonEncoder);
+        this.vectorStore = vectorStore;
     }
 
     @DynamicPropertySource
@@ -86,8 +93,11 @@ class DocumentInsightsLearnedIT extends TestContainersBaseConfig {
             assertThat(corrected.status()).isEqualTo("DONE");
         }
 
-        UploadResponse next = upload("releve-next-" + UUID.randomUUID() + ".txt",
-                "Relevé de compte Banque Zorg 99: solde, opérations du mois, virements et prélèvements.");
+        // The insight is queued before the chunks are stored, so DONE does not yet mean the document can teach
+        String nextText = "Relevé de compte Banque Zorg 99: solde, opérations du mois, virements et prélèvements.";
+        awaitVectors(statements, nextText);
+
+        UploadResponse next = upload("releve-next-" + UUID.randomUUID() + ".txt", nextText);
         DocumentInsightView learned = awaitInsights(next.id(), v -> "DONE".equals(v.status()) && v.tier() == 2);
         assertThat(learned.category()).as(String.valueOf(learned)).isEqualTo("other");
         assertThat(learned.model()).isEqualTo("learned:knn+names");
@@ -124,6 +134,25 @@ class DocumentInsightsLearnedIT extends TestContainersBaseConfig {
             }
         }
         throw new AssertionError("insights of " + documentId + " never became ready; last: " + last);
+    }
+
+    private void awaitVectors(List<UUID> documentIds, String query) {
+        Set<String> expected = documentIds.stream().map(UUID::toString).collect(Collectors.toSet());
+        Set<String> stored = Set.of();
+        for (int attempt = 0; attempt < 240; attempt++) {
+            stored = vectorStore.similaritySearch(SearchRequest.builder().query(query).topK(50).build()).stream()
+                    .map(hit -> String.valueOf(hit.getMetadata().get("document_id")))
+                    .collect(Collectors.toSet());
+            if (stored.containsAll(expected)) {
+                return;
+            }
+            try {
+                Thread.sleep(250);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        throw new AssertionError("chunks of " + expected + " never reached the vector store; found: " + stored);
     }
 
     private UploadResponse upload(String name, String content) {
