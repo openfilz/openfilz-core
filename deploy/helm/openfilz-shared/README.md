@@ -201,6 +201,14 @@ With tenancy on, tenant namespaces no longer reach the server directly (only thr
 egress policy limits it to DNS, the `api` pods of tenant namespaces on 8080, and public addresses on 80 and
 443. The DNS rule expects the cluster DNS pods to carry `k8s-app: kube-dns`.
 
+## Keycloak backup
+
+The Keycloak database holds the accounts of every realm on the platform, on one volume. Set
+`keycloak.backup.enabled=true` with `keycloak.backup.s3.*` for a nightly `pg_dump` to an S3 bucket.
+`keycloak.backup.prune=false` when the job's key can only add dumps, and a lifecycle rule on the
+bucket removes old ones. Restore with `pg_restore --clean --if-exists --no-owner` on the
+`<release>-keycloak-db` pod, Keycloak scaled to zero.
+
 ## Not yet done (follow-ups)
 
 - OnlyOffice Traefik middleware CR (only if X-Forwarded-Proto proves necessary).
