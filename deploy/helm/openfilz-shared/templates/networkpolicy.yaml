@@ -188,7 +188,7 @@ spec:
 {{- end }}
 {{- if .Values.keycloak.enabled }}
 ---
-# keycloak → keycloak-db (only Keycloak may reach its database)
+# keycloak and its backup job → keycloak-db (nothing else may reach this database)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -207,6 +207,12 @@ spec:
             matchLabels:
               app.kubernetes.io/instance: {{ .Release.Name }}
               app.kubernetes.io/component: keycloak
+        {{- if .Values.keycloak.backup.enabled }}
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: keycloak-backup
+        {{- end }}
       ports:
         - port: 5432
 {{- end }}

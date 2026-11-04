@@ -1,0 +1,110 @@
+{{- if and .Values.keycloak.enabled .Values.keycloak.backup.enabled }}
+{{- if not .Values.keycloak.backup.s3.existingSecret }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-keycloak-backup-s3
+  labels:
+    {{- include "openfilz-shared.labels" . | nindent 4 }}
+    app.kubernetes.io/component: keycloak-backup
+type: Opaque
+stringData:
+  access-key: {{ required "Set keycloak.backup.s3.accessKey (or keycloak.backup.s3.existingSecret)" .Values.keycloak.backup.s3.accessKey | quote }}
+  secret-key: {{ required "Set keycloak.backup.s3.secretKey (or keycloak.backup.s3.existingSecret)" .Values.keycloak.backup.s3.secretKey | quote }}
+---
+{{- end }}
+# Nightly pg_dump of the Keycloak database -> an S3 bucket. This database holds the accounts and the
+# access settings of every realm on the platform. Restore procedure: README.md.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-keycloak-pgdump
+  labels:
+    {{- include "openfilz-shared.labels" . | nindent 4 }}
+    app.kubernetes.io/component: keycloak-backup
+spec:
+  schedule: {{ .Values.keycloak.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels:
+            {{- include "openfilz-shared.labels" . | nindent 12 }}
+            app.kubernetes.io/component: keycloak-backup
+        spec:
+          restartPolicy: OnFailure
+          {{- with .Values.nodeSelector }}
+          nodeSelector: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.keycloak.backup.podSecurityContext }}
+          securityContext: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          initContainers:
+            - name: dump
+              image: {{ .Values.images.keycloakDb }}
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -e
+                  TS=$(date -u +%Y%m%dT%H%M%SZ)
+                  pg_dump -Fc -h {{ .Release.Name }}-keycloak-db -U "$PGUSER" "$PGDATABASE" \
+                    > "/backup/$PGDATABASE-$TS.dump"
+                  ls -lh /backup
+              env:
+                - name: PGUSER
+                  value: {{ .Values.keycloak.db.user | quote }}
+                - name: PGDATABASE
+                  value: {{ .Values.keycloak.db.name | quote }}
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "openfilz-shared.keycloakSecretName" . }}
+                      key: db-password
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+          containers:
+            # The mc image must ship a shell (ghcr.io/openfilz/minio has sh + mc); entrypoint overridden below.
+            - name: upload
+              image: {{ .Values.keycloak.backup.images.mc }}
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -e
+                  mc alias set target "$S3_ENDPOINT" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY"
+                  mc cp /backup/*.dump "target/$S3_BUCKET/$S3_PREFIX/"
+                  {{- if .Values.keycloak.backup.prune }}
+                  mc rm --recursive --force --older-than {{ .Values.keycloak.backup.retentionDays }}d \
+                    "target/$S3_BUCKET/$S3_PREFIX/" || true
+                  {{- end }}
+              env:
+                - name: S3_ENDPOINT
+                  value: {{ .Values.keycloak.backup.s3.endpoint | quote }}
+                - name: S3_BUCKET
+                  value: {{ required "Set keycloak.backup.s3.bucket" .Values.keycloak.backup.s3.bucket | quote }}
+                - name: S3_PREFIX
+                  value: {{ .Values.keycloak.backup.s3.prefix | quote }}
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.keycloak.backup.s3.existingSecret | default (printf "%s-keycloak-backup-s3" .Release.Name) }}
+                      key: access-key
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.keycloak.backup.s3.existingSecret | default (printf "%s-keycloak-backup-s3" .Release.Name) }}
+                      key: secret-key
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+          volumes:
+            - name: backup
+              emptyDir: {}
+{{- end }}
