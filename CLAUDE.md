@@ -306,6 +306,7 @@ Optional audit chain verification (hash chain for integrity): `openfilz.audit.ch
     `TextLanguageDetector` = function words, no model), set = new version through `replaceDocumentContent`
   - `GET /config/{id}?lang=` — editor UI language (hidden param, `DocumentLanguages.uiLanguage`, default `en`)
 - **OnlyOfficeJwtService** — JWT token generation for OnlyOffice
+- **A save never overwrites what it did not start from.** Opening an editor records the session (`onlyoffice_editor_session`, V1_20, `EditorSessionStore`): its key and a marker of the content it starts from, the latest version id, or the storage path where versioning is off. Never `updated_at`: a rename, a move or a metadata change moves it. The save callback downloads first, then compares: same marker = replace and move the base (force save then close is no conflict); different = the current content stays and the work goes to `<name> (editor copy <date>).<ext>` next to it, audit `ONLYOFFICE_SAVE_CONFLICT`, `EditorConflictNotifier` seam (no-op in core); later saves of that session update that copy. No row (older session) = saved with a warning. A refused copy (WORM, quota, folder) is audited and reported as saved, since a retry would be refused too; any other failure answers `error: 1` so the document server retries. A write landing between the comparison and the replacement can still be overwritten: the window is short, not closed. `EditorSessionCleanupScheduler` removes closed rows after a day, silent ones after a week. Tests: `OnlyOfficeEditorConflictIT` (local) + `OnlyOfficeEditorConflictVersionedIT` (MinIO), `AbstractOnlyOfficeServiceConflictCopyTest`.
 - Configuration: `onlyoffice.enabled`, `onlyoffice.document-server.url`, `onlyoffice.jwt.secret`
 
 ### e-Sign (electronic signatures)
@@ -370,7 +371,7 @@ under the actor's Authentication** (audit names the real person; a failed action
 event, never a failed transition). Task completion is a conditional `UPDATE … WHERE status='OPEN'`
 (two racing candidates → 409). **Parallel review** (`WorkflowState.review` = `WorkflowReview {rule ALL|FIRST_REJECTION|QUORUM,
 quorum, approveTransition}`, STEP with USERS/CHOSEN_AT_START only): one task per reviewer sharing `workflow_task.review_group`
-(`V1_14`), each vote = a `REVIEWED` event + `WORKFLOW_REVIEWED` audit (**mirrored in the EE `AuditAction`**), the pure
+(`V1_14`), each vote = a `REVIEWED` event + `WORKFLOW_REVIEWED` audit, the pure
 `WorkflowReviewDecider` turns the round's votes into one transition (remaining reviews → CANCELLED); `complete` locks the
 instance row (`SELECT … FOR UPDATE`) first so concurrent votes serialise; tasks carry `review` progress
 (`WorkflowReviewProgressDTO`). Hot folders: `WorkflowTriggerService.afterUpload` is called by
