@@ -103,6 +103,25 @@ keycloak:
     # Hetzner platform — its CSI minimum is 10Gi).
     storageClassName: ""
     podSecurityContext: {}     # OpenShift: postgres:alpine needs runAsUser 0
+  # Nightly pg_dump of the Keycloak database to an S3 bucket. Without it, an incident on this
+  # one volume loses the accounts of every realm. Off by default; set it on any shared platform.
+  backup:
+    enabled: false
+    schedule: "30 2 * * *"
+    retentionDays: 30
+    # The job deletes dumps older than retentionDays. false when its key can only add dumps,
+    # and a lifecycle rule on the bucket does it instead.
+    prune: true
+    podSecurityContext: {}
+    images:
+      mc: ghcr.io/openfilz/minio:RELEASE.2026-10-23T20-06-51Z
+    s3:
+      endpoint: https://s3.fr-par.scw.cloud
+      bucket: ""
+      prefix: keycloak
+      accessKey: ""
+      secretKey: ""
+      existingSecret: ""       # keys: access-key, secret-key
 
 # =============================================================================
 # OpenSearch — single node, security plugin disabled (in-cluster access only,
