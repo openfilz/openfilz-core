@@ -61,8 +61,25 @@ public class McpReadOnlyModeIT extends AbstractMcpIT {
                 .doesNotContainAnyElementsOf(org.openfilz.dms.service.mcp.OrganizeAiToolsContributor.MUTATING_TOOLS)
                 .doesNotContainAnyElementsOf(org.openfilz.dms.service.mcp.SignatureAiToolsContributor.MUTATING_TOOLS)
                 .doesNotContainAnyElementsOf(org.openfilz.dms.service.mcp.FilingAiToolsContributor.MUTATING_TOOLS)
+                .doesNotContainAnyElementsOf(org.openfilz.dms.service.mcp.McpFileTransferToolsContributor.MUTATING_TOOLS)
                 .doesNotContainAnyElementsOf(org.openfilz.dms.service.mcp.EmbeddingAiToolsContributor.MUTATING_TOOLS)
                 .containsExactlyInAnyOrderElementsOf(readOnly);
+    }
+
+    @Test
+    @DisplayName("no tool takes a file in this mode, so /mcp keeps the ordinary body limit")
+    void theBodyLimitIsNotRaisedWithoutTheFileTools() {
+        // 1 MB: far under what READ_WRITE reads for a file, above the application-wide 256 KB
+        String body = rpcBody(77, "tools/call", """
+                {"name":"queryDocuments","arguments":{"folder":"all","nameLike":"%s"}}""".formatted("A".repeat(1024 * 1024)));
+
+        getWebTestClient().post().uri(MCP_ENDPOINT)
+                .header(org.springframework.http.HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .header(org.springframework.http.HttpHeaders.ACCEPT, "application/json, text/event-stream")
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .bodyValue(body)
+                .exchange()
+                .expectStatus().value(status -> assertThat(status).as("status of an oversized body").isGreaterThanOrEqualTo(400));
     }
 
     @Test

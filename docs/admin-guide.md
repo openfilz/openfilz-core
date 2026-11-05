@@ -985,6 +985,7 @@ configure or keep in sync.
 |--------------------------|---------|-------------|
 | `openfilz.mcp.active` / `OPENFILZ_MCP_ACTIVE` | `false` | Master switch for the MCP server |
 | `openfilz.mcp.mode` / `OPENFILZ_MCP_MODE` | `READ_ONLY` | `READ_ONLY` exposes query/read tools only; `READ_WRITE` also exposes `writeFile`, `createFolder`, `moveDocuments`, `renameDocument` |
+| `openfilz.mcp.max-text-chars` / `OPENFILZ_MCP_MAX_TEXT_CHARS` | `50000` | Largest page of text `readDocumentContent` gives in one answer. Longer documents are read in several calls |
 | `openfilz.mcp.authorization-server-url` / `KEYCLOAK_REALM_URL` | Keycloak realm URL | Advertised in the OAuth discovery metadata so remote hosts know where to log in. Defaults to the realm the API already validates tokens against — normally nothing to set. |
 
 **Remote connectors (Claude Desktop, claude.ai, IDE connectors)** log in via OAuth rather than a

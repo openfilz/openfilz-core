@@ -46,6 +46,8 @@ public class DocumentAiToolsFactory {
     private final org.springframework.beans.factory.ObjectProvider<org.openfilz.dms.service.filing.AutoFileService> autoFileServiceProvider;
     /** Destructive-action guardrails (destructive mode, soft-delete), read per tool call. */
     private final AiToolGuardrails guardrails;
+    private final org.openfilz.dms.config.McpProperties mcpProperties;
+    private final ExtractedTextCache textCache;
 
     /**
      * Create a tools instance bound to the requesting user: every document access inside
@@ -57,6 +59,7 @@ public class DocumentAiToolsFactory {
         return new DocumentAiTools(documentService, documentRepository, storageService, queryService, chatModel, accessPolicy, rolePolicy, versionService, commonProperties, downloadTokenService,
                 auditService, indexServiceProvider.getIfAvailable(), insightStoreProvider.getIfAvailable(),
                 autoFileServiceProvider.getIfAvailable(), guardrails)
+                .withTextPaging(mcpProperties.getMaxTextChars(), textCache)
                 .forUser(userEmail, authentication);
     }
 }

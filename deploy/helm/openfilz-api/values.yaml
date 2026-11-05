@@ -160,6 +160,7 @@ tus:
 mcp:
   active: false
   mode: READ_ONLY              # READ_ONLY | READ_WRITE
+  maxTextChars: 50000          # largest page of text readDocumentContent gives in one answer
   authorizationServerUrl: ""   # empty → global.auth.publicAuthority
   # Comma-separated scopes_supported advertised in the protected-resource metadata;
   # empty → application default (openid,profile,email,offline_access).

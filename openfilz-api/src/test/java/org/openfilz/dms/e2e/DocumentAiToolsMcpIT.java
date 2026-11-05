@@ -6,6 +6,7 @@ import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.CreateFolderRequest;
 import org.openfilz.dms.dto.response.FolderResponse;
 import org.openfilz.dms.dto.response.UploadResponse;
+import org.openfilz.dms.service.ai.UntrustedContent;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.io.ByteArrayResource;
@@ -32,6 +33,8 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
@@ -142,6 +145,154 @@ class DocumentAiToolsMcpIT extends AbstractMcpIT {
         // A folder is not a document
         assertThat(callToolText("readDocumentContent", """
                 {"documentName":"read-%s"}""".formatted(suffix))).contains("is a folder");
+    }
+
+    @Test
+    @DisplayName("two documents of one name: every read tool asks for the id, then answers about that document")
+    void readToolsRefuseToChooseBetweenTwoDocumentsOfOneName() {
+        String suffix = suffix();
+        String name = "same-" + suffix + ".txt";
+        FolderResponse left = createFolder("left-" + suffix, null);
+        FolderResponse right = createFolder("right-" + suffix, null);
+        UUID inLeft = upload(name, "content on the left".getBytes(), left.id());
+        UUID inRight = upload(name, "content on the right".getBytes(), right.id());
+
+        // (tool, argument name) of each read tool taking a document; describeImage has no model here
+        // and getDocumentActivity needs the AUDITOR role this suite's caller holds
+        String[][] tools = {{"readDocumentContent", "documentName"}, {"getMetadata", "documentName"},
+                {"listVersions", "documentName"}, {"downloadDocument", "documentName"},
+                {"getDocumentActivity", "document"}};
+        for (String[] tool : tools) {
+            assertThat(callToolText(tool[0], """
+                    {"%s":"%s"}""".formatted(tool[1], name)))
+                    .as("%s by a name two documents bear", tool[0])
+                    .contains("matches 2 documents")
+                    .contains(inLeft.toString()).contains(inRight.toString())
+                    .contains("left-" + suffix).contains("right-" + suffix);
+            assertThat(callToolText(tool[0], """
+                    {"%s":"%s"}""".formatted(tool[1], inRight)))
+                    .as("%s by id", tool[0])
+                    .doesNotContain("matches 2 documents");
+        }
+
+        assertThat(callToolText("readDocumentContent", """
+                {"documentName":"%s"}""".formatted(inRight))).contains("content on the right");
+        assertThat(callToolText("getMetadata", """
+                {"documentName":"%s"}""".formatted(inRight))).contains(inRight.toString()).contains("right-" + suffix);
+        // An id does not need the folder hint, and is not misread as a file name inside the folder
+        assertThat(callToolText("readDocumentContent", """
+                {"documentName":"%s","folderName":"left-%s"}""".formatted(inRight, suffix))).contains("content on the right");
+        // The folder argument narrows the search down to one
+        assertThat(callToolText("readDocumentContent", """
+                {"documentName":"%s","folderName":"left-%s"}""".formatted(name, suffix))).contains("content on the left");
+
+        // queryDocuments tells the two apart
+        assertThat(callToolText("queryDocuments", """
+                {"folder":"all","nameLike":"%s"}""".formatted(name)))
+                .contains(inLeft.toString()).contains(inRight.toString())
+                .contains("in folder " + left.id() + " 'left-" + suffix + "'")
+                .contains("in folder " + right.id() + " 'right-" + suffix + "'");
+    }
+
+    @Test
+    @DisplayName("an exact name beats a partial one, one partial match is used and named, several are refused")
+    void exactBeatsPartialAndPartialIsNamed() {
+        String suffix = suffix();
+        String exact = "ledger-" + suffix;
+        upload(exact, "the exact one".getBytes(), null);
+        upload("a-" + exact + "-annual.txt", "the first partial match".getBytes(), null);
+        upload("only-" + suffix + "-unique.txt", "the only partial match".getBytes(), null);
+
+        assertThat(callToolText("readDocumentContent", """
+                {"documentName":"%s"}""".formatted(exact))).contains("the exact one");
+
+        assertThat(callToolText("readDocumentContent", """
+                {"documentName":"only-%s"}""".formatted(suffix)))
+                .contains("Content of 'only-" + suffix + "-unique.txt'").contains("the only partial match");
+
+        assertThat(callToolText("readDocumentContent", """
+                {"documentName":"edger-%s"}""".formatted(suffix))).contains("matches 2 documents");
+    }
+
+    @Test
+    @DisplayName("two folders of one name: the folder argument of a read tool asks for the id too")
+    void readToolsRefuseToChooseBetweenTwoFoldersOfOneName() {
+        String suffix = suffix();
+        String folderName = "twin-" + suffix;
+        FolderResponse parentA = createFolder("twin-parent-a-" + suffix, null);
+        FolderResponse parentB = createFolder("twin-parent-b-" + suffix, null);
+        FolderResponse twinA = createFolder(folderName, parentA.id());
+        FolderResponse twinB = createFolder(folderName, parentB.id());
+        upload("inside-" + suffix + ".txt", "x".getBytes(), twinB.id());
+
+        assertThat(callToolText("queryDocuments", """
+                {"folder":"%s"}""".formatted(folderName)))
+                .contains("matches 2 documents").contains(twinA.id().toString()).contains(twinB.id().toString());
+        assertThat(callToolText("queryDocuments", """
+                {"folder":"%s"}""".formatted(twinB.id()))).contains("inside-" + suffix);
+        assertThat(callToolText("readDocumentContent", """
+                {"documentName":"inside-%s.txt","folderName":"%s"}""".formatted(suffix, folderName)))
+                .contains("matches 2 documents");
+        assertThat(callToolText("searchByMetadata", """
+                {"metadataJson":"{\\"a\\":\\"b\\"}","folderName":"%s"}""".formatted(folderName)))
+                .contains("matches 2 documents");
+    }
+
+    @Test
+    @DisplayName("a long document is read in pages, and the pages rebuild it exactly")
+    void readDocumentContentInPages() {
+        String suffix = suffix();
+        // Longer than a Tika default write limit (100 000 characters), to show the reader sets none
+        StringBuilder text = new StringBuilder();
+        for (int line = 0; text.length() < 150_000; line++) {
+            text.append("line ").append(line).append(" of the long document\n");
+        }
+        String expected = text.toString().strip();
+        String name = "long-" + suffix + ".txt";
+        upload(name, text.toString().getBytes(), null);
+
+        StringBuilder rebuilt = new StringBuilder();
+        int offset = 0;
+        for (int call = 0; call < 40; call++) {
+            String page = callToolText("readDocumentContent", """
+                    {"documentName":"%s","offset":%d,"maxChars":20000}""".formatted(name, offset));
+            rebuilt.append(fencedText(page));
+            Matcher next = Pattern.compile("\\[characters (\\d+) to (\\d+) of (\\d+), call again with offset=(\\d+)]").matcher(page);
+            if (!next.find()) {
+                assertThat(page).contains("end of the document");
+                break;
+            }
+            assertThat(Integer.parseInt(next.group(1))).isEqualTo(offset);
+            offset = Integer.parseInt(next.group(4));
+        }
+        assertThat(rebuilt.toString()).isEqualTo(expected);
+
+        // Without a size, the default page
+        assertThat(callToolText("readDocumentContent", """
+                {"documentName":"%s"}""".formatted(name)))
+                .contains("[characters 0 to 8000 of " + expected.length() + ", call again with offset=8000]");
+
+        // A size above the cap gets the cap
+        assertThat(callToolText("readDocumentContent", """
+                {"documentName":"%s","maxChars":100000000}""".formatted(name)))
+                .contains("[characters 0 to 50000 of " + expected.length() + ", call again with offset=50000]");
+
+        assertThat(callToolText("readDocumentContent", """
+                {"documentName":"%s","offset":100000000}""".formatted(name)))
+                .contains("past the end").contains(String.valueOf(expected.length()));
+
+        // downloadDocument keeps its short extract and says where the rest is
+        assertThat(callToolText("downloadDocument", """
+                {"documentName":"%s"}""".formatted(name)))
+                .contains("readDocumentContent reads on, with offset=8000");
+    }
+
+    /** The document's text in one answer of readDocumentContent, between the notice and the closing tag. */
+    private static String fencedText(String jsonAnswer) {
+        // The answer of a tool arrives as a JSON string
+        String answer = tools.jackson.databind.json.JsonMapper.builder().build().readTree(jsonAnswer).asString();
+        int from = answer.indexOf(UntrustedContent.NOTICE) + UntrustedContent.NOTICE.length() + 1;
+        return answer.substring(from, answer.indexOf("\n" + UntrustedContent.CLOSE_TAG));
     }
 
     @Test
@@ -373,6 +524,68 @@ class DocumentAiToolsMcpIT extends AbstractMcpIT {
                 {"documentId":"not-a-uuid"}""")).doesNotContain("Error:");
         assertThat(callToolText("getDocumentPath", """
                 {"documentId":"%s"}""".formatted(UUID.randomUUID()))).doesNotContain("Error:");
+    }
+
+    @Test
+    @DisplayName("two folders of one name: a write tool asks for the id, and writes nothing until it has it")
+    void writeToolsRefuseToChooseBetweenTwoFoldersOfOneName() {
+        String suffix = suffix();
+        String twin = "dest-" + suffix;
+        FolderResponse parentA = createFolder("dest-parent-a-" + suffix, null);
+        FolderResponse parentB = createFolder("dest-parent-b-" + suffix, null);
+        FolderResponse twinA = createFolder(twin, parentA.id());
+        FolderResponse twinB = createFolder(twin, parentB.id());
+        FolderResponse source = createFolder("dest-source-" + suffix, null);
+        UUID movable = upload("to-move-" + suffix + ".txt", "x".getBytes(), source.id());
+
+        String[] answers = {
+                callToolText("writeFile", """
+                        {"fileName":"w-%s.txt","content":"x","folderName":"%s"}""".formatted(suffix, twin)),
+                callToolText("createBlankDocument", """
+                        {"name":"b-%s","documentType":"WORD","folderName":"%s"}""".formatted(suffix, twin)),
+                callToolText("createFolder", """
+                        {"name":"f-%s","parentFolderId":"%s"}""".formatted(suffix, twin)),
+                callToolText("moveDocuments", """
+                        {"documentNames":"%s","targetFolder":"%s"}""".formatted(movable, twin))};
+        for (String answer : answers) {
+            assertThat(answer).contains("matches 2 documents")
+                    .contains(twinA.id().toString()).contains(twinB.id().toString());
+        }
+        assertThat(callToolText("queryDocuments", """
+                {"folder":"%s"}""".formatted(twinA.id()))).contains("No documents found");
+        assertThat(callToolText("queryDocuments", """
+                {"folder":"%s"}""".formatted(twinB.id()))).contains("No documents found");
+        assertThat(callToolText("getDocumentPath", """
+                {"documentId":"%s"}""".formatted(movable))).contains("dest-source-" + suffix);
+
+        // With the id, each one lands in that folder and says so
+        assertThat(callToolText("writeFile", """
+                {"fileName":"w-%s.txt","content":"x","folderName":"%s"}""".formatted(suffix, twinB.id())))
+                .contains("in folder '" + twin + "'");
+        assertThat(callToolText("moveDocuments", """
+                {"documentNames":"%s","targetFolder":"%s"}""".formatted(movable, twinB.id())))
+                .contains("moved 1").contains("to folder '" + twin + "'");
+        assertThat(callToolText("queryDocuments", """
+                {"folder":"%s"}""".formatted(twinB.id())))
+                .contains("w-" + suffix + ".txt").contains("to-move-" + suffix + ".txt");
+    }
+
+    @Test
+    @DisplayName("one folder fits a partial name: the write goes there, and the answer names it")
+    void aPartialFolderNameMatchingOneFolderIsUsedAndNamed() {
+        String suffix = suffix();
+        String folder = "archives-" + suffix + "-2026";
+
+        createFolder(folder, null);
+
+        assertThat(callToolText("writeFile", """
+                {"fileName":"p-%s.txt","content":"x","folderName":"archives-%s"}""".formatted(suffix, suffix)))
+                .contains("in folder '" + folder + "'");
+        // An id that is a file's is no destination
+        UUID file = upload("not-a-folder-" + suffix + ".txt", "x".getBytes(), null);
+        assertThat(callToolText("writeFile", """
+                {"fileName":"q-%s.txt","content":"x","folderName":"%s"}""".formatted(suffix, file)))
+                .contains("No folder named");
     }
 
     // ---------------------------------------------------------------- helpers
