@@ -6,6 +6,7 @@ import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.CreateFolderRequest;
 import org.openfilz.dms.dto.response.FolderResponse;
 import org.openfilz.dms.dto.response.UploadResponse;
+import org.openfilz.dms.service.ai.UntrustedContent;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.io.ByteArrayResource;
@@ -32,6 +33,8 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
@@ -233,6 +236,63 @@ class DocumentAiToolsMcpIT extends AbstractMcpIT {
         assertThat(callToolText("searchByMetadata", """
                 {"metadataJson":"{\\"a\\":\\"b\\"}","folderName":"%s"}""".formatted(folderName)))
                 .contains("matches 2 documents");
+    }
+
+    @Test
+    @DisplayName("a long document is read in pages, and the pages rebuild it exactly")
+    void readDocumentContentInPages() {
+        String suffix = suffix();
+        // Longer than a Tika default write limit (100 000 characters), to show the reader sets none
+        StringBuilder text = new StringBuilder();
+        for (int line = 0; text.length() < 150_000; line++) {
+            text.append("line ").append(line).append(" of the long document\n");
+        }
+        String expected = text.toString().strip();
+        String name = "long-" + suffix + ".txt";
+        upload(name, text.toString().getBytes(), null);
+
+        StringBuilder rebuilt = new StringBuilder();
+        int offset = 0;
+        for (int call = 0; call < 40; call++) {
+            String page = callToolText("readDocumentContent", """
+                    {"documentName":"%s","offset":%d,"maxChars":20000}""".formatted(name, offset));
+            rebuilt.append(fencedText(page));
+            Matcher next = Pattern.compile("\\[characters (\\d+) to (\\d+) of (\\d+), call again with offset=(\\d+)]").matcher(page);
+            if (!next.find()) {
+                assertThat(page).contains("end of the document");
+                break;
+            }
+            assertThat(Integer.parseInt(next.group(1))).isEqualTo(offset);
+            offset = Integer.parseInt(next.group(4));
+        }
+        assertThat(rebuilt.toString()).isEqualTo(expected);
+
+        // Without a size, the default page
+        assertThat(callToolText("readDocumentContent", """
+                {"documentName":"%s"}""".formatted(name)))
+                .contains("[characters 0 to 8000 of " + expected.length() + ", call again with offset=8000]");
+
+        // A size above the cap gets the cap
+        assertThat(callToolText("readDocumentContent", """
+                {"documentName":"%s","maxChars":100000000}""".formatted(name)))
+                .contains("[characters 0 to 50000 of " + expected.length() + ", call again with offset=50000]");
+
+        assertThat(callToolText("readDocumentContent", """
+                {"documentName":"%s","offset":100000000}""".formatted(name)))
+                .contains("past the end").contains(String.valueOf(expected.length()));
+
+        // downloadDocument keeps its short extract and says where the rest is
+        assertThat(callToolText("downloadDocument", """
+                {"documentName":"%s"}""".formatted(name)))
+                .contains("readDocumentContent reads on, with offset=8000");
+    }
+
+    /** The document's text in one answer of readDocumentContent, between the notice and the closing tag. */
+    private static String fencedText(String jsonAnswer) {
+        // The answer of a tool arrives as a JSON string
+        String answer = tools.jackson.databind.json.JsonMapper.builder().build().readTree(jsonAnswer).asString();
+        int from = answer.indexOf(UntrustedContent.NOTICE) + UntrustedContent.NOTICE.length() + 1;
+        return answer.substring(from, answer.indexOf("\n" + UntrustedContent.CLOSE_TAG));
     }
 
     @Test

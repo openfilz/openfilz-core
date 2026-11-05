@@ -189,6 +189,8 @@ spec:
             {{- if .Values.mcp.active }}
             - name: OPENFILZ_MCP_MODE
               value: {{ .Values.mcp.mode | quote }}
+            - name: OPENFILZ_MCP_MAX_TEXT_CHARS
+              value: {{ .Values.mcp.maxTextChars | quote }}
             {{- with (include "openfilz-api.mcpAuthorizationServerUrl" .) }}
             # Discovery must advertise the PUBLIC realm URL — the property defaults
             # to KEYCLOAK_REALM_URL (in-cluster), unreachable by MCP hosts.
