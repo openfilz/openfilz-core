@@ -1180,11 +1180,17 @@ public class DocumentAiTools {
         if (start >= total) {
             return "Offset %d is past the end of '%s', which has %d characters.".formatted(start, doc.getName(), total);
         }
-        int size = maxChars == null || maxChars <= 0 ? MAX_CONTENT_CHARS : Math.min(maxChars, maxTextChars);
+        // Never cut a surrogate pair in two. An offset that falls inside one starts on it
+        if (start > 0 && Character.isLowSurrogate(fullText.charAt(start))
+                && Character.isHighSurrogate(fullText.charAt(start - 1))) {
+            start--;
+        }
+        // The limit caps the default page too, where an operator set it below that default
+        int size = Math.min(maxChars == null || maxChars <= 0 ? MAX_CONTENT_CHARS : maxChars, maxTextChars);
         int end = (int) Math.min((long) start + size, total);
-        // Never cut a surrogate pair in two: the next page starts at the same character
-        if (end < total && end - start > 1 && Character.isHighSurrogate(fullText.charAt(end - 1))) {
-            end--;
+        // A page that would end inside a pair stops before it; a page of that one character takes it whole
+        if (end < total && Character.isHighSurrogate(fullText.charAt(end - 1))) {
+            end = end - start > 1 ? end - 1 : end + 1;
         }
         // Fenced: the file's text is third-party data, not instructions (see UntrustedContent)
         String fenced = UntrustedContent.fence(doc.getId(), doc.getName(), fullText.substring(start, end));
