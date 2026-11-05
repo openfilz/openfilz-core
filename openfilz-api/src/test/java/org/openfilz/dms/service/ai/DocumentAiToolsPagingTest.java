@@ -122,6 +122,30 @@ class DocumentAiToolsPagingTest {
     }
 
     @Test
+    @DisplayName("an offset inside a character outside the basic plane starts on it, and a page of one character takes it whole")
+    void anOffsetInsideASurrogatePairStartsOnIt() {
+        String emoji = "😀";
+        stored("ab" + emoji + "cd");
+        DocumentAiTools tools = tools();
+
+        assertThat(tools.readDocumentContent(id.toString(), null, 3, 3))
+                .contains(emoji + "c").contains("[characters 2 to 5 of 6, call again with offset=5]");
+        // One character at a time still moves forward, past the pair
+        assertThat(tools.readDocumentContent(id.toString(), null, 2, 1))
+                .contains(emoji).contains("[characters 2 to 4 of 6, call again with offset=4]");
+    }
+
+    @Test
+    @DisplayName("the limit caps the default page too")
+    void theLimitCapsTheDefaultPage() {
+        stored("x".repeat(3000));
+
+        // tools() sets the limit to 1000, below the default page
+        assertThat(tools().readDocumentContent(id.toString(), null))
+                .contains("[characters 0 to 1000 of 3000, call again with offset=1000]");
+    }
+
+    @Test
     @DisplayName("a document that fits one page carries no range line, and a negative offset reads from the start")
     void shortDocument() {
         stored("short text");

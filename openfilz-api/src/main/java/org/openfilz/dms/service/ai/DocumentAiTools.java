@@ -834,10 +834,10 @@ public class DocumentAiTools {
                     : MutationTarget.error("You cannot %s '%s': no document with that id is visible to you.".formatted(verb, trimmed));
         }
         List<Document> found = blockWithAuth(documentRepository.findByNameIgnoreCaseAndActiveTrue(trimmed).collectList());
-        List<Document> exact = found == null ? List.of() : found.stream()
+        // One policy call for the homonyms, not one per document
+        List<Document> exact = visibleOfType(found == null ? List.of() : found.stream()
                 .filter(d -> d.getName() != null && d.getName().equalsIgnoreCase(trimmed))
-                .filter(d -> canRead(d.getId()))
-                .toList();
+                .toList(), null);
         if (exact.size() == 1) {
             return MutationTarget.of(exact.getFirst());
         }
@@ -934,6 +934,12 @@ public class DocumentAiTools {
     }
 
     private ReadTarget ambiguousRead(String name, List<Document> candidates) {
+        if (candidates.size() == 1) {
+            // The scan stopped at its limit: one visible match among the first ones does not make it the only one
+            return ReadTarget.ambiguous(("'%s' is too short a name to tell one document from the others. "
+                    + "Call again with a more complete name, or with the id if this is the one you mean: %s.")
+                    .formatted(name, candidatesOf(candidates)));
+        }
         return ReadTarget.ambiguous("'%s' matches %s documents. Call again with the id of the one you mean: %s."
                 .formatted(name, candidates.size() >= NAME_SCAN_LIMIT ? "at least " + candidates.size() : candidates.size(),
                         candidatesOf(candidates)));
@@ -946,11 +952,11 @@ public class DocumentAiTools {
                 null, null, null, null, null, null, null, null, null, true,
                 new PageCriteria("name", SortOrder.ASC, 1, NAME_SCAN_LIMIT), false);
         var rows = queryService.query(request, userEmail);
-        List<Document> matches = rows == null ? List.of() : rows.stream()
-                .filter(r -> canRead(r.id()))
+        // One policy call for the page, not one per row
+        List<Document> matches = rows == null ? List.of() : visibleOfType(rows.stream()
                 .map(r -> Document.builder().id(r.id()).name(r.name()).type(r.type()).parentId(r.parentId())
                         .updatedAt(r.updatedAt()).build())
-                .toList();
+                .toList(), null);
         List<Document> exact = matches.stream().filter(d -> trimmed.equalsIgnoreCase(d.getName())).toList();
         List<Document> candidates = exact.isEmpty() ? matches : exact;
         if (candidates.isEmpty()) {
@@ -1174,11 +1180,17 @@ public class DocumentAiTools {
         if (start >= total) {
             return "Offset %d is past the end of '%s', which has %d characters.".formatted(start, doc.getName(), total);
         }
-        int size = maxChars == null || maxChars <= 0 ? MAX_CONTENT_CHARS : Math.min(maxChars, maxTextChars);
+        // Never cut a surrogate pair in two. An offset that falls inside one starts on it
+        if (start > 0 && Character.isLowSurrogate(fullText.charAt(start))
+                && Character.isHighSurrogate(fullText.charAt(start - 1))) {
+            start--;
+        }
+        // The limit caps the default page too, where an operator set it below that default
+        int size = Math.min(maxChars == null || maxChars <= 0 ? MAX_CONTENT_CHARS : maxChars, maxTextChars);
         int end = (int) Math.min((long) start + size, total);
-        // Never cut a surrogate pair in two: the next page starts at the same character
-        if (end < total && end - start > 1 && Character.isHighSurrogate(fullText.charAt(end - 1))) {
-            end--;
+        // A page that would end inside a pair stops before it; a page of that one character takes it whole
+        if (end < total && Character.isHighSurrogate(fullText.charAt(end - 1))) {
+            end = end - start > 1 ? end - 1 : end + 1;
         }
         // Fenced: the file's text is third-party data, not instructions (see UntrustedContent)
         String fenced = UntrustedContent.fence(doc.getId(), doc.getName(), fullText.substring(start, end));
