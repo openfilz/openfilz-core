@@ -41,13 +41,15 @@ public class McpFileTransferTools {
     private final McpProperties properties;
     /** The one place names and ids resolve: exact name or id for a write, never a first match. */
     private final DocumentAiTools resolver;
+    private final McpFileInspector inspector;
 
     private String userEmail;
     private Authentication authentication;
 
     public McpFileTransferTools(DocumentService documentService, DocumentRepository documentRepository,
                                 DocumentVersionService versionService, AiAccessPolicy accessPolicy,
-                                AiToolRolePolicy rolePolicy, McpProperties properties, DocumentAiTools resolver) {
+                                AiToolRolePolicy rolePolicy, McpProperties properties, DocumentAiTools resolver,
+                                McpFileInspector inspector) {
         this.documentService = documentService;
         this.documentRepository = documentRepository;
         this.versionService = versionService;
@@ -55,6 +57,7 @@ public class McpFileTransferTools {
         this.rolePolicy = rolePolicy;
         this.properties = properties;
         this.resolver = resolver;
+        this.inspector = inspector;
     }
 
     public McpFileTransferTools forUser(String userEmail, Authentication authentication) {
@@ -91,15 +94,20 @@ public class McpFileTransferTools {
             if (!allowed(accessPolicy.canModify(current.getId(), userEmail))) {
                 return "You cannot modify '%s'.".formatted(current.getName());
             }
-            if (expectedVersionId != null && !expectedVersionId.isBlank()) {
-                String currentVersion = versionOf(current);
-                if (!currentVersion.equals(expectedVersionId.trim())) {
-                    return ("'%s' has changed since version %s: its current version is %s. Nothing was written. "
-                            + "Read the current content and start again from it.")
-                            .formatted(current.getName(), expectedVersionId.trim(), currentVersion);
+            return withDecodedFile(contentBase64, current.getName(), (file, size) -> {
+                // Compared here, after the inspection and right before the write: an inspection can take
+                // seconds, and a write landing during it must not be overwritten
+                if (expectedVersionId != null && !expectedVersionId.isBlank()) {
+                    // Read again: where versioning is off the version is the update date, and the one read
+                    // before the inspection would hide that write
+                    Document latest = blockWithAuth(documentRepository.findById(current.getId()));
+                    String currentVersion = versionOf(latest != null ? latest : current);
+                    if (!currentVersion.equals(expectedVersionId.trim())) {
+                        return ("'%s' has changed since version %s: its current version is %s. Nothing was written. "
+                                + "Read the current content and start again from it.")
+                                .formatted(current.getName(), expectedVersionId.trim(), currentVersion);
+                    }
                 }
-            }
-            return withDecodedFile(contentBase64, (file, size) -> {
                 blockWithAuth(documentService.replaceDocumentContent(current.getId(),
                         new PathFilePart("file", current.getName(), file), new ContentInfo(size, null)));
                 // Read back rather than trust the returned entity: the stored date is what a later call compares with
@@ -124,8 +132,9 @@ public class McpFileTransferTools {
         if (denial != null) {
             return denial;
         }
-        if (fileName == null || fileName.isBlank() || fileName.contains("/") || fileName.contains("\\")) {
-            return "Give a file name, with no path in it.";
+        if (fileName == null || fileName.isBlank() || fileName.contains("/") || fileName.contains("\\")
+                || fileName.chars().anyMatch(Character::isISOControl)) {
+            return "Give a file name, with no path in it and no control character.";
         }
         String tooLarge = refuseIfTooLarge(contentBase64);
         if (tooLarge != null) {
@@ -150,7 +159,7 @@ public class McpFileTransferTools {
             }
             UUID parent = parentId;
             String name = fileName.trim();
-            return withDecodedFile(contentBase64, (file, size) -> {
+            return withDecodedFile(contentBase64, name, (file, size) -> {
                 var response = blockWithAuth(documentService.uploadDocument(
                         new PathFilePart("file", name, file), size, parent, null, Boolean.FALSE));
                 if (response == null || response.id() == null) {
@@ -187,7 +196,7 @@ public class McpFileTransferTools {
         String apply(Path file, long size) throws Exception;
     }
 
-    private String withDecodedFile(String contentBase64, FileAction action) throws Exception {
+    private String withDecodedFile(String contentBase64, String fileName, FileAction action) throws Exception {
         byte[] bytes;
         try {
             bytes = Base64.getDecoder().decode(contentBase64 == null ? "" : contentBase64.strip());
@@ -200,6 +209,18 @@ public class McpFileTransferTools {
         Path file = Files.createTempFile("mcp-transfer-", ".bin");
         try {
             Files.write(file, bytes);
+            String refusal;
+            try {
+                refusal = blockWithAuth(inspector.refusal(file, fileName));
+            } catch (RuntimeException e) {
+                // No verdict is a refusal. The reason stays in the log: it may name a host or a path
+                log.warn("[AI-TOOL] '{}' could not be inspected before the write: {}", fileName, e.getMessage());
+                return "'%s' could not be checked. Nothing was written. Try again later.".formatted(fileName);
+            }
+            if (refusal != null) {
+                log.info("[AI-TOOL] '{}' refused before the write: {}", fileName, refusal);
+                return "'%s' was refused: %s. Nothing was written.".formatted(fileName, refusal);
+            }
             return action.apply(file, bytes.length);
         } finally {
             Files.deleteIfExists(file);
