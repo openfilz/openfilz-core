@@ -297,6 +297,8 @@ Files larger than **10 MB** display a warning and offer a download button instea
 
 When OnlyOffice is available, you can **edit** Word, Excel, and PowerPoint documents directly in the browser with a full office-like interface, including real-time collaborative editing.
 
+**If the document changes while you edit it.** Someone may replace the file, or restore a version, while your editor is open. Your save then does not overwrite their content: it stays the current version, and your work is saved next to it as `<name> (editor copy <date>).<ext>`. Nothing is lost, and you can compare the two and decide. A rename, a move or a change of metadata does not count.
+
 ---
 
 ## Search
