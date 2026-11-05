@@ -199,6 +199,55 @@ class DocumentAiToolsMutationGuardrailsTest {
     }
 
     @Test
+    @DisplayName("one visible match in a scan that stopped at its limit is not taken for the only one")
+    void aSaturatedScanIsNeverTakenForAUniqueMatch() {
+        tools(null);
+        java.util.List<Document> scanned = new java.util.ArrayList<>();
+        for (int i = 0; i < 49; i++) {
+            scanned.add(Document.builder().id(UUID.randomUUID()).name("note-" + i).type(DocumentType.FILE).active(true).build());
+        }
+        scanned.add(notes);
+        when(repository.findTop50ByNameContainingIgnoreCaseAndActiveTrueOrderByNameAsc("note")).thenReturn(Flux.fromIterable(scanned));
+        java.util.concurrent.atomic.AtomicInteger policyCalls = new java.util.concurrent.atomic.AtomicInteger();
+        AiAccessPolicy onlyNotes = new AiAccessPolicy() {
+            @Override
+            public boolean permitAll() {
+                return false;
+            }
+
+            @Override
+            public Mono<Boolean> canRead(UUID documentId, String userEmail) {
+                policyCalls.incrementAndGet();
+                return Mono.just(notes.getId().equals(documentId));
+            }
+
+            @Override
+            public Mono<Boolean> canModify(UUID documentId, String userEmail) {
+                return canRead(documentId, userEmail);
+            }
+
+            @Override
+            public Mono<java.util.Set<UUID>> readable(java.util.Collection<UUID> documentIds, String userEmail) {
+                policyCalls.incrementAndGet();
+                return Mono.just(documentIds.contains(notes.getId()) ? java.util.Set.of(notes.getId()) : java.util.Set.of());
+            }
+        };
+        DocumentAiTools tools = new DocumentAiTools(
+                documentService, repository, storage, mock(AiDocumentQueryService.class),
+                null, onlyNotes, (authentication, capability) -> true,
+                mock(DocumentVersionService.class), new CommonProperties(),
+                new DownloadTokenService(new DownloadTokenProperties()),
+                null, index, null, null, null);
+
+        String result = tools.readDocumentContent("note", null);
+
+        assertThat(result).contains("too short a name").contains(notes.getId().toString())
+                .doesNotContain("matches 1 documents").doesNotContain("note-0");
+        // The fifty scanned documents are judged in one policy call, not fifty
+        assertThat(policyCalls.get()).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("listVersions states which document it reports on, and marks the current version")
     void listVersionsNamesTheDocumentAndTheCurrentVersion() {
         tools(null);
