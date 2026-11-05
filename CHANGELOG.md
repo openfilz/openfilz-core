@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[d71c35975ad252e](https://github.com/openfilz/openfilz-core/commit/d71c35975ad252e) maven-release-bot[bot] *2026-11-04 11:27:22*
+[34ecf4f240154ad](https://github.com/openfilz/openfilz-core/commit/34ecf4f240154ad) maven-release-bot[bot] *2026-11-05 09:59:40*
 
 
-## v1.4.4
+## v1.4.5
 ### No issue
 
-**[maven-release-plugin] prepare release v1.4.4**
+**[maven-release-plugin] prepare release v1.4.5**
 
 
-[f5653c180619eaa](https://github.com/openfilz/openfilz-core/commit/f5653c180619eaa) maven-release-bot[bot] *2026-11-04 11:27:19*
+[c0328ca1bdf2a53](https://github.com/openfilz/openfilz-core/commit/c0328ca1bdf2a53) maven-release-bot[bot] *2026-11-05 09:59:37*
 
-**Merge pull request #372 from openfilz/develop**
+**Merge pull request #382 from openfilz/develop**
 
- * Fix OnlyOffice auditing to track single open per editor config
+ * Fix document handling and enhance MCP binary write tools
 
-[7349f9f19300706](https://github.com/openfilz/openfilz-core/commit/7349f9f19300706) Yann Demel *2026-11-04 11:23:05*
+[8a56f681c4b9184](https://github.com/openfilz/openfilz-core/commit/8a56f681c4b9184) Yann Demel *2026-11-05 09:56:25*
 
 
