@@ -85,11 +85,19 @@ public class McpConfig {
      * nothing else, a body limit that fits a file tool's base64 argument: the application-wide codec
      * limit stays at its default. A declared length above the limit is refused without reading the
      * body, and a chunked body stops being read at the limit.
+     * <p>
+     * Only where the file tools exist: in {@code READ_ONLY} mode no tool takes a file, so the route
+     * is the transport's own and a body keeps the application-wide limit. Each request up to the
+     * larger limit is held in memory several times over (body, argument, decoded bytes), which is
+     * not something to offer callers who cannot write.
      */
     @Bean
     @SuppressWarnings("unchecked")
     public RouterFunction<ServerResponse> webFluxStatelessServerRouterFunction(WebFluxStatelessServerTransport transport,
                                                                                McpProperties properties) {
+        if (properties.getMode() != McpProperties.Mode.READ_WRITE) {
+            return (RouterFunction<ServerResponse>) transport.getRouterFunction();
+        }
         long limit = maxRequestBytes(properties.getMaxResourceSizeBytes());
         StringDecoder decoder = StringDecoder.allMimeTypes();
         decoder.setMaxInMemorySize((int) Math.min(limit, Integer.MAX_VALUE - 8));
