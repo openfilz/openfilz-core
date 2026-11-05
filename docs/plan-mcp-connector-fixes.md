@@ -126,8 +126,9 @@ tool wording.
 Why a copy rather than a refusal: the editor's work must survive too. Neither side is lost, and a
 person decides.
 
-Decision to take: in WORM mode, or if the folder refuses the new document, the copy fails. Proposal:
-log and audit the failure, and keep the current content.
+Decided (2026-11-05): in WORM mode, or if the folder refuses the new document, the copy fails. The
+failure is logged and audited, the current content stays, and the callback answers `error: 1`: the
+document server holds the only copy of the editor's work, and "saved" would make it drop it.
 
 Tests: `OnlyOfficeIT`, posting callbacks directly, no browser:
 replace during a session gives a copy and leaves the current content; force save then close gives
