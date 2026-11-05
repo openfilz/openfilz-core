@@ -466,6 +466,68 @@ class DocumentAiToolsMcpIT extends AbstractMcpIT {
                 {"documentId":"%s"}""".formatted(UUID.randomUUID()))).doesNotContain("Error:");
     }
 
+    @Test
+    @DisplayName("two folders of one name: a write tool asks for the id, and writes nothing until it has it")
+    void writeToolsRefuseToChooseBetweenTwoFoldersOfOneName() {
+        String suffix = suffix();
+        String twin = "dest-" + suffix;
+        FolderResponse parentA = createFolder("dest-parent-a-" + suffix, null);
+        FolderResponse parentB = createFolder("dest-parent-b-" + suffix, null);
+        FolderResponse twinA = createFolder(twin, parentA.id());
+        FolderResponse twinB = createFolder(twin, parentB.id());
+        FolderResponse source = createFolder("dest-source-" + suffix, null);
+        UUID movable = upload("to-move-" + suffix + ".txt", "x".getBytes(), source.id());
+
+        String[] answers = {
+                callToolText("writeFile", """
+                        {"fileName":"w-%s.txt","content":"x","folderName":"%s"}""".formatted(suffix, twin)),
+                callToolText("createBlankDocument", """
+                        {"name":"b-%s","documentType":"WORD","folderName":"%s"}""".formatted(suffix, twin)),
+                callToolText("createFolder", """
+                        {"name":"f-%s","parentFolderId":"%s"}""".formatted(suffix, twin)),
+                callToolText("moveDocuments", """
+                        {"documentNames":"%s","targetFolder":"%s"}""".formatted(movable, twin))};
+        for (String answer : answers) {
+            assertThat(answer).contains("matches 2 documents")
+                    .contains(twinA.id().toString()).contains(twinB.id().toString());
+        }
+        assertThat(callToolText("queryDocuments", """
+                {"folder":"%s"}""".formatted(twinA.id()))).contains("No documents found");
+        assertThat(callToolText("queryDocuments", """
+                {"folder":"%s"}""".formatted(twinB.id()))).contains("No documents found");
+        assertThat(callToolText("getDocumentPath", """
+                {"documentId":"%s"}""".formatted(movable))).contains("dest-source-" + suffix);
+
+        // With the id, each one lands in that folder and says so
+        assertThat(callToolText("writeFile", """
+                {"fileName":"w-%s.txt","content":"x","folderName":"%s"}""".formatted(suffix, twinB.id())))
+                .contains("in folder '" + twin + "'");
+        assertThat(callToolText("moveDocuments", """
+                {"documentNames":"%s","targetFolder":"%s"}""".formatted(movable, twinB.id())))
+                .contains("moved 1").contains("to folder '" + twin + "'");
+        assertThat(callToolText("queryDocuments", """
+                {"folder":"%s"}""".formatted(twinB.id())))
+                .contains("w-" + suffix + ".txt").contains("to-move-" + suffix + ".txt");
+    }
+
+    @Test
+    @DisplayName("one folder fits a partial name: the write goes there, and the answer names it")
+    void aPartialFolderNameMatchingOneFolderIsUsedAndNamed() {
+        String suffix = suffix();
+        String folder = "archives-" + suffix + "-2026";
+
+        createFolder(folder, null);
+
+        assertThat(callToolText("writeFile", """
+                {"fileName":"p-%s.txt","content":"x","folderName":"archives-%s"}""".formatted(suffix, suffix)))
+                .contains("in folder '" + folder + "'");
+        // An id that is a file's is no destination
+        UUID file = upload("not-a-folder-" + suffix + ".txt", "x".getBytes(), null);
+        assertThat(callToolText("writeFile", """
+                {"fileName":"q-%s.txt","content":"x","folderName":"%s"}""".formatted(suffix, file)))
+                .contains("No folder named");
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private static String suffix() {

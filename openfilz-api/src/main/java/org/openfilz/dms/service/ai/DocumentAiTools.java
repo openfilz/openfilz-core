@@ -561,14 +561,12 @@ public class DocumentAiTools {
         log.debug("[AI-TOOL] writeFile called with: file='{}', folder='{}', content={}chars", fileName, folderName, content != null ? content.length() : 0);
         try {
             // Same rule as moveDocuments: an unknown named folder must not silently become root
-            UUID parentId = null;
-            if (!isRootFolderName(folderName)) {
-                parentId = resolveToId(folderName);
-                if (parentId == null) {
-                    return toolResult("writeFile",
-                            "No folder named '%s' exists. Ask the user whether to create it (createFolder), then retry.".formatted(folderName));
-                }
+            ReadTarget destination = resolveDestinationFolder(folderName,
+                    "No folder named '%s' exists. Ask the user whether to create it (createFolder), then retry.".formatted(folderName));
+            if (destination.error() != null) {
+                return toolResult("writeFile", destination.error());
             }
+            UUID parentId = idOf(destination);
             if (!canCreateIn(parentId)) {
                 return toolResult("writeFile", "You don't have permission to create files in %s.".formatted(
                         parentId == null ? "the root folder" : "folder '%s'".formatted(folderName)));
@@ -593,9 +591,9 @@ public class DocumentAiTools {
                     recordAction("Created file '%s'".formatted(fileName));
                     log.info("[AI-TOOL] writeFile: created '{}' ({} bytes) in folder {}", fileName, fileSize, parentId);
                     if (Boolean.TRUE.equals(autoFile)) {
-                        return toolResult("writeFile", "File '%s' created successfully. %s".formatted(fileName, fileNow(response.id())));
+                        return toolResult("writeFile", "File '%s' created successfully%s. %s".formatted(fileName, inFolder(destination), fileNow(response.id())));
                     }
-                    return toolResult("writeFile", "File '%s' created successfully.".formatted(fileName));
+                    return toolResult("writeFile", "File '%s' created successfully%s.".formatted(fileName, inFolder(destination)));
                 }
                 return toolResult("writeFile", "Failed to save the file%s.".formatted(
                         response != null && response.errorMessage() != null ? ": " + response.errorMessage() : ""));
@@ -627,14 +625,12 @@ public class DocumentAiTools {
                 return toolResult("createBlankDocument",
                         "Unknown document type '%s'. Use WORD, EXCEL, POWERPOINT or TEXT.".formatted(documentType));
             }
-            UUID parentId = null;
-            if (!isRootFolderName(folderName)) {
-                parentId = resolveToId(folderName);
-                if (parentId == null) {
-                    return toolResult("createBlankDocument",
-                            "No folder named '%s' exists. Ask the user whether to create it (createFolder), then retry.".formatted(folderName));
-                }
+            ReadTarget destination = resolveDestinationFolder(folderName,
+                    "No folder named '%s' exists. Ask the user whether to create it (createFolder), then retry.".formatted(folderName));
+            if (destination.error() != null) {
+                return toolResult("createBlankDocument", destination.error());
             }
+            UUID parentId = idOf(destination);
             if (!canCreateIn(parentId)) {
                 return toolResult("createBlankDocument", "You don't have permission to create documents in %s.".formatted(
                         parentId == null ? "the root folder" : "folder '%s'".formatted(folderName)));
@@ -649,7 +645,7 @@ public class DocumentAiTools {
             recordFolderModified(parentId);
             recordAction("Created blank %s document '%s'".formatted(type.name().toLowerCase(), createdName));
             log.info("[AI-TOOL] createBlankDocument: created '{}' ({}) in folder {}", createdName, type, parentId);
-            return toolResult("createBlankDocument", "Document '%s' created successfully (id %s).".formatted(createdName, response.id()));
+            return toolResult("createBlankDocument", "Document '%s' created successfully%s (id %s).".formatted(createdName, inFolder(destination), response.id()));
         } catch (Exception e) {
             log.error("Error creating blank document", e);
             return "Error creating document: " + e.getMessage();
@@ -678,14 +674,12 @@ public class DocumentAiTools {
         log.debug("[AI-TOOL] createFolder called with: name='{}', parent='{}'", name, parentFolderId);
         try {
             // An unknown named parent must not silently become root
-            UUID parentId = null;
-            if (!isRootFolderName(parentFolderId)) {
-                parentId = resolveToId(parentFolderId);
-                if (parentId == null) {
-                    return toolResult("createFolder",
-                            "No parent folder '%s' exists. Create it first, or use null for root.".formatted(parentFolderId));
-                }
+            ReadTarget destination = resolveDestinationFolder(parentFolderId,
+                    "No parent folder '%s' exists. Create it first, or use null for root.".formatted(parentFolderId));
+            if (destination.error() != null) {
+                return toolResult("createFolder", destination.error());
             }
+            UUID parentId = idOf(destination);
             if (!canCreateIn(parentId)) {
                 return toolResult("createFolder", "You don't have permission to create folders in %s.".formatted(
                         parentId == null ? "the root folder" : "folder '%s'".formatted(parentFolderId)));
@@ -696,7 +690,7 @@ public class DocumentAiTools {
             register(result.id(), parentId, DocumentType.FOLDER.name(), name);
             recordFolderModified(parentId);
             recordAction("Created folder '%s'".formatted(name));
-            return "Folder '%s' created successfully with ID: %s".formatted(name, result.id());
+            return "Folder '%s' created successfully%s with ID: %s".formatted(name, inFolder(destination), result.id());
         } catch (Exception e) {
             log.error("Error creating folder", e);
             return "Error creating folder: " + e.getMessage();
@@ -714,14 +708,12 @@ public class DocumentAiTools {
         try {
             // Resolve target folder — a named folder that doesn't exist must NOT silently
             // fall back to root (the move would fail or land in the wrong place)
-            UUID targetId = null;
-            if (!isRootFolderName(targetFolder)) {
-                targetId = resolveToId(targetFolder);
-                if (targetId == null) {
-                    return toolResult("moveDocuments",
-                            "No folder named '%s' exists. Ask the user whether to create it (createFolder), then retry the move.".formatted(targetFolder));
-                }
+            ReadTarget destination = resolveDestinationFolder(targetFolder,
+                    "No folder named '%s' exists. Ask the user whether to create it (createFolder), then retry the move.".formatted(targetFolder));
+            if (destination.error() != null) {
+                return toolResult("moveDocuments", destination.error());
             }
+            UUID targetId = idOf(destination);
             if (!canCreateIn(targetId)) {
                 return toolResult("moveDocuments", "You don't have permission to move documents into %s.".formatted(
                         targetId == null ? "the root folder" : "folder '%s'".formatted(targetFolder)));
@@ -780,7 +772,7 @@ public class DocumentAiTools {
             sourceParents.forEach(this::recordFolderModified);
             recordAction("Moved %d item(s) to %s".formatted(moved,
                     isRootFolderName(targetFolder) ? "the root folder" : "'%s'".formatted(targetFolder)));
-            return "Successfully moved %d item(s).".formatted(moved);
+            return "Successfully moved %d item(s)%s.".formatted(moved, destination.document() == null ? "" : " to folder '%s'".formatted(destination.document().getName()));
         } catch (Exception e) {
             log.error("Error moving documents", e);
             return "Error moving documents: " + e.getMessage();
@@ -793,11 +785,6 @@ public class DocumentAiTools {
                 || "root".equalsIgnoreCase(name) || "My Folder".equalsIgnoreCase(name);
     }
 
-    /**
-     * Resolve a name or UUID string to a UUID, searching the registry and DB if needed.
-     * Only ever resolves to documents the requesting user can read — a name or id the
-     * user has no access to behaves exactly like a non-existent one.
-     */
     /**
      * The target of a mutating tool: exactly one of {@code document} / {@code error} is set. The
      * error is a complete tool result (it names the candidates when the reference is ambiguous).
@@ -888,6 +875,28 @@ public class DocumentAiTools {
     /** {@link #resolveForRead} limited to folders, for the folder argument of a reading tool. */
     ReadTarget resolveFolderForRead(String nameOrId, String notFoundMessage) {
         return resolveRead(nameOrId, DocumentType.FOLDER, notFoundMessage);
+    }
+
+    /** The root level, as a destination: not a document, and not an error. */
+    private static final ReadTarget ROOT_DESTINATION = new ReadTarget(null, null, false);
+
+    /**
+     * The folder a writing tool puts something in. Same rules as {@link #resolveFolderForRead}: several
+     * matches are an error, and one partial match is accepted, since what lands in the wrong folder can
+     * be moved back and the answer names the folder ({@link #inFolder}). A root name gives a target with
+     * neither document nor error.
+     */
+    private ReadTarget resolveDestinationFolder(String nameOrId, String notFoundMessage) {
+        return isRootFolderName(nameOrId) ? ROOT_DESTINATION : resolveRead(nameOrId, DocumentType.FOLDER, notFoundMessage);
+    }
+
+    private static UUID idOf(ReadTarget destination) {
+        return destination.document() == null ? null : destination.document().getId();
+    }
+
+    /** How an answer names the destination, which may not be what the caller typed. Nothing for the root. */
+    private static String inFolder(ReadTarget destination) {
+        return destination.document() == null ? "" : " in folder '%s'".formatted(destination.document().getName());
     }
 
     private ReadTarget resolveRead(String nameOrId, DocumentType onlyType, String notFoundMessage) {
@@ -1008,28 +1017,6 @@ public class DocumentAiTools {
         }
         List<Document> folders = visibleOfType(blockWithAuth(documentRepository.findAllById(ids).collectList()), null);
         return folders.stream().collect(Collectors.toMap(Document::getId, Document::getName, (a, b) -> a));
-    }
-
-    private UUID resolveToId(String nameOrId) {
-        if (isRootFolderName(nameOrId)) {
-            return null; // root folder
-        }
-        UUID id = parseUuid(nameOrId);
-        if (id != null) return canRead(id) ? id : null;
-        var ref = documentRegistry.get(nameOrId);
-        if (ref != null) return ref.id();
-        // Search DB — skip candidates the user cannot see
-        var found = documentRepository.findTop50ByNameContainingIgnoreCaseAndActiveTrueOrderByNameAsc(nameOrId)
-                .filter(d -> d.getType() == org.openfilz.dms.enums.DocumentType.FOLDER)
-                .collectList().block();
-        if (found != null) {
-            var readable = found.stream().filter(d -> canRead(d.getId())).findFirst();
-            if (readable.isPresent()) {
-                register(readable.get());
-                return readable.get().getId();
-            }
-        }
-        return null;
     }
 
     @Tool(description = "Rename a file or folder.")
