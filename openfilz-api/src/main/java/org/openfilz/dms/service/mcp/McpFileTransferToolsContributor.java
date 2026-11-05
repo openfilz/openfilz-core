@@ -8,6 +8,7 @@ import org.openfilz.dms.service.DocumentVersionService;
 import org.openfilz.dms.service.ai.AiAccessPolicy;
 import org.openfilz.dms.service.ai.AiToolRolePolicy;
 import org.openfilz.dms.service.ai.DocumentAiToolsFactory;
+import org.openfilz.dms.service.ai.McpFileInspector;
 import org.openfilz.dms.service.ai.McpFileTransferTools;
 import org.openfilz.dms.service.ai.McpFileTransferToolsRuntimeHints;
 import org.openfilz.dms.service.ai.ToolCapability;
@@ -47,12 +48,13 @@ public class McpFileTransferToolsContributor implements McpToolContributor {
     private final AiToolRolePolicy rolePolicy;
     private final McpProperties properties;
     private final DocumentAiToolsFactory documentTools;
+    private final McpFileInspector inspector;
 
     @Override
     public Object bind(String userEmail, Authentication authentication) {
         // No chat model: only the name resolution of the document tools is used here
         return new McpFileTransferTools(documentService, documentRepository, versionService, accessPolicy, rolePolicy,
-                properties, documentTools.create(null, userEmail, authentication))
+                properties, documentTools.create(null, userEmail, authentication), inspector)
                 .forUser(userEmail, authentication);
     }
 

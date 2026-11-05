@@ -41,13 +41,15 @@ public class McpFileTransferTools {
     private final McpProperties properties;
     /** The one place names and ids resolve: exact name or id for a write, never a first match. */
     private final DocumentAiTools resolver;
+    private final McpFileInspector inspector;
 
     private String userEmail;
     private Authentication authentication;
 
     public McpFileTransferTools(DocumentService documentService, DocumentRepository documentRepository,
                                 DocumentVersionService versionService, AiAccessPolicy accessPolicy,
-                                AiToolRolePolicy rolePolicy, McpProperties properties, DocumentAiTools resolver) {
+                                AiToolRolePolicy rolePolicy, McpProperties properties, DocumentAiTools resolver,
+                                McpFileInspector inspector) {
         this.documentService = documentService;
         this.documentRepository = documentRepository;
         this.versionService = versionService;
@@ -55,6 +57,7 @@ public class McpFileTransferTools {
         this.rolePolicy = rolePolicy;
         this.properties = properties;
         this.resolver = resolver;
+        this.inspector = inspector;
     }
 
     public McpFileTransferTools forUser(String userEmail, Authentication authentication) {
@@ -99,7 +102,7 @@ public class McpFileTransferTools {
                             .formatted(current.getName(), expectedVersionId.trim(), currentVersion);
                 }
             }
-            return withDecodedFile(contentBase64, (file, size) -> {
+            return withDecodedFile(contentBase64, current.getName(), (file, size) -> {
                 blockWithAuth(documentService.replaceDocumentContent(current.getId(),
                         new PathFilePart("file", current.getName(), file), new ContentInfo(size, null)));
                 // Read back rather than trust the returned entity: the stored date is what a later call compares with
@@ -150,7 +153,7 @@ public class McpFileTransferTools {
             }
             UUID parent = parentId;
             String name = fileName.trim();
-            return withDecodedFile(contentBase64, (file, size) -> {
+            return withDecodedFile(contentBase64, name, (file, size) -> {
                 var response = blockWithAuth(documentService.uploadDocument(
                         new PathFilePart("file", name, file), size, parent, null, Boolean.FALSE));
                 if (response == null || response.id() == null) {
@@ -187,7 +190,7 @@ public class McpFileTransferTools {
         String apply(Path file, long size) throws Exception;
     }
 
-    private String withDecodedFile(String contentBase64, FileAction action) throws Exception {
+    private String withDecodedFile(String contentBase64, String fileName, FileAction action) throws Exception {
         byte[] bytes;
         try {
             bytes = Base64.getDecoder().decode(contentBase64 == null ? "" : contentBase64.strip());
@@ -200,6 +203,11 @@ public class McpFileTransferTools {
         Path file = Files.createTempFile("mcp-transfer-", ".bin");
         try {
             Files.write(file, bytes);
+            String refusal = blockWithAuth(inspector.refusal(file, fileName));
+            if (refusal != null) {
+                log.info("[AI-TOOL] '{}' refused before the write: {}", fileName, refusal);
+                return "'%s' was refused: %s. Nothing was written.".formatted(fileName, refusal);
+            }
             return action.apply(file, bytes.length);
         } finally {
             Files.deleteIfExists(file);

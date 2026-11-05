@@ -971,7 +971,8 @@ external agents (Claude Code/Desktop, n8n, custom agents, Spring AI clients) ove
   limit applies to it, so `McpConfig` replaces the auto-configured route (`webFluxStatelessServerRouterFunction`) to read `/mcp`, and only
   `/mcp`, up to the file limit as base64 plus an envelope, with its own readers; `spring.http.codecs.*` stays untouched. In `READ_WRITE` mode only:
   in `READ_ONLY` no tool takes a file, the route is the transport's own and the ordinary limit applies (`McpReadOnlyModeIT`). Above it: 413,
-  on the declared length before reading, else while reading. Tests: `McpFileTransferToolsIT` (round trip, stale version, 10 MB, 413).
+  on the declared length before reading, else while reading. `McpFileInspector` (the default accepts all, a `@Primary` bean overrides it) sees the
+  decoded temp file before either write; a refusal is a plain tool answer and nothing is written. Tests: `McpFileTransferToolsIT` (round trip, stale version, 10 MB, 413), `McpFileInspectorIT`.
 - **Signed download links (`openfilz.download-tokens.*`)** — the claude.ai connector consumes
   neither resource links nor `resources/read`, and the bare download URL needs a bearer *header*
   a browser address bar can't supply. When enabled, `downloadDocument`'s URL carries a
