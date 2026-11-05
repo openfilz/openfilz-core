@@ -741,9 +741,9 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
      * The document changed during this session: its work goes to a document next to it, and neither
      * side is lost. Later saves of the session update that copy. When the copy is refused (WORM,
      * quota, no right on the folder) the failure is audited and the current content stays; the
-     * document server is told the save went through, since trying again would be refused the same way.
-     * Any other failure propagates, so that the document server retries: it still holds the work,
-     * and a storage or database failure passes.
+     * document server is answered an error, never "saved": it holds the only copy of the work, and
+     * an error makes it keep that file and tell the person in the editor. Any other failure
+     * propagates as it is, unaudited: a storage or database failure passes.
      */
     private Mono<Void> saveConflictCopy(Document current, EditorSession session, Path file, ContentInfo contentInfo,
                                         OnlyOfficeCallbackRequest callback) {
@@ -755,15 +755,31 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
                 .then()
                 .onErrorResume(AbstractOnlyOfficeService::isFinalRefusal, e -> {
                     log.error("The copy of the OnlyOffice save of document {} was refused: {}", current.getId(), e.getMessage());
-                    return auditConflict(current.getId(), new EditorConflictAudit(session.key(), null, null, e.getMessage()));
+                    return auditConflict(current.getId(), new EditorConflictAudit(session.key(), null, null, e.getMessage()))
+                            .onErrorResume(audit -> {
+                                log.warn("Could not audit the refused copy of document {}: {}", current.getId(), audit.getMessage());
+                                return Mono.empty();
+                            })
+                            .then(Mono.error(new ConflictCopyRefusedException(e)));
                 });
     }
 
     /**
+     * The copy of a diverged session's work was refused for good. Its own type, and not the refusal
+     * itself: the callback endpoint answers 403 on a forbidden operation, which there means a
+     * callback that is not the document server's. This one must answer {@code error: 1}.
+     */
+    static final class ConflictCopyRefusedException extends RuntimeException {
+        ConflictCopyRefusedException(Throwable refusal) {
+            super("The copy of the editor's work was refused: " + refusal.getMessage(), refusal);
+        }
+    }
+
+    /**
      * A refusal a retry would meet again: the rule (WORM, rights), a size or quota limit, the
-     * antivirus. Named one by one: the common parent of these exceptions also covers storage, index
-     * and audit failures, which pass, and telling the document server "saved" on one of those would
-     * make it drop the only copy of the editor's work.
+     * antivirus. These are audited, the others are not. Named one by one: the common parent of
+     * these exceptions also covers storage, index and audit failures, which pass, and each of those
+     * would leave an entry saying the copy was refused when it was only late.
      */
     private static boolean isFinalRefusal(Throwable e) {
         return e instanceof OperationForbiddenException || e instanceof AccessDeniedException

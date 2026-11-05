@@ -299,6 +299,8 @@ When OnlyOffice is available, you can **edit** Word, Excel, and PowerPoint docum
 
 **If the document changes while you edit it.** Someone may replace the file, or restore a version, while your editor is open. Your save then does not overwrite their content: it stays the current version, and your work is saved next to it as `<name> (editor copy <date>).<ext>`. Nothing is lost, and you can compare the two and decide. A rename, a move or a change of metadata does not count.
 
+If that copy cannot be created (your quota is full, the folder no longer accepts your files), your work is not saved in OpenFilz and the editor reports the failure when you save with Ctrl+S. Download your work from the editor (File, Download as) before closing it. The reason is recorded in the document's activity.
+
 ---
 
 ## Search
