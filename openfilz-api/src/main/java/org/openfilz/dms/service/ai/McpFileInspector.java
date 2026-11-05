@@ -18,8 +18,9 @@ public interface McpFileInspector {
      * @param file the decoded content, only valid until the returned {@code Mono} completes
      * @param fileName the name the agent gave, or the name of the document being replaced
      * @return empty to let the write go on, or why it is refused, as a clause the agent can read
-     *         ("it is too old"). An inspector that cannot decide refuses rather than erring: an
-     *         error is reported to the agent as is.
+     *         ("it is too old"). An error refuses the write too: the agent is told the file could
+     *         not be checked, and the error's message goes to the log only. The tool call waits for
+     *         the answer with no time limit of its own: an inspector that calls out bounds that call.
      */
     Mono<String> refusal(Path file, String fileName);
 }

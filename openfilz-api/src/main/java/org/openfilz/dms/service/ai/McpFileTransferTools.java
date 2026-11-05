@@ -94,15 +94,20 @@ public class McpFileTransferTools {
             if (!allowed(accessPolicy.canModify(current.getId(), userEmail))) {
                 return "You cannot modify '%s'.".formatted(current.getName());
             }
-            if (expectedVersionId != null && !expectedVersionId.isBlank()) {
-                String currentVersion = versionOf(current);
-                if (!currentVersion.equals(expectedVersionId.trim())) {
-                    return ("'%s' has changed since version %s: its current version is %s. Nothing was written. "
-                            + "Read the current content and start again from it.")
-                            .formatted(current.getName(), expectedVersionId.trim(), currentVersion);
-                }
-            }
             return withDecodedFile(contentBase64, current.getName(), (file, size) -> {
+                // Compared here, after the inspection and right before the write: an inspection can take
+                // seconds, and a write landing during it must not be overwritten
+                if (expectedVersionId != null && !expectedVersionId.isBlank()) {
+                    // Read again: where versioning is off the version is the update date, and the one read
+                    // before the inspection would hide that write
+                    Document latest = blockWithAuth(documentRepository.findById(current.getId()));
+                    String currentVersion = versionOf(latest != null ? latest : current);
+                    if (!currentVersion.equals(expectedVersionId.trim())) {
+                        return ("'%s' has changed since version %s: its current version is %s. Nothing was written. "
+                                + "Read the current content and start again from it.")
+                                .formatted(current.getName(), expectedVersionId.trim(), currentVersion);
+                    }
+                }
                 blockWithAuth(documentService.replaceDocumentContent(current.getId(),
                         new PathFilePart("file", current.getName(), file), new ContentInfo(size, null)));
                 // Read back rather than trust the returned entity: the stored date is what a later call compares with
@@ -127,8 +132,9 @@ public class McpFileTransferTools {
         if (denial != null) {
             return denial;
         }
-        if (fileName == null || fileName.isBlank() || fileName.contains("/") || fileName.contains("\\")) {
-            return "Give a file name, with no path in it.";
+        if (fileName == null || fileName.isBlank() || fileName.contains("/") || fileName.contains("\\")
+                || fileName.chars().anyMatch(Character::isISOControl)) {
+            return "Give a file name, with no path in it and no control character.";
         }
         String tooLarge = refuseIfTooLarge(contentBase64);
         if (tooLarge != null) {
@@ -203,7 +209,14 @@ public class McpFileTransferTools {
         Path file = Files.createTempFile("mcp-transfer-", ".bin");
         try {
             Files.write(file, bytes);
-            String refusal = blockWithAuth(inspector.refusal(file, fileName));
+            String refusal;
+            try {
+                refusal = blockWithAuth(inspector.refusal(file, fileName));
+            } catch (RuntimeException e) {
+                // No verdict is a refusal. The reason stays in the log: it may name a host or a path
+                log.warn("[AI-TOOL] '{}' could not be inspected before the write: {}", fileName, e.getMessage());
+                return "'%s' could not be checked. Nothing was written. Try again later.".formatted(fileName);
+            }
             if (refusal != null) {
                 log.info("[AI-TOOL] '{}' refused before the write: {}", fileName, refusal);
                 return "'%s' was refused: %s. Nothing was written.".formatted(fileName, refusal);
