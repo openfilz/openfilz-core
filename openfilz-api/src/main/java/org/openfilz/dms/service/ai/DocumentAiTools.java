@@ -834,10 +834,10 @@ public class DocumentAiTools {
                     : MutationTarget.error("You cannot %s '%s': no document with that id is visible to you.".formatted(verb, trimmed));
         }
         List<Document> found = blockWithAuth(documentRepository.findByNameIgnoreCaseAndActiveTrue(trimmed).collectList());
-        List<Document> exact = found == null ? List.of() : found.stream()
+        // One policy call for the homonyms, not one per document
+        List<Document> exact = visibleOfType(found == null ? List.of() : found.stream()
                 .filter(d -> d.getName() != null && d.getName().equalsIgnoreCase(trimmed))
-                .filter(d -> canRead(d.getId()))
-                .toList();
+                .toList(), null);
         if (exact.size() == 1) {
             return MutationTarget.of(exact.getFirst());
         }
@@ -934,6 +934,12 @@ public class DocumentAiTools {
     }
 
     private ReadTarget ambiguousRead(String name, List<Document> candidates) {
+        if (candidates.size() == 1) {
+            // The scan stopped at its limit: one visible match among the first ones does not make it the only one
+            return ReadTarget.ambiguous(("'%s' is too short a name to tell one document from the others. "
+                    + "Call again with a more complete name, or with the id if this is the one you mean: %s.")
+                    .formatted(name, candidatesOf(candidates)));
+        }
         return ReadTarget.ambiguous("'%s' matches %s documents. Call again with the id of the one you mean: %s."
                 .formatted(name, candidates.size() >= NAME_SCAN_LIMIT ? "at least " + candidates.size() : candidates.size(),
                         candidatesOf(candidates)));
@@ -946,11 +952,11 @@ public class DocumentAiTools {
                 null, null, null, null, null, null, null, null, null, true,
                 new PageCriteria("name", SortOrder.ASC, 1, NAME_SCAN_LIMIT), false);
         var rows = queryService.query(request, userEmail);
-        List<Document> matches = rows == null ? List.of() : rows.stream()
-                .filter(r -> canRead(r.id()))
+        // One policy call for the page, not one per row
+        List<Document> matches = rows == null ? List.of() : visibleOfType(rows.stream()
                 .map(r -> Document.builder().id(r.id()).name(r.name()).type(r.type()).parentId(r.parentId())
                         .updatedAt(r.updatedAt()).build())
-                .toList();
+                .toList(), null);
         List<Document> exact = matches.stream().filter(d -> trimmed.equalsIgnoreCase(d.getName())).toList();
         List<Document> candidates = exact.isEmpty() ? matches : exact;
         if (candidates.isEmpty()) {
