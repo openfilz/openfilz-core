@@ -86,6 +86,21 @@ class AbstractOnlyOfficeServiceConflictCopyTest {
     }
 
     @Test
+    @DisplayName("a storage failure is not a refusal: it propagates, and the document server keeps the work")
+    void aStorageFailureIsNotARefusal() {
+        Document current = Document.builder().id(UUID.randomUUID()).name("report.docx").type(DocumentType.FILE).build();
+        when(documentService.uploadDocument(any(), any(), any(), any(), any()))
+                .thenReturn(Mono.error(new org.openfilz.dms.exception.StorageException(new java.io.IOException("storage unreachable"))));
+
+        Mono<Void> saved = ReflectionTestUtils.invokeMethod(service(), "saveConflictCopy", current,
+                new EditorSession("key-1", current.getId(), "path:a", null), Path.of("ignored"),
+                new ContentInfo(5L, null), callback());
+
+        StepVerifier.create(saved).verifyError(org.openfilz.dms.exception.StorageException.class);
+        verify(auditService, org.mockito.Mockito.never()).logAction(any(), any(), any(), any(IAuditLogDetails.class));
+    }
+
+    @Test
     @DisplayName("the copy's name keeps the extension, and carries no character a file system refuses")
     void copyName() {
         OffsetDateTime when = OffsetDateTime.of(2026, 11, 5, 23, 19, 3, 0, ZoneOffset.UTC);

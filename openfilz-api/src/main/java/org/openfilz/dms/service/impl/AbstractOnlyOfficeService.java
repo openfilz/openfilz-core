@@ -7,6 +7,7 @@ import org.openfilz.dms.config.OnlyOfficeProperties;
 import org.openfilz.dms.dto.audit.EditorConflictAudit;
 import org.openfilz.dms.dto.request.OnlyOfficeCallbackRequest;
 import org.openfilz.dms.dto.response.DocumentLanguageInfo;
+import org.openfilz.dms.dto.response.DocumentVersionInfo;
 import org.openfilz.dms.dto.response.IUserInfo;
 import org.openfilz.dms.dto.response.OnlyOfficeConfigResponse;
 import org.openfilz.dms.dto.response.OnlyOfficeConfigResponse.*;
@@ -15,10 +16,12 @@ import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.AccessType;
 import org.openfilz.dms.enums.AuditAction;
 import org.openfilz.dms.enums.DocumentType;
-import org.openfilz.dms.exception.AbstractOpenFilzException;
 import org.openfilz.dms.exception.DocumentNotFoundException;
 import org.openfilz.dms.exception.FileSizeExceededException;
+import org.openfilz.dms.exception.InstanceQuotaExceededException;
 import org.openfilz.dms.exception.OperationForbiddenException;
+import org.openfilz.dms.exception.UserQuotaExceededException;
+import org.openfilz.dms.exception.VirusFoundException;
 import org.openfilz.dms.exception.VersioningDisabledException;
 import org.openfilz.dms.repository.DocumentDAO;
 import org.openfilz.dms.security.OnlyOfficeAuthenticationToken;
@@ -528,7 +531,10 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
      */
     private Mono<String> contentMarker(Document document) {
         Mono<String> version = versionService == null ? Mono.empty()
-                : versionService.listVersions(document.getId()).next()
+                : versionService.listVersions(document.getId()).collectList()
+                // The version the storage flags as current, not the first of a list sorted on a date two writes can share
+                .flatMap(versions -> Mono.justOrEmpty(versions.stream().filter(DocumentVersionInfo::latest).findFirst()
+                        .or(() -> versions.stream().findFirst())))
                 .map(v -> "version:" + v.versionId())
                 .onErrorResume(VersioningDisabledException.class, _ -> Mono.empty());
         return version.switchIfEmpty(Mono.fromSupplier(() -> "path:" + document.getStoragePath()));
@@ -736,7 +742,8 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
      * side is lost. Later saves of the session update that copy. When the copy is refused (WORM,
      * quota, no right on the folder) the failure is audited and the current content stays; the
      * document server is told the save went through, since trying again would be refused the same way.
-     * Any other failure propagates, so that the document server retries.
+     * Any other failure propagates, so that the document server retries: it still holds the work,
+     * and a storage or database failure passes.
      */
     private Mono<Void> saveConflictCopy(Document current, EditorSession session, Path file, ContentInfo contentInfo,
                                         OnlyOfficeCallbackRequest callback) {
@@ -746,10 +753,22 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
                 .flatMap(copy -> replaceContent(copy, file, contentInfo).then(Mono.just(true)))
                 .switchIfEmpty(Mono.defer(() -> newCopy(current, session, file, contentInfo, callback).thenReturn(true)))
                 .then()
-                .onErrorResume(e -> e instanceof AbstractOpenFilzException || e instanceof AccessDeniedException, e -> {
+                .onErrorResume(AbstractOnlyOfficeService::isFinalRefusal, e -> {
                     log.error("The copy of the OnlyOffice save of document {} was refused: {}", current.getId(), e.getMessage());
                     return auditConflict(current.getId(), new EditorConflictAudit(session.key(), null, null, e.getMessage()));
                 });
+    }
+
+    /**
+     * A refusal a retry would meet again: the rule (WORM, rights), a size or quota limit, the
+     * antivirus. Named one by one: the common parent of these exceptions also covers storage, index
+     * and audit failures, which pass, and telling the document server "saved" on one of those would
+     * make it drop the only copy of the editor's work.
+     */
+    private static boolean isFinalRefusal(Throwable e) {
+        return e instanceof OperationForbiddenException || e instanceof AccessDeniedException
+                || e instanceof FileSizeExceededException || e instanceof UserQuotaExceededException
+                || e instanceof InstanceQuotaExceededException || e instanceof VirusFoundException;
     }
 
     /** The copy an earlier save of this session made, if it is still there. */
