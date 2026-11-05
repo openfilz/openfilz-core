@@ -26,6 +26,7 @@ plainly when there isn't one.)
 |---|---|---|
 | `openfilz.mcp.active` / `OPENFILZ_MCP_ACTIVE` | `false` | Master switch for the MCP server |
 | `openfilz.mcp.mode` / `OPENFILZ_MCP_MODE` | `READ_ONLY` | `READ_ONLY` or `READ_WRITE` — see below |
+| `openfilz.mcp.max-text-chars` / `OPENFILZ_MCP_MAX_TEXT_CHARS` | `50000` | Largest page of text `readDocumentContent` gives in one answer |
 
 ```bash
 OPENFILZ_MCP_ACTIVE=true
@@ -98,8 +99,10 @@ tool per API endpoint, so agents pick the right one.
 |---|---|---|
 | `whoami` | read | The identity the session acts as (email, name) and the operations the caller's roles allow — derived from the caller's own token by the same policy that judges every call. Needs **no role** (any authenticated caller); an agent should call it before mutating operations to confirm its own blast radius. |
 | `queryDocuments` | read | List folder contents, search by name, find recent files, count documents. **The main entry point** — most other tools take a *name*, and this is what resolves an ambiguous name to the right item. |
-| `readDocumentContent` | read | Extract the text of a document. |
+| `readDocumentContent` | read | Extract the text of a document, in pages: `offset` and `maxChars` are optional (default page 8 000 characters, capped by `OPENFILZ_MCP_MAX_TEXT_CHARS`), and the answer ends with the range and the next offset, e.g. `[characters 0 to 8000 of 41250, call again with offset=8000]`. |
 | `getDocumentPath` | read | Full path (ancestors) of a document, from root to its parent folder. |
+| `replaceDocumentContent` | write | Replace a file's content with base64 bytes, as a new version. `document` is an exact name or an id; the optional `expectedVersionId` (from `listVersions`, or the previous answer of this tool) refuses the write if the file has changed since. Up to `openfilz.mcp.max-resource-size-bytes` (10 MB). MCP only, not in the chat. |
+| `uploadFile` | write | Create a new file from base64 bytes, in the root or a named folder. Same limit. MCP only, not in the chat. |
 | `describeImage` | read | Vision: describe/caption an image or PDF, OCR its text, or answer a question about it, with an **OpenFilz-side** model — the caller's own (BYOK) or the server default, behind the same fallback chain as the chat assistant. Degrades with a clear message when there is none. An agent with vision of its own does not need it: `downloadDocument` hands it the image. |
 | `writeFile` | write | Write text content to a new file. `autoFile=true` additionally lets smart filing choose its folder right after saving (needs `openfilz.ai.auto-file.active`). |
 | `createBlankDocument` | write | Create an empty Word, Excel, PowerPoint or text document (the same templates as the app's "New document" menu), ready to edit. |

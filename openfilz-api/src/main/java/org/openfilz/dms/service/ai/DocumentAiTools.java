@@ -789,7 +789,7 @@ public class DocumentAiTools {
      * The target of a mutating tool: exactly one of {@code document} / {@code error} is set. The
      * error is a complete tool result (it names the candidates when the reference is ambiguous).
      */
-    record MutationTarget(Document document, String error) {
+    public record MutationTarget(Document document, String error) {
         static MutationTarget of(Document document) {
             return new MutationTarget(document, null);
         }
@@ -809,7 +809,7 @@ public class DocumentAiTools {
      *
      * @param verb the tool's verb for the message ("delete", "move", "modify")
      */
-    MutationTarget resolveForMutation(String nameOrId, String verb) {
+    public MutationTarget resolveForMutation(String nameOrId, String verb) {
         if (nameOrId == null || nameOrId.isBlank()) {
             return MutationTarget.error("You cannot %s: give the exact name or the id of the document.".formatted(verb));
         }
@@ -842,7 +842,7 @@ public class DocumentAiTools {
      * error is a complete tool result; {@code ambiguous} tells "several documents match" from
      * "nothing matches", for the callers whose search goes on when nothing matches.
      */
-    record ReadTarget(Document document, String error, boolean ambiguous) {
+    public record ReadTarget(Document document, String error, boolean ambiguous) {
         static ReadTarget of(Document document) {
             return new ReadTarget(document, null, false);
         }
@@ -873,7 +873,7 @@ public class DocumentAiTools {
     }
 
     /** {@link #resolveForRead} limited to folders, for the folder argument of a reading tool. */
-    ReadTarget resolveFolderForRead(String nameOrId, String notFoundMessage) {
+    public ReadTarget resolveFolderForRead(String nameOrId, String notFoundMessage) {
         return resolveRead(nameOrId, DocumentType.FOLDER, notFoundMessage);
     }
 
@@ -1062,10 +1062,18 @@ public class DocumentAiTools {
         }
     }
 
-    @Tool(description = "Read and extract the text content of a document file. You can optionally specify a folder name to search in.")
+    /** {@link #readDocumentContent(String, String, Integer, Integer)} from the start, with the default page size. */
+    public String readDocumentContent(String documentName, String folderName) {
+        return readDocumentContent(documentName, folderName, null, null);
+    }
+
+    @Tool(description = "Read and extract the text content of a document file. You can optionally specify a folder name to search in. "
+            + "A long document comes in pages: the answer says which offset to call again with.")
     public String readDocumentContent(
             @ToolParam(description = "The name (or part of the name) of the document to read") String documentName,
-            @ToolParam(required = false, description = "Optional: the folder name where the document is located. Helps find the right file when the name is ambiguous.") String folderName
+            @ToolParam(required = false, description = "Optional: the folder name where the document is located. Helps find the right file when the name is ambiguous.") String folderName,
+            @ToolParam(required = false, description = "Optional: character to start from. Default 0") Integer offset,
+            @ToolParam(required = false, description = "Optional: how many characters to return. Default 8000") Integer maxChars
     ) {
         String roleDenial = denyIfNotAllowed("readDocumentContent", ToolCapability.DOCUMENT_READ);
         if (roleDenial != null) return roleDenial;
@@ -1129,21 +1137,57 @@ public class DocumentAiTools {
             // Load the file from storage and extract text with Tika
             // Prefer the text the full-text indexing pass already extracted: no storage download,
             // no second Tika parse. Falls back to the file when the index holds nothing for it.
+            // The access checks above run on every call, whether or not the text is cached.
             String fullText = indexedText(doc);
+            if (fullText == null && textCache != null) {
+                fullText = textCache.get(doc.getId(), doc.getUpdatedAt());
+            }
             if (fullText == null) {
                 Resource resource = blockWithAuth(storageService.loadFile(doc.getStoragePath()));
                 if (resource == null) return "Could not load the file from storage.";
-                fullText = extractText(resource);
+                fullText = extractFullText(resource);
+                if (fullText != null && textCache != null) {
+                    textCache.put(doc.getId(), doc.getUpdatedAt(), fullText);
+                }
             }
             if (fullText == null) {
                 return "Could not extract text from this file. It may be a binary or image file.";
             }
-            // Fenced: the file's text is third-party data, not instructions (see UntrustedContent)
-            return "Content of '%s':\n\n%s".formatted(doc.getName(), UntrustedContent.fence(doc.getId(), doc.getName(), fullText));
+            return toolResult("readDocumentContent", contentPage(doc, fullText, offset, maxChars));
         } catch (Exception e) {
             log.error("Error reading document content", e);
             return "Error reading document: " + e.getMessage();
         }
+    }
+
+    /** One page of a document's text, and where the next one starts. */
+    private String contentPage(Document doc, String fullText, Integer offset, Integer maxChars) {
+        int total = fullText.length();
+        int start = offset == null || offset < 0 ? 0 : offset;
+        if (start >= total) {
+            return "Offset %d is past the end of '%s', which has %d characters.".formatted(start, doc.getName(), total);
+        }
+        // Never cut a surrogate pair in two. An offset that falls inside one starts on it
+        if (start > 0 && Character.isLowSurrogate(fullText.charAt(start))
+                && Character.isHighSurrogate(fullText.charAt(start - 1))) {
+            start--;
+        }
+        // The limit caps the default page too, where an operator set it below that default
+        int size = Math.min(maxChars == null || maxChars <= 0 ? MAX_CONTENT_CHARS : maxChars, maxTextChars);
+        int end = (int) Math.min((long) start + size, total);
+        // A page that would end inside a pair stops before it; a page of that one character takes it whole
+        if (end < total && Character.isHighSurrogate(fullText.charAt(end - 1))) {
+            end = end - start > 1 ? end - 1 : end + 1;
+        }
+        // Fenced: the file's text is third-party data, not instructions (see UntrustedContent)
+        String fenced = UntrustedContent.fence(doc.getId(), doc.getName(), fullText.substring(start, end));
+        String content = "Content of '%s':\n\n%s".formatted(doc.getName(), fenced);
+        if (start == 0 && end == total) {
+            return content;
+        }
+        return content + (end < total
+                ? "\n\n[characters %d to %d of %d, call again with offset=%d]".formatted(start, end, total, end)
+                : "\n\n[characters %d to %d of %d, end of the document]".formatted(start, end, total));
     }
 
     /** Smart filing of a freshly written file, inline (the caller asked for it with autoFile=true). */
@@ -1829,12 +1873,25 @@ public class DocumentAiTools {
         }
     }
 
-    /** Maximum characters of a document's text handed to the model by readDocumentContent. */
+    /** Characters of a document's text in one answer of readDocumentContent, unless it asks for another size. */
     static final int MAX_CONTENT_CHARS = 8000;
 
+    /** Largest page readDocumentContent gives, set by the factory ({@code openfilz.mcp.max-text-chars}). */
+    private int maxTextChars = 50_000;
+
+    /** Avoids parsing the file again for each page. Null-tolerated for direct unit construction. */
+    private ExtractedTextCache textCache;
+
+    /** Bind the paging limit and the text cache (fluent, used by the factory). */
+    public DocumentAiTools withTextPaging(int maxTextChars, ExtractedTextCache textCache) {
+        this.maxTextChars = maxTextChars > 0 ? maxTextChars : this.maxTextChars;
+        this.textCache = textCache;
+        return this;
+    }
+
     /**
-     * The document's text from the full-text index (extracted at upload), truncated like
-     * {@link #extractText}; null when full-text is off or the index holds nothing for it.
+     * The document's whole text from the full-text index (extracted at upload); null when
+     * full-text is off or the index holds nothing for it.
      */
     private String indexedText(Document doc) {
         if (indexService == null || doc.getId() == null) {
@@ -1846,7 +1903,7 @@ public class DocumentAiTools {
                 return null;
             }
             log.debug("[AI-TOOL] readDocumentContent served '{}' from the search index ({} chars)", doc.getName(), text.length());
-            return truncateForModel(text);
+            return text;
         } catch (Exception e) {
             log.debug("[AI-TOOL] index lookup failed for {}, falling back to the file: {}", doc.getId(), e.getMessage());
             return null;
@@ -1855,12 +1912,19 @@ public class DocumentAiTools {
 
     private static String truncateForModel(String fullText) {
         return fullText.length() > MAX_CONTENT_CHARS
-                ? fullText.substring(0, MAX_CONTENT_CHARS) + "\n\n[... content truncated, document is longer ...]"
+                ? fullText.substring(0, MAX_CONTENT_CHARS) + "\n\n[characters 0 to %d of %d. readDocumentContent reads on, with offset=%d]"
+                        .formatted(MAX_CONTENT_CHARS, fullText.length(), MAX_CONTENT_CHARS)
                 : fullText;
     }
 
     /** Extract text from a file with Tika, truncated for context, or null if none is extractable. */
     private String extractText(Resource resource) {
+        String fullText = extractFullText(resource);
+        return fullText == null ? null : truncateForModel(fullText);
+    }
+
+    /** The whole text of a file, or null if none is extractable. The reader sets no write limit of its own. */
+    private String extractFullText(Resource resource) {
         if (resource == null) {
             return null;
         }
@@ -1873,7 +1937,8 @@ public class DocumentAiTools {
             if (fullText == null || fullText.isBlank()) {
                 return null;
             }
-            return truncateForModel(fullText);
+            // The parser ends the text with a newline: it would make a page of its own
+            return fullText.stripTrailing();
         } catch (Exception e) {
             log.debug("[AI-TOOL] no extractable text from {}: {}", resource, e.getMessage());
             return null;

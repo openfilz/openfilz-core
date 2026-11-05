@@ -87,6 +87,17 @@ public class McpWormModeIT extends AbstractMcpIT {
                 .isFalse();
     }
 
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("the binary write tools are refused under WORM")
+    void binaryWritesAreRefusedUnderWorm() {
+        assertThat(callToolText("replaceDocumentContent", """
+                {"document":"anything.bin","contentBase64":"AAAA"}"""))
+                .as("a replacement is what WORM forbids").contains("Not permitted");
+        assertThat(callToolText("uploadFile", """
+                {"fileName":"anything.bin","contentBase64":"AAAA"}"""))
+                .as("the tool perimeter is capability-grained: creations are refused here too").contains("Not permitted");
+    }
+
     private JsonNode callTool(String toolName, String argumentsJson) {
         return rpc(41, "tools/call", """
                 {"name":"%s","arguments":%s}""".formatted(toolName, argumentsJson));
