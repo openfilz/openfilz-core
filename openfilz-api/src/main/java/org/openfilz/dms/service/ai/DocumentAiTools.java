@@ -802,7 +802,7 @@ public class DocumentAiTools {
      * The target of a mutating tool: exactly one of {@code document} / {@code error} is set. The
      * error is a complete tool result (it names the candidates when the reference is ambiguous).
      */
-    record MutationTarget(Document document, String error) {
+    public record MutationTarget(Document document, String error) {
         static MutationTarget of(Document document) {
             return new MutationTarget(document, null);
         }
@@ -822,7 +822,7 @@ public class DocumentAiTools {
      *
      * @param verb the tool's verb for the message ("delete", "move", "modify")
      */
-    MutationTarget resolveForMutation(String nameOrId, String verb) {
+    public MutationTarget resolveForMutation(String nameOrId, String verb) {
         if (nameOrId == null || nameOrId.isBlank()) {
             return MutationTarget.error("You cannot %s: give the exact name or the id of the document.".formatted(verb));
         }
@@ -855,7 +855,7 @@ public class DocumentAiTools {
      * error is a complete tool result; {@code ambiguous} tells "several documents match" from
      * "nothing matches", for the callers whose search goes on when nothing matches.
      */
-    record ReadTarget(Document document, String error, boolean ambiguous) {
+    public record ReadTarget(Document document, String error, boolean ambiguous) {
         static ReadTarget of(Document document) {
             return new ReadTarget(document, null, false);
         }
@@ -886,7 +886,7 @@ public class DocumentAiTools {
     }
 
     /** {@link #resolveForRead} limited to folders, for the folder argument of a reading tool. */
-    ReadTarget resolveFolderForRead(String nameOrId, String notFoundMessage) {
+    public ReadTarget resolveFolderForRead(String nameOrId, String notFoundMessage) {
         return resolveRead(nameOrId, DocumentType.FOLDER, notFoundMessage);
     }
 

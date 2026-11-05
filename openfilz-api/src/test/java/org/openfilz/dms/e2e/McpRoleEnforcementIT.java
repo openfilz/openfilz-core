@@ -117,6 +117,10 @@ public class McpRoleEnforcementIT extends AbstractMcpIT {
                 {"documentNames":"%s.txt","targetFolder":"%s"}""".formatted(probe, probe))).contains("Not permitted");
         assertThat(callToolText("renameDocument", """
                 {"documentName":"%s.txt","newName":"%s-x.txt"}""".formatted(probe, probe))).contains("Not permitted");
+        assertThat(callToolText("replaceDocumentContent", """
+                {"document":"%s.txt","contentBase64":"AAAA"}""".formatted(probe))).contains("Not permitted");
+        assertThat(callToolText("uploadFile", """
+                {"fileName":"%s.bin","contentBase64":"AAAA"}""".formatted(probe))).contains("Not permitted");
     }
 
     @Test

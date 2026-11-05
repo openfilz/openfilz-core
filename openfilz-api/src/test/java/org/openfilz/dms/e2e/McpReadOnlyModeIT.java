@@ -61,6 +61,7 @@ public class McpReadOnlyModeIT extends AbstractMcpIT {
                 .doesNotContainAnyElementsOf(org.openfilz.dms.service.mcp.OrganizeAiToolsContributor.MUTATING_TOOLS)
                 .doesNotContainAnyElementsOf(org.openfilz.dms.service.mcp.SignatureAiToolsContributor.MUTATING_TOOLS)
                 .doesNotContainAnyElementsOf(org.openfilz.dms.service.mcp.FilingAiToolsContributor.MUTATING_TOOLS)
+                .doesNotContainAnyElementsOf(org.openfilz.dms.service.mcp.McpFileTransferToolsContributor.MUTATING_TOOLS)
                 .doesNotContainAnyElementsOf(org.openfilz.dms.service.mcp.EmbeddingAiToolsContributor.MUTATING_TOOLS)
                 .containsExactlyInAnyOrderElementsOf(readOnly);
     }

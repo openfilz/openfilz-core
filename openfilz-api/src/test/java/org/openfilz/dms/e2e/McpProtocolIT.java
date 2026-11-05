@@ -111,6 +111,7 @@ public class McpProtocolIT extends AbstractMcpIT {
         expected.addAll(org.openfilz.dms.service.mcp.SignatureAiToolsContributor.MUTATING_TOOLS);
         expected.addAll(org.openfilz.dms.service.mcp.FilingAiToolsContributor.READ_ONLY_TOOLS);
         expected.addAll(org.openfilz.dms.service.mcp.FilingAiToolsContributor.MUTATING_TOOLS);
+        expected.addAll(org.openfilz.dms.service.mcp.McpFileTransferToolsContributor.MUTATING_TOOLS);
         expected.addAll(org.openfilz.dms.service.mcp.EmbeddingAiToolsContributor.READ_ONLY_TOOLS);
         expected.addAll(org.openfilz.dms.service.mcp.EmbeddingAiToolsContributor.MUTATING_TOOLS);
 
@@ -447,6 +448,11 @@ public class McpProtocolIT extends AbstractMcpIT {
                     {"documentName":"%s"}""".formatted(probe);
             case "getDocumentActivity" -> """
                     {"document":"%s","limit":5}""".formatted(probe);
+            // binary writes (McpFileTransferTools): "AAAA" is three zero bytes; an unknown document answers with text
+            case "replaceDocumentContent" -> """
+                    {"document":"%s.bin","contentBase64":"AAAA"}""".formatted(probe);
+            case "uploadFile" -> """
+                    {"fileName":"%s-upload.bin","contentBase64":"AAAA"}""".formatted(probe);
             case "fileDocuments" -> """
                     {"documentIds":"%s"}""".formatted(UUID.randomUUID());
             // embedding backfill (EmbeddingAiTools): a folder that does not exist answers with text, a job id is unknown
