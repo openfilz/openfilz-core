@@ -55,10 +55,10 @@ public class McpWormModeIT extends AbstractMcpIT {
     void mutatingToolIsRefusedUnderWorm() {
         String folderName = "mcp-worm-" + UUID.randomUUID().toString().substring(0, 8);
 
-        assertThat(isRefused(callTool("createFolder", """
-                {"name":"%s","parentFolderId":null}""".formatted(folderName))))
+        assertThat(callToolText("createFolder", """
+                {"name":"%s"}""".formatted(folderName)))
                 .as("createFolder must be refused while the repository is write-once")
-                .isTrue();
+                .contains("Not permitted");
 
         assertThat(callToolText("queryDocuments", """
                 {"folder":"all","nameLike":"%s","type":"FOLDER","pageSize":10}""".formatted(folderName)))
@@ -69,10 +69,10 @@ public class McpWormModeIT extends AbstractMcpIT {
     @Test
     @DisplayName("deletion in particular is refused — the promise WORM exists to make")
     void deletionIsRefusedUnderWorm() {
-        assertThat(isRefused(callTool("deleteDocument", """
-                {"documentId":"%s"}""".formatted(UUID.randomUUID()))))
+        assertThat(callToolText("deleteDocument", """
+                {"documentName":"%s"}""".formatted(UUID.randomUUID())))
                 .as("deleteDocument must be refused under WORM")
-                .isTrue();
+                .contains("Not permitted");
     }
 
     @Test
@@ -85,6 +85,17 @@ public class McpWormModeIT extends AbstractMcpIT {
                 {"folder":"all","pageSize":5}""")))
                 .as("queryDocuments is a read and must stay available under WORM")
                 .isFalse();
+    }
+
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("the binary write tools are refused under WORM")
+    void binaryWritesAreRefusedUnderWorm() {
+        assertThat(callToolText("replaceDocumentContent", """
+                {"document":"anything.bin","contentBase64":"AAAA"}"""))
+                .as("a replacement is what WORM forbids").contains("Not permitted");
+        assertThat(callToolText("uploadFile", """
+                {"fileName":"anything.bin","contentBase64":"AAAA"}"""))
+                .as("the tool perimeter is capability-grained: creations are refused here too").contains("Not permitted");
     }
 
     private JsonNode callTool(String toolName, String argumentsJson) {

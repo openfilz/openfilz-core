@@ -87,14 +87,14 @@ class DocumentAiToolsIndexedContentTest {
     }
 
     @Test
-    @DisplayName("indexed text is truncated to the same budget as parsed text")
+    @DisplayName("indexed text comes in pages of the same size as parsed text")
     void indexedTextIsTruncatedLikeParsedText() {
         IndexService index = mock(IndexService.class);
         when(index.getContent(id)).thenReturn(Mono.just("x".repeat(DocumentAiTools.MAX_CONTENT_CHARS + 500)));
 
         String result = tools(index).readDocumentContent(id.toString(), null);
 
-        assertThat(result).contains("[... content truncated, document is longer ...]");
+        assertThat(result).contains("call again with offset=" + DocumentAiTools.MAX_CONTENT_CHARS);
         // budget + header/truncation marker + the untrusted-content fence around the text
         int fenceOverhead = UntrustedContent.fence(id, "report.txt", "").length();
         assertThat(result.length()).isLessThan(DocumentAiTools.MAX_CONTENT_CHARS + 200 + fenceOverhead);

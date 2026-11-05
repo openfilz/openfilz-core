@@ -306,6 +306,7 @@ Optional audit chain verification (hash chain for integrity): `openfilz.audit.ch
     `TextLanguageDetector` = function words, no model), set = new version through `replaceDocumentContent`
   - `GET /config/{id}?lang=` — editor UI language (hidden param, `DocumentLanguages.uiLanguage`, default `en`)
 - **OnlyOfficeJwtService** — JWT token generation for OnlyOffice
+- **A save never overwrites what it did not start from.** Opening an editor records the session (`onlyoffice_editor_session`, V1_20, `EditorSessionStore`): its key and a marker of the content it starts from, the latest version id, or the storage path where versioning is off. Never `updated_at`: a rename, a move or a metadata change moves it. The save callback downloads first, then compares: same marker = replace and move the base (force save then close is no conflict); different = the current content stays and the work goes to `<name> (editor copy <date>).<ext>` next to it, audit `ONLYOFFICE_SAVE_CONFLICT`, `EditorConflictNotifier` seam (no-op in core); later saves of that session update that copy. No row (older session) = saved with a warning. A refused copy (WORM, rights, size or quota, antivirus: `isFinalRefusal` names them one by one) is audited, then answers `error: 1` through `ConflictCopyRefusedException` (the refusal itself would answer 403, which the callback keeps for a callback that is not the document server's). Never "saved": the document server holds the only copy of that work, and on an error it keeps the file (its forgotten files) and a force save shows the failure in the editor. One audit entry per refused save. Any other failure, a storage, index or audit one included, also answers `error: 1`, unaudited. A write landing between the comparison and the replacement can still be overwritten: the window is short, not closed. `EditorSessionCleanupScheduler` removes closed rows after a day, silent ones after a week. Tests: `OnlyOfficeEditorConflictIT` (local) + `OnlyOfficeEditorConflictVersionedIT` (MinIO), `AbstractOnlyOfficeServiceConflictCopyTest`.
 - Configuration: `onlyoffice.enabled`, `onlyoffice.document-server.url`, `onlyoffice.jwt.secret`
 
 ### e-Sign (electronic signatures)
@@ -370,7 +371,7 @@ under the actor's Authentication** (audit names the real person; a failed action
 event, never a failed transition). Task completion is a conditional `UPDATE … WHERE status='OPEN'`
 (two racing candidates → 409). **Parallel review** (`WorkflowState.review` = `WorkflowReview {rule ALL|FIRST_REJECTION|QUORUM,
 quorum, approveTransition}`, STEP with USERS/CHOSEN_AT_START only): one task per reviewer sharing `workflow_task.review_group`
-(`V1_14`), each vote = a `REVIEWED` event + `WORKFLOW_REVIEWED` audit (**mirrored in the EE `AuditAction`**), the pure
+(`V1_14`), each vote = a `REVIEWED` event + `WORKFLOW_REVIEWED` audit, the pure
 `WorkflowReviewDecider` turns the round's votes into one transition (remaining reviews → CANCELLED); `complete` locks the
 instance row (`SELECT … FOR UPDATE`) first so concurrent votes serialise; tasks carry `review` progress
 (`WorkflowReviewProgressDTO`). Hot folders: `WorkflowTriggerService.afterUpload` is called by
@@ -965,6 +966,14 @@ external agents (Claude Code/Desktop, n8n, custom agents, Spring AI clients) ove
   pool-key fallback chain answered every MCP vision call with *"model 'llama3' not found"* while
   the in-app chat failed over fine (Demo EE, 2026-10-13). AI off → the bare bean as before; no
   model for the caller → null → the explicit "unavailable" answer.
+- **Binary writes (`McpFileTransferToolsContributor`, `replaceDocumentContent` + `uploadFile`)** take base64, go through
+  `DocumentService` from a temp file, and are never bound into the chat. `expectedVersionId` is the agent's optimistic lock (the update
+  date stands for the version where versioning is off). A tool argument travels inside one JSON body, and the default 256 KB codec
+  limit applies to it, so `McpConfig` replaces the auto-configured route (`webFluxStatelessServerRouterFunction`) to read `/mcp`, and only
+  `/mcp`, up to the file limit as base64 plus an envelope, with its own readers; `spring.http.codecs.*` stays untouched. In `READ_WRITE` mode only:
+  in `READ_ONLY` no tool takes a file, the route is the transport's own and the ordinary limit applies (`McpReadOnlyModeIT`). Above it: 413,
+  on the declared length before reading, else while reading. `McpFileInspector` (the default accepts all, a `@Primary` bean overrides it) sees the
+  decoded temp file before either write; a refusal is a plain tool answer and nothing is written, and an inspector that errs refuses too, its message kept in the log. `expectedVersionId` is compared after the inspection, right before the write. Tests: `McpFileTransferToolsIT` (round trip, stale version, 10 MB, 413), `McpFileInspectorIT`.
 - **Signed download links (`openfilz.download-tokens.*`)** — the claude.ai connector consumes
   neither resource links nor `resources/read`, and the bare download URL needs a bearer *header*
   a browser address bar can't supply. When enabled, `downloadDocument`'s URL carries a

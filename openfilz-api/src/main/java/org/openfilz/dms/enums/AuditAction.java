@@ -19,6 +19,7 @@ public enum AuditAction {
     UPDATE_DOCUMENT_METADATA,
     DOWNLOAD_DOCUMENT,
     OPEN_DOCUMENT, // Content fetched to be viewed in the app (viewer, OnlyOffice), not saved as a file
+    ONLYOFFICE_SAVE_CONFLICT, // An editor session saved over content it did not start from: its work went to a copy
     DELETE_DOCUMENT_METADATA,
     // Recycle bin actions
     RESTORE_FILE, // Restore file from recycle bin

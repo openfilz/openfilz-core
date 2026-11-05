@@ -57,6 +57,8 @@ class DocumentAiToolsMutationGuardrailsTest {
         when(documentService.deleteFiles(any(DeleteRequest.class))).thenReturn(Mono.empty());
         when(documentService.renameFile(any(UUID.class), any(RenameRequest.class))).thenReturn(Mono.empty());
         when(repository.findById(notes.getId())).thenReturn(Mono.just(notes));
+        when(repository.findById(reportInA.getId())).thenReturn(Mono.just(reportInA));
+        when(repository.findAllById(org.mockito.ArgumentMatchers.<Iterable<UUID>>any())).thenReturn(Flux.empty());
         when(repository.findByNameIgnoreCaseAndActiveTrue(anyString())).thenReturn(Flux.empty());
         when(repository.findByNameIgnoreCaseAndActiveTrue("report.pdf")).thenReturn(Flux.just(reportInA, reportInB));
         when(repository.findByNameIgnoreCaseAndActiveTrue("notes.txt")).thenReturn(Flux.just(notes));
@@ -169,6 +171,106 @@ class DocumentAiToolsMutationGuardrailsTest {
         // the forged closing tag inside the text cannot end the fence early: exactly one real closing tag
         assertThat(result.split(java.util.regex.Pattern.quote(UntrustedContent.CLOSE_TAG), -1)).hasSize(2);
         assertThat(result).contains("<\\/document-content>");
+    }
+
+    @Test
+    @DisplayName("the turn's registry resolves a name, unless two documents registered under it")
+    void registryNeverChoosesBetweenTwoDocumentsOfOneName() {
+        DocumentAiTools tools = tools(AiToolGuardrails.fixed(DestructiveMode.CONFIRM_ONLY, true));
+        when(index.getContent(reportInA.getId())).thenReturn(Mono.just("Report A"));
+
+        // Read by id: the name it answers under now means that document for the rest of the turn,
+        // even though the library holds two documents of that name
+        assertThat(tools.readDocumentContent(reportInA.getId().toString(), null)).contains("Report A");
+        assertThat(tools.readDocumentContent("report.pdf", null)).contains("Report A");
+
+        // A listing shows the two: the registry cannot tell them apart any more
+        AiDocumentQueryService query = mock(AiDocumentQueryService.class);
+        DocumentAiTools listing = new DocumentAiTools(
+                documentService, repository, storage, query,
+                null, new PermitAllAiAccessPolicy(), (authentication, capability) -> true,
+                mock(DocumentVersionService.class), new CommonProperties(),
+                new DownloadTokenService(new DownloadTokenProperties()),
+                null, index, null, null, null);
+        when(query.query(any(), any(), any())).thenReturn(java.util.List.of(row(reportInA, "report.pdf"), row(reportInB, "report.pdf")));
+        listing.queryDocuments("all", "report", null, null, null, null, null, null);
+
+        assertThat(listing.readDocumentContent("report.pdf", null)).contains("matches 2 documents").doesNotContain("Report A");
+    }
+
+    @Test
+    @DisplayName("one visible match in a scan that stopped at its limit is not taken for the only one")
+    void aSaturatedScanIsNeverTakenForAUniqueMatch() {
+        tools(null);
+        java.util.List<Document> scanned = new java.util.ArrayList<>();
+        for (int i = 0; i < 49; i++) {
+            scanned.add(Document.builder().id(UUID.randomUUID()).name("note-" + i).type(DocumentType.FILE).active(true).build());
+        }
+        scanned.add(notes);
+        when(repository.findTop50ByNameContainingIgnoreCaseAndActiveTrueOrderByNameAsc("note")).thenReturn(Flux.fromIterable(scanned));
+        java.util.concurrent.atomic.AtomicInteger policyCalls = new java.util.concurrent.atomic.AtomicInteger();
+        AiAccessPolicy onlyNotes = new AiAccessPolicy() {
+            @Override
+            public boolean permitAll() {
+                return false;
+            }
+
+            @Override
+            public Mono<Boolean> canRead(UUID documentId, String userEmail) {
+                policyCalls.incrementAndGet();
+                return Mono.just(notes.getId().equals(documentId));
+            }
+
+            @Override
+            public Mono<Boolean> canModify(UUID documentId, String userEmail) {
+                return canRead(documentId, userEmail);
+            }
+
+            @Override
+            public Mono<java.util.Set<UUID>> readable(java.util.Collection<UUID> documentIds, String userEmail) {
+                policyCalls.incrementAndGet();
+                return Mono.just(documentIds.contains(notes.getId()) ? java.util.Set.of(notes.getId()) : java.util.Set.of());
+            }
+        };
+        DocumentAiTools tools = new DocumentAiTools(
+                documentService, repository, storage, mock(AiDocumentQueryService.class),
+                null, onlyNotes, (authentication, capability) -> true,
+                mock(DocumentVersionService.class), new CommonProperties(),
+                new DownloadTokenService(new DownloadTokenProperties()),
+                null, index, null, null, null);
+
+        String result = tools.readDocumentContent("note", null);
+
+        assertThat(result).contains("too short a name").contains(notes.getId().toString())
+                .doesNotContain("matches 1 documents").doesNotContain("note-0");
+        // The fifty scanned documents are judged in one policy call, not fifty
+        assertThat(policyCalls.get()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("listVersions states which document it reports on, and marks the current version")
+    void listVersionsNamesTheDocumentAndTheCurrentVersion() {
+        tools(null);
+        DocumentVersionService versions = mock(DocumentVersionService.class);
+        when(versions.listVersions(notes.getId())).thenReturn(Flux.just(
+                new org.openfilz.dms.dto.response.DocumentVersionInfo("v2", null, 20L, true),
+                new org.openfilz.dms.dto.response.DocumentVersionInfo("v1", null, 10L, false)));
+        DocumentAiTools tools = new DocumentAiTools(
+                documentService, repository, storage, mock(AiDocumentQueryService.class),
+                null, new PermitAllAiAccessPolicy(), (authentication, capability) -> true,
+                versions, new CommonProperties(),
+                new DownloadTokenService(new DownloadTokenProperties()),
+                null, index, null, null, null);
+
+        // a partial name, the one match is used and named
+        assertThat(tools.listVersions("notes"))
+                .contains("2 version(s) of 'notes.txt' (id " + notes.getId() + ", at the root)")
+                .contains("- v2 (current)").contains("- v1 ").doesNotContain("v1 (current)");
+    }
+
+    private static org.openfilz.dms.dto.response.FullDocumentInfo row(Document document, String name) {
+        return new org.openfilz.dms.dto.response.FullDocumentInfo(document.getId(), document.getType(), null, name,
+                document.getParentId(), null, null, null, null, null, null, null, null, null, null, null);
     }
 
     @Test

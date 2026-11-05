@@ -55,6 +55,13 @@ public class McpProperties {
     private long maxResourceSizeBytes = 10L * 1024 * 1024;
 
     /**
+     * Largest page of text {@code readDocumentContent} gives in one answer, whatever {@code maxChars}
+     * asks for. A longer document is read in several calls. Holds for the chat too, whose default
+     * page stays at 8 000 characters.
+     */
+    private int maxTextChars = 50_000;
+
+    /**
      * {@code downloadDocument} on an image also returns the picture itself as an MCP
      * {@code image} content block, re-encoded so its longest edge is at most this many pixels.
      * That block is what lets a host that consumes neither resource links nor
