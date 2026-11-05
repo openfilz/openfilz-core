@@ -55,10 +55,10 @@ public class McpWormModeIT extends AbstractMcpIT {
     void mutatingToolIsRefusedUnderWorm() {
         String folderName = "mcp-worm-" + UUID.randomUUID().toString().substring(0, 8);
 
-        assertThat(isRefused(callTool("createFolder", """
-                {"name":"%s","parentFolderId":null}""".formatted(folderName))))
+        assertThat(callToolText("createFolder", """
+                {"name":"%s"}""".formatted(folderName)))
                 .as("createFolder must be refused while the repository is write-once")
-                .isTrue();
+                .contains("Not permitted");
 
         assertThat(callToolText("queryDocuments", """
                 {"folder":"all","nameLike":"%s","type":"FOLDER","pageSize":10}""".formatted(folderName)))
@@ -69,10 +69,10 @@ public class McpWormModeIT extends AbstractMcpIT {
     @Test
     @DisplayName("deletion in particular is refused — the promise WORM exists to make")
     void deletionIsRefusedUnderWorm() {
-        assertThat(isRefused(callTool("deleteDocument", """
-                {"documentId":"%s"}""".formatted(UUID.randomUUID()))))
+        assertThat(callToolText("deleteDocument", """
+                {"documentName":"%s"}""".formatted(UUID.randomUUID())))
                 .as("deleteDocument must be refused under WORM")
-                .isTrue();
+                .contains("Not permitted");
     }
 
     @Test
