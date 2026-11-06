@@ -24,6 +24,7 @@ import java.util.Base64;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 
 /**
@@ -92,19 +93,27 @@ class SessionRevocationIT extends TestContainersKeyCloakConfig {
         assertEquals(1L, rows);
     }
 
-    /** A token of the {@code openfilz-web} client, which in the test realm always gets {@code offline_access}. */
+    /**
+     * A token of the {@code openfilz-web} client asking for {@code offline_access} explicitly: the core
+     * test realm grants it by default. A realm whose users may not hold offline tokens (the enterprise
+     * test realm has no {@code offline_access} role) cannot exercise the case, so it is skipped there;
+     * {@code SessionRevocationJwtDecoderTest} covers the rule either way.
+     */
     private static String offlineScopedAccessToken(String username) {
         String response = WebClient.create(SharedKeyCloakContainer.getAuthServerUrl()).post()
                 .uri("/realms/openfilz/protocol/openid-connect/token")
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .body(BodyInserters.fromFormData("grant_type", "password")
                         .with("client_id", "openfilz-web")
+                        .with("scope", "openid offline_access")
                         .with("username", username)
                         .with("password", "password"))
-                .retrieve()
-                .bodyToMono(String.class)
+                .exchangeToMono(r -> r.bodyToMono(String.class))
                 .block();
-        return JsonMapper.builder().build().readTree(response).get("access_token").asString();
+        var json = JsonMapper.builder().build().readTree(response);
+        assumeTrue(json.get("access_token") != null,
+                "this realm issues no offline tokens to " + username + ": " + response);
+        return json.get("access_token").asString();
     }
 
     @Test
