@@ -40,17 +40,24 @@ public class BackchannelLogoutController {
                 .mapNotNull(form -> form.getFirst("logout_token"))
                 .filter(token -> !token.isBlank())
                 .flatMap(token -> logoutTokenVerifier.verify(token)
+                        .onErrorResume(e -> {
+                            // Anyone can post here: a refused token is not worth a warning per request.
+                            log.debug("Back-channel logout refused: {}", e.getMessage());
+                            return Mono.empty();
+                        })
                         .flatMap(sid -> revokedSessionStore.revoke(sid)
                                 .doOnSuccess(v -> log.info("Session {} signed out by Keycloak: its tokens are refused", sid))
-                                .thenReturn(ok()))
-                        .onErrorResume(e -> {
-                            log.warn("Back-channel logout refused: {}", e.getMessage());
-                            return Mono.just(badRequest());
-                        }))
+                                .thenReturn(ok())
+                                .onErrorResume(e -> {
+                                    // Refused on this replica already (memory); the others never learn of it.
+                                    log.error("Session {} was signed out by Keycloak but could not be recorded: "
+                                            + "the other API replicas keep accepting its tokens until they expire", sid, e);
+                                    return Mono.just(badRequest());
+                                })))
                 .defaultIfEmpty(badRequest());
     }
 
-    // Spec §2.8: the response must not be cached.
+    // Spec §2.8: the response must not be cached; 400 also when the logout could not be carried out.
     private static ResponseEntity<Void> ok() {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).build();
     }

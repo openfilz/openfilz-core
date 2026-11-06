@@ -14,6 +14,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.BodyInserters;
+import org.springframework.web.reactive.function.client.WebClient;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -22,6 +23,7 @@ import java.util.Base64;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 
 /**
@@ -88,6 +90,38 @@ class SessionRevocationIT extends TestContainersKeyCloakConfig {
                 .map((row, meta) -> row.get("n", Long.class))
                 .one().block();
         assertEquals(1L, rows);
+    }
+
+    /** A token of the {@code openfilz-web} client, which in the test realm always gets {@code offline_access}. */
+    private static String offlineScopedAccessToken(String username) {
+        String response = WebClient.create(SharedKeyCloakContainer.getAuthServerUrl()).post()
+                .uri("/realms/openfilz/protocol/openid-connect/token")
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(BodyInserters.fromFormData("grant_type", "password")
+                        .with("client_id", "openfilz-web")
+                        .with("username", username)
+                        .with("password", "password"))
+                .retrieve()
+                .bodyToMono(String.class)
+                .block();
+        return JsonMapper.builder().build().readTree(response).get("access_token").asString();
+    }
+
+    @Test
+    void anOfflineSessionKeepsAccessWhenTheBrowserSessionSharingItsSidEnds() {
+        // A connector or a sync client signed in through a browser already signed in to the web
+        // application: Keycloak gives its offline session the browser session's sid, and keeps
+        // issuing tokens with that sid after the browser session ended.
+        String offline = offlineScopedAccessToken("contributor-user");
+        String payload = new String(Base64.getUrlDecoder().decode(offline.split("\\.")[1]), StandardCharsets.UTF_8);
+        String scope = JsonMapper.builder().build().readTree(payload).get("scope").asString();
+        assertTrue(scope.contains("offline_access"), "expected an offline_access token, got scope: " + scope);
+        assertEquals(200, settingsStatus(offline));
+
+        // The browser session ends: Keycloak reports the sid they share.
+        revokedSessionStore.revoke(sidOf(offline)).block();
+
+        assertEquals(200, settingsStatus(offline), "the offline session did not end: its token must still be accepted");
     }
 
     @Test
