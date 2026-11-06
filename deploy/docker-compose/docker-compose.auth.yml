@@ -31,6 +31,8 @@ services:
       KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8180}
       # Client root URL for openfilz-web (used in realm import for redirectUris)
       OPENFILZ_WEB_ROOT_URL: ${OPENFILZ_WEB_ROOT_URL:-http://localhost:4200}
+      # OIDC back-channel logout: Keycloak calls the API when a session ends (password change...)
+      OPENFILZ_BACKCHANNEL_LOGOUT_URL: ${OPENFILZ_BACKCHANNEL_LOGOUT_URL:-http://openfilz-api:8081/api/v1/auth/backchannel-logout}
       # Default roles assigned to new users (used in realm import)
       # Up to 4 role slots; set unused slots to an already-used role (duplicates are ignored)
       KEYCLOAK_DEFAULT_ROLE_1: ${KEYCLOAK_DEFAULT_ROLE_1:-READER}

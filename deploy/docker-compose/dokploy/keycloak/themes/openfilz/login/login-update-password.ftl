@@ -128,20 +128,12 @@
                 </#if>
             </div>
 
-            <#-- Logout other sessions checkbox -->
-            <div class="of-checkbox-group">
-                <input
-                    id="logout-sessions"
-                    name="logout-sessions"
-                    type="checkbox"
-                    class="of-checkbox"
-                    value="on"
-                    checked
-                />
-                <label for="logout-sessions" class="of-checkbox-label">
-                    ${msg("logoutOtherSessions")}
-                </label>
-            </div>
+            <#-- Sign out every other session, always. Keycloak only does it when "logout-sessions"
+                 is "on", and a password change is how a user locks out someone holding a stolen
+                 session, so it is not offered as an opt-out. Keycloak then sends a back-channel
+                 logout to the API, which stops accepting the access tokens of those sessions. -->
+            <input type="hidden" id="logout-sessions" name="logout-sessions" value="on"/>
+            <p class="of-form-note">${msg("logoutOtherSessionsNotice")}</p>
 
             <#-- Submit -->
             <div class="of-form-group of-mb-0">

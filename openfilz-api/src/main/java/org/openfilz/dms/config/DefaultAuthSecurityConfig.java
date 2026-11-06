@@ -2,6 +2,9 @@ package org.openfilz.dms.config;
 
 import lombok.RequiredArgsConstructor;
 import org.openfilz.dms.security.SecurityService;
+import org.openfilz.dms.security.session.RevokedSessionStore;
+import org.openfilz.dms.security.session.SessionRevocationJwtDecoder;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Conditional;
@@ -49,9 +52,24 @@ public class DefaultAuthSecurityConfig {
     protected final SecurityService securityService;
     protected final CommonProperties commonProperties;
 
+    /**
+     * Injected by setter, not through the constructor, so that the configurations extending this
+     * one keep their constructors.
+     */
+    private RevokedSessionStore revokedSessionStore;
+
+    @Autowired
+    public void setRevokedSessionStore(RevokedSessionStore revokedSessionStore) {
+        this.revokedSessionStore = revokedSessionStore;
+    }
+
+    /**
+     * Checks the signature and expiry, then refuses a token whose Keycloak session was signed out
+     * (back-channel logout, see {@code BackchannelLogoutController}).
+     */
     @Bean
     public ReactiveJwtDecoder jwtDecoder() {
-        return NimbusReactiveJwtDecoder.withJwkSetUri(jwkSetUri).build();
+        return new SessionRevocationJwtDecoder(NimbusReactiveJwtDecoder.withJwkSetUri(jwkSetUri).build(), revokedSessionStore);
     }
 
     private static final String[] AUTH_WHITELIST = {
