@@ -786,3 +786,10 @@ html {
     font-weight: 600;
     color: var(--of-brand-primary);
 }
+
+/* Informational line under a form (e.g. "your other devices will be signed out") */
+.of-form-note {
+    margin: 0 0 18px;
+    font-size: 13px;
+    color: var(--of-text-muted);
+}

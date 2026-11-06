@@ -106,6 +106,7 @@
       "attributes": {
         "realm_client": "false",
         "oidc.ciba.grant.enabled": "false",
+        "backchannel.logout.url": "${OPENFILZ_BACKCHANNEL_LOGOUT_URL}",
         "backchannel.logout.session.required": "true",
         "post.logout.redirect.uris": "+",
         "oauth2.device.authorization.grant.enabled": "false",
