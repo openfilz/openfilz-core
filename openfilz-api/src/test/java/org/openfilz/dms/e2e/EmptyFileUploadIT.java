@@ -25,12 +25,11 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 /**
  * Zero-byte uploads into a folder.
  * <p>
- * Spring WebFlux's {@code DefaultPartHttpMessageReader} (Framework 7.0.9) silently drops a zero-byte part
- * that is FOLLOWED by another part; the same empty part sent last is kept (only the trailing case was
- * fixed upstream, spring-framework#30953). Clients (openfilz-web, openfilz-web-ee, openfilz-desktop)
- * therefore send the file part(s) last. The drop only happens when the empty part and the next boundary
- * arrive in the same buffer, which is what a browser does for a small body. These tests lock that order,
- * and pin the parser bug so we notice when an upgrade fixes it.
+ * Up to Spring Framework 7.0.9, WebFlux's {@code DefaultPartHttpMessageReader} silently dropped a zero-byte
+ * part that was FOLLOWED by another part, when the empty part and the next boundary arrived in the same
+ * buffer (what a browser does for a small body). Framework 7.0.10 (Spring Boot 4.1.2) no longer drops it.
+ * Clients (openfilz-web, openfilz-web-ee, openfilz-desktop) still send the file part(s) last. These tests
+ * cover both part orders, so a parser regression shows up here.
  */
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -81,18 +80,24 @@ public class EmptyFileUploadIT extends TestContainersBaseConfig {
     }
 
     /**
-     * Canary for the Spring parser bug: an empty file part followed by another part is dropped, so the
-     * server reports the file as missing. If this starts failing after a Spring upgrade, the bug is fixed
-     * upstream: delete this test, and the "file part last" rule in the clients can be relaxed.
+     * Empty file part FOLLOWED by another part, in one buffer: dropped by the parser up to Spring
+     * Framework 7.0.9 (the server answered 400), kept since 7.0.10.
      */
     @Test
-    void whenUploadEmptyFileFirstWithParentFolder_thenSpringDropsTheFilePart() {
+    void whenUploadEmptyFileFirstWithParentFolder_thenCreatedInFolder() {
         FolderResponse folder = createFolder();
 
-        postRaw("/documents/upload",
+        UploadResponse response = postRaw("/documents/upload",
                 emptyFile("empty.txt"),
                 field("parentFolderId", folder.id().toString()))
-                .expectStatus().isBadRequest();
+                .expectStatus().isCreated()
+                .expectBody(UploadResponse.class)
+                .returnResult().getResponseBody();
+
+        Assertions.assertNotNull(response);
+        Assertions.assertEquals("empty.txt", response.name());
+        Assertions.assertEquals(0L, response.size());
+        assertFolderContainsOnly(folder, "empty.txt");
     }
 
     /*
