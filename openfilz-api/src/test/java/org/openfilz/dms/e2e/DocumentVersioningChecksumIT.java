@@ -49,7 +49,7 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 public class DocumentVersioningChecksumIT extends TestContainersBaseConfig {
 
     @Container
-    static MinIOContainer minio = new MinIOContainer(DockerImageName.parse("ghcr.io/openfilz/minio:RELEASE.2026-10-23T20-06-51Z").asCompatibleSubstituteFor("minio/minio"));
+    static MinIOContainer minio = new MinIOContainer(DockerImageName.parse("ghcr.io/openfilz/minio:RELEASE.2026-11-09T00-10-40Z").asCompatibleSubstituteFor("minio/minio"));
 
     private final DocumentRepository documentRepository;
     private final SaveDocumentService saveDocumentService;

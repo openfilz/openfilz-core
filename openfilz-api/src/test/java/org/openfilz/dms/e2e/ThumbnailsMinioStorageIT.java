@@ -40,7 +40,7 @@ import static org.springframework.test.context.TestConstructor.AutowireMode.ALL;
 public class ThumbnailsMinioStorageIT extends ThumbnailsBaseIT {
 
     @Container
-    static MinIOContainer minio = new MinIOContainer(DockerImageName.parse("ghcr.io/openfilz/minio:RELEASE.2026-10-23T20-06-51Z").asCompatibleSubstituteFor("minio/minio"));
+    static MinIOContainer minio = new MinIOContainer(DockerImageName.parse("ghcr.io/openfilz/minio:RELEASE.2026-11-09T00-10-40Z").asCompatibleSubstituteFor("minio/minio"));
 
     public ThumbnailsMinioStorageIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
         super(webTestClient, customJacksonJsonEncoder);

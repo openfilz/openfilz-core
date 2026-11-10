@@ -114,7 +114,7 @@ keycloak:
     prune: true
     podSecurityContext: {}
     images:
-      mc: ghcr.io/openfilz/minio:RELEASE.2026-10-23T20-06-51Z
+      mc: ghcr.io/openfilz/minio:RELEASE.2026-11-09T00-10-40Z
     s3:
       endpoint: https://s3.fr-par.scw.cloud
       bucket: ""
