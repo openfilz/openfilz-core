@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[1aa69fe06905347](https://github.com/openfilz/openfilz-core/commit/1aa69fe06905347) maven-release-bot[bot] *2026-11-10 00:35:26*
+[dd48969f020fb0f](https://github.com/openfilz/openfilz-core/commit/dd48969f020fb0f) maven-release-bot[bot] *2026-11-10 07:50:18*
 
 
-## v1.4.7
+## v1.4.8
 ### No issue
 
-**[maven-release-plugin] prepare release v1.4.7**
+**[maven-release-plugin] prepare release v1.4.8**
 
 
-[bb01d8204bc199d](https://github.com/openfilz/openfilz-core/commit/bb01d8204bc199d) maven-release-bot[bot] *2026-11-10 00:35:23*
+[2b50eb94411c363](https://github.com/openfilz/openfilz-core/commit/2b50eb94411c363) maven-release-bot[bot] *2026-11-10 07:50:15*
 
-**Merge pull request #388 from openfilz/develop**
+**Merge pull request #390 from openfilz/develop**
 
- * Upgrade Spring Boot to 4.1.2 and align dependency versions
+ * Bump MinIO version to RELEASE.2026-11-09T00-10-40Z
 
-[49491e2ce8d336a](https://github.com/openfilz/openfilz-core/commit/49491e2ce8d336a) Yann Demel *2026-11-10 00:31:10*
+[a930e840eabb7f7](https://github.com/openfilz/openfilz-core/commit/a930e840eabb7f7) Yann Demel *2026-11-10 07:46:17*
 
 
