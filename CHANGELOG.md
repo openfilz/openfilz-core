@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[f85bc5cf32b7ede](https://github.com/openfilz/openfilz-core/commit/f85bc5cf32b7ede) maven-release-bot[bot] *2026-11-06 12:34:25*
+[1aa69fe06905347](https://github.com/openfilz/openfilz-core/commit/1aa69fe06905347) maven-release-bot[bot] *2026-11-10 00:35:26*
 
 
-## v1.4.6
+## v1.4.7
 ### No issue
 
-**[maven-release-plugin] prepare release v1.4.6**
+**[maven-release-plugin] prepare release v1.4.7**
 
 
-[e8f33ac0d680fd4](https://github.com/openfilz/openfilz-core/commit/e8f33ac0d680fd4) maven-release-bot[bot] *2026-11-06 12:34:23*
+[bb01d8204bc199d](https://github.com/openfilz/openfilz-core/commit/bb01d8204bc199d) maven-release-bot[bot] *2026-11-10 00:35:23*
 
-**Merge pull request #384 from openfilz/develop**
+**Merge pull request #388 from openfilz/develop**
 
- * Fix session invalidation on password change and improve logout handling
+ * Upgrade Spring Boot to 4.1.2 and align dependency versions
 
-[dd729bae5fd2bdf](https://github.com/openfilz/openfilz-core/commit/dd729bae5fd2bdf) Yann Demel *2026-11-06 12:30:48*
+[49491e2ce8d336a](https://github.com/openfilz/openfilz-core/commit/49491e2ce8d336a) Yann Demel *2026-11-10 00:31:10*
 
 
