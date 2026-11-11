@@ -16,6 +16,12 @@
 #     verified the e-mail: Google does) or idp-email-verification (a link is e-mailed to the
 #     existing account; the provider is linked once it is opened). Needs SMTP on the realm.
 #
+# Keycloak version: idp-auto-link only checks that the provider verified the e-mail from Keycloak
+# 26.8.2. On an older server it links without any check, whatever "Trust Email" says, so there
+# the script leaves it out (and removes it if it is there): every first social sign-in to an
+# existing account, Google included, then goes through the e-mailed link. Run the script again
+# after upgrading to 26.8.2 or later to let a provider that verifies the e-mail link at once.
+#
 # Identities already linked are not touched. The script only adds what is missing and changes
 # only the settings above, so a second run changes nothing.
 #
@@ -54,22 +60,44 @@ enc()  { printf '%s' "$1" | sed 's/ /%20/g'; }
 apply() {
   changes=$((changes + 1))
   if [ "$DRY_RUN" = "false" ]; then
-    say "apply: $1"; shift; "$KCADM" "$@" >/dev/null
+    say "apply: $1"; shift; kcadm "$@" >/dev/null
   else
     say "plan:  $1"
   fi
 }
-kc_csv() { "$KCADM" get "$@" -r "$REALM" --format csv --noquotes; }
+# The admin session goes to a file of its own, removed on exit: kcadm's default file would stay
+# in the Keycloak container with a usable admin token in it.
+KCADM_CONFIG_FILE=$(mktemp)
+trap 'rm -f "$KCADM_CONFIG_FILE"' EXIT
+kcadm()  { "$KCADM" "$@" --config "$KCADM_CONFIG_FILE"; }
+kc_csv() { kcadm get "$@" -r "$REALM" --format csv --noquotes; }
 
 if [ -z "$ADMIN_PASSWORD" ]; then
   say "KEYCLOAK_ADMIN_PASSWORD is not set"; exit 2
 fi
-"$KCADM" config credentials --server "$KEYCLOAK_URL" --realm "$ADMIN_REALM" \
+kcadm config credentials --server "$KEYCLOAK_URL" --realm "$ADMIN_REALM" \
   --user "$ADMIN" --password "$ADMIN_PASSWORD" >/dev/null
-if ! "$KCADM" get "realms/$REALM" --fields realm >/dev/null 2>&1; then
+if ! kcadm get "realms/$REALM" --fields realm >/dev/null 2>&1; then
   say "realm $REALM not found"; exit 2
 fi
-say "realm $REALM, DRY_RUN=$DRY_RUN"
+
+# idp-auto-link refuses an e-mail the provider did not verify from Keycloak 26.8.2 only.
+AUTO_LINK_MIN=26.8.2
+version=$(kcadm get serverinfo --fields 'systemInfo(version)' 2>/dev/null \
+  | sed -n 's/.*"version" *: *"\([0-9][0-9.]*\).*/\1/p' | head -n 1)
+if [ -n "$version" ] && [ "$(printf '%s\n' "$AUTO_LINK_MIN" "$version" | sort -V | head -n 1)" = "$AUTO_LINK_MIN" ]; then
+  auto_link=true
+  sub_steps_wanted="idp-auto-link idp-email-verification"
+else
+  auto_link=false
+  sub_steps_wanted="idp-email-verification"
+fi
+say "realm $REALM, Keycloak ${version:-of unknown version}, DRY_RUN=$DRY_RUN"
+if [ "$auto_link" = "false" ]; then
+  say "NOTE: before Keycloak $AUTO_LINK_MIN idp-auto-link links without checking the e-mail, so it is"
+  say "      left out: every first social sign-in to an existing account gets the e-mailed link."
+  say "      Run this script again after upgrading Keycloak."
+fi
 
 flows=$(kc_csv authentication/flows --fields alias)
 if ! grep -qxF "$FLOW" <<<"$flows"; then
@@ -90,7 +118,7 @@ if ! grep -q "^[^,]*,0,,$SUB," <<<"$top"; then
 else
   sub_steps=$(kc_csv "authentication/flows/$(enc "$SUB")/executions" --fields providerId)
 fi
-for step in idp-auto-link idp-email-verification; do
+for step in $sub_steps_wanted; do
   if ! grep -qxF "$step" <<<"$sub_steps"; then
     apply "add $step to '$SUB'" \
       create "authentication/flows/$(enc "$SUB")/executions/execution" -r "$REALM" -s "provider=$step"
@@ -118,7 +146,12 @@ fi
 while IFS=, read -r id level provider name requirement priority; do
   [ -n "$id" ] || continue
   if [ "$level" = "0" ] && [ "$provider" = "idp-auto-link" ]; then
-    apply "remove idp-auto-link from the top of '$FLOW' (it now runs inside '$SUB')" \
+    apply "remove idp-auto-link from the top of '$FLOW'" \
+      delete "authentication/executions/$id" -r "$REALM"
+    continue
+  fi
+  if [ "$level" = "1" ] && [ "$provider" = "idp-auto-link" ] && [ "$auto_link" = "false" ]; then
+    apply "remove idp-auto-link from '$SUB' (it checks nothing before Keycloak $AUTO_LINK_MIN)" \
       delete "authentication/executions/$id" -r "$REALM"
     continue
   fi
@@ -135,7 +168,14 @@ done <<<"$top"
 #    csv columns: alias, providerId, trustEmail, firstBrokerLoginFlowAlias
 while IFS=, read -r alias type trust flow; do
   [ -n "$alias" ] || continue
-  grep -qw -- "$type" <<<"$SOCIAL_PROVIDER_TYPES" || continue
+  if ! grep -qw -- "$type" <<<"$SOCIAL_PROVIDER_TYPES"; then
+    if [ "$flow" = "$FLOW" ] && [ "$trust" = "true" ]; then
+      say "NOTE: identity provider $alias ($type) uses '$FLOW' with Trust Email on and is left as it"
+      say "      is: a first sign-in through it links to the account with the same e-mail without any"
+      say "      check. Keep that only if the provider cannot report an e-mail its user does not own."
+    fi
+    continue
+  fi
   [ "$flow" = "$FLOW" ] || { say "skip:  $alias uses flow '$flow', not '$FLOW'"; continue; }
   if [ "$trust" = "true" ]; then
     apply "Trust Email off on identity provider $alias ($type)" \
@@ -143,9 +183,9 @@ while IFS=, read -r alias type trust flow; do
   fi
 done < <(kc_csv identity-provider/instances --fields alias,providerId,trustEmail,firstBrokerLoginFlowAlias)
 
-if ! "$KCADM" get "realms/$REALM" --fields 'smtpServer(host)' 2>/dev/null | grep -q '"host" : "[^"]'; then
-  say "WARN: the realm has no SMTP server: the link e-mail cannot be sent, so a first Microsoft or"
-  say "      GitHub sign-in to an existing account will fail until SMTP is configured"
+if ! kcadm get "realms/$REALM" --fields 'smtpServer(host)' 2>/dev/null | grep -q '"host" : "[^"]'; then
+  say "WARN: the realm has no SMTP server: the link e-mail cannot be sent, so a first social sign-in"
+  say "      to an existing account that needs it will fail until SMTP is configured"
 fi
 
 if [ "$changes" -eq 0 ]; then

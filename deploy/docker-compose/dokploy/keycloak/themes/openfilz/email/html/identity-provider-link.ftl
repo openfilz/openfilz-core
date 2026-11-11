@@ -5,5 +5,5 @@
 <div style="background-color: #f8fafc; border-radius: 12px; padding: 16px; margin-bottom: 20px;">
 <p style="margin: 0; font-size: 14px; color: #6b7280; line-height: 1.6;">&#9200; ${msg("identityProviderLinkExpiry", linkExpirationFormatter(linkExpiration))}</p>
 </div>
-<p style="margin: 0; font-size: 14px; color: #9ca3af; line-height: 1.6;">${msg("identityProviderLinkIgnore")}</p>
+<p style="margin: 0; font-size: 14px; color: #4b5563; font-weight: 600; line-height: 1.6;">${msg("identityProviderLinkIgnore")}</p>
 </@layout.emailLayout>
