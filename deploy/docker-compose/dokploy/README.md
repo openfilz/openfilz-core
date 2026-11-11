@@ -222,6 +222,26 @@ To use a specific version, set:
 KEYCLOAK_IMAGE=ghcr.io/openfilz/keycloak:26.8
 ```
 
+### Keycloak account page in an existing realm
+
+In a realm created before 2026-11, Keycloak's account page (`/realms/openfilz/account`) shows
+"Something went wrong": the `account-console` client was created without client scopes, so the
+account API refuses its token. A realm imported from the current export is fine. Fix an existing
+realm with `keycloak/fix-account-console.sh` (plan by default, `DRY_RUN=false` applies it):
+
+```bash
+docker exec -i <keycloak-container> bash < keycloak/fix-account-console.sh
+docker exec -i -e DRY_RUN=false <keycloak-container> bash < keycloak/fix-account-console.sh
+```
+
+The script signs in as the bootstrap administrator of the container (`KC_BOOTSTRAP_ADMIN_PASSWORD`).
+If that password was changed in Keycloak since, export the current one as `KEYCLOAK_ADMIN_PASSWORD`
+and add `-e KEYCLOAK_ADMIN_PASSWORD` (no value) to the command, so it stays out of the process list.
+
+The page lets a user change their name and language, password, two-factor sign-in, linked social
+accounts and signed-in devices. The e-mail address stays read-only there: it is the username
+(`registrationEmailAsUsername`), and the realm does not allow editing it.
+
 ## Keycloak Database Initialization
 
 The Keycloak database and user are automatically created by PostgreSQL on first startup using the `db-create.sh` script (sourced from `init-keycloak-db.sh`). This script:
