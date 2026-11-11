@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[dd48969f020fb0f](https://github.com/openfilz/openfilz-core/commit/dd48969f020fb0f) maven-release-bot[bot] *2026-11-10 07:50:18*
+[22275d4a7afba96](https://github.com/openfilz/openfilz-core/commit/22275d4a7afba96) maven-release-bot[bot] *2026-11-11 09:52:13*
 
 
-## v1.4.8
+## v1.4.9
 ### No issue
 
-**[maven-release-plugin] prepare release v1.4.8**
+**[maven-release-plugin] prepare release v1.4.9**
 
 
-[2b50eb94411c363](https://github.com/openfilz/openfilz-core/commit/2b50eb94411c363) maven-release-bot[bot] *2026-11-10 07:50:15*
+[3c6f415b87603f8](https://github.com/openfilz/openfilz-core/commit/3c6f415b87603f8) maven-release-bot[bot] *2026-11-11 09:52:11*
 
-**Merge pull request #390 from openfilz/develop**
+**Merge pull request #392 from openfilz/develop**
 
- * Bump MinIO version to RELEASE.2026-11-09T00-10-40Z
+ * Fix Keycloak logout configuration for back-channel support
 
-[a930e840eabb7f7](https://github.com/openfilz/openfilz-core/commit/a930e840eabb7f7) Yann Demel *2026-11-10 07:46:17*
+[1e6d025b0456cfe](https://github.com/openfilz/openfilz-core/commit/1e6d025b0456cfe) Yann Demel *2026-11-11 09:48:04*
 
 
