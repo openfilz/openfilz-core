@@ -9,11 +9,13 @@
 # could sign in as an existing user.
 #
 # New rules (what this script sets):
-#   - "Trust Email" off on the identity providers of type google, github and microsoft that use
-#     the "openfilz first broker login" flow (other identity providers are left as they are);
+#   - "Trust Email" off on the identity providers of type github and microsoft that use the
+#     "openfilz first broker login" flow. Google keeps it: Google only reports the e-mail of the
+#     account that signs in, and with Trust Email off every new Google sign-up would be asked to
+#     verify an e-mail Google already verified. Other identity providers are left as they are;
 #   - "openfilz first broker login" = idp-create-user-if-unique, then the sub-flow
 #     "openfilz link existing account" = idp-auto-link (passes only when the provider itself
-#     verified the e-mail: Google does) or idp-email-verification (a link is e-mailed to the
+#     verified the e-mail or has Trust Email on: Google) or idp-email-verification (a link is e-mailed to the
 #     existing account; the provider is linked once it is opened). Needs SMTP on the realm.
 #
 # Keycloak version: idp-auto-link only checks that the provider verified the e-mail from Keycloak
@@ -36,7 +38,7 @@
 #   KEYCLOAK_ADMIN            admin  (KC_BOOTSTRAP_ADMIN_USERNAME if set)
 #   KEYCLOAK_ADMIN_PASSWORD   (KC_BOOTSTRAP_ADMIN_PASSWORD if set)
 #   KEYCLOAK_ADMIN_REALM      master
-#   SOCIAL_PROVIDER_TYPES     "google github microsoft"
+#   SOCIAL_PROVIDER_TYPES     "github microsoft"   (the types whose Trust Email is turned off)
 #
 # Exit codes: 0 done or nothing to do, 1 error, 2 configuration (flow or realm missing).
 set -euo pipefail
@@ -48,11 +50,11 @@ REALM=${KEYCLOAK_REALM:-openfilz}
 ADMIN=${KEYCLOAK_ADMIN:-${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}}
 ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-${KC_BOOTSTRAP_ADMIN_PASSWORD:-}}
 ADMIN_REALM=${KEYCLOAK_ADMIN_REALM:-master}
-SOCIAL_PROVIDER_TYPES=${SOCIAL_PROVIDER_TYPES:-"google github microsoft"}
+SOCIAL_PROVIDER_TYPES=${SOCIAL_PROVIDER_TYPES:-"github microsoft"}
 
 FLOW="openfilz first broker login"
 SUB="openfilz link existing account"
-SUB_DESCRIPTION="Links the IdP identity to the account with the same e-mail: automatically when the IdP verified the e-mail (Trust Email stays off), otherwise through a link e-mailed to the existing account"
+SUB_DESCRIPTION="Links the IdP identity to the account with the same e-mail: automatically when the IdP verified the e-mail or has Trust Email on (Google only), otherwise through a link e-mailed to the existing account"
 
 changes=0
 say()  { echo "[secure-social-login] $*"; }
@@ -164,12 +166,12 @@ while IFS=, read -r id level provider name requirement priority; do
   fi
 done <<<"$top"
 
-# 3. Trust Email off on the social providers that use the flow.
+# 3. Trust Email off on the social providers that use the flow (not Google, see the header).
 #    csv columns: alias, providerId, trustEmail, firstBrokerLoginFlowAlias
 while IFS=, read -r alias type trust flow; do
   [ -n "$alias" ] || continue
   if ! grep -qw -- "$type" <<<"$SOCIAL_PROVIDER_TYPES"; then
-    if [ "$flow" = "$FLOW" ] && [ "$trust" = "true" ]; then
+    if [ "$flow" = "$FLOW" ] && [ "$trust" = "true" ] && [ "$type" != "google" ]; then
       say "NOTE: identity provider $alias ($type) uses '$FLOW' with Trust Email on and is left as it"
       say "      is: a first sign-in through it links to the account with the same e-mail without any"
       say "      check. Keep that only if the provider cannot report an e-mail its user does not own."

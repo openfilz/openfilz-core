@@ -619,7 +619,7 @@
     },
     {
       "alias": "openfilz link existing account",
-      "description": "Links the IdP identity to the account with the same e-mail: automatically when the IdP verified the e-mail (Trust Email stays off), otherwise through a link e-mailed to the existing account",
+      "description": "Links the IdP identity to the account with the same e-mail: automatically when the IdP verified the e-mail or has Trust Email on (Google only), otherwise through a link e-mailed to the existing account",
       "providerId": "basic-flow",
       "topLevel": false,
       "builtIn": false,
@@ -647,7 +647,7 @@
       "displayName": "Google",
       "providerId": "google",
       "enabled": true,
-      "trustEmail": false,
+      "trustEmail": true,
       "storeToken": false,
       "addReadTokenRoleOnCreate": false,
       "authenticateByDefault": false,

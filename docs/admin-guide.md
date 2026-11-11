@@ -1250,7 +1250,7 @@ Navigate to `http://localhost:8180` (default) and log in with the admin credenti
 
 ### Identity Providers
 
-Social login providers (Google, GitHub, Microsoft) are pre-configured in the realm. To activate them, set the corresponding `CLIENT_ID` and `CLIENT_SECRET` environment variables. Users who sign in via a social provider are auto-created and auto-linked by email.
+Social login providers (Google, GitHub, Microsoft) are pre-configured in the realm. To activate them, set the corresponding `CLIENT_ID` and `CLIENT_SECRET` environment variables. Users who sign in via a social provider are auto-created on their first sign-in. When an account with the same e-mail already exists, Google is linked to it at once; Microsoft and GitHub are linked after the owner opens a link e-mailed to that account (the realm needs SMTP). A realm created before 2026-11 keeps the old rule, linking with no check, until `deploy/docker-compose/dokploy/keycloak/secure-social-login-linking.sh` is run on it.
 
 ### Keycloak Database
 
