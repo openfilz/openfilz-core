@@ -217,6 +217,18 @@ added one (a provisioning script with its own client or service account), give i
 its calls answer `401`: in the admin console, *Clients*, your client, *Client scopes*,
 *Add client scope*, `kc-admin-api`, *Default*.
 
+### Keycloak account page in an existing realm
+
+In a realm created before 2026-11, Keycloak's account page (`/realms/openfilz/account`) shows
+"Something went wrong": the `account-console` client was created without client scopes, so the
+account API refuses its token. A realm imported from the current export is fine. Fix an existing
+realm with `keycloak/fix-account-console.sh` (plan by default, `DRY_RUN=false` applies it):
+
+```bash
+docker exec -i <keycloak-container> bash < keycloak/fix-account-console.sh
+docker exec -i -e DRY_RUN=false <keycloak-container> bash < keycloak/fix-account-console.sh
+```
+
 To use a specific version, set:
 ```env
 KEYCLOAK_IMAGE=ghcr.io/openfilz/keycloak:26.8
