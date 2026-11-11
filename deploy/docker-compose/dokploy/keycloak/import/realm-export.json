@@ -596,7 +596,7 @@
   "authenticationFlows": [
     {
       "alias": "openfilz first broker login",
-      "description": "First broker login flow for OpenFilz - auto-links when IdP email matches existing account (all IdPs are trusted)",
+      "description": "First broker login flow for OpenFilz - creates the account when the e-mail is new; links to an existing account only on an e-mail the IdP verified, otherwise after the owner clicks a link sent to that account's e-mail",
       "providerId": "basic-flow",
       "topLevel": true,
       "builtIn": false,
@@ -609,7 +609,30 @@
           "userSetupAllowed": false
         },
         {
+          "authenticatorFlow": true,
+          "requirement": "ALTERNATIVE",
+          "priority": 20,
+          "flowAlias": "openfilz link existing account",
+          "userSetupAllowed": false
+        }
+      ]
+    },
+    {
+      "alias": "openfilz link existing account",
+      "description": "Links the IdP identity to the account with the same e-mail: automatically when the IdP verified the e-mail or has Trust Email on (Google only), otherwise through a link e-mailed to the existing account",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
           "authenticator": "idp-auto-link",
+          "authenticatorFlow": false,
+          "requirement": "ALTERNATIVE",
+          "priority": 10,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticator": "idp-email-verification",
           "authenticatorFlow": false,
           "requirement": "ALTERNATIVE",
           "priority": 20,
@@ -643,7 +666,7 @@
       "displayName": "GitHub",
       "providerId": "github",
       "enabled": true,
-      "trustEmail": true,
+      "trustEmail": false,
       "storeToken": false,
       "addReadTokenRoleOnCreate": false,
       "authenticateByDefault": false,
@@ -661,7 +684,7 @@
       "displayName": "Microsoft",
       "providerId": "microsoft",
       "enabled": true,
-      "trustEmail": true,
+      "trustEmail": false,
       "storeToken": false,
       "addReadTokenRoleOnCreate": false,
       "authenticateByDefault": false,

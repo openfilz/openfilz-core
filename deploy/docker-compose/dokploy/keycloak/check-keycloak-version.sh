@@ -43,3 +43,19 @@ fi
 
 count=$(echo "$matches" | grep -cE 'keycloak(-ee)?:[0-9]' || true)
 echo "OK: all $count pinned Keycloak references are on $KC_VERSION"
+
+# The realm export links a first social sign-in to an existing account with idp-auto-link. That
+# step only checks that the identity provider verified the e-mail from Keycloak 26.8.2: on an
+# older Keycloak it links without any check, whatever "Trust Email" says, and anyone who controls
+# the e-mail a provider reports can sign in as an existing user. So this export must not be
+# shipped on an older Keycloak. A tag without a patch number (26.8) is the latest patch.
+if grep -q '"idp-auto-link"' "$SCRIPT_DIR/import/realm-export.json"; then
+  kc_full=$(printf '%s' "$KC_VERSION" | tr -d '\r')
+  case "$kc_full" in *.*.*) ;; *) kc_full="$kc_full.999" ;; esac
+  if [ "$(printf '%s\n' 26.8.2 "$kc_full" | sort -V | head -n 1)" != "26.8.2" ]; then
+    echo "ERROR: import/realm-export.json uses idp-auto-link, which needs Keycloak 26.8.2 or later to" >&2
+    echo "       check the e-mail before linking; the Dockerfile is on $KC_VERSION. Upgrade Keycloak first." >&2
+    exit 1
+  fi
+  echo "OK: idp-auto-link in the realm export, Keycloak $KC_VERSION checks the e-mail before linking"
+fi
