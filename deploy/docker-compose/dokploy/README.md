@@ -169,7 +169,7 @@ Click **Deploy** and wait for all services to start (this may take a few minutes
 
 ## Custom Keycloak Image
 
-This deployment uses a custom Keycloak image (`ghcr.io/openfilz/keycloak:26.7`) that includes:
+This deployment uses a custom Keycloak image (`ghcr.io/openfilz/keycloak:26.8`) that includes:
 
 - **Pre-imported realm**: The OpenFilz realm configuration is baked into the image
 - **Custom themes**: OpenFilz-branded login and email themes
@@ -201,7 +201,7 @@ cd keycloak/
 
 To use a specific version, set:
 ```env
-KEYCLOAK_IMAGE=ghcr.io/openfilz/keycloak:26.7
+KEYCLOAK_IMAGE=ghcr.io/openfilz/keycloak:26.8
 ```
 
 ## Keycloak Database Initialization
