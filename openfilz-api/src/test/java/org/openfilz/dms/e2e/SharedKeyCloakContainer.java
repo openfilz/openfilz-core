@@ -28,6 +28,8 @@ public final class SharedKeyCloakContainer {
                 .withEnv("KEYCLOAK_DEFAULT_ROLE", "READER")
                 .withEnv("KEYCLOAK_DEFAULT_GROUP", "OPENFILZ/READER")
                 .withEnv("KC_HTTP_ENABLED", "true")
+                // Keycloak calls the API under test for the back-channel logout (KeycloakBackchannelLogoutIT)
+                .withExtraHost("host.docker.internal", "host-gateway")
                 .withReuse(true);
         KEYCLOAK_CONTAINER.start();
     }
