@@ -1252,6 +1252,8 @@ Navigate to `http://localhost:8180` (default) and log in with the admin credenti
 
 Social login providers (Google, GitHub, Microsoft) are pre-configured in the realm. To activate them, set the corresponding `CLIENT_ID` and `CLIENT_SECRET` environment variables. Users who sign in via a social provider are auto-created on their first sign-in. When an account with the same e-mail already exists, Google is linked to it at once; Microsoft and GitHub are linked after the owner opens a link e-mailed to that account (the realm needs SMTP). A realm created before 2026-11 keeps the old rule, linking with no check, until `deploy/docker-compose/dokploy/keycloak/secure-social-login-linking.sh` is run on it.
 
+Keycloak's own account page (`/realms/openfilz/account`: profile, password, signed-in devices, linked accounts) works in a realm imported from the current export. In a realm created before 2026-11 it shows "Something went wrong" (the `account-console` client has no client scopes, so the account API refuses its token) until `deploy/docker-compose/dokploy/keycloak/fix-account-console.sh` is run on it: `docker exec -i <keycloak-container> bash < fix-account-console.sh` prints the plan, `-e DRY_RUN=false` applies it. It only changes `account-console`; the tokens of the other clients do not change.
+
 ### Keycloak Database
 
 The Keycloak database is auto-created on first PostgreSQL startup via `init-keycloak-db.sh`. If you already have a running database, create it manually:
