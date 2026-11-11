@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[b9bec65ae0ddcf8](https://github.com/openfilz/openfilz-core/commit/b9bec65ae0ddcf8) maven-release-bot[bot] *2026-11-11 14:23:57*
+[6b8f328e200ff51](https://github.com/openfilz/openfilz-core/commit/6b8f328e200ff51) maven-release-bot[bot] *2026-11-11 19:40:19*
 
 
-## v1.4.10
+## v1.4.11
 ### No issue
 
-**[maven-release-plugin] prepare release v1.4.10**
+**[maven-release-plugin] prepare release v1.4.11**
 
 
-[c2aae2fb05585bc](https://github.com/openfilz/openfilz-core/commit/c2aae2fb05585bc) maven-release-bot[bot] *2026-11-11 14:23:55*
+[d0a0771c8a99fc8](https://github.com/openfilz/openfilz-core/commit/d0a0771c8a99fc8) maven-release-bot[bot] *2026-11-11 19:40:16*
 
-**Merge pull request #395 from openfilz/develop**
+**Merge pull request #398 from openfilz/develop**
 
- * Upgrade Keycloak to 26.8.2 with social login verification changes
+ * Fix Keycloak account console and secure admin password handling
 
-[9f10498aeea358b](https://github.com/openfilz/openfilz-core/commit/9f10498aeea358b) Yann Demel *2026-11-11 14:19:27*
+[c50b840ff41666c](https://github.com/openfilz/openfilz-core/commit/c50b840ff41666c) Yann Demel *2026-11-11 19:36:19*
 
 
