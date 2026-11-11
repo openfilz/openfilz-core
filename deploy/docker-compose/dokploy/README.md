@@ -174,6 +174,8 @@ This deployment uses a custom Keycloak image (`ghcr.io/openfilz/keycloak:26.8`) 
 - **Pre-imported realm**: The OpenFilz realm configuration is baked into the image
 - **Custom themes**: OpenFilz-branded login and email themes
 - **Pre-built optimizations**: `kc.sh build` has already been executed for faster startup
+- **OpenJDK 25**: the stock Keycloak image ships OpenJDK 21, so this image is put together again
+  the way upstream builds its own (`keycloak/ubi-null.sh`), on `java-25-openjdk-headless`
 
 To build and push the image manually:
 
@@ -198,6 +200,22 @@ update:
 cd keycloak/
 ./check-keycloak-version.sh
 ```
+
+`keycloak/ubi-null.sh` is a copy of the script Keycloak builds the root filesystem of its own
+image with. After bumping the `FROM` line, compare it with `quarkus/container/ubi-null.sh` of the
+new Keycloak tag and copy it again if it changed.
+
+### Moving a deployment from 26.7 to 26.8
+
+Back up the Keycloak database first: Keycloak migrates it on the first start of the new image and
+26.7 cannot run on it afterwards.
+
+Keycloak 26.8.2 refuses an Admin REST API call whose token was not issued for the Admin API. A
+client gets such a token from the new client scope `kc-admin-api`, which Keycloak gives to its own
+clients (`admin-cli`, the admin console). The OpenFilz realm has no other admin client. If you
+added one (a provisioning script with its own client or service account), give it that scope, or
+its calls answer `401`: in the admin console, *Clients*, your client, *Client scopes*,
+*Add client scope*, `kc-admin-api`, *Default*.
 
 To use a specific version, set:
 ```env
