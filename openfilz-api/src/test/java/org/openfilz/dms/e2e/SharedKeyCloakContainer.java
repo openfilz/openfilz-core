@@ -18,7 +18,7 @@ import java.io.IOException;
 public final class SharedKeyCloakContainer {
 
     /** Pinned to the Keycloak minor shipped by deploy/docker-compose/dokploy/keycloak/Dockerfile. */
-    private static final String KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.7";
+    private static final String KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.8";
 
     private static final KeycloakContainer KEYCLOAK_CONTAINER;
 
