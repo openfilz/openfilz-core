@@ -217,6 +217,11 @@ added one (a provisioning script with its own client or service account), give i
 its calls answer `401`: in the admin console, *Clients*, your client, *Client scopes*,
 *Add client scope*, `kc-admin-api`, *Default*.
 
+To use a specific version, set:
+```env
+KEYCLOAK_IMAGE=ghcr.io/openfilz/keycloak:26.8
+```
+
 ### Keycloak account page in an existing realm
 
 In a realm created before 2026-11, Keycloak's account page (`/realms/openfilz/account`) shows
@@ -229,10 +234,13 @@ docker exec -i <keycloak-container> bash < keycloak/fix-account-console.sh
 docker exec -i -e DRY_RUN=false <keycloak-container> bash < keycloak/fix-account-console.sh
 ```
 
-To use a specific version, set:
-```env
-KEYCLOAK_IMAGE=ghcr.io/openfilz/keycloak:26.8
-```
+The script signs in as the bootstrap administrator of the container (`KC_BOOTSTRAP_ADMIN_PASSWORD`).
+If that password was changed in Keycloak since, export the current one as `KEYCLOAK_ADMIN_PASSWORD`
+and add `-e KEYCLOAK_ADMIN_PASSWORD` (no value) to the command, so it stays out of the process list.
+
+The page lets a user change their name and language, password, two-factor sign-in, linked social
+accounts and signed-in devices. The e-mail address stays read-only there: it is the username
+(`registrationEmailAsUsername`), and the realm does not allow editing it.
 
 ## Keycloak Database Initialization
 

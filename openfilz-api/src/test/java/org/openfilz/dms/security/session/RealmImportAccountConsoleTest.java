@@ -101,6 +101,57 @@ class RealmImportAccountConsoleTest {
     }
 
     @Test
+    void theAccountClientsRedirectToTheRealmOfTheExport() {
+        // Both clients carry the realm name in their URLs. A mismatch imports without a word and
+        // the account page then answers "Invalid parameter: redirect_uri".
+        String account = "/realms/" + realm.path("realm").asString() + "/account/";
+        for (String clientId : List.of("account", "account-console")) {
+            JsonNode c = client(clientId);
+            assertNotNull(c, clientId);
+            assertEquals(account, c.path("baseUrl").asString(), clientId + " baseUrl");
+            assertEquals(Set.of(account + "*"), strings(c.get("redirectUris")), clientId + " redirectUris");
+        }
+    }
+
+    @Test
+    void theAccountConsoleStaysABrowserOnlyPkceClient() {
+        // Its token manages the account (password, two-factor, linked accounts): sign-in through
+        // the browser with PKCE only, as in a stock realm. No password grant, no implicit flow.
+        JsonNode console = client("account-console");
+        assertNotNull(console);
+        assertTrue(console.path("publicClient").asBoolean(false), "account-console is a public client");
+        assertEquals("S256", console.path("attributes").path("pkce.code.challenge.method").asString());
+        assertFalse(console.path("directAccessGrantsEnabled").asBoolean(true), "no password grant on account-console");
+        assertFalse(console.path("implicitFlowEnabled").asBoolean(true), "no implicit flow on account-console");
+        assertFalse(console.path("serviceAccountsEnabled").asBoolean(true), "no service account on account-console");
+    }
+
+    @Test
+    void theAccountPageCannotChangeTheEmail() {
+        // The e-mail address identifies the user. Keycloak keeps it read-only on the account page
+        // while it is the username, usernames cannot be edited and the UPDATE_EMAIL action is not
+        // registered (checked on 26.8.2: the account API ignores a new e-mail or username).
+        assertTrue(realm.path("registrationEmailAsUsername").asBoolean(false), "registrationEmailAsUsername");
+        assertFalse(realm.path("editUsernameAllowed").asBoolean(false), "editUsernameAllowed must stay off");
+        for (JsonNode action : realm.path("requiredActions")) {
+            assertFalse("UPDATE_EMAIL".equals(action.path("alias").asString()),
+                    "UPDATE_EMAIL lets a user change the e-mail address from the account page");
+        }
+    }
+
+    @Test
+    void theSharedRolesScopeStillMapsRealmRolesOnly() {
+        // The client-roles mapper lives on account-console. On the shared roles scope it would add
+        // resource_access to the token of every OpenFilz client.
+        for (JsonNode s : realm.path("clientScopes")) {
+            for (JsonNode m : s.path("protocolMappers")) {
+                assertFalse("oidc-usermodel-client-role-mapper".equals(m.path("protocolMapper").asString()),
+                        "client scope " + s.path("name").asString() + " must not carry a client-roles mapper");
+            }
+        }
+    }
+
+    @Test
     void newUsersStillGetTheAccountRoles() {
         // Keycloak adds them to the default roles only when it creates the account client itself.
         Set<String> accountRoles = new HashSet<>();

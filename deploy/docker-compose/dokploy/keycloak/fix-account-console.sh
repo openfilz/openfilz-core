@@ -13,11 +13,15 @@
 #     exist in the realm);
 #   - a "client roles" mapper (resource_access.${client_id}.roles) on account-console itself. It is
 #     not added to the shared "roles" scope, so the tokens of the other clients do not change;
-#     fullScopeAllowed stays off, so the claim only holds the account roles mapped to the console;
+#   - "Full scope allowed" off, as in a stock realm, if someone turned it on. With it on, the mapper
+#     would put every client role of the user in the token of this public client (for an
+#     administrator, the realm-management roles). Off, the claim only holds the account roles
+#     mapped to the console;
 #   - the scope mapping account -> manage-account, view-groups, if it is missing;
 #   - the account roles view-profile and manage-account in the realm's default roles, if missing.
 #
-# The script only adds what is missing, so a second run changes nothing.
+# Apart from "Full scope allowed", the script only adds what is missing. A second run changes
+# nothing.
 #
 # Run it with the Keycloak image's own kcadm, for example:
 #   docker exec -i <keycloak-container> bash < fix-account-console.sh
@@ -28,7 +32,9 @@
 #   KEYCLOAK_URL              http://localhost:8080
 #   KEYCLOAK_REALM            openfilz
 #   KEYCLOAK_ADMIN            admin  (KC_BOOTSTRAP_ADMIN_USERNAME if set)
-#   KEYCLOAK_ADMIN_PASSWORD   (KC_BOOTSTRAP_ADMIN_PASSWORD if set)
+#   KEYCLOAK_ADMIN_PASSWORD   (KC_BOOTSTRAP_ADMIN_PASSWORD if set). To keep it out of the host's
+#                             process list and shell history, export it and give docker exec
+#                             "-e KEYCLOAK_ADMIN_PASSWORD" with no value.
 #   KEYCLOAK_ADMIN_REALM      master
 #
 # Exit codes: 0 done or nothing to do, 1 error, 2 configuration (realm or client missing).
@@ -67,8 +73,10 @@ client_uuid() { kc_csv clients -q "clientId=$1" --fields id | head -n 1; }
 if [ -z "$ADMIN_PASSWORD" ]; then
   say "KEYCLOAK_ADMIN_PASSWORD is not set"; exit 2
 fi
-kcadm config credentials --server "$KEYCLOAK_URL" --realm "$ADMIN_REALM" \
-  --user "$ADMIN" --password "$ADMIN_PASSWORD" >/dev/null
+# kcadm reads the password from KC_CLI_PASSWORD: given as --password it would show in the process
+# list for as long as the login runs.
+KC_CLI_PASSWORD="$ADMIN_PASSWORD" kcadm config credentials --server "$KEYCLOAK_URL" \
+  --realm "$ADMIN_REALM" --user "$ADMIN" >/dev/null
 if ! kcadm get "realms/$REALM" --fields realm >/dev/null 2>&1; then
   say "realm $REALM not found"; exit 2
 fi
@@ -92,7 +100,7 @@ scope_id() {
 have_default=$(kc_csv "clients/$console/default-client-scopes" --fields name)
 have_optional=$(kc_csv "clients/$console/optional-client-scopes" --fields name)
 for kind in default optional; do
-  if [ "$kind" = default ]; then wanted=$DEFAULT_SCOPES; have=$have_default; else wanted=$OPTIONAL_SCOPES; have=$have_optional; fi
+  if [ "$kind" = default ]; then wanted=$DEFAULT_SCOPES; else wanted=$OPTIONAL_SCOPES; fi
   for name in $wanted; do
     if grep -qxF "$name" <<<"$have_default"$'\n'"$have_optional"; then
       continue
@@ -107,7 +115,13 @@ for kind in default optional; do
   done
 done
 
-# 2. The client-roles mapper on account-console. csv columns: name, protocolMapper
+# 2. "Full scope allowed" off, before the mapper below widens what the token can carry.
+if [ "$(kc_csv "clients/$console" --fields fullScopeAllowed)" = "true" ]; then
+  apply "turn 'Full scope allowed' off on account-console (the stock setting)" \
+    update "clients/$console" -r "$REALM" -s fullScopeAllowed=false
+fi
+
+# 3. The client-roles mapper on account-console. csv columns: name, protocolMapper
 if ! kc_csv "clients/$console/protocol-mappers/models" --fields name,protocolMapper \
     | grep -q ',oidc-usermodel-client-role-mapper$'; then
   apply "add the '$MAPPER_NAME' mapper (resource_access.\${client_id}.roles) to account-console" \
@@ -120,27 +134,31 @@ if ! kc_csv "clients/$console/protocol-mappers/models" --fields name,protocolMap
 JSON
 fi
 
-# 3. Scope mapping account -> account-console (a stock realm has it; check anyway).
+# 4. Scope mapping account -> account-console (a stock realm has it; check anyway). The role is
+#    read on a line of its own: a missing role then stops the script (set -e) instead of sending
+#    an empty list, which Keycloak accepts.
 mapped=$(kc_csv "clients/$console/scope-mappings/clients/$account" --fields name)
 for role in manage-account view-groups; do
   if ! grep -qxF "$role" <<<"$mapped"; then
+    role_json=$(kcadm get "clients/$account/roles/$role" -r "$REALM")
     apply "map the account role $role to account-console" \
       create "clients/$console/scope-mappings/clients/$account" -r "$REALM" -f - <<JSON
-[$(kcadm get "clients/$account/roles/$role" -r "$REALM")]
+[$role_json]
 JSON
   fi
 done
 
-# 4. The account roles new users get (Keycloak puts them in the default roles of a realm it creates
+# 5. The account roles new users get (Keycloak puts them in the default roles of a realm it creates
 #    the account client for; check anyway).
 default_role=$(kcadm get "realms/$REALM" --fields 'defaultRole(name)' | sed -n 's/.*"name" *: *"\([^"]*\)".*/\1/p' | head -n 1)
 if [ -n "$default_role" ]; then
   in_default=$(kc_csv "roles/$default_role/composites/clients/$account" --fields name)
   for role in view-profile manage-account; do
     if ! grep -qxF "$role" <<<"$in_default"; then
+      role_json=$(kcadm get "clients/$account/roles/$role" -r "$REALM")
       apply "add the account role $role to the default roles ($default_role)" \
         create "roles/$default_role/composites" -r "$REALM" -f - <<JSON
-[$(kcadm get "clients/$account/roles/$role" -r "$REALM")]
+[$role_json]
 JSON
     fi
   done
