@@ -36,7 +36,9 @@
 #   KEYCLOAK_URL              http://localhost:8080
 #   KEYCLOAK_REALM            openfilz
 #   KEYCLOAK_ADMIN            admin  (KC_BOOTSTRAP_ADMIN_USERNAME if set)
-#   KEYCLOAK_ADMIN_PASSWORD   (KC_BOOTSTRAP_ADMIN_PASSWORD if set)
+#   KEYCLOAK_ADMIN_PASSWORD   (KC_BOOTSTRAP_ADMIN_PASSWORD if set). To keep it out of the host's
+#                             process list and shell history, export it and give docker exec
+#                             "-e KEYCLOAK_ADMIN_PASSWORD" with no value.
 #   KEYCLOAK_ADMIN_REALM      master
 #   SOCIAL_PROVIDER_TYPES     "github microsoft"   (the types whose Trust Email is turned off)
 #
@@ -77,8 +79,10 @@ kc_csv() { kcadm get "$@" -r "$REALM" --format csv --noquotes; }
 if [ -z "$ADMIN_PASSWORD" ]; then
   say "KEYCLOAK_ADMIN_PASSWORD is not set"; exit 2
 fi
-kcadm config credentials --server "$KEYCLOAK_URL" --realm "$ADMIN_REALM" \
-  --user "$ADMIN" --password "$ADMIN_PASSWORD" >/dev/null
+# kcadm reads the password from KC_CLI_PASSWORD: given as --password it would show in the process
+# list for as long as the login runs.
+KC_CLI_PASSWORD="$ADMIN_PASSWORD" kcadm config credentials --server "$KEYCLOAK_URL" \
+  --realm "$ADMIN_REALM" --user "$ADMIN" >/dev/null
 if ! kcadm get "realms/$REALM" --fields realm >/dev/null 2>&1; then
   say "realm $REALM not found"; exit 2
 fi
