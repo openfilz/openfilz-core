@@ -6,9 +6,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.openfilz.dms.dto.request.CopyRequest;
-import org.openfilz.dms.dto.response.ChildElementInfo;
 import org.openfilz.dms.entity.Document;
-import org.openfilz.dms.enums.DocumentType;
 import org.openfilz.dms.enums.AccessType;
 import org.openfilz.dms.exception.DocumentNotFoundException;
 import org.openfilz.dms.exception.OperationForbiddenException;
@@ -23,7 +21,6 @@ import org.openfilz.dms.service.quota.StorageQuotaService;
 import org.openfilz.dms.utils.BlankDocumentGenerator;
 import org.openfilz.dms.utils.JsonUtils;
 import org.springframework.transaction.reactive.TransactionalOperator;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import tools.jackson.databind.ObjectMapper;
@@ -132,8 +129,7 @@ class DocumentServiceImplCopyFolderTest {
     void copyFolders_overQuota_isRefusedBeforeAnyWrite() {
         when(documentDAO.findById(eq(targetId), any())).thenReturn(Mono.just(folder(targetId, null)));
         when(documentDAO.findById(eq(sourceId), eq(AccessType.RO))).thenReturn(Mono.just(folder(sourceId, null)));
-        when(documentDAO.getChildren(sourceId)).thenReturn(Flux.just(
-                child(FILE, 600L), child(FOLDER, null), child(FILE, 400L)));
+        when(documentDAO.getFolderFilesSize(sourceId)).thenReturn(Mono.just(1000L));
         when(storageQuotaService.checkStorage(1000L))
                 .thenReturn(Mono.error(new UserQuotaExceededException("u", 0, 1000, 500)));
 
@@ -170,13 +166,10 @@ class DocumentServiceImplCopyFolderTest {
         return Document.builder().id(id).name("file-" + id).type(FILE).size(size).build();
     }
 
-    private static ChildElementInfo child(DocumentType type, Long size) {
-        return ChildElementInfo.builder().id(UUID.randomUUID()).type(type).size(size).build();
-    }
-
     private void assertNoWrite() {
         verifyNoInteractions(saveDocumentService, storageService, auditService);
         verify(documentDAO, never()).findDocumentsByParentId(any());
+        verify(documentDAO, never()).findActiveDocumentsByParentId(any());
         verify(documentDAO, never()).findDocumentsByParentIdAndType(any(), any());
     }
 }

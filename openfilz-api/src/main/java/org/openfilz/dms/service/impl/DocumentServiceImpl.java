@@ -510,14 +510,6 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                 .flatMap(this::validateUserQuota);
     }
 
-    /** The active files under a folder (all levels) add this many bytes when the folder is copied. */
-    private Mono<Long> folderBytes(UUID folderId) {
-        return documentDAO.getChildren(folderId)
-                .filter(child -> child.getType() == FILE)
-                .map(child -> child.getSize() == null ? 0L : child.getSize())
-                .reduce(0L, Long::sum);
-    }
-
     private Flux<CopyResponse> doCopyFiles(CopyRequest request) {
         return Flux.fromIterable(request.documentIds())
                 .flatMapSequential(fileIdToCopy -> documentDAO.findById(fileIdToCopy, AccessType.RO)
@@ -595,7 +587,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                                         // the next check sees what the previous copy stored)
                                         return documentDAO.findById(folderIdToCopy, AccessType.RO)
                                                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, folderIdToCopy)))
-                                                .flatMap(_ -> folderBytes(folderIdToCopy))
+                                                .flatMap(_ -> documentDAO.getFolderFilesSize(folderIdToCopy))
                                                 .flatMap(this::validateUserQuota)
                                                 .thenMany(Flux.defer(() -> copyFolderRecursive(folderIdToCopy,
                                                         request.targetFolderId(), request.allowDuplicateFileNames())));
@@ -610,7 +602,9 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                 .flatMapMany(sourceFolder -> {
                     // Snapshot the children BEFORE the copy exists: the copy (or anything created under the
                     // source while we run) must never be part of what gets copied, or the recursion never ends.
-                    Mono<List<Document>> childrenSnapshot = documentDAO.findDocumentsByParentId(sourceFolderId).collectList();
+                    // Active children only: what is in the recycle bin is not copied (the copy would bring it
+                    // back as a live file, and its bytes are not in the storage check made before the copy).
+                    Mono<List<Document>> childrenSnapshot = documentDAO.findActiveDocumentsByParentId(sourceFolderId).collectList();
                     // Generate unique name for the new folder in the target location
                     return childrenSnapshot.flatMap(children -> raiseErrorIfExists(sourceFolder.getName(), targetParentFolderId, allowDuplicateFileNames)
                             .flatMap(_ -> doCreateFolder(new CreateFolderRequest(sourceFolder.getName(), targetParentFolderId),
