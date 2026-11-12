@@ -1142,6 +1142,26 @@ row is written, so keep `parallelism` below `spring.r2dbc.pool.max-size` (10 by 
 2 000 small files: ~5 s on local storage at 8; on MinIO ~11 s at 8 and ~5 s at 16 (storage-bound —
 raise the pool with it).
 
+### Product brand of the e-mails
+
+Every e-mail OpenFilz sends (e-Sign, workflows) is rendered in one brand: product name, logo,
+main colour and the link of its footer. All values are optional; empty = OpenFilz.
+
+| Property | Variable | Default | Effect |
+|---|---|---|---|
+| `openfilz.branding.product-name` | `OPENFILZ_BRANDING_PRODUCT_NAME` | *(empty)* | Replaces "OpenFilz" in subjects, bodies, footers and the sender name |
+| `openfilz.branding.logo-url` | `OPENFILZ_BRANDING_LOGO_URL` | *(empty)* | Absolute https logo; `none` = no image |
+| `openfilz.branding.primary-color` | `OPENFILZ_BRANDING_PRIMARY_COLOR` | *(empty)* | `#rrggbb`; the darker and lighter shades are derived from it |
+| `openfilz.branding.brand-url` | `OPENFILZ_BRANDING_BRAND_URL` | *(empty)* | Footer link (openfilz.com for the OpenFilz brand, none otherwise) |
+| `openfilz.branding.support-url` | `OPENFILZ_BRANDING_SUPPORT_URL` | *(empty)* | Help link |
+| `openfilz.branding.show-powered-by` | `OPENFILZ_BRANDING_SHOW_POWERED_BY` | `true` | "Powered by OpenFilz" line under a brand other than OpenFilz |
+
+The older `OPENFILZ_SIGNATURE_PRODUCT_NAME`, `OPENFILZ_WORKFLOWS_PRODUCT_NAME` and their `*_LOGO_URL`
+still apply when the matching `OPENFILZ_BRANDING_*` value is empty. The sender names
+(`OPENFILZ_SIGNATURE_MAIL_FROM_NAME`, `OPENFILZ_WORKFLOWS_MAIL_FROM_NAME`) default to the product
+name followed by "e-Sign" or "Workflows". A sender address on your own domain needs SPF and DKIM
+records for that domain, on your side.
+
 ### Workflows
 
 Statuses, transitions and tasks on documents — *Draft → Pending approval → Approved | Rejected* —
@@ -1162,7 +1182,7 @@ openfilz:
     sweep.cron: "0 0 * * * ?"             # OPENFILZ_WORKFLOWS_SWEEP_CRON — overdue reminders
     mail:
       from: no-reply@openfilz.com         # OPENFILZ_WORKFLOWS_MAIL_FROM
-      from-name: OpenFilz Workflows       # OPENFILZ_WORKFLOWS_MAIL_FROM_NAME
+      from-name: ""                      # OPENFILZ_WORKFLOWS_MAIL_FROM_NAME; empty = "<product name> Workflows"
 ```
 
 | Property | Default | Description |

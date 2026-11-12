@@ -141,9 +141,9 @@ values, so overriding them goes through relaxed binding; the other three have en
 | Property | Env var | Default | What it does |
 |---|---|---|---|
 | `openfilz.signature.mail.from` | `OPENFILZ_SIGNATURE_MAIL_FROM` | `no-reply@openfilz.com` | `From` address of every e-Sign e-mail. |
-| `openfilz.signature.mail.from-name` | `OPENFILZ_SIGNATURE_MAIL_FROM_NAME` | `OpenFilz e-Sign` | Display name in the `From` header. |
-| `openfilz.signature.mail.product-name` | `OPENFILZ_SIGNATURE_PRODUCT_NAME` | `OpenFilz` | Product name used in subjects and bodies (white-labelling). |
-| `openfilz.signature.mail.logo-url` | `OPENFILZ_SIGNATURE_LOGO_URL` | *(empty)* | Logo rendered in the header and footer of the HTML e-mails (absolute URL, ideally a ~135×104 PNG). Empty = the hosted OpenFilz logo. |
+| `openfilz.signature.mail.from-name` | `OPENFILZ_SIGNATURE_MAIL_FROM_NAME` | *(empty)* | Display name in the `From` header. Empty = the product name followed by "e-Sign". |
+| `openfilz.signature.mail.product-name` | `OPENFILZ_SIGNATURE_PRODUCT_NAME` | `OpenFilz` | Older form of `openfilz.branding.product-name` (see the admin guide, Product brand), used when that one is empty. |
+| `openfilz.signature.mail.logo-url` | `OPENFILZ_SIGNATURE_LOGO_URL` | *(empty)* | Older form of `openfilz.branding.logo-url`, used when that one is empty (absolute URL, ideally a ~135×104 PNG). Empty = the hosted OpenFilz logo. |
 | `spring.mail.host` | `SMTP_HOST` | *(empty)* | **Empty ⇒ no mail is sent at all** (links are only logged). |
 | `spring.mail.port` | `SMTP_PORT` | `587` | |
 | `spring.mail.username` | `SMTP_USER` | *(empty)* | |

@@ -1,6 +1,7 @@
 package org.openfilz.dms.config;
 
 import lombok.extern.slf4j.Slf4j;
+import org.openfilz.dms.service.branding.BrandingProvider;
 import org.openfilz.dms.service.signature.SignatureMailer;
 import org.openfilz.dms.service.signature.SignatureSealer;
 import org.openfilz.dms.service.signature.impl.CloudSignatureSealer;
@@ -48,12 +49,14 @@ public class SignatureConfig {
     @Bean
     public SignatureMailer signatureMailer(@Value("${spring.mail.host:}") String mailHost,
                                            ObjectProvider<JavaMailSender> mailSender,
-                                           SignatureProperties props) {
+                                           SignatureProperties props,
+                                           ObjectProvider<BrandingProvider> branding) {
         JavaMailSender sender = mailHost == null || mailHost.isBlank() ? null : mailSender.getIfAvailable();
         if (sender == null) {
             log.warn("[e-sign] spring.mail.host is not set — signing links will only be LOGGED, not emailed");
             return new LoggingSignatureMailer();
         }
-        return new SmtpSignatureMailer(sender, props);
+        BrandingProvider brand = branding == null ? null : branding.getIfAvailable();
+        return brand == null ? new SmtpSignatureMailer(sender, props) : new SmtpSignatureMailer(sender, props, brand);
     }
 }

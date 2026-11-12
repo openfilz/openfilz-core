@@ -66,9 +66,9 @@ class SignatureConfigTest {
     @SuppressWarnings("unchecked")
     void signatureMailer_blankHost_isLogging_andNeverResolvesSender() {
         ObjectProvider<JavaMailSender> provider = mock(ObjectProvider.class);
-        assertThat(config.signatureMailer("", provider, new SignatureProperties())).isInstanceOf(LoggingSignatureMailer.class);
-        assertThat(config.signatureMailer(null, provider, new SignatureProperties())).isInstanceOf(LoggingSignatureMailer.class);
-        assertThat(config.signatureMailer("   ", provider, new SignatureProperties())).isInstanceOf(LoggingSignatureMailer.class);
+        assertThat(config.signatureMailer("", provider, new SignatureProperties(), null)).isInstanceOf(LoggingSignatureMailer.class);
+        assertThat(config.signatureMailer(null, provider, new SignatureProperties(), null)).isInstanceOf(LoggingSignatureMailer.class);
+        assertThat(config.signatureMailer("   ", provider, new SignatureProperties(), null)).isInstanceOf(LoggingSignatureMailer.class);
         verify(provider, never()).getIfAvailable();
     }
 
@@ -77,7 +77,7 @@ class SignatureConfigTest {
     void signatureMailer_hostButNoSenderBean_isLogging() {
         ObjectProvider<JavaMailSender> provider = mock(ObjectProvider.class);
         when(provider.getIfAvailable()).thenReturn(null);
-        assertThat(config.signatureMailer("smtp.example.com", provider, new SignatureProperties())).isInstanceOf(LoggingSignatureMailer.class);
+        assertThat(config.signatureMailer("smtp.example.com", provider, new SignatureProperties(), null)).isInstanceOf(LoggingSignatureMailer.class);
     }
 
     @Test
@@ -85,7 +85,7 @@ class SignatureConfigTest {
     void signatureMailer_hostAndSender_isSmtp() {
         ObjectProvider<JavaMailSender> provider = mock(ObjectProvider.class);
         when(provider.getIfAvailable()).thenReturn(mock(JavaMailSender.class));
-        SignatureMailer mailer = config.signatureMailer("smtp.example.com", provider, new SignatureProperties());
+        SignatureMailer mailer = config.signatureMailer("smtp.example.com", provider, new SignatureProperties(), null);
         assertThat(mailer).isInstanceOf(SmtpSignatureMailer.class);
     }
 

@@ -1,5 +1,7 @@
 package org.openfilz.dms.utils;
 
+import org.openfilz.dms.service.branding.Brand;
+import org.openfilz.dms.service.branding.BrandColors;
 import org.springframework.web.util.HtmlUtils;
 
 /**
@@ -11,6 +13,11 @@ import org.springframework.web.util.HtmlUtils;
  * <p>Table-based, inline-styled markup only — the subset Gmail, Outlook (Word engine) and Apple
  * Mail all render. Gradients carry a solid {@code bgcolor} fallback for Outlook. Callers pass
  * already-localised, already-escaped fragments; {@link #esc(String)} is there for user input.
+ *
+ * <p><b>Brand colour.</b> The helpers write the default palette ({@link #PRIMARY}, its gradient end
+ * and its light tint). {@link #brandedPage(String, boolean, String, String, String, Brand, String)} rewrites
+ * those three literals in the whole message when the brand has another colour, so a fragment built
+ * by any caller follows the brand without taking it as a parameter.
  */
 public final class EmailLayout {
 
@@ -18,35 +25,61 @@ public final class EmailLayout {
     public static final String DEFAULT_LOGO_URL = "https://www.openfilz.com/assets/img/logo-email-header.png";
     /** Logo value that switches the logo off: no {@code <img>} (nothing is fetched), the brand name as text. */
     public static final String NO_LOGO = "none";
-    public static final String BRAND_URL = "https://www.openfilz.com";
+    public static final String BRAND_URL = Brand.OPENFILZ_URL;
 
     private static final String FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
-    private static final String PRIMARY = "#667eea";
-    private static final String GRADIENT = "linear-gradient(135deg,#667eea 0%,#764ba2 100%)";
+    /** Default palette colour, rewritten for another brand colour (see the class comment). */
+    public static final String PRIMARY = Brand.DEFAULT_PRIMARY_COLOR;
+    private static final String GRADIENT_END = "#764ba2";
+    private static final String TINT = "#f1f3ff";
+    private static final String GRADIENT = "linear-gradient(135deg," + PRIMARY + " 0%," + GRADIENT_END + " 100%)";
 
     private EmailLayout() {
     }
 
     /**
-     * Renders a complete e-mail.
+     * Renders a complete e-mail with a product name and a logo, in the default colours.
      *
      * @param lang       language tag for the {@code lang} attribute (may be null)
      * @param rtl        right-to-left script (Arabic)
      * @param title      header title (localised, escaped)
      * @param content    body fragments built with the helpers of this class
      * @param footerNote small print above the brand (localised, escaped; may be blank)
-     * @param brandName  product name shown in the footer (white label; blank = OpenFilz)
+     * @param brandName  product name shown in the footer (blank = OpenFilz)
      * @param logoUrl    absolute logo URL (blank = {@link #DEFAULT_LOGO_URL}; {@link #NO_LOGO} = no image,
      *                   the brand name is shown as a text wordmark instead)
+     * @see #brandedPage(String, boolean, String, String, String, Brand, String)
      */
     public static String page(String lang, boolean rtl, String title, String content,
                               String footerNote, String brandName, String logoUrl) {
+        return brandedPage(lang, rtl, title, content, footerNote, Brand.of(brandName, logoUrl, null, null, null, false), null);
+    }
+
+    /**
+     * Renders a complete e-mail in the brand's name, logo, colour and footer link.
+     *
+     * @param theBrand      the brand (null = OpenFilz)
+     * @param poweredByNote localised, escaped "Powered by OpenFilz" line, shown when
+     *                      {@link Brand#poweredByShown()}; blank = the English text
+     */
+    public static String brandedPage(String lang, boolean rtl, String title, String content,
+                                     String footerNote, Brand theBrand, String poweredByNote) {
+        Brand b = theBrand == null ? Brand.OPENFILZ : theBrand;
+        String logoUrl = b.logoUrl();
         String dir = rtl ? "rtl" : "ltr";
         String align = rtl ? "right" : "left";
         boolean noLogo = logoUrl != null && NO_LOGO.equalsIgnoreCase(logoUrl.trim());
         String logo = isBlank(logoUrl) ? DEFAULT_LOGO_URL : logoUrl;
-        String brand = esc(isBlank(brandName) ? "OpenFilz" : brandName);
-        return "<!DOCTYPE html><html lang=\"" + esc(isBlank(lang) ? "en" : lang) + "\" dir=\"" + dir + "\">"
+        String brand = esc(b.productName());
+        String footerBrand = "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:0 auto;\"><tr>"
+                + (noLogo ? "" : "<td valign=\"middle\" style=\"padding:0 6px;\"><img src=\"" + esc(logo) + "\" alt=\"\" width=\"37\" height=\"28\" style=\"display:block;border:0;max-width:37px;height:auto;\" /></td>")
+                + "<td valign=\"middle\"><span style=\"font-size:15px;font-weight:700;color:" + PRIMARY + ";letter-spacing:0.08em;text-transform:uppercase;\">" + brand + "</span></td>"
+                + "</tr></table>";
+        String poweredBy = b.poweredByShown()
+                ? "<p style=\"margin:12px 0 0;font-size:11px;line-height:1.5;color:#9ca3af;\"><a href=\"" + Brand.OPENFILZ_URL
+                    + "\" style=\"color:#9ca3af;text-decoration:none;\">" + (isBlank(poweredByNote) ? "Powered by OpenFilz" : poweredByNote) + "</a></p>"
+                : "";
+        String html = "<!DOCTYPE html><html lang=\"" + esc(isBlank(lang) ? "en" : lang) + "\" dir=\"" + dir + "\">"
                 + "<head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\">"
                 + "<meta name=\"color-scheme\" content=\"light only\"><title>" + title + "</title></head>"
                 + "<body style=\"margin:0;padding:0;background-color:#f4f6f9;font-family:" + FONT + ";\">"
@@ -72,15 +105,28 @@ public final class EmailLayout {
                 // Footer
                 + "<tr><td align=\"center\" bgcolor=\"#f8fafc\" style=\"padding:26px 40px;background-color:#f8fafc;border-top:1px solid #e5e7eb;text-align:center;\">"
                 + (isBlank(footerNote) ? "" : "<p style=\"margin:0 0 12px;font-size:12px;line-height:1.5;color:#9ca3af;\">" + footerNote + "</p>")
-                + "<a href=\"" + BRAND_URL + "\" style=\"text-decoration:none;\">"
-                + "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:0 auto;\"><tr>"
-                + (noLogo ? "" : "<td valign=\"middle\" style=\"padding:0 6px;\"><img src=\"" + esc(logo) + "\" alt=\"\" width=\"37\" height=\"28\" style=\"display:block;border:0;max-width:37px;height:auto;\" /></td>")
-                + "<td valign=\"middle\"><span style=\"font-size:15px;font-weight:700;color:" + PRIMARY + ";letter-spacing:0.08em;text-transform:uppercase;\">" + brand + "</span></td>"
-                + "</tr></table></a>"
+                + (isBlank(b.brandUrl()) ? footerBrand
+                    : "<a href=\"" + esc(b.brandUrl()) + "\" style=\"text-decoration:none;\">" + footerBrand + "</a>")
+                + poweredBy
                 + "</td></tr>"
                 + "</table>"
                 + "</td></tr></table>"
                 + "</body></html>";
+        return recolor(html, b.primaryColor());
+    }
+
+    /**
+     * Rewrites the default palette for another brand colour: the colour itself, the gradient end
+     * (the colour darkened) and the light tint. Only a valid {@code #rrggbb} is written.
+     */
+    static String recolor(String html, String primary) {
+        if (primary == null || PRIMARY.equalsIgnoreCase(primary) || !Brand.isHexColor(primary)) {
+            return html;
+        }
+        String color = primary.strip().toLowerCase(java.util.Locale.ROOT);
+        return html.replace(GRADIENT_END, BrandColors.darker(color, 0.25))
+                .replace(TINT, BrandColors.lighter(color, 0.92))
+                .replace(PRIMARY, color);
     }
 
     /** Emphasised opening line (greeting / who did what). */
@@ -126,7 +172,7 @@ public final class EmailLayout {
 
     /** A one-time code, large and spaced. */
     public static String code(String code) {
-        return "<p style=\"margin:8px 0 20px;text-align:center;\"><span style=\"display:inline-block;padding:14px 26px;background-color:#f1f3ff;"
+        return "<p style=\"margin:8px 0 20px;text-align:center;\"><span style=\"display:inline-block;padding:14px 26px;background-color:" + TINT + ";"
                 + "border:1px dashed " + PRIMARY + ";border-radius:12px;font-size:30px;font-weight:700;letter-spacing:8px;color:#1a1a2e;"
                 + "font-family:'SFMono-Regular',Consolas,'Liberation Mono',monospace;\">" + esc(code) + "</span></p>";
     }
