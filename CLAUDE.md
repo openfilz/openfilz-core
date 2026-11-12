@@ -271,7 +271,7 @@ Optional audit chain verification (hash chain for integrity): `openfilz.audit.ch
   user → 507 `UserQuotaExceeded`), `openfilz.quota.total` (MB for the whole instance → 507 `InstanceQuotaExceeded`); 0 = no limit.
 - **`service/quota/StorageQuotaService`** (`DefaultStorageQuotaService`) is the ONLY place quotas are resolved and
   enforced — upload, multi-upload, TUS create/finalize, replace (growth only), unzip (once per archive), recycle-bin
-  restore all call `checkFileSize` / `checkStorage` / `checkUpload`. Never re-implement a quota check in a service.
+  restore, copy (files: once per request; folders: once per folder, every file below it) all call `checkFileSize` / `checkStorage` / `checkUpload`. Never re-implement a quota check in a service.
 - Effective user limit, most specific wins: own override (`user_storage_quota`, V1_15; 0 = exempt) > inherited
   (`inheritedQuotas` hook — none in core, EE = teams) > default. Seams (protected): `usedBytes` (core = `created_by`),
   `inheritedQuotas`, `chargedUsers`, `displayName`.

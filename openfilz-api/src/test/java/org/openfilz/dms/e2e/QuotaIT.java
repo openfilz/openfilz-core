@@ -7,6 +7,7 @@ import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.DeleteRequest;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.exception.GlobalExceptionHandler.ErrorResponse;
+import org.openfilz.dms.dto.request.CopyRequest;
 import org.openfilz.dms.dto.request.CreateFolderRequest;
 import org.openfilz.dms.dto.response.FolderResponse;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -240,6 +241,60 @@ public class QuotaIT extends TestContainersBaseConfig {
             assertTrue(errorResponse.message().contains("quota exceeded"));
         } finally {
             cleanupTestData(uploadedIds, null);
+        }
+    }
+
+    /**
+     * A copy adds bytes like an upload: copying files or a folder past the user quota is refused with
+     * HTTP 507 before anything is written, and goes through once there is room again.
+     */
+    @Test
+    void whenCopyExceedsUserQuota_thenInsufficientStorage() {
+        List<UUID> uploadedIds = new ArrayList<>();
+        List<UUID> folderIds = new ArrayList<>();
+        try {
+            FolderResponse folder = createFolder("copy-quota-" + UUID.randomUUID(), null);
+            folderIds.add(folder.id());
+            FolderResponse target = createFolder("copy-quota-target-" + UUID.randomUUID(), null);
+            folderIds.add(target.id());
+            UploadResponse inFolder = uploadFileWithSize("copy-quota-a.txt", 600 * ONE_KB, folder.id());
+            uploadedIds.add(inFolder.id());
+            UploadResponse atRoot = uploadFileWithSize("copy-quota-b.txt", 600 * ONE_KB);
+            uploadedIds.add(atRoot.id());
+            // 1200 KB used of 2048 KB: one more 600 KB copy fits, two do not
+
+            ErrorResponse filesRefused = getWebTestClient().post()
+                    .uri(RestApiVersion.API_PREFIX + "/files/copy")
+                    .body(BodyInserters.fromValue(new CopyRequest(List.of(inFolder.id(), atRoot.id()), target.id(), true)))
+                    .exchange()
+                    .expectStatus().isEqualTo(HttpStatus.INSUFFICIENT_STORAGE)
+                    .expectBody(ErrorResponse.class)
+                    .returnResult().getResponseBody();
+            assertNotNull(filesRefused);
+            assertTrue(filesRefused.message().contains("quota exceeded"));
+
+            // Nothing was copied: the target folder is still empty
+            getWebTestClient().get().uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/folders/list")
+                            .queryParam("folderId", target.id()).build())
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectBody().jsonPath("$.length()").isEqualTo(0);
+
+            // One file fits
+            getWebTestClient().post()
+                    .uri(RestApiVersion.API_PREFIX + "/files/copy")
+                    .body(BodyInserters.fromValue(new CopyRequest(List.of(atRoot.id()), target.id(), true)))
+                    .exchange()
+                    .expectStatus().isOk();
+
+            // 2400 KB would be used after copying the folder: refused
+            getWebTestClient().post()
+                    .uri(RestApiVersion.API_PREFIX + "/folders/copy")
+                    .body(BodyInserters.fromValue(new CopyRequest(List.of(folder.id()), target.id(), true)))
+                    .exchange()
+                    .expectStatus().isEqualTo(HttpStatus.INSUFFICIENT_STORAGE);
+        } finally {
+            cleanupTestData(uploadedIds, folderIds);
         }
     }
 

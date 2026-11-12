@@ -483,7 +483,7 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
     @Override
     public Flux<CopyResponse> copyFiles(CopyRequest request) {
         if (request.targetFolderId() == null) {
-            return doCopyFiles(request);
+            return checkCopiedFilesStorage(request).thenMany(Flux.defer(() -> doCopyFiles(request)));
         }
         Mono<Document> targetFolderMono = documentDAO.findById(request.targetFolderId(), AccessType.RW)
                 .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, request.targetFolderId())))
@@ -491,8 +491,31 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                 .switchIfEmpty(Mono.error(new OperationForbiddenException("Target is not a folder: " + request.targetFolderId())));
 
         return targetFolderMono.flatMapMany(_ ->
-                doCopyFiles(request)
+                checkCopiedFilesStorage(request).thenMany(Flux.defer(() -> doCopyFiles(request)))
         );
+    }
+
+    /**
+     * A copy adds bytes like an upload: the files of one request are checked against the storage
+     * quotas once, together, before any of them is written (they are copied concurrently, so a check
+     * per file would not see its siblings). An unknown or unreadable id adds nothing here: the copy
+     * itself reports it.
+     */
+    private Mono<Void> checkCopiedFilesStorage(CopyRequest request) {
+        return Flux.fromIterable(request.documentIds())
+                .concatMap(id -> documentDAO.findById(id, AccessType.RO))
+                .filter(doc -> doc.getType() == FILE)
+                .map(doc -> doc.getSize() == null ? 0L : doc.getSize())
+                .reduce(0L, Long::sum)
+                .flatMap(this::validateUserQuota);
+    }
+
+    /** The active files under a folder (all levels) add this many bytes when the folder is copied. */
+    private Mono<Long> folderBytes(UUID folderId) {
+        return documentDAO.getChildren(folderId)
+                .filter(child -> child.getType() == FILE)
+                .map(child -> child.getSize() == null ? 0L : child.getSize())
+                .reduce(0L, Long::sum);
     }
 
     private Flux<CopyResponse> doCopyFiles(CopyRequest request) {
@@ -567,7 +590,15 @@ public class DocumentServiceImpl implements DocumentService, UserInfoService {
                                         if (isDescendant) {
                                             return Flux.error(new OperationForbiddenException("Cannot copy a folder into one of its descendants."));
                                         }
-                                        return copyFolderRecursive(folderIdToCopy, request.targetFolderId(), request.allowDuplicateFileNames());
+                                        // A copied folder adds the bytes of every file under it: checked once,
+                                        // before anything is written (folders are copied one after another, so
+                                        // the next check sees what the previous copy stored)
+                                        return documentDAO.findById(folderIdToCopy, AccessType.RO)
+                                                .switchIfEmpty(Mono.error(new DocumentNotFoundException(FOLDER, folderIdToCopy)))
+                                                .flatMap(_ -> folderBytes(folderIdToCopy))
+                                                .flatMap(this::validateUserQuota)
+                                                .thenMany(Flux.defer(() -> copyFolderRecursive(folderIdToCopy,
+                                                        request.targetFolderId(), request.allowDuplicateFileNames())));
                                     });
                         })
         );
