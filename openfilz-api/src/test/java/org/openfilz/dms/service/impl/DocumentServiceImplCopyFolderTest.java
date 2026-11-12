@@ -10,6 +10,7 @@ import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.AccessType;
 import org.openfilz.dms.exception.DocumentNotFoundException;
 import org.openfilz.dms.exception.OperationForbiddenException;
+import org.openfilz.dms.exception.UserQuotaExceededException;
 import org.openfilz.dms.repository.DocumentDAO;
 import org.openfilz.dms.service.AuditService;
 import org.openfilz.dms.service.DocumentDeleteService;
@@ -33,12 +34,14 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.openfilz.dms.enums.DocumentType.FILE;
 import static org.openfilz.dms.enums.DocumentType.FOLDER;
 
 /**
  * {@link DocumentServiceImpl#copyFolders(CopyRequest)} must refuse to copy a folder into itself or
  * into one of its own descendants before anything is written: the copy would otherwise show up among
- * the source's children and be copied again, forever, filling storage and the database.
+ * the source's children and be copied again, forever, filling storage and the database. A copy is also
+ * checked against the storage quotas, once per request (files) or per folder, before anything is written.
  */
 @ExtendWith(MockitoExtension.class)
 class DocumentServiceImplCopyFolderTest {
@@ -122,9 +125,51 @@ class DocumentServiceImplCopyFolderTest {
         assertNoWrite();
     }
 
+    @Test
+    void copyFolders_overQuota_isRefusedBeforeAnyWrite() {
+        when(documentDAO.findById(eq(targetId), any())).thenReturn(Mono.just(folder(targetId, null)));
+        when(documentDAO.findById(eq(sourceId), eq(AccessType.RO))).thenReturn(Mono.just(folder(sourceId, null)));
+        when(documentDAO.getFolderFilesSize(sourceId)).thenReturn(Mono.just(1000L));
+        when(storageQuotaService.checkStorage(1000L))
+                .thenReturn(Mono.error(new UserQuotaExceededException("u", 0, 1000, 500)));
+
+        StepVerifier.create(service.copyFolders(new CopyRequest(List.of(sourceId), targetId, false)))
+                .expectError(UserQuotaExceededException.class)
+                .verify();
+
+        verify(storageQuotaService).checkStorage(1000L);
+        assertNoWrite();
+    }
+
+    @Test
+    void copyFiles_overQuota_isRefusedBeforeAnyWrite() {
+        UUID a = UUID.randomUUID();
+        UUID b = UUID.randomUUID();
+        UUID unknown = UUID.randomUUID();
+        when(documentDAO.findById(eq(targetId), eq(AccessType.RW))).thenReturn(Mono.just(folder(targetId, null)));
+        when(documentDAO.findById(eq(a), eq(AccessType.RO))).thenReturn(Mono.just(file(a, 300L)));
+        when(documentDAO.findById(eq(b), eq(AccessType.RO))).thenReturn(Mono.just(file(b, 200L)));
+        when(documentDAO.findById(eq(unknown), eq(AccessType.RO))).thenReturn(Mono.empty());
+        // The files of one request are checked together, once
+        when(storageQuotaService.checkStorage(500L))
+                .thenReturn(Mono.error(new UserQuotaExceededException("u", 0, 500, 100)));
+
+        StepVerifier.create(service.copyFiles(new CopyRequest(List.of(a, unknown, b), targetId, false)))
+                .expectError(UserQuotaExceededException.class)
+                .verify();
+
+        verify(storageQuotaService).checkStorage(500L);
+        verifyNoInteractions(saveDocumentService, storageService, auditService);
+    }
+
+    private static Document file(UUID id, Long size) {
+        return Document.builder().id(id).name("file-" + id).type(FILE).size(size).build();
+    }
+
     private void assertNoWrite() {
         verifyNoInteractions(saveDocumentService, storageService, auditService);
         verify(documentDAO, never()).findDocumentsByParentId(any());
+        verify(documentDAO, never()).findActiveDocumentsByParentId(any());
         verify(documentDAO, never()).findDocumentsByParentIdAndType(any(), any());
     }
 }

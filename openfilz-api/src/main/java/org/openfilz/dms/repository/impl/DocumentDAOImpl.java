@@ -420,6 +420,34 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
     }
 
     @Override
+    public Flux<Document> findActiveDocumentsByParentId(@Nonnull UUID folderId) {
+        return documentRepository.findByParentIdAndActiveIsTrue(folderId);
+    }
+
+    @Override
+    public Mono<Long> getFolderFilesSize(@Nonnull UUID folderId) {
+        // Summed in the database: a folder may hold many thousands of files, and only the total is needed
+        String sql = """
+            WITH RECURSIVE folder_tree AS (
+              SELECT id, type, size
+              FROM documents
+              WHERE parent_id = :parentId AND active = true
+             UNION ALL
+              SELECT d.id, d.type, d.size
+              FROM documents d
+              JOIN folder_tree tree ON d.parent_id = tree.id AND tree.type = 'FOLDER'
+              WHERE d.active = true
+            )
+            SELECT COALESCE(SUM(size), 0) as total_size FROM folder_tree WHERE type = 'FILE'
+            """;
+        return databaseClient.sql(sql)
+                .bind(PARENT_ID, folderId)
+                .map(row -> row.get(TOTAL_SIZE, Long.class))
+                .one()
+                .defaultIfEmpty(0L);
+    }
+
+    @Override
     public Mono<Document> findById(UUID documentId, AccessType accessType) {
         return documentRepository.findByIdAndActive(documentId, true);
     }
