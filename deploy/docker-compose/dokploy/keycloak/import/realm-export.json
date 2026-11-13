@@ -1,5 +1,6 @@
 {
   "realm": "openfilz",
+  "displayName": "OpenFilz",
   "attributes": {
     "frontendUrl": "${KEYCLOAK_PUBLIC_URL}"
   },

@@ -30,4 +30,12 @@ public interface SqlQueryUtils {
                 row.get(NAME, String.class));
     }
 
+    /** Same, plus the {@code owner} column (e-mail) of the folder listing. */
+    default Function<Readable, FolderElementInfo> mapFolderElementInfoWithOwner() {
+        return row -> new FolderElementInfo(row.get(ID, UUID.class),
+                DocumentType.valueOf(row.get(TYPE, String.class)),
+                row.get(NAME, String.class),
+                row.get("owner", String.class));
+    }
+
 }

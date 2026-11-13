@@ -5,6 +5,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.SignatureProperties;
 import org.openfilz.dms.entity.SignatureEnvelope;
 import org.openfilz.dms.entity.SignatureRecipient;
+import org.openfilz.dms.service.branding.Brand;
+import org.openfilz.dms.service.branding.BrandingProvider;
+import org.openfilz.dms.service.branding.PropertiesBrandingProvider;
 import org.openfilz.dms.service.signature.SignatureMailer;
 import org.openfilz.dms.utils.EmailLayout;
 import org.springframework.core.io.ByteArrayResource;
@@ -19,17 +22,24 @@ import java.util.Locale;
  * JavaMail implementation of {@link SignatureMailer}. Every send is fire-and-forget on the
  * bounded-elastic scheduler; failures are logged and never propagate to the signing flow.
  * HTML is assembled in Java (no template engine) from the localised bundle — see
- * {@link SignatureMailTexts} — inside the shared branded shell {@link EmailLayout}.
+ * {@link SignatureMailTexts} — inside the shared branded shell {@link EmailLayout}, in the brand
+ * the {@link BrandingProvider} answers for each message (name, logo, colour, footer link).
  */
 @Slf4j
 public class SmtpSignatureMailer implements SignatureMailer {
 
     private final JavaMailSender sender;
     private final SignatureProperties props;
+    private final BrandingProvider branding;
 
     public SmtpSignatureMailer(JavaMailSender sender, SignatureProperties props) {
+        this(sender, props, new PropertiesBrandingProvider(null, props, null));
+    }
+
+    public SmtpSignatureMailer(JavaMailSender sender, SignatureProperties props, BrandingProvider branding) {
         this.sender = sender;
         this.props = props;
+        this.branding = branding;
     }
 
     @Override
@@ -97,7 +107,7 @@ public class SmtpSignatureMailer implements SignatureMailer {
             try {
                 MimeMessage message = sender.createMimeMessage();
                 MimeMessageHelper helper = new MimeMessageHelper(message, attachment != null, "UTF-8");
-                helper.setFrom(props.getMail().getFrom(), props.getMail().getFromName());
+                helper.setFrom(props.getMail().getFrom(), fromName());
                 helper.setTo(to);
                 helper.setSubject(subject);
                 helper.setText(html, true);
@@ -139,8 +149,14 @@ public class SmtpSignatureMailer implements SignatureMailer {
     }
 
     private String layout(Locale loc, String title, String content) {
-        SignatureProperties.Mail mail = props.getMail();
-        return EmailLayout.page(loc.getLanguage(), SignatureMailTexts.isRtl(loc), title, content,
-                t(loc, "footer", esc(mail.getProductName())), mail.getProductName(), mail.getLogoUrl());
+        Brand brand = branding.brand();
+        return EmailLayout.brandedPage(loc.getLanguage(), SignatureMailTexts.isRtl(loc), title, content,
+                t(loc, "footer", esc(brand.productName())), brand, t(loc, "poweredBy"));
+    }
+
+    /** Display name of the From header: the configured one, else "{product} e-Sign". */
+    String fromName() {
+        String configured = props.getMail().getFromName();
+        return configured == null || configured.isBlank() ? branding.brand().productName() + " e-Sign" : configured;
     }
 }

@@ -1,6 +1,7 @@
 package org.openfilz.dms.config;
 
 import lombok.extern.slf4j.Slf4j;
+import org.openfilz.dms.service.branding.BrandingProvider;
 import org.openfilz.dms.service.workflow.WorkflowMailer;
 import org.openfilz.dms.service.workflow.impl.LoggingWorkflowMailer;
 import org.openfilz.dms.service.workflow.impl.SmtpWorkflowMailer;
@@ -23,7 +24,8 @@ public class WorkflowConfig {
     @Bean
     public WorkflowMailer workflowMailer(@Value("${spring.mail.host:}") String mailHost,
                                          ObjectProvider<JavaMailSender> mailSender,
-                                         WorkflowProperties props) {
+                                         WorkflowProperties props,
+                                         ObjectProvider<BrandingProvider> branding) {
         JavaMailSender sender = mailHost == null || mailHost.isBlank() ? null : mailSender.getIfAvailable();
         if (sender == null) {
             if (props.isActive()) {
@@ -31,6 +33,7 @@ public class WorkflowConfig {
             }
             return new LoggingWorkflowMailer();
         }
-        return new SmtpWorkflowMailer(sender, props);
+        BrandingProvider brand = branding == null ? null : branding.getIfAvailable();
+        return brand == null ? new SmtpWorkflowMailer(sender, props) : new SmtpWorkflowMailer(sender, props, brand);
     }
 }
