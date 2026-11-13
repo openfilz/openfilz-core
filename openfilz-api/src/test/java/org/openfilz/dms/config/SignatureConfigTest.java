@@ -29,7 +29,7 @@ class SignatureConfigTest {
 
     @Test
     void coreSignatureSealer_selfSignedDev_isInProcess() {
-        SignatureSealer sealer = config.coreSignatureSealer(props("self-signed-dev"), WebClient.builder());
+        SignatureSealer sealer = config.coreSignatureSealer(props("self-signed-dev"), WebClient.builder(), null);
         assertThat(sealer).isInstanceOf(InProcessSignatureSealer.class);
         assertThat(sealer.id()).isEqualTo("self-signed-dev");
         assertThat(((InProcessSignatureSealer) sealer).certificate()).as("init() was called").isNotNull();
@@ -37,7 +37,7 @@ class SignatureConfigTest {
 
     @Test
     void coreSignatureSealer_pkcs12WithoutKeystore_isInProcessFallingBackToEphemeral() {
-        SignatureSealer sealer = config.coreSignatureSealer(props("pkcs12"), WebClient.builder());
+        SignatureSealer sealer = config.coreSignatureSealer(props("pkcs12"), WebClient.builder(), null);
         assertThat(sealer).isInstanceOf(InProcessSignatureSealer.class);
         // no keystore path configured → ephemeral material, id reflects what is actually used
         assertThat(sealer.id()).isEqualTo("self-signed-dev");
@@ -45,14 +45,14 @@ class SignatureConfigTest {
 
     @Test
     void coreSignatureSealer_unknownProvider_defaultsToInProcess() {
-        assertThat(config.coreSignatureSealer(props("whatever"), WebClient.builder())).isInstanceOf(InProcessSignatureSealer.class);
+        assertThat(config.coreSignatureSealer(props("whatever"), WebClient.builder(), null)).isInstanceOf(InProcessSignatureSealer.class);
     }
 
     @Test
     void coreSignatureSealer_openfilzCloud_isCloud_caseInsensitive() {
         SignatureProperties p = props("OpenFilz-Cloud");
         p.getSeal().getCloud().setApiKey("k");
-        SignatureSealer sealer = config.coreSignatureSealer(p, WebClient.builder());
+        SignatureSealer sealer = config.coreSignatureSealer(p, WebClient.builder(), null);
         assertThat(sealer).isInstanceOf(CloudSignatureSealer.class);
         assertThat(sealer.id()).isEqualTo(CloudSignatureSealer.ID);
     }
@@ -66,9 +66,9 @@ class SignatureConfigTest {
     @SuppressWarnings("unchecked")
     void signatureMailer_blankHost_isLogging_andNeverResolvesSender() {
         ObjectProvider<JavaMailSender> provider = mock(ObjectProvider.class);
-        assertThat(config.signatureMailer("", provider, new SignatureProperties())).isInstanceOf(LoggingSignatureMailer.class);
-        assertThat(config.signatureMailer(null, provider, new SignatureProperties())).isInstanceOf(LoggingSignatureMailer.class);
-        assertThat(config.signatureMailer("   ", provider, new SignatureProperties())).isInstanceOf(LoggingSignatureMailer.class);
+        assertThat(config.signatureMailer("", provider, new SignatureProperties(), null)).isInstanceOf(LoggingSignatureMailer.class);
+        assertThat(config.signatureMailer(null, provider, new SignatureProperties(), null)).isInstanceOf(LoggingSignatureMailer.class);
+        assertThat(config.signatureMailer("   ", provider, new SignatureProperties(), null)).isInstanceOf(LoggingSignatureMailer.class);
         verify(provider, never()).getIfAvailable();
     }
 
@@ -77,7 +77,7 @@ class SignatureConfigTest {
     void signatureMailer_hostButNoSenderBean_isLogging() {
         ObjectProvider<JavaMailSender> provider = mock(ObjectProvider.class);
         when(provider.getIfAvailable()).thenReturn(null);
-        assertThat(config.signatureMailer("smtp.example.com", provider, new SignatureProperties())).isInstanceOf(LoggingSignatureMailer.class);
+        assertThat(config.signatureMailer("smtp.example.com", provider, new SignatureProperties(), null)).isInstanceOf(LoggingSignatureMailer.class);
     }
 
     @Test
@@ -85,7 +85,7 @@ class SignatureConfigTest {
     void signatureMailer_hostAndSender_isSmtp() {
         ObjectProvider<JavaMailSender> provider = mock(ObjectProvider.class);
         when(provider.getIfAvailable()).thenReturn(mock(JavaMailSender.class));
-        SignatureMailer mailer = config.signatureMailer("smtp.example.com", provider, new SignatureProperties());
+        SignatureMailer mailer = config.signatureMailer("smtp.example.com", provider, new SignatureProperties(), null);
         assertThat(mailer).isInstanceOf(SmtpSignatureMailer.class);
     }
 

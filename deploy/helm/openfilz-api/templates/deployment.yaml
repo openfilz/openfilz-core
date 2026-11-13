@@ -374,6 +374,41 @@ spec:
             - name: AI_SETTINGS_ENCRYPTION_KEY
               value: {{ .Values.ai.userSettings.encryptionKey | quote }}
             {{- end }}
+            # Product brand of the e-mails (openfilz.branding.*); unset = OpenFilz. Passed only when set.
+            {{- with .Values.branding }}
+            {{- if .productName }}
+            - name: OPENFILZ_BRANDING_PRODUCT_NAME
+              value: {{ .productName | quote }}
+            {{- end }}
+            {{- if .logoUrl }}
+            - name: OPENFILZ_BRANDING_LOGO_URL
+              value: {{ .logoUrl | quote }}
+            {{- end }}
+            {{- if .primaryColor }}
+            - name: OPENFILZ_BRANDING_PRIMARY_COLOR
+              value: {{ .primaryColor | quote }}
+            {{- end }}
+            {{- if .brandUrl }}
+            - name: OPENFILZ_BRANDING_BRAND_URL
+              value: {{ .brandUrl | quote }}
+            {{- end }}
+            {{- if .supportUrl }}
+            - name: OPENFILZ_BRANDING_SUPPORT_URL
+              value: {{ .supportUrl | quote }}
+            {{- end }}
+            - name: OPENFILZ_BRANDING_SHOW_POWERED_BY
+              value: {{ ne .showPoweredBy false | quote }}
+            {{- end }}
+            {{- with .Values.mail }}
+            {{- if .signatureFromName }}
+            - name: OPENFILZ_SIGNATURE_MAIL_FROM_NAME
+              value: {{ .signatureFromName | quote }}
+            {{- end }}
+            {{- if .workflowsFromName }}
+            - name: OPENFILZ_WORKFLOWS_MAIL_FROM_NAME
+              value: {{ .workflowsFromName | quote }}
+            {{- end }}
+            {{- end }}
           {{- if or .Values.extraEnv .Values.extraEnvSecretRef }}
           envFrom:
             {{- if .Values.extraEnv }}

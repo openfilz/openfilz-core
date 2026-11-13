@@ -354,6 +354,23 @@ ai:
     enabled: false
     encryptionKey: ""
 
+# -- Product brand of the e-mails (openfilz.branding.*). Empty = OpenFilz.
+branding:
+  productName: ""
+  # absolute https URL; "none" = no logo image
+  logoUrl: ""
+  # #rrggbb; empty = the OpenFilz palette
+  primaryColor: ""
+  # link of the brand in e-mail footers
+  brandUrl: ""
+  supportUrl: ""
+  showPoweredBy: true
+
+# -- Display names of the e-Sign and workflow e-mails. Empty = "<product name> e-Sign" / "<product name> Workflows".
+mail:
+  signatureFromName: ""
+  workflowsFromName: ""
+
 # Extra environment variables injected via a chart-managed ConfigMap (envFrom).
 extraEnv: {}
 # Existing Secret injected as environment variables via envFrom.

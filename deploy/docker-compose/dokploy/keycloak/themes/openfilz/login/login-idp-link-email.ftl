@@ -24,7 +24,7 @@
         </div>
 
         <div class="of-info-message" id="instruction1">
-            ${msg("idpLinkEmailSent", idpDisplayName, (brokerContext.email)!(brokerContext.username))}
+            ${msg("idpLinkEmailSent", idpDisplayName, (brokerContext.email)!(brokerContext.username), layout.brandName)}
         </div>
 
         <div class="of-text-center">
