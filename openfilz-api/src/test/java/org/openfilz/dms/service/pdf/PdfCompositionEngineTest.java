@@ -68,6 +68,21 @@ class PdfCompositionEngineTest {
     }
 
     @Test
+    void producerIsTheProductBrand() throws IOException {
+        Path out = dir.resolve("branded.pdf");
+        new PdfCompositionEngine((org.openfilz.dms.service.branding.BrandingProvider) () -> org.openfilz.dms.service.branding.Brand.OPENFILZ.withProductName("Acme Docs"))
+                .compose(List.of(new PageRef(b, 1, 0)), null, null, out);
+        try (var doc = org.apache.pdfbox.Loader.loadPDF(out.toFile())) {
+            assertThat(doc.getDocumentInformation().getProducer()).isEqualTo("Acme Docs");
+        }
+        Path plain = dir.resolve("plain.pdf");
+        engine.compose(List.of(new PageRef(b, 1, 0)), null, null, plain);
+        try (var doc = org.apache.pdfbox.Loader.loadPDF(plain.toFile())) {
+            assertThat(doc.getDocumentInformation().getProducer()).isEqualTo("OpenFilz");
+        }
+    }
+
+    @Test
     void mergeKeepsOrderAndCreatesBookmarks() throws IOException {
         Path out = dir.resolve("merged.pdf");
         int pages = engine.compose(List.of(

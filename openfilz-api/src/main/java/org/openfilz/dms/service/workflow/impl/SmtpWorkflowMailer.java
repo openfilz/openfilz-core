@@ -3,6 +3,9 @@ package org.openfilz.dms.service.workflow.impl;
 import jakarta.mail.internet.MimeMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.WorkflowProperties;
+import org.openfilz.dms.service.branding.Brand;
+import org.openfilz.dms.service.branding.BrandingProvider;
+import org.openfilz.dms.service.branding.PropertiesBrandingProvider;
 import org.openfilz.dms.entity.WorkflowInstance;
 import org.openfilz.dms.entity.WorkflowTask;
 import org.openfilz.dms.service.workflow.WorkflowMailer;
@@ -24,10 +27,16 @@ public class SmtpWorkflowMailer implements WorkflowMailer {
 
     private final JavaMailSender sender;
     private final WorkflowProperties props;
+    private final BrandingProvider branding;
 
     public SmtpWorkflowMailer(JavaMailSender sender, WorkflowProperties props) {
+        this(sender, props, new PropertiesBrandingProvider(null, null, props));
+    }
+
+    public SmtpWorkflowMailer(JavaMailSender sender, WorkflowProperties props, BrandingProvider branding) {
         this.sender = sender;
         this.props = props;
+        this.branding = branding;
     }
 
     @Override
@@ -60,7 +69,7 @@ public class SmtpWorkflowMailer implements WorkflowMailer {
         String subject = t(loc, "completed.subject", i.getDocumentName(), i.getCurrentStateLabel());
         String body = layout(loc, t(loc, "completed.title"),
                 EmailLayout.lead(t(loc, "completed.body", esc(i.getDocumentName()), esc(i.getDefinitionName()), esc(i.getCurrentStateLabel())))
-                        + EmailLayout.button(link, t(loc, "completed.button")));
+                        + EmailLayout.button(link, openIn(loc)));
         send(toEmail, subject, body);
     }
 
@@ -71,7 +80,7 @@ public class SmtpWorkflowMailer implements WorkflowMailer {
         String body = layout(loc, t(loc, "cancelled.title"),
                 EmailLayout.lead(t(loc, "cancelled.body", esc(i.getDocumentName()), esc(i.getDefinitionName()), esc(actorEmail)))
                         + quote(comment)
-                        + EmailLayout.button(link, t(loc, "completed.button")));
+                        + EmailLayout.button(link, openIn(loc)));
         send(toEmail, subject, body);
     }
 
@@ -81,7 +90,7 @@ public class SmtpWorkflowMailer implements WorkflowMailer {
         String subject = t(loc, "reached.subject", i.getDocumentName(), stateLabel);
         String body = layout(loc, t(loc, "reached.title"),
                 EmailLayout.lead(t(loc, "reached.body", esc(i.getDocumentName()), esc(i.getDefinitionName()), esc(stateLabel)))
-                        + EmailLayout.button(link, t(loc, "completed.button")));
+                        + EmailLayout.button(link, openIn(loc)));
         send(toEmail, subject, body);
     }
 
@@ -92,7 +101,7 @@ public class SmtpWorkflowMailer implements WorkflowMailer {
             try {
                 MimeMessage message = sender.createMimeMessage();
                 MimeMessageHelper helper = new MimeMessageHelper(message, false, "UTF-8");
-                helper.setFrom(props.getMail().getFrom(), props.getMail().getFromName());
+                helper.setFrom(props.getMail().getFrom(), fromName());
                 helper.setTo(to);
                 helper.setSubject(subject);
                 helper.setText(html, true);
@@ -118,8 +127,19 @@ public class SmtpWorkflowMailer implements WorkflowMailer {
     }
 
     private String layout(Locale loc, String title, String content) {
-        WorkflowProperties.Mail mail = props.getMail();
-        return EmailLayout.page(loc.getLanguage(), WorkflowMailTexts.isRtl(loc), title, content,
-                t(loc, "footer", esc(mail.getProductName())), mail.getProductName(), mail.getLogoUrl());
+        Brand brand = branding.brand();
+        return EmailLayout.brandedPage(loc.getLanguage(), WorkflowMailTexts.isRtl(loc), title, content,
+                t(loc, "footer", esc(brand.productName())), brand, t(loc, "poweredBy"));
+    }
+
+    /** "Open in {product}": the button of the notices that lead back to the document. */
+    private String openIn(Locale loc) {
+        return t(loc, "completed.button", esc(branding.brand().productName()));
+    }
+
+    /** Display name of the From header: the configured one, else "{product} Workflows". */
+    String fromName() {
+        String configured = props.getMail().getFromName();
+        return configured == null || configured.isBlank() ? branding.brand().productName() + " Workflows" : configured;
     }
 }

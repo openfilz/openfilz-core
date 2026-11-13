@@ -15,6 +15,8 @@ import org.bouncycastle.operator.DefaultSignatureAlgorithmIdentifierFinder;
 import org.bouncycastle.operator.jcajce.JcaDigestCalculatorProviderBuilder;
 import org.openfilz.dms.config.SignatureProperties;
 import org.openfilz.dms.entity.SignatureEnvelope;
+import org.openfilz.dms.service.branding.BrandingProvider;
+import org.openfilz.dms.service.signature.SealWording;
 import org.openfilz.dms.service.signature.SignatureSealer;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
@@ -52,9 +54,16 @@ public class CloudSignatureSealer implements SignatureSealer {
 
     private final SignatureProperties props;
     private final WebClient client;
+    /** The product brand, for the reason. Null = OpenFilz. */
+    private final BrandingProvider branding;
     private volatile List<X509Certificate> chain;
 
     public CloudSignatureSealer(SignatureProperties props, WebClient.Builder builder) {
+        this(props, builder, null);
+    }
+
+    public CloudSignatureSealer(SignatureProperties props, WebClient.Builder builder, BrandingProvider branding) {
+        this.branding = branding;
         this.props = props;
         SignatureProperties.Seal.Cloud cloud = props.getSeal().getCloud();
         this.client = builder.clone()
@@ -86,8 +95,9 @@ public class CloudSignatureSealer implements SignatureSealer {
             PDSignature signature = new PDSignature();
             signature.setFilter(PDSignature.FILTER_ADOBE_PPKLITE);
             signature.setSubFilter(PDSignature.SUBFILTER_ADBE_PKCS7_DETACHED);
-            signature.setName(props.getSeal().getName());
-            signature.setReason("Document completed via OpenFilz e-Sign — envelope " + envelope.getId());
+            // The certificate is the signing service's: the signer name stays its owner's whatever the brand
+            signature.setName(SealWording.certificateOwnerName());
+            signature.setReason(SealWording.reason(branding, envelope.getId()));
             signature.setSignDate(Calendar.getInstance());
 
             SignatureInterface si = content -> {

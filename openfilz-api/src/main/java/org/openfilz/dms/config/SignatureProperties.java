@@ -117,11 +117,11 @@ public class SignatureProperties {
     public static class Mail {
         /** From address of every e-Sign email. */
         private String from = "no-reply@openfilz.com";
-        /** Display name in the From header. */
-        private String fromName = "OpenFilz e-Sign";
-        /** Product name used in subjects / bodies (EE white-label overrides this). */
+        /** Display name in the From header; blank = "{product name} e-Sign". */
+        private String fromName = "";
+        /** Product name, older form of {@code openfilz.branding.product-name}, which wins when set. */
         private String productName = "OpenFilz";
-        /** Logo URL rendered in the HTML emails; blank = the hosted OpenFilz logo. */
+        /** Logo URL, older form of {@code openfilz.branding.logo-url}, which wins when set; blank = the hosted OpenFilz logo. */
         private String logoUrl = "";
     }
 }

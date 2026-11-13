@@ -31,7 +31,9 @@ public class WorkflowProperties {
     @Setter
     public static class Mail {
         private String from = "no-reply@openfilz.com";
-        private String fromName = "OpenFilz Workflows";
+        /** Display name in the From header; blank = "{product name} Workflows". */
+        private String fromName = "";
+        /** Older forms of {@code openfilz.branding.product-name} / {@code logo-url}, which win when set. */
         private String productName = "OpenFilz";
         private String logoUrl = "";
     }

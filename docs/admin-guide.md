@@ -1142,6 +1142,43 @@ row is written, so keep `parallelism` below `spring.r2dbc.pool.max-size` (10 by 
 2 000 small files: ~5 s on local storage at 8; on MinIO ~11 s at 8 and ~5 s at 16 (storage-bound —
 raise the pool with it).
 
+### Product brand of the e-mails
+
+Every e-mail OpenFilz sends (e-Sign, workflows) is rendered in one brand: product name, logo,
+main colour and the link of its footer. All values are optional; empty = OpenFilz.
+
+| Property | Variable | Default | Effect |
+|---|---|---|---|
+| `openfilz.branding.product-name` | `OPENFILZ_BRANDING_PRODUCT_NAME` | *(empty)* | Replaces "OpenFilz" in subjects, bodies, footers and the sender name |
+| `openfilz.branding.logo-url` | `OPENFILZ_BRANDING_LOGO_URL` | *(empty)* | Absolute https logo; `none` = no image |
+| `openfilz.branding.primary-color` | `OPENFILZ_BRANDING_PRIMARY_COLOR` | *(empty)* | `#rrggbb`; the darker and lighter shades are derived from it |
+| `openfilz.branding.brand-url` | `OPENFILZ_BRANDING_BRAND_URL` | *(empty)* | Footer link (openfilz.com for the OpenFilz brand, none otherwise) |
+| `openfilz.branding.support-url` | `OPENFILZ_BRANDING_SUPPORT_URL` | *(empty)* | Help link |
+| `openfilz.branding.show-powered-by` | `OPENFILZ_BRANDING_SHOW_POWERED_BY` | `true` | "Powered by OpenFilz" line under a brand other than OpenFilz |
+
+The older `OPENFILZ_SIGNATURE_PRODUCT_NAME`, `OPENFILZ_WORKFLOWS_PRODUCT_NAME` and their `*_LOGO_URL`
+still apply when the matching `OPENFILZ_BRANDING_*` value is empty. The sender names
+(`OPENFILZ_SIGNATURE_MAIL_FROM_NAME`, `OPENFILZ_WORKFLOWS_MAIL_FROM_NAME`) default to the product
+name followed by "e-Sign" or "Workflows". A sender address on your own domain needs SPF and DKIM
+records for that domain, on your side.
+
+The product name also goes into the documents OpenFilz writes: the `Producer` of a PDF made by the PDF
+tools, and the reason and seal name of a signed document (e-Sign section). The completion certificate of a
+signed document carries a logo only when an extension layer provides one as PNG bytes.
+
+**Sign-in page and account e-mails (Keycloak theme).** The `openfilz` theme writes the realm's display
+name wherever it said OpenFilz: page title, wordmark, the invited-user welcome, and the account e-mails
+(verification, password reset, invitation, account link, login error). A realm without a display name
+reads as OpenFilz. Set it in the Keycloak admin console (Realm settings, Display name), or keep it in line
+with the API through the Keycloak Admin API. The e-mail subjects name no product (Keycloak builds them
+before the template runs); the From name of these e-mails is the realm's SMTP setting "From display name".
+Two optional variables of the Keycloak container:
+
+| Variable | Effect |
+|---|---|
+| `OPENFILZ_BRANDING_PUBLIC_URL` | Absolute address serving `<url>/logo` (the sign-in page logo; a 404 keeps the bundled one) and `<url>/theme.css` (custom properties `--brand-custom-primary`, `--brand-custom-primary-dark`, `--brand-custom-primary-light`, `--brand-custom-primary-light-dark`, mapped onto the page colours). Empty = the bundled logo and colours. Keycloak's default CSP does not restrict images or stylesheets; a realm that sets its own `Content-Security-Policy` must allow this host in `img-src` and `style-src`. |
+| `OPENFILZ_MAIL_LOGO_URL` | Header logo of the account e-mails (PNG; mail clients do not show SVG). Empty = the hosted OpenFilz logo under the OpenFilz name, the product name written out under another. |
+
 ### Workflows
 
 Statuses, transitions and tasks on documents — *Draft → Pending approval → Approved | Rejected* —
@@ -1162,7 +1199,7 @@ openfilz:
     sweep.cron: "0 0 * * * ?"             # OPENFILZ_WORKFLOWS_SWEEP_CRON — overdue reminders
     mail:
       from: no-reply@openfilz.com         # OPENFILZ_WORKFLOWS_MAIL_FROM
-      from-name: OpenFilz Workflows       # OPENFILZ_WORKFLOWS_MAIL_FROM_NAME
+      from-name: ""                      # OPENFILZ_WORKFLOWS_MAIL_FROM_NAME; empty = "<product name> Workflows"
 ```
 
 | Property | Default | Description |

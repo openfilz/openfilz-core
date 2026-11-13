@@ -13,6 +13,10 @@ import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlin
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineNode;
 import org.openfilz.dms.dto.response.pdf.PdfOutlineEntry;
 import org.openfilz.dms.dto.response.pdf.PdfPageInfo;
+import org.openfilz.dms.service.branding.Brand;
+import org.openfilz.dms.service.branding.BrandingProvider;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -37,6 +41,23 @@ import java.util.Map;
 @Slf4j
 @Component
 public class PdfCompositionEngine {
+
+    /** Names the producer of every PDF written here (the product brand, read per document). */
+    private final BrandingProvider branding;
+
+    /** Without a brand source (unit tests): OpenFilz. */
+    public PdfCompositionEngine() {
+        this((BrandingProvider) () -> Brand.OPENFILZ);
+    }
+
+    public PdfCompositionEngine(BrandingProvider branding) {
+        this.branding = branding;
+    }
+
+    @Autowired
+    public PdfCompositionEngine(ObjectProvider<BrandingProvider> branding) {
+        this(branding.getIfAvailable(() -> () -> Brand.OPENFILZ));
+    }
 
     /** Deeper bookmarks are not reported (they are never split points anyway). */
     static final int MAX_OUTLINE_DEPTH = 4;
@@ -137,7 +158,7 @@ public class PdfCompositionEngine {
                 root.openNode();
             }
             PDDocumentInformation info = out.getDocumentInformation();
-            info.setProducer("OpenFilz");
+            info.setProducer(branding.brand().productName());
             if (title != null && !title.isBlank()) {
                 info.setTitle(title);
             }

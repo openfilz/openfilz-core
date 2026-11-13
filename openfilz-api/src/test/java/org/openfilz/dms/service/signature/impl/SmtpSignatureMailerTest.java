@@ -212,4 +212,22 @@ class SmtpSignatureMailerTest {
         failing.sendRequest(envelope("en"), recipient("j@test.local", null), "doc.pdf", "https://x");
         failing.sendCompleted(envelope("en"), "k@test.local", null, null, new byte[]{1}, "s.pdf");
     }
+
+    @Test
+    void commonBrand_appliesToTheMail_andNamesTheSenderWhenNoneIsSet() throws Exception {
+        JavaMailSenderImpl sender = new JavaMailSenderImpl();
+        sender.setHost(ServerSetupTest.SMTP.getBindAddress());
+        sender.setPort(ServerSetupTest.SMTP.getPort());
+        props.getMail().setFromName("");
+        org.openfilz.dms.service.branding.Brand brand = org.openfilz.dms.service.branding.Brand.of(
+                "Acme Docs", "https://acme.test/logo.png", "#0b5394", "https://acme.test", "", true);
+        SmtpSignatureMailer branded = new SmtpSignatureMailer(sender, props, () -> brand);
+
+        branded.sendOtp(envelope("fr"), recipient("bob@test.local", "fr"), "123456", 10);
+
+        MimeMessage m = awaitOne();
+        assertThat(MimeUtility.decodeText(m.getFrom()[0].toString())).contains("Acme Docs e-Sign");
+        assertThat(body(m)).contains("Acme Docs").contains("#0b5394").doesNotContain("#667eea")
+                .contains("Propulsé par OpenFilz").contains("https://acme.test/logo.png");
+    }
 }

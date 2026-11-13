@@ -16,6 +16,9 @@ import org.openfilz.dms.entity.SignatureRecipient;
 import org.openfilz.dms.enums.SignatureFieldType;
 import org.openfilz.dms.enums.SignatureRecipientStatus;
 import org.openfilz.dms.service.SignaturePdfService;
+import org.openfilz.dms.service.branding.BrandingProvider;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
@@ -43,7 +46,8 @@ import java.util.stream.Collectors;
  *   <li>CHECKBOX — a box with a cross when "true".</li>
  * </ul>
  * Signature fields get a "Signed by … — timestamp" caption below (or above when near the
- * page bottom). A Certificate of Completion page is appended with signers + audit trail.
+ * page bottom). A Certificate of Completion page is appended with signers + audit trail, under the
+ * brand's logo when {@link BrandingProvider#logoPng()} has one.
  * <p>
  * All stamped text uses Liberation Sans (SIL OFL 1.1, bundled under {@code fonts/liberation/}),
  * embedded as a subset Type 0 font: it covers Latin, Greek and Cyrillic, so a signer named
@@ -62,6 +66,26 @@ public class SignaturePdfServiceImpl implements SignaturePdfService {
     private static final byte[] REGULAR_TTF = fontBytes("LiberationSans-Regular.ttf");
     private static final byte[] BOLD_TTF = fontBytes("LiberationSans-Bold.ttf");
     private static final byte[] ITALIC_TTF = fontBytes("LiberationSans-Italic.ttf");
+    /** Room for the brand's logo, top right of the certificate (points). */
+    static final float LOGO_MAX_WIDTH = 140f;
+    static final float LOGO_MAX_HEIGHT = 40f;
+
+    /** The brand's logo for the certificate; null = none. */
+    private final BrandingProvider branding;
+
+    /** Without a brand source (unit tests): no logo. */
+    public SignaturePdfServiceImpl() {
+        this((BrandingProvider) null);
+    }
+
+    public SignaturePdfServiceImpl(BrandingProvider branding) {
+        this.branding = branding;
+    }
+
+    @Autowired
+    public SignaturePdfServiceImpl(ObjectProvider<BrandingProvider> branding) {
+        this(branding.getIfAvailable());
+    }
 
     @Override
     public String sha256Hex(byte[] data) {
@@ -206,6 +230,7 @@ public class SignaturePdfServiceImpl implements SignaturePdfService {
         float y = page.getMediaBox().getHeight() - margin;
         PDPageContentStream cs = new PDPageContentStream(doc, page);
         try {
+            drawLogo(doc, cs, page, margin);
             y = line(cs, fonts, 18, margin, y, "Certificate of Completion", true);
             y -= 6;
             y = line(cs, fonts, 10, margin, y, "Envelope: " + envelope.getTitle(), false);
@@ -240,6 +265,25 @@ public class SignaturePdfServiceImpl implements SignaturePdfService {
             }
         } finally {
             cs.close();
+        }
+    }
+
+    /**
+     * The brand's logo in the top right corner, scaled into {@link #LOGO_MAX_WIDTH} x {@link #LOGO_MAX_HEIGHT}.
+     * A logo that cannot be read leaves the certificate as it was: it never fails a signature.
+     */
+    private void drawLogo(PDDocument doc, PDPageContentStream cs, PDPage page, float margin) {
+        byte[] png = branding == null ? null : branding.logoPng();
+        if (png == null || png.length == 0) return;
+        try {
+            PDImageXObject img = PDImageXObject.createFromByteArray(doc, png, "brand-logo");
+            if (img.getWidth() <= 0 || img.getHeight() <= 0) return;
+            float ratio = Math.min(LOGO_MAX_WIDTH / img.getWidth(), LOGO_MAX_HEIGHT / img.getHeight());
+            float w = img.getWidth() * ratio, h = img.getHeight() * ratio;
+            PDRectangle box = page.getMediaBox();
+            cs.drawImage(img, box.getUpperRightX() - margin - w, box.getUpperRightY() - margin - h + 14f, w, h);
+        } catch (IOException | RuntimeException e) {
+            log.warn("Brand logo left off the completion certificate: {}", e.toString());
         }
     }
 
