@@ -122,6 +122,57 @@ class DocxLanguageTest {
         assertThat(result.get("word/document.xml")).contains("w:val=\"en-GB\"").doesNotContain("en-US");
     }
 
+    /** The shape OnlyOffice writes: a Normal style with paragraph properties, defaults without a language. */
+    private static final String ONLYOFFICE_STYLES = styles("<w:docDefaults><w:rPrDefault><w:rPr>"
+            + "<w:rFonts w:hint=\"default\" w:ascii=\"Calibri\"/><w:sz w:val=\"22\"/></w:rPr></w:rPrDefault></w:docDefaults>"
+            + "<w:style w:type=\"paragraph\" w:styleId=\"832\" w:default=\"1\"><w:name w:val=\"Normal\"/><w:qFormat/>"
+            + "<w:pPr><w:spacing/></w:pPr></w:style>"
+            + "<w:style w:type=\"paragraph\" w:styleId=\"Heading1\"><w:name w:val=\"heading 1\"/><w:rPr><w:b/></w:rPr></w:style>");
+
+    @Test
+    void writesTheLanguageIntoTheNormalStyleToo() throws IOException {
+        String styles = rewrite(TestDocx.build(ONLYOFFICE_STYLES, TestDocx.ENGLISH), "en-US", null).get("word/styles.xml");
+
+        assertThat(styles).contains("<w:qFormat/><w:pPr><w:spacing/></w:pPr><w:rPr><w:lang w:val=\"en-US\"/></w:rPr></w:style>")
+                .contains("<w:name w:val=\"heading 1\"/><w:rPr><w:b/></w:rPr></w:style>");
+        assertThat(DocxLanguage.defaultLanguage(styles)).isEqualTo("en-US");
+        assertThat(DocxLanguage.styleLanguage(styles)).isEqualTo("en-US");
+    }
+
+    @Test
+    void theNormalStyleStillDeclaresTheLanguageOnceOnlyOfficeDroppedTheDefault() throws IOException {
+        // OnlyOffice saves an en-US default as nothing (its built-in default) but keeps the style's
+        Map<String, String> parts = TestDocx.parts(TestDocx.build(ONLYOFFICE_STYLES, TestDocx.ENGLISH));
+        parts.put("word/styles.xml", rewrite(TestDocx.zip(parts), "en-US", null).get("word/styles.xml")
+                .replace("<w:sz w:val=\"22\"/><w:lang w:val=\"en-US\"/>", "<w:sz w:val=\"22\"/>"));
+
+        DocxLanguage.Inspection inspection = inspect(TestDocx.zip(parts));
+
+        assertThat(inspection.defaultLanguage()).isNull();
+        assertThat(inspection.styleLanguage()).isEqualTo("en-US");
+        assertThat(inspection.defaultParagraphStyle()).isTrue();
+        assertThat(inspection.declaredLanguage()).isEqualTo("en-US");
+    }
+
+    @Test
+    void replacesAnotherLanguageOfTheNormalStyle() {
+        String styles = styles("<w:style w:type=\"paragraph\" w:default=\"1\" w:styleId=\"Normal\"><w:rPr><w:sz w:val=\"20\"/>"
+                + "<w:lang w:val=\"de-DE\"/></w:rPr><w:tblPr/></w:style>");
+
+        assertThat(DocxLanguage.withDefaultStyleLanguage(styles, "fr-FR"))
+                .contains("<w:rPr><w:sz w:val=\"20\"/><w:lang w:val=\"fr-FR\"/></w:rPr><w:tblPr/></w:style>");
+    }
+
+    @Test
+    void opensASelfClosingNormalStyleAndLeavesAPartWithoutOne() {
+        assertThat(DocxLanguage.withDefaultStyleLanguage(styles("<w:style w:type=\"paragraph\" w:default=\"1\" w:styleId=\"N\"/>"), "fr-FR"))
+                .contains("<w:style w:type=\"paragraph\" w:default=\"1\" w:styleId=\"N\"><w:rPr><w:lang w:val=\"fr-FR\"/></w:rPr></w:style>");
+        String noNormal = styles("<w:style w:type=\"character\" w:default=\"1\" w:styleId=\"F\"/>");
+        assertThat(DocxLanguage.withDefaultStyleLanguage(noNormal, "fr-FR")).isEqualTo(noNormal);
+        assertThat(DocxLanguage.withDefaultStyleLanguage(styles("<w:style w:type=\"paragraph\" w:default=\"1\"><w:tblPr/></w:style>"), "fr-FR"))
+                .contains("<w:style w:type=\"paragraph\" w:default=\"1\"><w:rPr><w:lang w:val=\"fr-FR\"/></w:rPr><w:tblPr/></w:style>");
+    }
+
     @Test
     void survivesAnOutOfRangeCharacterReference() {
         assertThat(DocxLanguage.text("<w:p><w:r><w:t>a &#99999999999; b &#x110000; c</w:t></w:r></w:p>"))
