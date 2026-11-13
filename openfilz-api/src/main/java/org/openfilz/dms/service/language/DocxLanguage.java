@@ -38,6 +38,12 @@ import java.util.zip.ZipOutputStream;
  * Word wrote it. Only the {@code w:} prefix is understood (what Word, LibreOffice, OnlyOffice and
  * the docx libraries all write); a document using another prefix reports no declared language
  * and is not rewritten.
+ * <p>
+ * A part is read in a time proportional to its length, whatever it holds: it comes from whoever
+ * uploaded the document and may inflate to {@link #MAX_PART_BYTES}. Two rules keep it so. A tag is
+ * matched with {@code [^<>]*}, never {@code [^>]*}, so a tag that is not closed stops at the next
+ * one instead of running to the end of the part. An element is found by {@link #first}, never by a
+ * {@code <x>(.*?)</x>} pattern, which looks for the closing tag again from every opening one.
  */
 public final class DocxLanguage {
 
@@ -48,23 +54,25 @@ public final class DocxLanguage {
     private static final Pattern TEXT_PARTS = Pattern.compile(
             "word/(document|styles|header\\d*|footer\\d*|footnotes|endnotes|comments)\\.xml");
 
-    private static final Pattern LANG = Pattern.compile("<w:lang\\b[^>]*?/?>");
+    private static final Pattern LANG = Pattern.compile("<w:lang\\b[^<>]*?/?>");
     private static final Pattern VAL = Pattern.compile("\\bw:val=\"([^\"]*)\"");
-    private static final Pattern DOC_DEFAULTS = Pattern.compile(
-            "<w:docDefaults\\s*/>|<w:docDefaults\\b[^>]*>(.*?)</w:docDefaults>", Pattern.DOTALL);
-    private static final Pattern RPR_DEFAULT = Pattern.compile(
-            "<w:rPrDefault\\s*/>|<w:rPrDefault\\b[^>]*>(.*?)</w:rPrDefault>", Pattern.DOTALL);
-    private static final Pattern RPR = Pattern.compile("<w:rPr\\s*/>|<w:rPr\\b[^>]*>(.*?)</w:rPr>", Pattern.DOTALL);
+    // Opening (or self-closing) tags, each with its closing tag: see first()
+    private static final Pattern DOC_DEFAULTS = Pattern.compile("<w:docDefaults\\b[^<>]*>");
+    private static final String DOC_DEFAULTS_END = "</w:docDefaults>";
+    private static final Pattern RPR_DEFAULT = Pattern.compile("<w:rPrDefault\\b[^<>]*>");
+    private static final String RPR_DEFAULT_END = "</w:rPrDefault>";
+    private static final Pattern RPR = Pattern.compile("<w:rPr\\b[^<>]*>");
+    private static final String RPR_END = "</w:rPr>";
     /** Elements that follow {@code w:lang} in a run's properties (schema order of CT_RPr). */
     private static final Pattern AFTER_LANG = Pattern.compile("<w:(eastAsianLayout|specVanish|oMath)\\b");
-    private static final Pattern STYLES_OPEN = Pattern.compile("<w:styles\\b[^>]*>");
-    /** The default paragraph style (Normal): {@code w:type="paragraph"} and {@code w:default} on. */
+    private static final Pattern STYLES_OPEN = Pattern.compile("<w:styles\\b[^<>]*>");
+    /** The tag of the default paragraph style (Normal): {@code w:type="paragraph"} and {@code w:default} on. */
     private static final Pattern DEFAULT_PARAGRAPH_STYLE = Pattern.compile(
-            "<w:style\\b(?=[^>]*\\bw:type=\"paragraph\")(?=[^>]*\\bw:default=\"(?:1|true|on)\")[^>]*?(?:/>|>(.*?)</w:style>)",
-            Pattern.DOTALL);
+            "<w:style\\b(?=[^<>]*\\bw:type=\"paragraph\")(?=[^<>]*\\bw:default=\"(?:1|true|on)\")[^<>]*>");
+    private static final String STYLE_END = "</w:style>";
     /** Elements that follow {@code w:rPr} in a style (schema order of CT_Style). */
     private static final Pattern AFTER_STYLE_RPR = Pattern.compile("<w:(tblPr|trPr|tcPr|tblStylePr)\\b");
-    private static final Pattern TEXT = Pattern.compile("<w:t(?:\\s[^>]*)?>([^<]*)</w:t>|</w:p>|<w:tab\\s*/>|<w:br\\s*/>");
+    private static final Pattern TEXT = Pattern.compile("<w:t(?:\\s[^<>]*)?>([^<]*)</w:t>|</w:p>|<w:tab\\s*/>|<w:br\\s*/>");
     private static final Pattern ENTITY = Pattern.compile("&(#x[0-9a-fA-F]+|#\\d+|amp|lt|gt|quot|apos);");
 
     /** Text kept for the language guess; a few pages are plenty. */
@@ -83,13 +91,18 @@ public final class DocxLanguage {
     public record Inspection(String defaultLanguage, String styleLanguage, boolean defaultParagraphStyle,
                              Map<String, Integer> languages, String text, boolean rewritable) {
 
-        /** The default, else the Normal style's, else the language most runs carry, else null. */
+        /**
+         * The Normal style's, else the default, else the language most runs carry, else null. The
+         * style first: it overrides the default for every paragraph that names no other style, so
+         * it is the language the text is checked against when the two differ (Word writes such
+         * documents: an {@code en-GB} default under a {@code fr-FR} Normal style).
+         */
         public String declaredLanguage() {
-            if (defaultLanguage != null) {
-                return defaultLanguage;
-            }
             if (styleLanguage != null) {
                 return styleLanguage;
+            }
+            if (defaultLanguage != null) {
+                return defaultLanguage;
             }
             return languages.entrySet().stream()
                     .max(Map.Entry.comparingByValue())
@@ -118,8 +131,9 @@ public final class DocxLanguage {
                     countLanguages(xml, languages);
                 }
             }
-            return new Inspection(defaultLanguage(styles), styleLanguage(styles),
-                    styles != null && DEFAULT_PARAGRAPH_STYLE.matcher(styles).find(), Collections.unmodifiableMap(languages),
+            Element normal = styles == null ? null : first(DEFAULT_PARAGRAPH_STYLE, STYLE_END, styles);
+            return new Inspection(defaultLanguage(styles), styleLanguage(styles, normal), normal != null,
+                    Collections.unmodifiableMap(languages),
                     text(document), styles != null && STYLES_OPEN.matcher(styles).find());
         }
     }
@@ -178,38 +192,58 @@ public final class DocxLanguage {
 
     // ── reading ─────────────────────────────────────────────────────────────
 
+    /** Where an element lies in a part; {@code bodyStart} is -1 for a self-closing one. */
+    private record Element(int start, int bodyStart, int bodyEnd, int end) {
+
+        boolean selfClosing() {
+            return bodyStart < 0;
+        }
+
+        /** What the element holds: nothing for a self-closing one. */
+        String body(String xml) {
+            return selfClosing() ? "" : xml.substring(bodyStart, bodyEnd);
+        }
+    }
+
+    /**
+     * The first element of {@code xml} whose tag matches {@code tag}, or null. Its closing tag is
+     * looked for once, from that tag: when there is none, no later tag has one either, so there is
+     * nothing more to try.
+     */
+    private static Element first(Pattern tag, String closingTag, String xml) {
+        Matcher open = tag.matcher(xml);
+        if (!open.find()) {
+            return null;
+        }
+        if (xml.charAt(open.end() - 2) == '/') {
+            return new Element(open.start(), -1, -1, open.end());
+        }
+        int close = xml.indexOf(closingTag, open.end());
+        return close < 0 ? null : new Element(open.start(), open.end(), close, close + closingTag.length());
+    }
+
     static String defaultLanguage(String styles) {
-        if (styles == null) {
-            return null;
-        }
-        Matcher defaults = DOC_DEFAULTS.matcher(styles);
-        if (!defaults.find() || defaults.group(1) == null) {
-            return null;
-        }
-        Matcher lang = LANG.matcher(defaults.group(1));
-        while (lang.find()) {
-            Matcher val = VAL.matcher(lang.group());
-            if (val.find() && !val.group(1).isBlank()) {
-                return val.group(1);
-            }
-        }
-        return null;
+        Element defaults = styles == null ? null : first(DOC_DEFAULTS, DOC_DEFAULTS_END, styles);
+        return defaults == null ? null : firstLanguage(defaults.body(styles));
     }
 
     /** The language of the default paragraph style, or null. */
     static String styleLanguage(String styles) {
-        if (styles == null) {
+        return styles == null ? null : styleLanguage(styles, first(DEFAULT_PARAGRAPH_STYLE, STYLE_END, styles));
+    }
+
+    private static String styleLanguage(String styles, Element style) {
+        if (style == null) {
             return null;
         }
-        Matcher style = DEFAULT_PARAGRAPH_STYLE.matcher(styles);
-        if (!style.find() || style.group(1) == null) {
-            return null;
-        }
-        Matcher rPr = RPR.matcher(style.group(1));
-        if (!rPr.find() || rPr.group(1) == null) {
-            return null;
-        }
-        Matcher lang = LANG.matcher(rPr.group(1));
+        String body = style.body(styles);
+        Element rPr = first(RPR, RPR_END, body);
+        return rPr == null ? null : firstLanguage(rPr.body(body));
+    }
+
+    /** The first {@code w:lang w:val} of {@code xml} that names a language, or null. */
+    private static String firstLanguage(String xml) {
+        Matcher lang = LANG.matcher(xml);
         while (lang.find()) {
             Matcher val = VAL.matcher(lang.group());
             if (val.find() && !val.group(1).isBlank()) {
@@ -280,8 +314,8 @@ public final class DocxLanguage {
     /** {@code styles.xml} with {@code language} as the document default, creating the elements it lacks. */
     static String withDefaultLanguage(String styles, String language) {
         String lang = langElement(language);
-        Matcher defaults = DOC_DEFAULTS.matcher(styles);
-        if (!defaults.find()) {
+        Element defaults = first(DOC_DEFAULTS, DOC_DEFAULTS_END, styles);
+        if (defaults == null) {
             Matcher open = STYLES_OPEN.matcher(styles);
             if (!open.find()) {
                 throw new IllegalArgumentException("styles.xml without <w:styles>");
@@ -290,22 +324,21 @@ public final class DocxLanguage {
                     + "<w:docDefaults><w:rPrDefault><w:rPr>" + lang + "</w:rPr></w:rPrDefault></w:docDefaults>"
                     + styles.substring(open.end());
         }
-        String body = defaults.group(1) == null ? "" : defaults.group(1);
+        String body = defaults.body(styles);
         String newBody;
-        Matcher rPrDefault = RPR_DEFAULT.matcher(body);
-        if (!rPrDefault.find()) {
+        Element rPrDefault = first(RPR_DEFAULT, RPR_DEFAULT_END, body);
+        if (rPrDefault == null) {
             // rPrDefault comes first in docDefaults (before pPrDefault)
             newBody = "<w:rPrDefault><w:rPr>" + lang + "</w:rPr></w:rPrDefault>" + body;
         } else {
-            String rPrDefaultBody = rPrDefault.group(1) == null ? "" : rPrDefault.group(1);
-            Matcher rPr = RPR.matcher(rPrDefaultBody);
+            String rPrDefaultBody = rPrDefault.body(body);
+            Element rPr = first(RPR, RPR_END, rPrDefaultBody);
             String newRPrDefaultBody;
-            if (!rPr.find()) {
+            if (rPr == null) {
                 newRPrDefaultBody = "<w:rPr>" + lang + "</w:rPr>" + rPrDefaultBody;
             } else {
-                String props = rPr.group(1) == null ? "" : rPr.group(1);
                 newRPrDefaultBody = rPrDefaultBody.substring(0, rPr.start())
-                        + "<w:rPr>" + withLang(props, language) + "</w:rPr>"
+                        + "<w:rPr>" + withLang(rPr.body(rPrDefaultBody), language) + "</w:rPr>"
                         + rPrDefaultBody.substring(rPr.end());
             }
             newBody = body.substring(0, rPrDefault.start())
@@ -323,33 +356,26 @@ public final class DocxLanguage {
      * defaults then carry the language alone.
      */
     static String withDefaultStyleLanguage(String styles, String language) {
-        Matcher style = DEFAULT_PARAGRAPH_STYLE.matcher(styles);
-        if (!style.find()) {
+        Element style = first(DEFAULT_PARAGRAPH_STYLE, STYLE_END, styles);
+        if (style == null) {
             return styles;
         }
-        String element = style.group();
-        String updated;
-        if (style.group(1) == null) {
-            // <w:style .../>: open it to hold the run properties
-            updated = element.substring(0, element.length() - 2).stripTrailing()
-                    + "><w:rPr>" + langElement(language) + "</w:rPr></w:style>";
+        // <w:style .../> is opened to hold the run properties
+        String open = style.selfClosing()
+                ? styles.substring(style.start(), style.end() - 2).stripTrailing() + ">"
+                : styles.substring(style.start(), style.bodyStart());
+        String body = style.body(styles);
+        Element rPr = first(RPR, RPR_END, body);
+        String newBody;
+        if (rPr != null) {
+            newBody = body.substring(0, rPr.start()) + "<w:rPr>" + withLang(rPr.body(body), language) + "</w:rPr>"
+                    + body.substring(rPr.end());
         } else {
-            String body = style.group(1);
-            String open = element.substring(0, element.length() - body.length() - "</w:style>".length());
-            Matcher rPr = RPR.matcher(body);
-            String newBody;
-            if (rPr.find()) {
-                String props = rPr.group(1) == null ? "" : rPr.group(1);
-                newBody = body.substring(0, rPr.start()) + "<w:rPr>" + withLang(props, language) + "</w:rPr>"
-                        + body.substring(rPr.end());
-            } else {
-                Matcher after = AFTER_STYLE_RPR.matcher(body);
-                int at = after.find() ? after.start() : body.length();
-                newBody = body.substring(0, at) + "<w:rPr>" + langElement(language) + "</w:rPr>" + body.substring(at);
-            }
-            updated = open + newBody + "</w:style>";
+            Matcher after = AFTER_STYLE_RPR.matcher(body);
+            int at = after.find() ? after.start() : body.length();
+            newBody = body.substring(0, at) + "<w:rPr>" + langElement(language) + "</w:rPr>" + body.substring(at);
         }
-        return styles.substring(0, style.start()) + updated + styles.substring(style.end());
+        return styles.substring(0, style.start()) + open + newBody + STYLE_END + styles.substring(style.end());
     }
 
     /** Run properties with their {@code w:lang} set to {@code language}, in schema order. */

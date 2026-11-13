@@ -6,11 +6,13 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.openfilz.dms.service.language.TestDocx.FRENCH;
 import static org.openfilz.dms.service.language.TestDocx.styles;
 
@@ -155,6 +157,21 @@ class DocxLanguageTest {
     }
 
     @Test
+    void theNormalStyleWinsOverAnotherDefault() throws IOException {
+        // As Word wrote a French document: the text is checked in the style's language, not the default's
+        String styles = styles("<w:docDefaults><w:rPrDefault><w:rPr><w:lang w:val=\"en-GB\" w:eastAsia=\"en-GB\"/></w:rPr>"
+                + "</w:rPrDefault><w:pPrDefault/></w:docDefaults>"
+                + "<w:style w:type=\"paragraph\" w:default=\"1\" w:styleId=\"Normal\"><w:name w:val=\"Normal\"/><w:qFormat/>"
+                + "<w:rPr><w:lang w:val=\"fr-FR\" w:eastAsia=\"fr-FR\"/></w:rPr></w:style>");
+
+        DocxLanguage.Inspection inspection = inspect(TestDocx.build(styles, FRENCH));
+
+        assertThat(inspection.defaultLanguage()).isEqualTo("en-GB");
+        assertThat(inspection.styleLanguage()).isEqualTo("fr-FR");
+        assertThat(inspection.declaredLanguage()).isEqualTo("fr-FR");
+    }
+
+    @Test
     void replacesAnotherLanguageOfTheNormalStyle() {
         String styles = styles("<w:style w:type=\"paragraph\" w:default=\"1\" w:styleId=\"Normal\"><w:rPr><w:sz w:val=\"20\"/>"
                 + "<w:lang w:val=\"de-DE\"/></w:rPr><w:tblPr/></w:style>");
@@ -171,6 +188,36 @@ class DocxLanguageTest {
         assertThat(DocxLanguage.withDefaultStyleLanguage(noNormal, "fr-FR")).isEqualTo(noNormal);
         assertThat(DocxLanguage.withDefaultStyleLanguage(styles("<w:style w:type=\"paragraph\" w:default=\"1\"><w:tblPr/></w:style>"), "fr-FR"))
                 .contains("<w:style w:type=\"paragraph\" w:default=\"1\"><w:rPr><w:lang w:val=\"fr-FR\"/></w:rPr><w:tblPr/></w:style>");
+    }
+
+    /**
+     * A part made of tags that are never closed, a few KB once zipped. Looking for the end of each of them
+     * up to the end of the part costs the square of its length: 250 KB of one such tag held a thread for
+     * 6 to 38 seconds, and a part may inflate to 64 MB.
+     */
+    @Test
+    void aPartOfUnclosedTagsIsReadInLinearTime() {
+        int repeats = 30_000;
+        String styles = styles("</w:docDefaults></w:rPrDefault></w:rPr></w:style>"
+                + "<w:docDefaults>".repeat(repeats)
+                + "<w:rPrDefault>".repeat(repeats)
+                + "<w:rPr>".repeat(repeats)
+                + "<w:style w:type=\"paragraph\" w:default=\"1\">".repeat(repeats)
+                + "<w:style w:type=\"paragraph\" ".repeat(repeats)
+                + "<w:lang ".repeat(repeats)
+                + "<w:styles ".repeat(repeats));
+        Map<String, String> parts = TestDocx.parts(TestDocx.build(styles, FRENCH));
+        parts.put("word/document.xml", parts.get("word/document.xml").replace("</w:body>",
+                "<w:t ".repeat(repeats) + "<w:lang ".repeat(repeats) + "</w:body>"));
+        byte[] docx = TestDocx.zip(parts);
+
+        assertTimeoutPreemptively(Duration.ofSeconds(20), () -> {
+            DocxLanguage.Inspection inspection = inspect(docx);
+            assertThat(inspection.defaultLanguage()).isNull();
+            assertThat(inspection.defaultParagraphStyle()).isFalse();
+            assertThat(inspection.text()).contains("appel d'offres");
+            assertThat(DocxLanguage.defaultLanguage(rewrite(docx, "fr-FR", "en-US").get("word/styles.xml"))).isEqualTo("fr-FR");
+        });
     }
 
     @Test

@@ -302,7 +302,10 @@ Optional audit chain verification (hash chain for integrity): `openfilz.audit.ch
   - `GET /status` — check if enabled
   - `GET /supported` — check file type support
   - `GET|POST /language/{documentId}` — proofing language of a Word document: declared (`w:lang`) vs detected
-    from its text (`service/language/`: `DocxLanguage` reads/writes `styles.xml` docDefaults + the Normal style + runs as text — the Normal style because OnlyOffice's save drops an `en-US` docDefaults language (its built-in default) but keeps a style's,
+    from its text (`service/language/`: `DocxLanguage` reads/writes `styles.xml` docDefaults + the Normal style + runs
+    as text — the Normal style because OnlyOffice's save drops an `en-US` docDefaults language (its built-in default)
+    but keeps a style's; a part is read in linear time whatever it holds: tags match `[^<>]*`, elements go through
+    `first()`, never a `<x>(.*?)</x>` pattern (`aPartOfUnclosedTagsIsReadInLinearTime`),
     `TextLanguageDetector` = function words, no model), set = new version through `replaceDocumentContent`
   - `GET /config/{id}?lang=` — editor UI language (hidden param, `DocumentLanguages.uiLanguage`, default `en`)
 - **OnlyOfficeJwtService** — JWT token generation for OnlyOffice

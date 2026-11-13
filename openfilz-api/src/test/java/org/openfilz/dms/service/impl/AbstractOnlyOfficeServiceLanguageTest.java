@@ -38,4 +38,14 @@ class AbstractOnlyOfficeServiceLanguageTest {
 
         assertThat(AbstractOnlyOfficeService.languageInfo(inspection, true).suggested()).isFalse();
     }
+
+    @Test
+    void aFrenchNormalStyleOverAnEnglishDefaultAsksNothingForAFrenchText() {
+        var inspection = new DocxLanguage.Inspection("en-GB", "fr-FR", true, Map.of("en-GB", 1, "fr-FR", 1), TestDocx.FRENCH, true);
+
+        var info = AbstractOnlyOfficeService.languageInfo(inspection, true);
+
+        assertThat(info.declared()).isEqualTo("fr-FR");
+        assertThat(info.suggested()).isFalse();
+    }
 }
