@@ -295,6 +295,60 @@ class SignaturePdfServiceImplTest {
                 .isInstanceOfAny(IllegalStateException.class, IllegalArgumentException.class);
     }
 
+    // ── brand logo on the certificate ─────────────────────────────────────
+
+    @Test
+    void certificateCarriesTheBrandLogoWhenThereIsOne() throws IOException {
+        byte[] png = Base64.getDecoder().decode(tinyPngB64);
+        org.openfilz.dms.service.branding.BrandingProvider withLogo = new org.openfilz.dms.service.branding.BrandingProvider() {
+            @Override
+            public org.openfilz.dms.service.branding.Brand brand() {
+                return org.openfilz.dms.service.branding.Brand.OPENFILZ.withProductName("Acme Docs");
+            }
+
+            @Override
+            public byte[] logoPng() {
+                return png;
+            }
+        };
+        SignatureRecipient r = recipient("Alice", "alice@example.com", SignatureRecipientStatus.SIGNED);
+        byte[] branded = new SignaturePdfServiceImpl(withLogo)
+                .buildStampedDocument(originalPdf, envelope("x", false), List.of(r), List.of(), List.of());
+        byte[] plain = service.buildStampedDocument(originalPdf, envelope("x", false), List.of(r), List.of(), List.of());
+        assertThat(certificateImages(branded)).isEqualTo(certificateImages(plain) + 1);
+    }
+
+    @Test
+    void anUnreadableLogoLeavesTheCertificateWithoutOne() throws IOException {
+        org.openfilz.dms.service.branding.BrandingProvider broken = new org.openfilz.dms.service.branding.BrandingProvider() {
+            @Override
+            public org.openfilz.dms.service.branding.Brand brand() {
+                return org.openfilz.dms.service.branding.Brand.OPENFILZ;
+            }
+
+            @Override
+            public byte[] logoPng() {
+                return "not a png".getBytes(StandardCharsets.UTF_8);
+            }
+        };
+        SignatureRecipient r = recipient("Alice", "alice@example.com", SignatureRecipientStatus.SIGNED);
+        byte[] out = new SignaturePdfServiceImpl(broken)
+                .buildStampedDocument(originalPdf, envelope("x", false), List.of(r), List.of(), List.of());
+        byte[] plain = service.buildStampedDocument(originalPdf, envelope("x", false), List.of(r), List.of(), List.of());
+        assertThat(certificateImages(out)).isEqualTo(certificateImages(plain));
+    }
+
+    private static int certificateImages(byte[] pdf) throws IOException {
+        try (PDDocument doc = Loader.loadPDF(pdf)) {
+            var resources = doc.getPage(originalPages).getResources();
+            int count = 0;
+            for (var name : resources.getXObjectNames()) {
+                if (resources.isImageXObject(name)) count++;
+            }
+            return count;
+        }
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────
 
     private static String textOfPage(PDDocument doc, int oneBasedPage) throws IOException {

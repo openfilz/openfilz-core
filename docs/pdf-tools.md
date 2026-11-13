@@ -102,7 +102,7 @@ exception/PdfToolsException             -> 422 (encrypted, not a PDF, bad ranges
 Engine details: `Loader.loadPDF(new RandomAccessReadBufferedFile(path), IOUtils.createTempFileOnlyStreamCache())`
 per source, `out.importPage(page)` per `PageRef` (keeps resources/annotations; rotation applied as
 `(page.getRotation() + delta) % 360`), optional outline entries per source (`PDDocumentOutline`),
-`Producer = "OpenFilz"`, `Title = output name`, save with a temp-file stream cache. Guards:
+`Producer` = the product name (admin guide, Product brand), `Title = output name`, save with a temp-file stream cache. Guards:
 `isEncrypted()`, `getSignatureDictionaries()` non-empty → `signed`, page count and byte limits.
 
 ### 3.2 REST API (`/api/v1/pdf`, CONTRIBUTOR for writes, READER for reads)

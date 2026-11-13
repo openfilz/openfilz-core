@@ -161,7 +161,8 @@ class CloudSignatureSealerTest {
             List<PDSignature> sigs = doc.getSignatureDictionaries();
             assertThat(sigs).hasSize(1);
             PDSignature sig = sigs.getFirst();
-            assertThat(sig.getName()).isEqualTo("Cloud Seal");
+            // the hosted service's certificate: its owner's name, whatever openfilz.signature.seal.name says
+            assertThat(sig.getName()).isEqualTo("OpenFilz e-Sign Seal");
             byte[] signedContent = sig.getSignedContent(result.bytes());
             byte[] cms = sig.getContents(result.bytes());
             CMSSignedData signedData = SignatureTestKeys.parseCms(signedContent, cms);

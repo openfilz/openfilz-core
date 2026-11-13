@@ -10,4 +10,13 @@ package org.openfilz.dms.service.branding;
 public interface BrandingProvider {
 
     Brand brand();
+
+    /**
+     * The brand's logo as PNG bytes, for generated documents (the completion certificate of a signed
+     * document); null = no logo. The default has none: a deployment that only sets a logo address
+     * gives nothing to fetch here, since generating a document never calls out to the network.
+     */
+    default byte[] logoPng() {
+        return null;
+    }
 }

@@ -1,6 +1,6 @@
 <#import "template.ftl" as layout>
-<@layout.emailLayout icon="&#128075;" title=msg("executeActionsTitle")>
-<p style="margin: 0 0 16px 0; font-size: 15px; color: #4b5563; line-height: 1.6;">${msg("executeActionsInstruction")}</p>
+<@layout.emailLayout icon="&#128075;" title=msg("executeActionsTitle", layout.brandName)>
+<p style="margin: 0 0 16px 0; font-size: 15px; color: #4b5563; line-height: 1.6;">${msg("executeActionsInstruction", layout.brandName)}</p>
 <p style="margin: 0 0 24px 0; font-size: 15px; color: #4b5563; line-height: 1.6;">${msg("executeActionsDetail")}</p>
 <@layout.button url=link text=msg("executeActionsButtonText")/>
 <div style="background-color: #f8fafc; border-radius: 12px; padding: 16px; margin-bottom: 20px;">

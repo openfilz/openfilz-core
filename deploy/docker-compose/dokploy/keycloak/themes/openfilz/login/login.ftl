@@ -22,7 +22,7 @@
 
     <#if section = "header">
         <#if isInvitedUser>
-            ${msg("loginInvitedWelcome")}
+            ${msg("loginInvitedWelcome", layout.brandName)}
         <#else>
             ${msg("loginWelcome")}
         </#if>

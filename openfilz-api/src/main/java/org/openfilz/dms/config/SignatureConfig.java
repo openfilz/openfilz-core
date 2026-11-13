@@ -36,14 +36,20 @@ public class SignatureConfig {
      * fallback while still being the {@code @Primary} {@link SignatureSealer}.
      */
     @Bean(CORE_SEALER)
-    public SignatureSealer coreSignatureSealer(SignatureProperties props, WebClient.Builder webClientBuilder) {
+    public SignatureSealer coreSignatureSealer(SignatureProperties props, WebClient.Builder webClientBuilder,
+                                               ObjectProvider<BrandingProvider> branding) {
         String provider = props.getSeal().getProvider();
+        // Read per seal, so a brand changed at runtime reaches the next signed document
+        BrandingProvider brand = () -> {
+            BrandingProvider current = branding == null ? null : branding.getIfAvailable();
+            return current == null ? org.openfilz.dms.service.branding.Brand.OPENFILZ : current.brand();
+        };
         if (CloudSignatureSealer.ID.equalsIgnoreCase(provider)) {
             log.info("[e-sign] seal provider: openfilz-cloud ({})", props.getSeal().getCloud().getUrl());
-            return new CloudSignatureSealer(props, webClientBuilder);
+            return new CloudSignatureSealer(props, webClientBuilder, brand);
         }
         log.info("[e-sign] seal provider: {} (in-process PAdES-B-B)", provider);
-        return new InProcessSignatureSealer(props).init();
+        return new InProcessSignatureSealer(props, brand).init();
     }
 
     @Bean
