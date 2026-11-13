@@ -55,6 +55,15 @@ public interface DocumentDAO {
 
     Flux<Document> findDocumentsByParentId(@Nonnull UUID folderId);
 
+    /** Direct children of a folder that are not in the recycle bin: what a copy of the folder takes. */
+    Flux<Document> findActiveDocumentsByParentId(@Nonnull UUID folderId);
+
+    /**
+     * Bytes of every file below a folder, at any depth, the recycle bin left out: what a copy of the folder
+     * adds. It follows the folder copy (every active child of an active folder), so the two never disagree.
+     */
+    Mono<Long> getFolderFilesSize(@Nonnull UUID folderId);
+
     Mono<Document> findById(UUID documentId, AccessType accessType);
 
     Mono<Document> update(Document document);
