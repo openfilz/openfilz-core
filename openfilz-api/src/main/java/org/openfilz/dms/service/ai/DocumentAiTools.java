@@ -433,6 +433,22 @@ public class DocumentAiTools {
         return result;
     }
 
+    /**
+     * The name filter is already a partial match, and its {@code %} / {@code _} are escaped as
+     * literals ({@code SqlUtils.escapeLike}). Small models still wrap the term in SQL or glob
+     * wildcards ({@code %invoice%}, {@code *invoice*}) or quotes, which then match nothing. Strip
+     * them from both ends; a term left blank, or the literal {@code "null"}, means no filter.
+     */
+    static String normalizeNameLike(String nameLike) {
+        if (nameLike == null) return null;
+        String term = nameLike.strip();
+        int start = 0, end = term.length();
+        while (start < end && "%*\"'`".indexOf(term.charAt(start)) >= 0) start++;
+        while (end > start && "%*\"'`".indexOf(term.charAt(end - 1)) >= 0) end--;
+        term = term.substring(start, end).strip();
+        return term.isEmpty() || "null".equalsIgnoreCase(term) ? null : term;
+    }
+
     @Tool(description = "Query documents with filtering, sorting, and pagination. Use this to: list folder contents, search files by name, find recent files, count documents, get document details. This is the main tool for finding documents.")
     public String queryDocuments(
             @ToolParam(required = false, description = "Folder name to list contents of, or null for root folder, or 'all' to search across all folders") String folder,
@@ -449,6 +465,7 @@ public class DocumentAiTools {
         if (roleDenial != null) return roleDenial;
         log.debug("[AI-TOOL] queryDocuments called: folder='{}', nameLike='{}', type='{}', sort={}:{}, pageSize={}, countOnly={}",
                 folder, nameLike, type, sortBy, sortOrder, pageSize, countOnly);
+        nameLike = normalizeNameLike(nameLike);
         try {
             // Resolve folder name to UUID
             // Default: search across all folders unless a specific folder is named
