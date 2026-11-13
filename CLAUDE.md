@@ -271,7 +271,7 @@ Optional audit chain verification (hash chain for integrity): `openfilz.audit.ch
   user → 507 `UserQuotaExceeded`), `openfilz.quota.total` (MB for the whole instance → 507 `InstanceQuotaExceeded`); 0 = no limit.
 - **`service/quota/StorageQuotaService`** (`DefaultStorageQuotaService`) is the ONLY place quotas are resolved and
   enforced — upload, multi-upload, TUS create/finalize, replace (growth only), unzip (once per archive), recycle-bin
-  restore all call `checkFileSize` / `checkStorage` / `checkUpload`. Never re-implement a quota check in a service.
+  restore, copy (files: once per request; folders: once per folder, every file below it summed by `DocumentDAO.getFolderFilesSize`; a folder copy takes active children only, never the recycle bin) all call `checkFileSize` / `checkStorage` / `checkUpload`. Never re-implement a quota check in a service.
 - Effective user limit, most specific wins: own override (`user_storage_quota`, V1_15; 0 = exempt) > inherited
   (`inheritedQuotas` hook — none in core, EE = teams) > default. Seams (protected): `usedBytes` (core = `created_by`),
   `inheritedQuotas`, `chargedUsers`, `displayName`.
@@ -302,7 +302,10 @@ Optional audit chain verification (hash chain for integrity): `openfilz.audit.ch
   - `GET /status` — check if enabled
   - `GET /supported` — check file type support
   - `GET|POST /language/{documentId}` — proofing language of a Word document: declared (`w:lang`) vs detected
-    from its text (`service/language/`: `DocxLanguage` reads/writes `styles.xml` docDefaults + runs as text,
+    from its text (`service/language/`: `DocxLanguage` reads/writes `styles.xml` docDefaults + the Normal style + runs
+    as text — the Normal style because OnlyOffice's save drops an `en-US` docDefaults language (its built-in default)
+    but keeps a style's; a part is read in linear time whatever it holds: tags match `[^<>]*`, elements go through
+    `first()`, never a `<x>(.*?)</x>` pattern (`aPartOfUnclosedTagsIsReadInLinearTime`),
     `TextLanguageDetector` = function words, no model), set = new version through `replaceDocumentContent`
   - `GET /config/{id}?lang=` — editor UI language (hidden param, `DocumentLanguages.uiLanguage`, default `en`)
 - **OnlyOfficeJwtService** — JWT token generation for OnlyOffice

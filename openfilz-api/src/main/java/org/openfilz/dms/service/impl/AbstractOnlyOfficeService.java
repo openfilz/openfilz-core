@@ -207,10 +207,15 @@ public class AbstractOnlyOfficeService<T extends IUserInfo> implements OnlyOffic
                         .subscribeOn(Schedulers.boundedElastic()));
     }
 
-    /** The default is {@code language} and no run carries another variant of it. */
-    private static boolean isAlreadySet(DocxLanguage.Inspection inspection, String language) {
+    /**
+     * The default is {@code language}, so is the Normal style's when there is one (OnlyOffice drops
+     * an {@code en-US} default on save and keeps the style's), and no run carries another variant of it.
+     */
+    static boolean isAlreadySet(DocxLanguage.Inspection inspection, String language) {
         String base = DocxLanguage.base(language);
-        return language.equals(inspection.defaultLanguage()) && inspection.languages().keySet().stream()
+        return language.equals(inspection.defaultLanguage())
+                && (!inspection.defaultParagraphStyle() || language.equals(inspection.styleLanguage()))
+                && inspection.languages().keySet().stream()
                 .allMatch(l -> l.equals(language) || !DocxLanguage.base(l).equals(base));
     }
 

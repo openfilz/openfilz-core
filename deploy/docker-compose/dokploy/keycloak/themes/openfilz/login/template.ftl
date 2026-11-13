@@ -1,3 +1,10 @@
+<#-- The product name is the realm's display name. A realm with none (Keycloak then falls back to the
+     realm's technical name) reads as OpenFilz. Other templates read it as layout.brandName. -->
+<#assign brandName = (realm.displayName?has_content && realm.displayName != realm.name)?then(realm.displayName, "OpenFilz")>
+<#-- Optional brand endpoint (theme.properties brandingUrl, from OPENFILZ_BRANDING_PUBLIC_URL): an absolute
+     http(s) address serving /logo and /theme.css. Empty = the bundled OpenFilz logo and colours. -->
+<#assign brandingBase = (properties.brandingUrl!"")?trim?remove_ending("/")>
+<#assign brandingOn = brandingBase?starts_with("https://") || brandingBase?starts_with("http://")>
 <#macro registrationLayout bodyClass="" displayInfo=false displayMessage=true displayRequiredFields=false showAnotherWayIfPresent=true>
 <!DOCTYPE html>
 <html lang="${(locale.currentLanguageTag)!'en'}">
@@ -5,7 +12,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
-    <title>${msg("loginTitle", (realm.displayName!''))}</title>
+    <title>${msg("loginTitle", brandName)}</title>
 
     <#if properties.meta?has_content>
         <#list properties.meta?split(' ') as meta>
@@ -19,6 +26,13 @@
         </#list>
     </#if>
 
+    <#if brandingOn>
+        <#-- The brand colour as CSS custom properties, then their mapping onto this theme's palette.
+             A stylesheet needs no CORS; Keycloak's default CSP does not restrict style-src. -->
+        <link rel="stylesheet" href="${brandingBase}/theme.css"/>
+        <link rel="stylesheet" href="${url.resourcesPath}/css/brand.css"/>
+    </#if>
+
     <#if properties.scripts?has_content>
         <#list properties.scripts?split(' ') as script>
             <script src="${url.resourcesPath}/${script}"></script>
@@ -27,7 +41,7 @@
 </head>
 <body>
     <div class="of-page" role="main">
-        <div class="of-card" role="region" aria-label="${msg("loginTitle", (realm.displayName!''))}">
+        <div class="of-card" role="region" aria-label="${msg("loginTitle", brandName)}">
 
             <#-- Locale Switcher -->
             <#if realm.internationalizationEnabled && locale?? && locale.supported?? && (locale.supported?size gt 1)>
@@ -63,10 +77,16 @@
             </#if>
 
             <#-- Logo -->
-            <div class="of-logo-wrapper" role="img" aria-label="${msg("logoAlt")}">
+            <div class="of-logo-wrapper" role="img" aria-label="${msg("logoAlt", brandName)}">
                 <div class="of-logo-lockup">
-                    <img class="of-logo-icon" src="${url.resourcesPath}/img/logo.svg" alt="OpenFilz" />
-                    <span class="of-logo-wordmark">OPENFILZ</span>
+                    <#if brandingOn>
+                        <#-- The uploaded logo; the endpoint answers 404 when there is none, then the bundled one shows -->
+                        <img class="of-logo-icon" src="${brandingBase}/logo" alt="${brandName}"
+                             onerror="this.onerror=null;this.src='${url.resourcesPath}/img/logo.svg';" />
+                    <#else>
+                        <img class="of-logo-icon" src="${url.resourcesPath}/img/logo.svg" alt="${brandName}" />
+                    </#if>
+                    <span class="of-logo-wordmark">${(brandName == "OpenFilz")?then("OPENFILZ", brandName)}</span>
                 </div>
             </div>
 

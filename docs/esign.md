@@ -117,7 +117,7 @@ values, so overriding them goes through relaxed binding; the other three have en
 | `openfilz.signature.seal.keystore-path` | `OPENFILZ_SIGNATURE_SEAL_KEYSTORE_PATH` | *(empty)* | PKCS#12 keystore holding the seal key + certificate. **This is what actually selects `pkcs12`** — see the note below. |
 | `openfilz.signature.seal.keystore-password` | `OPENFILZ_SIGNATURE_SEAL_KEYSTORE_PASSWORD` | *(empty)* | Used for both the store and the key entry — they must be identical. |
 | `openfilz.signature.seal.keystore-alias` | `OPENFILZ_SIGNATURE_SEAL_KEYSTORE_ALIAS` | `openfilz-seal` | Alias of the key entry inside the keystore. |
-| `openfilz.signature.seal.name` † | `OPENFILZ_SIGNATURE_SEAL_NAME` | `OpenFilz e-Sign Seal` | Written into the PDF signature dictionary (`/Name`). The `/Reason` always reads `Document completed via OpenFilz e-Sign — envelope <id>`. |
+| `openfilz.signature.seal.name` † | `OPENFILZ_SIGNATURE_SEAL_NAME` | `OpenFilz e-Sign Seal` | Written into the PDF signature dictionary (`/Name`) by the in-process seal. Left at its default, it reads `<product name> e-Sign Seal` (admin guide, Product brand). The `openfilz-cloud` seal always writes `OpenFilz e-Sign Seal`: the certificate is the signing service's. The `/Reason` reads `Document completed via <product name> e-Sign, envelope <id>`. |
 | `openfilz.signature.seal.cloud.url` | `OPENFILZ_SIGNATURE_CLOUD_URL` | `https://sign.openfilz.com` | Base URL of the cloud signing service. |
 | `openfilz.signature.seal.cloud.api-key` | `OPENFILZ_SIGNATURE_CLOUD_API_KEY` | *(empty)* | Tenant API key; sealing fails fast with a clear error when the `openfilz-cloud` provider is selected and this is blank. |
 | `openfilz.signature.seal.cloud.timeout` † | `OPENFILZ_SIGNATURE_SEAL_CLOUD_TIMEOUT` | `15s` | Per-call timeout for `/api/v1/cert` and `/api/v1/sign-hash`. |
@@ -141,9 +141,9 @@ values, so overriding them goes through relaxed binding; the other three have en
 | Property | Env var | Default | What it does |
 |---|---|---|---|
 | `openfilz.signature.mail.from` | `OPENFILZ_SIGNATURE_MAIL_FROM` | `no-reply@openfilz.com` | `From` address of every e-Sign e-mail. |
-| `openfilz.signature.mail.from-name` | `OPENFILZ_SIGNATURE_MAIL_FROM_NAME` | `OpenFilz e-Sign` | Display name in the `From` header. |
-| `openfilz.signature.mail.product-name` | `OPENFILZ_SIGNATURE_PRODUCT_NAME` | `OpenFilz` | Product name used in subjects and bodies (white-labelling). |
-| `openfilz.signature.mail.logo-url` | `OPENFILZ_SIGNATURE_LOGO_URL` | *(empty)* | Logo rendered in the header and footer of the HTML e-mails (absolute URL, ideally a ~135×104 PNG). Empty = the hosted OpenFilz logo. |
+| `openfilz.signature.mail.from-name` | `OPENFILZ_SIGNATURE_MAIL_FROM_NAME` | *(empty)* | Display name in the `From` header. Empty = the product name followed by "e-Sign". |
+| `openfilz.signature.mail.product-name` | `OPENFILZ_SIGNATURE_PRODUCT_NAME` | `OpenFilz` | Older form of `openfilz.branding.product-name` (see the admin guide, Product brand), used when that one is empty. |
+| `openfilz.signature.mail.logo-url` | `OPENFILZ_SIGNATURE_LOGO_URL` | *(empty)* | Older form of `openfilz.branding.logo-url`, used when that one is empty (absolute URL, ideally a ~135×104 PNG). Empty = the hosted OpenFilz logo. |
 | `spring.mail.host` | `SMTP_HOST` | *(empty)* | **Empty ⇒ no mail is sent at all** (links are only logged). |
 | `spring.mail.port` | `SMTP_PORT` | `587` | |
 | `spring.mail.username` | `SMTP_USER` | *(empty)* | |

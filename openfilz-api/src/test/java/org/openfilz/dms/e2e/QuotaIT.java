@@ -7,9 +7,11 @@ import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.request.DeleteRequest;
 import org.openfilz.dms.dto.response.UploadResponse;
 import org.openfilz.dms.exception.GlobalExceptionHandler.ErrorResponse;
+import org.openfilz.dms.dto.request.CopyRequest;
 import org.openfilz.dms.dto.request.CreateFolderRequest;
 import org.openfilz.dms.dto.response.FolderResponse;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -26,6 +28,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -241,6 +244,113 @@ public class QuotaIT extends TestContainersBaseConfig {
         } finally {
             cleanupTestData(uploadedIds, null);
         }
+    }
+
+    /**
+     * A copy adds bytes like an upload: copying files or a folder past the user quota is refused with
+     * HTTP 507 before anything is written, and goes through once there is room again.
+     */
+    @Test
+    void whenCopyExceedsUserQuota_thenInsufficientStorage() {
+        List<UUID> uploadedIds = new ArrayList<>();
+        List<UUID> folderIds = new ArrayList<>();
+        try {
+            FolderResponse folder = createFolder("copy-quota-" + UUID.randomUUID(), null);
+            folderIds.add(folder.id());
+            FolderResponse target = createFolder("copy-quota-target-" + UUID.randomUUID(), null);
+            folderIds.add(target.id());
+            UploadResponse inFolder = uploadFileWithSize("copy-quota-a.txt", 600 * ONE_KB, folder.id());
+            uploadedIds.add(inFolder.id());
+            UploadResponse atRoot = uploadFileWithSize("copy-quota-b.txt", 600 * ONE_KB);
+            uploadedIds.add(atRoot.id());
+            // 1200 KB used of 2048 KB: one more 600 KB copy fits, two do not
+
+            ErrorResponse filesRefused = getWebTestClient().post()
+                    .uri(RestApiVersion.API_PREFIX + "/files/copy")
+                    .body(BodyInserters.fromValue(new CopyRequest(List.of(inFolder.id(), atRoot.id()), target.id(), true)))
+                    .exchange()
+                    .expectStatus().isEqualTo(HttpStatus.INSUFFICIENT_STORAGE)
+                    .expectBody(ErrorResponse.class)
+                    .returnResult().getResponseBody();
+            assertNotNull(filesRefused);
+            assertTrue(filesRefused.message().contains("quota exceeded"));
+
+            // Nothing was copied: the target folder is still empty
+            getWebTestClient().get().uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/folders/list")
+                            .queryParam("folderId", target.id()).build())
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectBody().jsonPath("$.length()").isEqualTo(0);
+
+            // One file fits
+            getWebTestClient().post()
+                    .uri(RestApiVersion.API_PREFIX + "/files/copy")
+                    .body(BodyInserters.fromValue(new CopyRequest(List.of(atRoot.id()), target.id(), true)))
+                    .exchange()
+                    .expectStatus().isOk();
+
+            // 2400 KB would be used after copying the folder: refused
+            getWebTestClient().post()
+                    .uri(RestApiVersion.API_PREFIX + "/folders/copy")
+                    .body(BodyInserters.fromValue(new CopyRequest(List.of(folder.id()), target.id(), true)))
+                    .exchange()
+                    .expectStatus().isEqualTo(HttpStatus.INSUFFICIENT_STORAGE);
+        } finally {
+            cleanupTestData(uploadedIds, folderIds);
+        }
+    }
+
+    /**
+     * A folder copy takes what is in the folder, not what is in the recycle bin: a deleted file does not
+     * come back in the copy, so the copy adds exactly the bytes the storage check counted.
+     */
+    @Test
+    void whenFolderHoldsDeletedFile_thenCopyLeavesItOutAndStaysWithinQuota() {
+        List<UUID> uploadedIds = new ArrayList<>();
+        List<UUID> folderIds = new ArrayList<>();
+        try {
+            FolderResponse folder = createFolder("copy-bin-" + UUID.randomUUID(), null);
+            folderIds.add(folder.id());
+            FolderResponse target = createFolder("copy-bin-target-" + UUID.randomUUID(), null);
+            folderIds.add(target.id());
+            UploadResponse kept = uploadFileWithSize("copy-bin-kept.txt", 600 * ONE_KB, folder.id());
+            uploadedIds.add(kept.id());
+            UploadResponse deleted = uploadFileWithSize("copy-bin-deleted.txt", 600 * ONE_KB, folder.id());
+            softDeleteFiles(Collections.singletonList(deleted.id()));
+            // 600 KB used of 2048 KB, 600 KB more in the recycle bin
+
+            getWebTestClient().post()
+                    .uri(RestApiVersion.API_PREFIX + "/folders/copy")
+                    .body(BodyInserters.fromValue(new CopyRequest(List.of(folder.id()), target.id(), true)))
+                    .exchange()
+                    .expectStatus().isOk();
+
+            // The copy holds the kept file only
+            List<Map<String, Object>> inTarget = listFolder(target.id());
+            assertEquals(1, inTarget.size());
+            UUID copyId = UUID.fromString((String) inTarget.get(0).get("id"));
+            folderIds.add(copyId);
+            List<Map<String, Object>> inCopy = listFolder(copyId);
+            assertEquals(1, inCopy.size());
+            assertEquals("copy-bin-kept.txt", inCopy.get(0).get("name"));
+
+            // 1200 KB used: 800 KB more fit. Had the deleted file been copied (1800 KB), they would not
+            uploadedIds.add(uploadFileWithSize("copy-bin-after.txt", 800 * ONE_KB).id());
+        } finally {
+            cleanupTestData(uploadedIds, folderIds);
+        }
+    }
+
+    /** The direct children of a folder, as {@code GET /folders/list} gives them. */
+    private List<Map<String, Object>> listFolder(UUID folderId) {
+        List<Map<String, Object>> children = getWebTestClient().get()
+                .uri(uri -> uri.path(RestApiVersion.API_PREFIX + "/folders/list").queryParam("folderId", folderId).build())
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
+                .returnResult().getResponseBody();
+        assertNotNull(children);
+        return children;
     }
 
     /**
