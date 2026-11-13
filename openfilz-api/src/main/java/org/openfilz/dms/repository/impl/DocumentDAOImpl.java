@@ -54,8 +54,9 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
     protected static final String SELECT_ID_FROM_DOCUMENTS = "SELECT id FROM " + DOCUMENT + " WHERE active = true ";
 
 
-    private static final String SELECT_ALL_FOLDER_ELEMENT_INFO = """
-            SELECT d.id, d.type, d.name
+    // The owner column is added by buildListDocumentInfoInFolderQuery (folderElementOwnerColumn)
+    private static final String SELECT_ALL_FOLDER_ELEMENT_INFO_FROM = """
+             AS owner
             FROM Documents d
             WHERE d.active = true and d.parent_id""";
 
@@ -328,7 +329,15 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
         if(type != null) {
             query = query.bind(TYPE, type.toString());
         }
-        return executeListDocumentInfoQuery(query, mapFolderElementInfo());
+        return executeListDocumentInfoQuery(query, mapFolderElementInfoWithOwner());
+    }
+
+    /**
+     * SQL expression of the owner listed by {@code GET /folders/list}: the e-mail of the document's
+     * creator. A layer with its own notion of ownership overrides it (an expression over {@code d}).
+     */
+    protected String folderElementOwnerColumn() {
+        return "d.created_by";
     }
 
     protected  <T> Flux<T> executeListDocumentInfoQuery(DatabaseClient.GenericExecuteSpec query, Function<Readable, T> mappingFunction) {
@@ -341,7 +350,7 @@ public class DocumentDAOImpl implements DocumentDAO, SqlQueryUtils {
 
     protected StringBuilder buildListDocumentInfoInFolderQuery(UUID parentFolderId, DocumentType type) {
         StringBuilder sql = new StringBuilder();
-        sql.append(SELECT_ALL_FOLDER_ELEMENT_INFO);
+        sql.append("SELECT d.id, d.type, d.name, ").append(folderElementOwnerColumn()).append(SELECT_ALL_FOLDER_ELEMENT_INFO_FROM);
 
         if(parentFolderId != null) {
             sql.append(EQUALS_ID);

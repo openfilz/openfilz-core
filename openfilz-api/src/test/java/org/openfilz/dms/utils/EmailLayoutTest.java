@@ -52,4 +52,27 @@ class EmailLayoutTest {
         assertThat(EmailLayout.page("en", false, "T", "body", "", null, "https://intranet.example/logo.png"))
                 .contains("https://intranet.example/logo.png");
     }
+
+    @Test
+    void brandColourReplacesThePaletteEverywhere() {
+        org.openfilz.dms.service.branding.Brand brand = org.openfilz.dms.service.branding.Brand.of(
+                "Acme", "", "#0B5394", "https://acme.test", "", true);
+        String html = EmailLayout.brandedPage("en", false, "T",
+                EmailLayout.button("https://x.test", "Go") + EmailLayout.code("123456"), "", brand, "Fourni par OpenFilz");
+
+        assertThat(html)
+                .doesNotContain("#667eea").doesNotContain("#764ba2").doesNotContain("#f1f3ff")
+                .contains("#0b5394")
+                .contains("href=\"https://acme.test\"")
+                .contains("Fourni par OpenFilz");
+    }
+
+    @Test
+    void poweredByHiddenForOpenFilzOrWhenSwitchedOff() {
+        assertThat(EmailLayout.brandedPage("en", false, "T", "", "", org.openfilz.dms.service.branding.Brand.OPENFILZ, "Powered"))
+                .doesNotContain(">Powered<").contains("href=\"" + EmailLayout.BRAND_URL + "\"");
+        org.openfilz.dms.service.branding.Brand off = org.openfilz.dms.service.branding.Brand.of("Acme", "", "", "", "", false);
+        assertThat(EmailLayout.brandedPage("en", false, "T", "", "", off, "Powered"))
+                .doesNotContain(">Powered<").doesNotContain("href=\"" + EmailLayout.BRAND_URL + "\"");
+    }
 }

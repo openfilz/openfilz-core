@@ -1,0 +1,26 @@
+/* ==========================================================================
+   Brand colour on top of the theme palette.
+   Loaded only when theme.properties names a brand endpoint (brandingUrl), right after that
+   endpoint's theme.css. --brand-custom-primary / --brand-custom-primary-dark are defined there
+   only for a colour other than the default: without them every value below falls back to the
+   theme's own, so the page is unchanged.
+   ========================================================================== */
+
+:root,
+[data-theme="light"] {
+    --of-brand-primary: var(--brand-custom-primary, #4361ee);
+    --of-brand-primary-hover: var(--brand-custom-primary-dark, #3a56d4);
+    --of-brand-primary-active: var(--brand-custom-primary-dark, #3049b8);
+    --of-brand-primary-light: var(--brand-custom-primary-light, rgba(67, 97, 238, 0.08));
+    --of-text-link: var(--brand-custom-primary, #4361ee);
+    --of-border-color-focus: var(--brand-custom-primary, #4361ee);
+}
+
+[data-theme="dark"] {
+    --of-brand-primary: var(--brand-custom-primary, #6b8aff);
+    --of-brand-primary-hover: var(--brand-custom-primary-dark, #5a7aef);
+    --of-brand-primary-active: var(--brand-custom-primary-dark, #4a6adf);
+    --of-brand-primary-light: var(--brand-custom-primary-light-dark, rgba(107, 138, 255, 0.12));
+    --of-text-link: var(--brand-custom-primary, #6b8aff);
+    --of-border-color-focus: var(--brand-custom-primary, #6b8aff);
+}

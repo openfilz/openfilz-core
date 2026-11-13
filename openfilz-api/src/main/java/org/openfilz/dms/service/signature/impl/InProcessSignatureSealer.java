@@ -17,6 +17,8 @@ import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.bouncycastle.operator.jcajce.JcaDigestCalculatorProviderBuilder;
 import org.openfilz.dms.config.SignatureProperties;
 import org.openfilz.dms.entity.SignatureEnvelope;
+import org.openfilz.dms.service.branding.BrandingProvider;
+import org.openfilz.dms.service.signature.SealWording;
 import org.openfilz.dms.service.signature.SignatureSealer;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -51,12 +53,19 @@ import java.util.List;
 public class InProcessSignatureSealer implements SignatureSealer {
 
     private final SignatureProperties props;
+    /** The product brand: the reason and, unless set, the signer name. Null = OpenFilz. */
+    private final BrandingProvider branding;
     private PrivateKey sealKey;
     private X509Certificate sealCert;
     private String providerId = "self-signed-dev";
 
     public InProcessSignatureSealer(SignatureProperties props) {
+        this(props, null);
+    }
+
+    public InProcessSignatureSealer(SignatureProperties props, BrandingProvider branding) {
         this.props = props;
+        this.branding = branding;
     }
 
     /** Loads (or generates) the seal key material. Called once by {@code SignatureConfig}. */
@@ -129,8 +138,8 @@ public class InProcessSignatureSealer implements SignatureSealer {
             PDSignature signature = new PDSignature();
             signature.setFilter(PDSignature.FILTER_ADOBE_PPKLITE);
             signature.setSubFilter(PDSignature.SUBFILTER_ADBE_PKCS7_DETACHED);
-            signature.setName(props.getSeal().getName());
-            signature.setReason("Document completed via OpenFilz e-Sign — envelope " + envelope.getId());
+            signature.setName(SealWording.sealName(props, branding));
+            signature.setReason(SealWording.reason(branding, envelope.getId()));
             signature.setSignDate(Calendar.getInstance());
 
             SignatureInterface si = content -> {

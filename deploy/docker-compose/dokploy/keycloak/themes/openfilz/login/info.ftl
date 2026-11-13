@@ -49,7 +49,7 @@
             </script>
             <noscript>
                 <a href="${pageRedirectUri}" class="of-btn of-btn--primary">
-                    ${msg("goToOpenFilz")}
+                    ${msg("goToOpenFilz", layout.brandName)}
                 </a>
             </noscript>
         <#else>
@@ -76,7 +76,7 @@
             </a>
         <#elseif client?? && client.baseUrl?has_content>
             <a href="${client.baseUrl}" class="of-btn of-btn--primary">
-                ${msg("goToOpenFilz")}
+                ${msg("goToOpenFilz", layout.brandName)}
             </a>
         </#if>
 
