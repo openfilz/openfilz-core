@@ -129,7 +129,9 @@ images must be `data:image/…` or base64 and under the size cap; client IP come
   `status` after the action. A reader of the trail, or anything built from it, gets the
   envelope directly instead of inferring it from the document's folder or name. On
   `SIGNATURE_ENVELOPE_COMPLETED` the entry's resource is the sealed document and
-  `sourceDocumentId` points back to the original.
+  `sourceDocumentId` points back to the original. The signature that completes the envelope is
+  audited after the seal, so the last signer's `SIGNATURE_DOCUMENT_SIGNED` entry already reads
+  `status = COMPLETED` with the `signedDocumentId`: tell completion by the action, not the status.
 * **Finalization and the audit chain.** A signature is one transaction: recipient + fields +
   `RECIPIENT_SIGNED` event, then — when it was the last one — stamp, seal (an HTTP call for remote
   seal providers), store, the signed document row, `COMPLETED`, link
