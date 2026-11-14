@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[643e4746429b16d](https://github.com/openfilz/openfilz-core/commit/643e4746429b16d) maven-release-bot[bot] *2026-11-13 08:14:20*
+[f89aceb50da74a6](https://github.com/openfilz/openfilz-core/commit/f89aceb50da74a6) maven-release-bot[bot] *2026-11-14 17:48:23*
 
 
-## v1.4.12
+## v1.4.13
 ### No issue
 
-**[maven-release-plugin] prepare release v1.4.12**
+**[maven-release-plugin] prepare release v1.4.13**
 
 
-[84f88df99132d88](https://github.com/openfilz/openfilz-core/commit/84f88df99132d88) maven-release-bot[bot] *2026-11-13 08:14:17*
+[b1af5b1b8213db7](https://github.com/openfilz/openfilz-core/commit/b1af5b1b8213db7) maven-release-bot[bot] *2026-11-14 17:48:20*
 
-**Merge pull request #402 from openfilz/develop**
+**Merge pull request #405 from openfilz/develop**
 
- * Enhance copy quota checks and branding features
+ * Enhance signature audit entries with envelope details
 
-[9ba4f5d51769984](https://github.com/openfilz/openfilz-core/commit/9ba4f5d51769984) Yann Demel *2026-11-13 08:10:57*
+[b931a79c9918537](https://github.com/openfilz/openfilz-core/commit/b931a79c9918537) Yann Demel *2026-11-14 17:44:36*
 
 
