@@ -27,7 +27,8 @@ import java.util.UUID;
         @JsonSubTypes.Type(value = PdfTransformAudit.class, name = AuditLogDetails.PDF_TRANSFORM),
         @JsonSubTypes.Type(value = EditorConflictAudit.class, name = AuditLogDetails.EDITOR_CONFLICT),
         @JsonSubTypes.Type(value = WorkflowAudit.class, name = AuditLogDetails.WORKFLOW),
-        @JsonSubTypes.Type(value = WorkflowActionFailureAudit.class, name = AuditLogDetails.WORKFLOW_ACTION_FAILURE)
+        @JsonSubTypes.Type(value = WorkflowActionFailureAudit.class, name = AuditLogDetails.WORKFLOW_ACTION_FAILURE),
+        @JsonSubTypes.Type(value = SignatureAudit.class, name = AuditLogDetails.SIGNATURE)
 
 })
 @Schema(
@@ -46,7 +47,8 @@ import java.util.UUID;
                 @DiscriminatorMapping(value = AuditLogDetails.PDF_TRANSFORM, schema = PdfTransformAudit.class),
                 @DiscriminatorMapping(value = AuditLogDetails.EDITOR_CONFLICT, schema = EditorConflictAudit.class),
                 @DiscriminatorMapping(value = AuditLogDetails.WORKFLOW, schema = WorkflowAudit.class),
-                @DiscriminatorMapping(value = AuditLogDetails.WORKFLOW_ACTION_FAILURE, schema = WorkflowActionFailureAudit.class)
+                @DiscriminatorMapping(value = AuditLogDetails.WORKFLOW_ACTION_FAILURE, schema = WorkflowActionFailureAudit.class),
+                @DiscriminatorMapping(value = AuditLogDetails.SIGNATURE, schema = SignatureAudit.class)
         }
 )
 public abstract class AuditLogDetails implements IAuditLogDetails {
@@ -90,4 +92,5 @@ public abstract class AuditLogDetails implements IAuditLogDetails {
     public static final String EDITOR_CONFLICT = "editorConflict";
     public static final String WORKFLOW = "workflow";
     public static final String WORKFLOW_ACTION_FAILURE = "workflowActionFailure";
+    public static final String SIGNATURE = "signature";
 }

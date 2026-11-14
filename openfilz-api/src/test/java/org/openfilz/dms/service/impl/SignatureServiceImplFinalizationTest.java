@@ -3,11 +3,13 @@ package org.openfilz.dms.service.impl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.openfilz.dms.dto.audit.SignatureAudit;
 import org.openfilz.dms.config.CommonProperties;
 import org.openfilz.dms.config.SignatureProperties;
 import org.openfilz.dms.dto.signature.ApplySignatureRequest;
@@ -164,7 +166,7 @@ class SignatureServiceImplFinalizationTest {
         when(completionListener.onCompleted(any(), any(), any())).thenReturn(Mono.empty());
         when(actorResolver.signerAuthentication(any())).thenReturn(mock(Authentication.class));
         when(actorResolver.requesterAuthentication(any())).thenReturn(Mono.just(mock(Authentication.class)));
-        when(auditService.logAction(any(), any(), any())).thenReturn(Mono.empty());
+        when(auditService.logAction(any(), any(), any(), any())).thenReturn(Mono.empty());
         when(notifier.completed(any())).thenReturn(Mono.empty());
         when(notifier.requested(any(), any())).thenReturn(Mono.empty());
         when(metadataPostProcessorProvider.getIfAvailable()).thenReturn(null);
@@ -186,13 +188,33 @@ class SignatureServiceImplFinalizationTest {
         order.verify(recipientRepo).revokeTokens(envId);
         order.verify(completionListener).onCompleted(eq(env), any(), any());
         // audit rows: signer's, then completion — both after the slow work, right before the commit
-        order.verify(auditService).logAction(AuditAction.SIGNATURE_DOCUMENT_SIGNED, DocumentType.FILE, docId);
-        order.verify(auditService).logAction(eq(AuditAction.SIGNATURE_ENVELOPE_COMPLETED), eq(DocumentType.FILE), any(UUID.class));
+        order.verify(auditService).logAction(eq(AuditAction.SIGNATURE_DOCUMENT_SIGNED), eq(DocumentType.FILE), eq(docId), any(SignatureAudit.class));
+        order.verify(auditService).logAction(eq(AuditAction.SIGNATURE_ENVELOPE_COMPLETED), eq(DocumentType.FILE), any(UUID.class), any(SignatureAudit.class));
         // side effects after the transaction
         order.verify(notifier).completed(env);
         order.verify(mailer).sendCompleted(eq(env), eq("boss@x.io"), any(), any(), eq(SEALED), anyString());
         verify(mailer).sendCompleted(eq(env), eq("alice@x.io"), eq("Alice"), any(), eq(SEALED), anyString());
         verify(mailer).sendCompleted(eq(env), eq("bob@x.io"), eq("Bob"), any(), eq(SEALED), anyString());
+    }
+
+    @Test
+    void completionAudit_namesTheEnvelope_soAnEventBuiltFromItCanBeMatchedWithoutGuessing() {
+        service.applySignature(TOKEN, aliceSigns, "1.1.1.1", "ua").block();
+
+        ArgumentCaptor<UUID> signedDoc = ArgumentCaptor.forClass(UUID.class);
+        ArgumentCaptor<SignatureAudit> details = ArgumentCaptor.forClass(SignatureAudit.class);
+        verify(auditService).logAction(eq(AuditAction.SIGNATURE_ENVELOPE_COMPLETED), eq(DocumentType.FILE),
+                signedDoc.capture(), details.capture());
+        SignatureAudit d = details.getValue();
+        assertThat(d.getEnvelopeId()).isEqualTo(envId);
+        assertThat(d.getEnvelopeTitle()).isEqualTo("Deal");
+        assertThat(d.getSourceDocumentId()).isEqualTo(docId);
+        assertThat(d.getSignedDocumentId()).isEqualTo(signedDoc.getValue());
+        assertThat(d.getStatus()).isEqualTo("COMPLETED");
+
+        ArgumentCaptor<SignatureAudit> signed = ArgumentCaptor.forClass(SignatureAudit.class);
+        verify(auditService).logAction(eq(AuditAction.SIGNATURE_DOCUMENT_SIGNED), eq(DocumentType.FILE), eq(docId), signed.capture());
+        assertThat(signed.getValue().getEnvelopeId()).isEqualTo(envId);
     }
 
     @Test
@@ -207,7 +229,7 @@ class SignatureServiceImplFinalizationTest {
         assertThat(env.getStatus()).isEqualTo(SignatureEnvelopeStatus.SENT);
         verify(storageService, never()).saveData(any(), any());
         verify(recipientRepo, never()).revokeTokens(any());
-        verify(auditService, never()).logAction(any(), any(), any());
+        verify(auditService, never()).logAction(any(), any(), any(), any());
         verify(mailer, never()).sendCompleted(any(), any(), any(), any(), any(), any());
         verify(notifier, never()).completed(any());
     }
@@ -221,7 +243,7 @@ class SignatureServiceImplFinalizationTest {
                 .expectErrorMessage("archive store down")
                 .verify();
 
-        verify(auditService, never()).logAction(any(), any(), any());
+        verify(auditService, never()).logAction(any(), any(), any(), any());
         verify(mailer, never()).sendCompleted(any(), any(), any(), any(), any(), any());
     }
 
@@ -233,8 +255,8 @@ class SignatureServiceImplFinalizationTest {
 
         assertThat(v.envelopeStatus()).isEqualTo(SignatureEnvelopeStatus.SENT);
         assertThat(v.recipientStatus()).isEqualTo(SignatureRecipientStatus.SIGNED);
-        verify(auditService).logAction(AuditAction.SIGNATURE_DOCUMENT_SIGNED, DocumentType.FILE, docId);
-        verify(auditService, never()).logAction(eq(AuditAction.SIGNATURE_ENVELOPE_COMPLETED), any(), any());
+        verify(auditService).logAction(eq(AuditAction.SIGNATURE_DOCUMENT_SIGNED), eq(DocumentType.FILE), eq(docId), any(SignatureAudit.class));
+        verify(auditService, never()).logAction(eq(AuditAction.SIGNATURE_ENVELOPE_COMPLETED), any(), any(), any());
         verify(sealer, never()).seal(any(), any());
         verify(recipientRepo, never()).revokeTokens(any());
         verify(envelopeRepo).findByIdForUpdate(envId);   // the envelope row is locked for the signing transaction
@@ -254,7 +276,7 @@ class SignatureServiceImplFinalizationTest {
         assertThat(bob.getTokenHash()).isNotEqualTo("sha:bob");   // fresh token for the unlocked signer
         assertThat(bob.getOtpRequestCount()).isZero();
         InOrder order = inOrder(auditService, mailer);
-        order.verify(auditService).logAction(AuditAction.SIGNATURE_DOCUMENT_SIGNED, DocumentType.FILE, docId);
+        order.verify(auditService).logAction(eq(AuditAction.SIGNATURE_DOCUMENT_SIGNED), eq(DocumentType.FILE), eq(docId), any(SignatureAudit.class));
         order.verify(mailer).sendRequest(eq(env), eq(bob), eq("deal.pdf"), anyString());
     }
 
@@ -270,9 +292,9 @@ class SignatureServiceImplFinalizationTest {
         InOrder order = inOrder(sealer, recipientRepo, auditService, mailer);
         order.verify(sealer).seal(STAMPED, env);
         order.verify(recipientRepo).revokeTokens(envId);
-        order.verify(auditService).logAction(eq(AuditAction.SIGNATURE_ENVELOPE_COMPLETED), eq(DocumentType.FILE), any(UUID.class));
+        order.verify(auditService).logAction(eq(AuditAction.SIGNATURE_ENVELOPE_COMPLETED), eq(DocumentType.FILE), any(UUID.class), any(SignatureAudit.class));
         order.verify(mailer).sendCompleted(eq(env), eq("alice@x.io"), any(), any(), eq(SEALED), anyString());
-        verify(auditService, never()).logAction(eq(AuditAction.SIGNATURE_DOCUMENT_SIGNED), any(), any());
+        verify(auditService, never()).logAction(eq(AuditAction.SIGNATURE_DOCUMENT_SIGNED), any(), any(), any());
     }
 
     @Test
@@ -284,7 +306,7 @@ class SignatureServiceImplFinalizationTest {
 
         assertThat(view.envelopeStatus()).isEqualTo(SignatureEnvelopeStatus.SENT);
         assertThat(view.recipientStatus()).isEqualTo(SignatureRecipientStatus.SIGNED);
-        verify(auditService, never()).logAction(any(), any(), any());
+        verify(auditService, never()).logAction(any(), any(), any(), any());
         verify(mailer, never()).sendCompleted(any(), any(), any(), any(), any(), any());
     }
 }

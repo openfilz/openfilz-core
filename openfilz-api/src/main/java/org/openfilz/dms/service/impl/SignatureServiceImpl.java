@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.CommonProperties;
 import org.openfilz.dms.config.SignatureConfig;
 import org.openfilz.dms.config.SignatureProperties;
+import org.openfilz.dms.dto.audit.SignatureAudit;
 import org.openfilz.dms.dto.signature.ApplySignatureRequest;
 import org.openfilz.dms.dto.signature.CreateSignatureEnvelopeRequest;
 import org.openfilz.dms.dto.signature.DeclineSignatureRequest;
@@ -260,12 +261,12 @@ public class SignatureServiceImpl implements SignatureService {
                                 .thenMany(Flux.fromIterable(fields).concatMap(fieldRepo::save))
                                 .then(event(envelopeId, SignatureEventType.ENVELOPE_CREATED, actor.email(),
                                         env.getOriginalSha256(), null, null))
-                                .then(auditService.logAction(AuditAction.SIGNATURE_ENVELOPE_CREATED, DocumentType.FILE, doc.getId()));
+                                .then(auditService.logAction(AuditAction.SIGNATURE_ENVELOPE_CREATED, DocumentType.FILE, doc.getId(), SignatureAudit.of(env)));
                         if (sendNow) {
                             persist = persist
                                     .then(event(envelopeId, SignatureEventType.ENVELOPE_SENT, actor.email(),
                                             env.getOriginalSha256(), null, recipients.size() + " recipient(s)"))
-                                    .then(auditService.logAction(AuditAction.SIGNATURE_ENVELOPE_SENT, DocumentType.FILE, doc.getId()));
+                                    .then(auditService.logAction(AuditAction.SIGNATURE_ENVELOPE_SENT, DocumentType.FILE, doc.getId(), SignatureAudit.of(env)));
                         }
                         return persist.as(tx::transactional)
                                 .then(Mono.defer(() -> sendNow
@@ -299,7 +300,7 @@ public class SignatureServiceImpl implements SignatureService {
                                         .thenMany(Flux.fromIterable(withTokens).concatMap(rt -> recipientRepo.save(rt.recipient())))
                                         .then(event(envelopeId, SignatureEventType.ENVELOPE_SENT, initiatorEmail,
                                                 env.getOriginalSha256(), null, recipients.size() + " recipient(s)"))
-                                        .then(auditService.logAction(AuditAction.SIGNATURE_ENVELOPE_SENT, DocumentType.FILE, env.getSourceDocId()))
+                                        .then(auditService.logAction(AuditAction.SIGNATURE_ENVELOPE_SENT, DocumentType.FILE, env.getSourceDocId(), SignatureAudit.of(env)))
                                         .as(tx::transactional)
                                         .then(Mono.defer(() -> dispatchInvitations(env, t.getT2(), withTokens, env.getCurrentOrder())))
                                         .thenReturn(env);
@@ -361,7 +362,7 @@ public class SignatureServiceImpl implements SignatureService {
                             .then(recipientRepo.revokeTokens(envelopeId))
                             .then(event(envelopeId, SignatureEventType.ENVELOPE_CANCELLED, env.getInitiatorEmail(),
                                     env.getOriginalSha256(), null, null))
-                            .then(auditService.logAction(AuditAction.SIGNATURE_ENVELOPE_CANCELLED, DocumentType.FILE, env.getSourceDocId()))
+                            .then(auditService.logAction(AuditAction.SIGNATURE_ENVELOPE_CANCELLED, DocumentType.FILE, env.getSourceDocId(), SignatureAudit.of(env)))
                             .thenReturn(env);
                 })
                 .as(tx::transactional)
@@ -390,7 +391,7 @@ public class SignatureServiceImpl implements SignatureService {
                                         .then(envelopeRepo.save(env))
                                         .then(event(envelopeId, SignatureEventType.RECIPIENT_LINK_RESENT, initiatorEmail,
                                                 null, null, r.getRecipientEmail()))
-                                        .then(auditService.logAction(AuditAction.SIGNATURE_REMINDER_SENT, DocumentType.FILE, env.getSourceDocId()))
+                                        .then(auditService.logAction(AuditAction.SIGNATURE_REMINDER_SENT, DocumentType.FILE, env.getSourceDocId(), SignatureAudit.of(env)))
                                         .as(tx::transactional)
                                         .then(documentName(env))
                                         .doOnNext(name -> mailer.sendReminder(env, r, name, signLink(rt.rawToken())))
@@ -672,7 +673,7 @@ public class SignatureServiceImpl implements SignatureService {
 
     /** Attributes the signature audit row to the signer (identity from the validated token row). */
     private Mono<Void> auditSigned(SignatureRecipient r, SignatureEnvelope env) {
-        return auditService.logAction(AuditAction.SIGNATURE_DOCUMENT_SIGNED, DocumentType.FILE, env.getSourceDocId())
+        return auditService.logAction(AuditAction.SIGNATURE_DOCUMENT_SIGNED, DocumentType.FILE, env.getSourceDocId(), SignatureAudit.of(env))
                 .contextWrite(ReactiveSecurityContextHolder.withAuthentication(actorResolver.signerAuthentication(r)));
     }
 
@@ -698,7 +699,7 @@ public class SignatureServiceImpl implements SignatureService {
                             .then(recipientRepo.revokeTokens(env.getId()))
                             .then(event(env.getId(), SignatureEventType.RECIPIENT_DECLINED, r.getRecipientEmail(),
                                     env.getOriginalSha256(), ip, r.getDeclineReason()))
-                            .then(auditService.logAction(AuditAction.SIGNATURE_ENVELOPE_DECLINED, DocumentType.FILE, env.getSourceDocId())
+                            .then(auditService.logAction(AuditAction.SIGNATURE_ENVELOPE_DECLINED, DocumentType.FILE, env.getSourceDocId(), SignatureAudit.of(env))
                                     .contextWrite(ReactiveSecurityContextHolder.withAuthentication(actorResolver.signerAuthentication(r))))
                             .as(tx::transactional)
                             .then(notifier.declined(env, r).onErrorResume(e -> Mono.empty()))
@@ -815,7 +816,7 @@ public class SignatureServiceImpl implements SignatureService {
     private Mono<Void> auditCompleted(SignatureEnvelope env, CompletionResult cr) {
         return actorResolver.requesterAuthentication(env)
                 .flatMap(auth -> auditService.logAction(AuditAction.SIGNATURE_ENVELOPE_COMPLETED, DocumentType.FILE,
-                                cr.signedDoc().getId())
+                                cr.signedDoc().getId(), SignatureAudit.completed(env, cr.signedDoc().getId()))
                         .contextWrite(ReactiveSecurityContextHolder.withAuthentication(auth)));
     }
 
@@ -912,7 +913,7 @@ public class SignatureServiceImpl implements SignatureService {
                             .then(event(env.getId(), SignatureEventType.ENVELOPE_EXPIRED, "system", env.getOriginalSha256(), null, null))
                             .then(actorResolver.requesterAuthentication(env)
                                     .flatMap(auth -> auditService.logAction(AuditAction.SIGNATURE_ENVELOPE_EXPIRED, DocumentType.FILE,
-                                                    env.getSourceDocId())
+                                                    env.getSourceDocId(), SignatureAudit.of(env))
                                             .contextWrite(ReactiveSecurityContextHolder.withAuthentication(auth))))
                             .as(tx::transactional)
                             .thenReturn(1);
@@ -941,7 +942,7 @@ public class SignatureServiceImpl implements SignatureService {
                                             SignatureEventType.RECIPIENT_REMINDED, "system", null, null, rt.recipient().getRecipientEmail())))
                                     .then(due.isEmpty() ? Mono.empty() : actorResolver.requesterAuthentication(env)
                                             .flatMap(auth -> auditService.logAction(AuditAction.SIGNATURE_REMINDER_SENT, DocumentType.FILE,
-                                                            env.getSourceDocId())
+                                                            env.getSourceDocId(), SignatureAudit.of(env))
                                                     .contextWrite(ReactiveSecurityContextHolder.withAuthentication(auth))))
                                     .as(tx::transactional)
                                     .then(documentName(env))

@@ -7,6 +7,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.openfilz.dms.dto.audit.SignatureAudit;
 import org.openfilz.dms.config.CommonProperties;
 import org.openfilz.dms.config.SignatureProperties;
 import org.openfilz.dms.dto.signature.ApplySignatureRequest;
@@ -472,7 +473,7 @@ class SignatureServiceImplPublicAccessTest {
         when(completionListener.onCompleted(any(), any(), any())).thenReturn(Mono.empty());
         when(actorResolver.requesterAuthentication(env)).thenReturn(Mono.just(org.mockito.Mockito.mock(org.springframework.security.core.Authentication.class)));
         when(actorResolver.signerAuthentication(me)).thenReturn(org.mockito.Mockito.mock(org.springframework.security.core.Authentication.class));
-        when(auditService.logAction(any(), any(), any())).thenReturn(Mono.empty());
+        when(auditService.logAction(any(), any(), any(), any())).thenReturn(Mono.empty());
         when(notifier.completed(any())).thenReturn(Mono.empty());
         when(metadataPostProcessorProvider.getIfAvailable()).thenReturn(null);
         // The sign response re-reads the envelope: by then it is COMPLETED.
