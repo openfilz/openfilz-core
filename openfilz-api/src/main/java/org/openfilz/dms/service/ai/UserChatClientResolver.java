@@ -162,6 +162,8 @@ public class UserChatClientResolver {
     private final boolean userSettingsEnabled;
     /** A model set at runtime for every user; the core one has none, an extension's is {@code @Primary}. */
     private final DefaultChatModelSource defaultSource;
+    /** Where a user's own OpenAI-compatible server may be; checked again each time their model is built. */
+    private final AiBaseUrlPolicy baseUrlPolicy;
 
     /** Last time the "no chat model" operator message was logged: at most once a minute. */
     private final AtomicLong lastNoModelLog = new AtomicLong();
@@ -187,7 +189,9 @@ public class UserChatClientResolver {
                                   AiSettingsCipher cipher,
                                   Environment environment,
                                   @Value("${openfilz.ai.user-settings.enabled:false}") boolean userSettingsEnabled,
-                                  DefaultChatModelSource defaultSource) {
+                                  DefaultChatModelSource defaultSource,
+                                  AiBaseUrlPolicy baseUrlPolicy) {
+        this.baseUrlPolicy = baseUrlPolicy != null ? baseUrlPolicy : new SchemeOnlyAiBaseUrlPolicy();
         this.defaultChatModelProvider = defaultChatModelProvider;
         this.toolCallingManager = toolCallingManager;
         this.repository = repository;
@@ -195,6 +199,18 @@ public class UserChatClientResolver {
         this.environment = environment;
         this.userSettingsEnabled = userSettingsEnabled;
         this.defaultSource = defaultSource != null ? defaultSource : new NoDefaultChatModelSource();
+    }
+
+    /** With the core base URL rule (callers that build the resolver by hand). */
+    public UserChatClientResolver(ObjectProvider<ChatModel> defaultChatModelProvider,
+                                  ToolCallingManager toolCallingManager,
+                                  UserAiSettingsRepository repository,
+                                  AiSettingsCipher cipher,
+                                  Environment environment,
+                                  boolean userSettingsEnabled,
+                                  DefaultChatModelSource defaultSource) {
+        this(defaultChatModelProvider, toolCallingManager, repository, cipher, environment,
+                userSettingsEnabled, defaultSource, new SchemeOnlyAiBaseUrlPolicy());
     }
 
     /** Without a runtime model source (tests, callers that build the resolver by hand). */
@@ -205,7 +221,7 @@ public class UserChatClientResolver {
                                   Environment environment,
                                   boolean userSettingsEnabled) {
         this(defaultChatModelProvider, toolCallingManager, repository, cipher, environment,
-                userSettingsEnabled, new NoDefaultChatModelSource());
+                userSettingsEnabled, new NoDefaultChatModelSource(), new SchemeOnlyAiBaseUrlPolicy());
     }
 
     public boolean isUserSettingsEnabled() {
@@ -290,8 +306,12 @@ public class UserChatClientResolver {
             return cached.resolved();
         }
         AiProvider provider = AiProvider.valueOf(settings.getProvider());
+        // A stored address is checked like a new one: the rule may be stricter than when the row was
+        // saved, and a host name may point elsewhere by now. Runs on boundedElastic (see resolve).
+        String baseUrl = provider == AiProvider.OPENAI_COMPATIBLE
+                ? baseUrlPolicy.validate(settings.getBaseUrl()) : settings.getBaseUrl();
         String apiKey = cipher.decrypt(settings.getApiKeyEncrypted());
-        ChatModel model = buildChatModel(provider, apiKey, settings.getBaseUrl(), settings.getModel());
+        ChatModel model = buildChatModel(provider, apiKey, baseUrl, settings.getModel());
         ResolvedChat resolved = new ResolvedChat(model, provider.name(), settings.getModel(), AiKeyRef.of(apiKey));
         cache.put(userEmail, new CachedModel(hash, resolved));
         log.debug("[AI] Built {} chat model ({}) for user {}", provider, settings.getModel(), userEmail);

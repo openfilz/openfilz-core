@@ -865,6 +865,14 @@ Security properties:
 - Vendor clients are built via Spring AI's `AnthropicSetup` / `OpenAiSetup` helpers (Gemini:
   `com.google.genai.Client`); **both sync and async clients must be supplied** or the model
   builder self-builds the missing one from environment variables and fails.
+- The base URL of a user's own OpenAI-compatible server goes through the `AiBaseUrlPolicy` seam
+  before any request leaves: at save, at "test connection", at the model listing, and each time the
+  user's model is built from the stored row. The server calls that address and hands the answer
+  back to the user, so a deployment that shares its network with other services replaces the core
+  rule (`SchemeOnlyAiBaseUrlPolicy`: `http` or `https`, a local Ollama included) with a `@Primary`
+  bean of its own. A refusal is a 400; the model listing answers its built-in list with the reason.
+  The other providers are only ever asked at their fixed address (a `baseUrl` sent with them is
+  ignored), and redirects are never followed. Tests: `AiSettingsBaseUrlPolicyTest`.
 
 ---
 

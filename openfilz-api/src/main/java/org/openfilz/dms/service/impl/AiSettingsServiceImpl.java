@@ -10,6 +10,7 @@ import org.openfilz.dms.entity.UserAiSettings;
 import org.openfilz.dms.enums.AiProvider;
 import org.openfilz.dms.repository.UserAiSettingsRepository;
 import org.openfilz.dms.service.AiSettingsService;
+import org.openfilz.dms.service.ai.AiBaseUrlPolicy;
 import org.openfilz.dms.service.ai.AiModelCatalog;
 import org.openfilz.dms.service.ai.AiModelDirectory;
 import org.openfilz.dms.service.ai.UserChatClientResolver;
@@ -25,6 +26,7 @@ import reactor.core.scheduler.Schedulers;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Implementation of the per-user BYOK settings. Keys are stored AES-256-GCM encrypted
@@ -43,12 +45,15 @@ public class AiSettingsServiceImpl implements AiSettingsService {
     private final UserChatClientResolver resolver;
     private final AiModelDirectory modelDirectory;
     private final Environment environment;
+    private final AiBaseUrlPolicy baseUrlPolicy;
 
     public AiSettingsServiceImpl(UserAiSettingsRepository repository,
                                  AiSettingsCipher cipher,
                                  UserChatClientResolver resolver,
                                  AiModelDirectory modelDirectory,
-                                 Environment environment) {
+                                 Environment environment,
+                                 AiBaseUrlPolicy baseUrlPolicy) {
+        this.baseUrlPolicy = baseUrlPolicy;
         this.repository = repository;
         this.cipher = cipher;
         this.resolver = resolver;
@@ -67,6 +72,11 @@ public class AiSettingsServiceImpl implements AiSettingsService {
     public Mono<AiSettingsResponse> saveSettings(String userEmail, SaveAiSettingsRequest request) {
         requireEnabled();
         validate(request, false);
+        return checkedBaseUrl(request.provider(), request.baseUrl())
+                .flatMap(baseUrl -> save(userEmail, request, baseUrl.orElse(null)));
+    }
+
+    private Mono<AiSettingsResponse> save(String userEmail, SaveAiSettingsRequest request, String baseUrl) {
         return repository.findById(userEmail)
                 .map(existing -> {
                     if (isBlank(request.apiKey()) && existing.getApiKeyEncrypted() == null) {
@@ -74,7 +84,7 @@ public class AiSettingsServiceImpl implements AiSettingsService {
                     }
                     existing.setProvider(request.provider().name());
                     existing.setModel(request.model().trim());
-                    existing.setBaseUrl(normalizeBaseUrl(request));
+                    existing.setBaseUrl(baseUrl);
                     if (!isBlank(request.apiKey())) {
                         existing.setApiKeyEncrypted(cipher.encrypt(request.apiKey().trim()));
                     }
@@ -90,7 +100,7 @@ public class AiSettingsServiceImpl implements AiSettingsService {
                             .userEmail(userEmail)
                             .provider(request.provider().name())
                             .model(request.model().trim())
-                            .baseUrl(normalizeBaseUrl(request))
+                            .baseUrl(baseUrl)
                             .apiKeyEncrypted(cipher.encrypt(request.apiKey().trim()))
                             .updatedAt(OffsetDateTime.now())
                             .isNew(true)
@@ -128,8 +138,9 @@ public class AiSettingsServiceImpl implements AiSettingsService {
                 .publishOn(Schedulers.boundedElastic())
                 .map(apiKey -> {
                     long start = System.currentTimeMillis();
-                    ChatModel model = resolver.buildChatModel(
-                            request.provider(), apiKey, normalizeBaseUrl(request), request.model().trim());
+                    // On boundedElastic: the address rule may resolve the host
+                    ChatModel model = resolver.buildChatModel(request.provider(), apiKey,
+                            normalizeBaseUrl(request.provider(), request.baseUrl()), request.model().trim());
                     String reply = model.call(TEST_PROMPT);
                     long latency = System.currentTimeMillis() - start;
                     log.debug("AI connection test OK for {} ({} ms): {}", request.provider(), latency, reply);
@@ -156,8 +167,11 @@ public class AiSettingsServiceImpl implements AiSettingsService {
         AiProvider provider = request.provider();
         List<String> builtIn = AiModelCatalog.fallback(provider);
 
+        // The address goes through the same rule as a save, before any request leaves; only an
+        // OpenAI-compatible server has one of its own (the others are asked at their fixed address).
         return storedOrSubmittedKey(userEmail, request.apiKey())
-                .flatMap(apiKey -> modelDirectory.listChatModels(provider, apiKey, request.baseUrl()))
+                .flatMap(apiKey -> checkedBaseUrl(provider, request.baseUrl())
+                        .flatMap(baseUrl -> modelDirectory.listChatModels(provider, apiKey, baseUrl.orElse(null))))
                 .map(models -> models.isEmpty()
                         // A provider that answers with nothing usable is not an outage, but it is
                         // not an answer either — offer the built-in list rather than an empty picker.
@@ -200,15 +214,21 @@ public class AiSettingsServiceImpl implements AiSettingsService {
         }
     }
 
-    private String normalizeBaseUrl(SaveAiSettingsRequest request) {
-        if (request.provider() != AiProvider.OPENAI_COMPATIBLE || isBlank(request.baseUrl())) {
+    /**
+     * The base URL to use, or null for a provider that has none of its own. Goes through
+     * {@link AiBaseUrlPolicy}, which may resolve the host: never call it on an event loop.
+     */
+    private String normalizeBaseUrl(AiProvider provider, String baseUrl) {
+        if (provider != AiProvider.OPENAI_COMPATIBLE || isBlank(baseUrl)) {
             return null;
         }
-        String url = request.baseUrl().trim();
-        if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            throw badRequest("baseUrl must start with http:// or https://");
-        }
-        return url;
+        return baseUrlPolicy.validate(baseUrl);
+    }
+
+    /** {@link #normalizeBaseUrl} off the event loop; empty for a provider without a base URL. */
+    private Mono<Optional<String>> checkedBaseUrl(AiProvider provider, String baseUrl) {
+        return Mono.fromCallable(() -> Optional.ofNullable(normalizeBaseUrl(provider, baseUrl)))
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     private AiSettingsResponse toResponse(UserAiSettings settings) {
@@ -252,6 +272,9 @@ public class AiSettingsServiceImpl implements AiSettingsService {
         Throwable root = e;
         while (root.getCause() != null && root.getCause() != root) {
             root = root.getCause();
+        }
+        if (root instanceof ResponseStatusException refused && refused.getReason() != null) {
+            return refused.getReason(); // a refused base URL: the reason alone, not "400 BAD_REQUEST ..."
         }
         String message = root.getMessage() != null ? root.getMessage() : root.getClass().getSimpleName();
         return message.length() > 300 ? message.substring(0, 300) + "…" : message;
