@@ -78,7 +78,10 @@ import java.util.Map;
  * </ul>
  * Chat selector precedence: explicit {@code spring.ai.model.chat} &gt; a
  * {@code <PROVIDER>_CHAT_ENABLED} switch &gt; {@code openfilz.ai.model} &gt; the fallback chain's first
- * entry &gt; Ollama ({@code none} instead when the model is {@code openfilz-cloud}). The chain still
+ * entry &gt; Ollama ({@code none} instead when the model is {@code openfilz-cloud}, or when
+ * {@code openfilz.ai.ollama-default=false}: a deployment that ships no local Ollama says so, and
+ * "nothing configured" then means "no chat model" rather than a localhost that answers nobody). The
+ * chain still
  * supplies the <em>fallbacks</em> when the model names the primary; it just no longer names it.
  * {@code openfilz.ai.model} never implies {@code openfilz.ai.active}: the feature's master switch
  * stays {@code OPENFILZ_AI_ACTIVE} (native images compile the provider auto-configurations in only
@@ -98,6 +101,11 @@ public class AiModelProviderEnvironmentPostProcessor implements EnvironmentPostP
     private static final String EMBEDDING_SELECTOR = "spring.ai.model.embedding";
     private static final String FALLBACK_ENABLED = "openfilz.ai.fallback.enabled";
     private static final String FALLBACK_CHAIN = "openfilz.ai.fallback.chain";
+    /**
+     * {@code OPENFILZ_AI_OLLAMA_DEFAULT} (default true): whether "no chat provider configured" means
+     * the local Ollama. False = {@code none}. Chat only: the embedding fallback is unchanged.
+     */
+    static final String OLLAMA_DEFAULT = "openfilz.ai.ollama-default";
 
     /**
      * Prefix of the chain-derived model properties application.yml falls back to. Deliberately
@@ -213,8 +221,10 @@ public class AiModelProviderEnvironmentPostProcessor implements EnvironmentPostP
             return NONE;
         }
         // Nothing configured: Ollama, whose defaults target a stock local install, so
-        // `openfilz.ai.active=true` alone is a working setup.
-        return OLLAMA;
+        // `openfilz.ai.active=true` alone is a working setup — unless the deployment says it ships
+        // no Ollama, in which case there is no server chat model (per-user keys or a model set at
+        // runtime by an administrator may still serve the chat).
+        return environment.getProperty(OLLAMA_DEFAULT, Boolean.class, true) ? OLLAMA : NONE;
     }
 
     /**

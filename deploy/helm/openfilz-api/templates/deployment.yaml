@@ -210,6 +210,9 @@ spec:
             # reorganisation / MCP and drops only the chat (docs/ai-overview.md §6).
             - name: OPENFILZ_AI_CHAT_ACTIVE
               value: {{ .Values.ai.chat.active | quote }}
+            # "Nothing configured" = the local Ollama (true) or no server chat model (false).
+            - name: OPENFILZ_AI_OLLAMA_DEFAULT
+              value: {{ .Values.ai.ollamaDefault | quote }}
             # The one-pair setup (provider:model + its key); the key always comes from a Secret.
             {{- with .Values.ai.model }}
             - name: OPENFILZ_AI_MODEL

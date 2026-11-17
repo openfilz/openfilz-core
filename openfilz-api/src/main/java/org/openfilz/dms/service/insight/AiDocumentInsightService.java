@@ -113,7 +113,13 @@ public class AiDocumentInsightService implements DocumentInsightService {
      * whose text it is enriching — a batch would otherwise slow down the very pipeline feeding it.
      */
     private volatile Scheduler scheduler;
-    private volatile ResolvedChat model;
+    private volatile CachedModel model;
+
+    /**
+     * The model in use and the {@link UserChatClientResolver#defaultModelVersion()} it was resolved
+     * under. {@code pinned} = {@code openfilz.ai.insights.model}, which no runtime change replaces.
+     */
+    private record CachedModel(ResolvedChat chat, long version, boolean pinned) {}
 
     public AiDocumentInsightService(AiProperties aiProperties, DocumentInsightStore store,
                                     UserChatClientResolver resolver, AiFallbackChain fallbackChain,
@@ -580,18 +586,27 @@ public class AiDocumentInsightService implements DocumentInsightService {
     }
 
     /** The insights model: the configured {@code provider:model} when set and buildable, else the chat model. */
-    private ResolvedChat model() {
-        ResolvedChat current = model;
-        if (current != null) {
-            return current;
+    /**
+     * The insights model: {@code openfilz.ai.insights.model} when set (kept for the life of the
+     * process), else the default model, resolved again whenever the runtime model source moved
+     * (set, changed or removed at runtime), so a removed model is never called again.
+     */
+    ResolvedChat model() {
+        // Read before resolving: a change landing during the resolution leaves an older version on
+        // the cached entry, so the next call resolves again.
+        long version = resolver.defaultModelVersion();
+        CachedModel current = model;
+        if (current != null && (current.pinned() || current.version() == version)) {
+            return current.chat();
         }
         String configured = aiProperties.getInsights().getModel();
-        ResolvedChat resolved = fallbackChain.configuredModel(configured)
-                .orElseGet(() -> resolver.resolve(null).block());
+        Optional<ResolvedChat> pinned = fallbackChain.configuredModel(configured);
+        ResolvedChat resolved = pinned.orElseGet(() -> resolver.resolve(null).block());
         if (resolved == null) {
+            model = null;
             throw new IllegalStateException("no chat model available for document insights");
         }
-        model = resolved;
+        model = new CachedModel(resolved, version, pinned.isPresent());
         return resolved;
     }
 

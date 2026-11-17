@@ -57,6 +57,84 @@ class AiModelProviderEnvironmentPostProcessorTest {
         assertEquals("ollama", environment.getProperty("spring.ai.model.embedding"));
     }
 
+    /** A deployment that ships no Ollama: nothing configured = no server chat model. */
+    @Test
+    void ollamaDefaultOff_nothingConfigured_selectsNoChatModel() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.ollama-default", "false");
+
+        assertEquals("none", environment.getProperty("spring.ai.model.chat"));
+        // Embeddings keep their fallback: the vector store needs a model to be built at all.
+        assertEquals("ollama", environment.getProperty("spring.ai.model.embedding"));
+    }
+
+    @Test
+    void ollamaDefaultOff_inProcessEmbeddingsStillWin() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.ollama-default", "false",
+                "openfilz.ai.transformers.embedding.enabled", "true");
+
+        assertEquals("none", environment.getProperty("spring.ai.model.chat"));
+        assertEquals("transformers", environment.getProperty("spring.ai.model.embedding"));
+    }
+
+    @Test
+    void ollamaDefaultOff_theModelPairStillWins() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.ollama-default", "false",
+                "openfilz.ai.model", "google:gemini-3.6-flash");
+
+        assertEquals("google-genai", environment.getProperty("spring.ai.model.chat"));
+    }
+
+    @Test
+    void ollamaDefaultOff_aProviderSwitchStillWins() {
+        MockEnvironment ollama = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.ollama-default", "false",
+                "openfilz.ai.ollama.chat.enabled", "true");
+        assertEquals("ollama", ollama.getProperty("spring.ai.model.chat"));
+
+        MockEnvironment anthropic = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.ollama-default", "false",
+                "openfilz.ai.anthropic.chat.enabled", "true");
+        assertEquals("anthropic", anthropic.getProperty("spring.ai.model.chat"));
+    }
+
+    @Test
+    void ollamaDefaultOff_aFallbackChainStillWins() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.ollama-default", "false",
+                "openfilz.ai.fallback.enabled", "true",
+                "openfilz.ai.fallback.chain", "openai:gpt-4o-mini");
+
+        assertEquals("openai", environment.getProperty("spring.ai.model.chat"));
+    }
+
+    @Test
+    void ollamaDefaultOff_anExplicitSelectorStillWins() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.ollama-default", "false",
+                "spring.ai.model.chat", "ollama");
+
+        assertEquals("ollama", environment.getProperty("spring.ai.model.chat"));
+    }
+
+    @Test
+    void ollamaDefaultExplicitlyOn_keepsTheOllamaFallback() {
+        MockEnvironment environment = process(
+                "openfilz.ai.active", "true",
+                "openfilz.ai.ollama-default", "true");
+
+        assertEquals("ollama", environment.getProperty("spring.ai.model.chat"));
+    }
+
     @Test
     void ollamaEnabled_selectsOllama() {
         MockEnvironment environment = process(

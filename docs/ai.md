@@ -675,14 +675,16 @@ sequenceDiagram
 
     User->>C: POST /ai/chat {message, conversationId?} (SSE)
     C->>S: chat(request, userEmail)   [email from JWT]
-    S->>DB: conversation: ownership check, or create (created_by = userEmail)
-    S->>R: resolve(userEmail)
+    S->>R: resolve(userEmail)   [before any event: no model = 409 AI_NO_MODEL]
     alt BYOK on + user has settings
         R->>DB: user_ai_settings row
         R->>R: decrypt key (AiSettingsCipher), build vendor ChatModel<br/>(cache hit unless config changed)
+    else model set at runtime for everyone (DefaultChatModelSource)
+        R-->>S: that model
     else
-        R-->>S: server-default ChatModel bean
+        R-->>S: deployment default (ChatModel bean or runtime-rebuilt primary)
     end
+    S->>DB: conversation: ownership check, or create (created_by = userEmail)
     S->>T: toolsFactory.create(resolvedModel)
     S->>A: assemble(resolvedModel, tools) → ChatClient<br/>(system prompt + tool callbacks + ToolCallingAdvisor)
     S->>DB: save USER message
@@ -781,6 +783,14 @@ sequenceDiagram
   through an `ObjectProvider`, so the insight and filing services (which depend on it only for the
   model stages they may never reach) still build, and only an actual model request fails, naming
   what needs one. Pinned by `AiChatDisabledIT`.
+- **Chat on, no model anywhere**: `UserChatClientResolver` throws `AiNoModelException`, which
+  `GlobalExceptionHandler` maps to `409 {"code":"AI_NO_MODEL","userKeysAllowed":<openfilz.ai.user-settings.enabled>}`.
+  `AiChatServiceImpl` resolves the model before it creates the conversation or emits anything, so
+  the 409 comes out ahead of the SSE stream (the "Organise with AI" plan is written in that same chat
+  request; no other core endpoint calls a chat model). The operator message is logged at most once a
+  minute. `openfilz.ai.ollama-default=false` (`OPENFILZ_AI_OLLAMA_DEFAULT`) makes "nothing configured"
+  resolve the chat selector to `none` instead of Ollama, for a deployment that runs no Ollama (§5b, "Enabling a provider").
+  Pinned by `AiNoModelIT` (personal keys allowed) and `AiChatNoModelIT` (not allowed).
 - **Trimming the tool surface for small models**: the schema of every bound tool travels with
   each request, and small local models (1–3B) stop calling tools once it grows too large — they
   refuse, or emit the call as text. The e-Sign tools are bound only while
@@ -802,6 +812,24 @@ sequenceDiagram
 Gated by `openfilz.ai.user-settings.enabled` — read at **runtime** (plain `@Value`), so it stays
 a deployment toggle in native images. Only the *chat* model is user-selectable (see §2 for why
 embeddings are fixed).
+
+**Precedence** (`AiModelSource`, reported to the caller as `Settings.aiModelSource`):
+
+1. `PERSONAL`: the user's own row in `user_ai_settings` (BYOK on);
+2. `ORGANISATION`: a model set at runtime for every user, from the `DefaultChatModelSource` seam
+   (core: `NoDefaultChatModelSource`, none; an extension provides a `@Primary` bean, answering from
+   memory, whose `version()` moves on every change);
+3. `DEPLOYMENT`: the deployment's configuration (`OPENFILZ_AI_MODEL`, provider switches, the
+   fallback chain's first entry, the auto-configured bean);
+4. `NONE`: `AiNoModelException`, answered 409 `AI_NO_MODEL`.
+
+The fallback to 2 and 3 is lazy (`switchIfEmpty`), so a personal key works on a deployment with no
+server model at all. Public helpers: `modelSourceFor(email)` (one primary-key read when BYOK is on),
+`defaultModelSource()`, `deploymentDefault()` (the deployment model alone, ignoring the source),
+`defaultModelVersion()`, `hasDefaultChatModel()` (source or deployment). The insight worker and smart
+filing keep their model between documents and resolve again when `defaultModelVersion()` moves, so a
+model removed at runtime is never called again; `OPENFILZ_AI_INSIGHTS_MODEL`, when set, stays first
+for both.
 
 ```mermaid
 sequenceDiagram
@@ -912,8 +940,12 @@ implies `openfilz.ai.active`, and an unusable value is ignored (the post-process
 and reported by `AiFallbackValidator` at startup. Deployment targets must pass the vendor keys and
 models **only when set** (bare Compose keys, `with` blocks in Helm): an empty environment variable is
 a value, and would shadow the derived one. With no chat model, `UserChatClientResolver.hasDefaultChatModel()`
-is false and `Settings` reports `aiChatActive=false`, `aiChatUnavailableReason=NO_MODEL`; a native
-image's compiled-in Ollama bean is ignored under a runtime selector of `none`.
+is false and `Settings` reports `aiChatActive=false`, `aiChatUnavailableReason=NO_MODEL` (unless
+personal keys are allowed) and `aiModelSource=NONE`; a native image's compiled-in Ollama bean is
+ignored under a runtime selector of `none`. When nothing names a chat provider the selector is
+Ollama, or `none` with `openfilz.ai.ollama-default=false`; the embedding selector keeps its Ollama
+fallback either way (the chat service needs a vector store, so a `none` embedding selector with no
+in-process model would stop the chat from being built at all).
 
 Since chain[0] then *is* the primary, the two are the same candidate and get de-duplicated.
 
@@ -1047,7 +1079,7 @@ request, well under the SDK cycle, classified `QUOTA_EXHAUSTED`).
 | Text extraction / OpenSearch | `service/impl/TikaService`, `service/impl/LocalFullTextServiceImpl` |
 | Chunking + vectors | `service/impl/DocumentEmbeddingServiceImpl` |
 | Chat pipeline | `service/impl/AiChatServiceImpl` |
-| Model resolution (BYOK) | `service/ai/UserChatClientResolver` |
+| Model resolution (BYOK, runtime model, deployment default) | `service/ai/UserChatClientResolver`, `service/ai/DefaultChatModelSource`, `exception/AiNoModelException` |
 | Client assembly + tools | `service/ai/ChatClientAssembler`, `service/ai/DocumentAiTools(+Factory)` |
 | Destructive-tool guardrails, content fencing | `service/ai/AiToolGuardrails` (`openfilz.ai.tools.destructive-mode`, soft-delete), `DocumentAiTools.resolveForMutation`, `service/ai/UntrustedContent`, `McpToolContributor.chatWithheldTools` |
 | BYOK settings API + crypto | `controller/rest/AiSettingsController`, `service/impl/AiSettingsCipher` |
