@@ -24,6 +24,8 @@ import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.ollama.OllamaChatModel;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.openai.http.okhttp.OpenAiHttpClientBuilderCustomizer;
+import okhttp3.OkHttpClient;
 import org.springframework.ai.openai.setup.OpenAiSetup;
 import org.springframework.ai.retry.TransientAiException;
 import org.springframework.beans.factory.ObjectProvider;
@@ -84,6 +86,29 @@ public class UserChatClientResolver {
     private record CachedModel(String configHash, ResolvedChat resolved) {}
 
     private static final Duration PROVIDER_TIMEOUT = Duration.ofSeconds(120);
+
+    /**
+     * HTTP client that never follows a redirect, shared by every programmatically built OpenAI /
+     * OpenAI-compatible model. A base URL is checked when it is saved, but a server answering
+     * {@code 302 Location: http://10.0.0.5/...} would otherwise lead the client to an address the
+     * check never saw, and hand its answer back to the caller (a "test connection" shows it).
+     * Provider APIs do not redirect, so a 3xx simply surfaces as an error.
+     */
+    private static final OkHttpClient NO_REDIRECT_HTTP = new OkHttpClient.Builder()
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .connectTimeout(Duration.ofSeconds(30))
+            .readTimeout(PROVIDER_TIMEOUT)
+            .writeTimeout(PROVIDER_TIMEOUT)
+            .build();
+
+    /**
+     * Spring AI's OkHttp client follows redirects and offers no switch for it, and its
+     * interceptors are application interceptors (they only see the final hop). So the interceptor
+     * sends the request itself on {@link #NO_REDIRECT_HTTP} and hands that response back.
+     */
+    static final List<OpenAiHttpClientBuilderCustomizer> NO_REDIRECTS = List.of(
+            builder -> builder.interceptor(chain -> NO_REDIRECT_HTTP.newCall(chain.request()).execute()));
 
     /**
      * Retry policy for the programmatically built Google model. Spring AI's default template
@@ -306,12 +331,12 @@ public class UserChatClientResolver {
                             provider == AiProvider.OPENAI_COMPATIBLE ? baseUrl : null,
                             apiKey, null, null, null, null, false, false, model,
                             PROVIDER_TIMEOUT, 1, null, null,
-                            ObservationRegistry.NOOP, null, List.of()))
+                            ObservationRegistry.NOOP, null, NO_REDIRECTS))
                     .openAiClientAsync(OpenAiSetup.setupAsyncClient(
                             provider == AiProvider.OPENAI_COMPATIBLE ? baseUrl : null,
                             apiKey, null, null, null, null, false, false, model,
                             PROVIDER_TIMEOUT, 1, null, null,
-                            ObservationRegistry.NOOP, null, List.of()))
+                            ObservationRegistry.NOOP, null, NO_REDIRECTS))
                     .options(OpenAiChatOptions.builder()
                             .model(model)
                             .build())
