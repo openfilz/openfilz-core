@@ -8,7 +8,9 @@ import com.google.genai.types.HttpRetryOptions;
 import io.micrometer.observation.ObservationRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.entity.UserAiSettings;
+import org.openfilz.dms.enums.AiModelSource;
 import org.openfilz.dms.enums.AiProvider;
+import org.openfilz.dms.exception.AiNoModelException;
 import org.openfilz.dms.repository.UserAiSettingsRepository;
 import org.openfilz.dms.service.impl.AiSettingsCipher;
 import org.openfilz.dms.utils.UserInfoService;
@@ -22,9 +24,12 @@ import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.ollama.OllamaChatModel;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.openai.http.okhttp.OpenAiHttpClientBuilderCustomizer;
+import okhttp3.OkHttpClient;
 import org.springframework.ai.openai.setup.OpenAiSetup;
 import org.springframework.ai.retry.TransientAiException;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.core.env.Environment;
@@ -38,13 +43,17 @@ import reactor.core.scheduler.Schedulers;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Resolves the {@link ChatModel} to use for a given user's chat request.
  * <p>
- * When BYOK ({@code openfilz.ai.user-settings.enabled}, read at runtime — native-image-safe)
- * is off, or the user has no personal settings, the server-default model is returned. When the
+ * Precedence ({@link AiModelSource}): the user's personal settings ({@code PERSONAL}, when BYOK
+ * {@code openfilz.ai.user-settings.enabled} is on, read at runtime, native-image-safe), then a model
+ * set at runtime for every user ({@code ORGANISATION}, {@link DefaultChatModelSource}), then the
+ * deployment's configuration ({@code DEPLOYMENT}). Nothing resolving is an {@link AiNoModelException}
+ * (answered 409 {@code AI_NO_MODEL}). When the
  * user configured a provider + API key, a provider {@link ChatModel} is built
  * <em>programmatically</em> (no Spring auto-configuration involved, so the
  * {@code spring.ai.model.*} selectors and the GraalVM build-time conditions are untouched).
@@ -77,6 +86,29 @@ public class UserChatClientResolver {
     private record CachedModel(String configHash, ResolvedChat resolved) {}
 
     private static final Duration PROVIDER_TIMEOUT = Duration.ofSeconds(120);
+
+    /**
+     * HTTP client that never follows a redirect, shared by every programmatically built OpenAI /
+     * OpenAI-compatible model. A base URL is checked when it is saved, but a server answering
+     * {@code 302 Location: http://10.0.0.5/...} would otherwise lead the client to an address the
+     * check never saw, and hand its answer back to the caller (a "test connection" shows it).
+     * Provider APIs do not redirect, so a 3xx simply surfaces as an error.
+     */
+    private static final OkHttpClient NO_REDIRECT_HTTP = new OkHttpClient.Builder()
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .connectTimeout(Duration.ofSeconds(30))
+            .readTimeout(PROVIDER_TIMEOUT)
+            .writeTimeout(PROVIDER_TIMEOUT)
+            .build();
+
+    /**
+     * Spring AI's OkHttp client follows redirects and offers no switch for it, and its
+     * interceptors are application interceptors (they only see the final hop). So the interceptor
+     * sends the request itself on {@link #NO_REDIRECT_HTTP} and hands that response back.
+     */
+    static final List<OpenAiHttpClientBuilderCustomizer> NO_REDIRECTS = List.of(
+            builder -> builder.interceptor(chain -> NO_REDIRECT_HTTP.newCall(chain.request()).execute()));
 
     /**
      * Retry policy for the programmatically built Google model. Spring AI's default template
@@ -128,6 +160,14 @@ public class UserChatClientResolver {
     private final AiSettingsCipher cipher;
     private final Environment environment;
     private final boolean userSettingsEnabled;
+    /** A model set at runtime for every user; the core one has none, an extension's is {@code @Primary}. */
+    private final DefaultChatModelSource defaultSource;
+    /** Where a user's own OpenAI-compatible server may be; checked again each time their model is built. */
+    private final AiBaseUrlPolicy baseUrlPolicy;
+
+    /** Last time the "no chat model" operator message was logged: at most once a minute. */
+    private final AtomicLong lastNoModelLog = new AtomicLong();
+    private static final long NO_MODEL_LOG_INTERVAL_MS = Duration.ofMinutes(1).toMillis();
 
     private final Cache<String, CachedModel> cache = Caffeine.newBuilder()
             .maximumSize(500)
@@ -142,18 +182,46 @@ public class UserChatClientResolver {
      */
     private final AtomicReference<Optional<ResolvedChat>> runtimeSwitchedDefault = new AtomicReference<>();
 
+    @Autowired
     public UserChatClientResolver(ObjectProvider<ChatModel> defaultChatModelProvider,
                                   ToolCallingManager toolCallingManager,
                                   UserAiSettingsRepository repository,
                                   AiSettingsCipher cipher,
                                   Environment environment,
-                                  @Value("${openfilz.ai.user-settings.enabled:false}") boolean userSettingsEnabled) {
+                                  @Value("${openfilz.ai.user-settings.enabled:false}") boolean userSettingsEnabled,
+                                  DefaultChatModelSource defaultSource,
+                                  AiBaseUrlPolicy baseUrlPolicy) {
+        this.baseUrlPolicy = baseUrlPolicy != null ? baseUrlPolicy : new SchemeOnlyAiBaseUrlPolicy();
         this.defaultChatModelProvider = defaultChatModelProvider;
         this.toolCallingManager = toolCallingManager;
         this.repository = repository;
         this.cipher = cipher;
         this.environment = environment;
         this.userSettingsEnabled = userSettingsEnabled;
+        this.defaultSource = defaultSource != null ? defaultSource : new NoDefaultChatModelSource();
+    }
+
+    /** With the core base URL rule (callers that build the resolver by hand). */
+    public UserChatClientResolver(ObjectProvider<ChatModel> defaultChatModelProvider,
+                                  ToolCallingManager toolCallingManager,
+                                  UserAiSettingsRepository repository,
+                                  AiSettingsCipher cipher,
+                                  Environment environment,
+                                  boolean userSettingsEnabled,
+                                  DefaultChatModelSource defaultSource) {
+        this(defaultChatModelProvider, toolCallingManager, repository, cipher, environment,
+                userSettingsEnabled, defaultSource, new SchemeOnlyAiBaseUrlPolicy());
+    }
+
+    /** Without a runtime model source (tests, callers that build the resolver by hand). */
+    public UserChatClientResolver(ObjectProvider<ChatModel> defaultChatModelProvider,
+                                  ToolCallingManager toolCallingManager,
+                                  UserAiSettingsRepository repository,
+                                  AiSettingsCipher cipher,
+                                  Environment environment,
+                                  boolean userSettingsEnabled) {
+        this(defaultChatModelProvider, toolCallingManager, repository, cipher, environment,
+                userSettingsEnabled, new NoDefaultChatModelSource(), new SchemeOnlyAiBaseUrlPolicy());
     }
 
     public boolean isUserSettingsEnabled() {
@@ -161,8 +229,10 @@ public class UserChatClientResolver {
     }
 
     /**
-     * Resolve the chat model for this user. Falls back to the server default when BYOK is off,
-     * the user is anonymous, or no personal settings exist. A broken personal configuration
+     * Resolve the chat model for this user. Falls back to the default (the runtime source, then the
+     * deployment's) when BYOK is off, the user is anonymous, or no personal settings exist, and
+     * lazily, so a personal key works on a deployment with no server model at all. Nothing anywhere
+     * is an {@link AiNoModelException} error signal. A broken personal configuration
      * (e.g. undecryptable key after a master-key rotation) propagates as an error so the user
      * sees it and can fix or reset their settings, rather than silently chatting with a model
      * they didn't choose.
@@ -170,12 +240,58 @@ public class UserChatClientResolver {
     public Mono<ResolvedChat> resolve(String userEmail) {
         if (!userSettingsEnabled || userEmail == null || userEmail.isBlank()
                 || UserInfoService.ANONYMOUS_USER.equals(userEmail)) {
-            return Mono.just(defaultChat());
+            return Mono.fromSupplier(this::defaultChat);
         }
         return repository.findById(userEmail)
                 .publishOn(Schedulers.boundedElastic()) // client construction does blocking setup work
                 .map(settings -> resolveCached(userEmail, settings))
-                .defaultIfEmpty(defaultChat());
+                .switchIfEmpty(Mono.fromSupplier(this::defaultChat));
+    }
+
+    /**
+     * Where the model of a user comes from: {@code PERSONAL} when BYOK is on and they saved settings
+     * (one primary-key read), else {@link #defaultModelSource()}. Never fails for "no model".
+     */
+    public Mono<AiModelSource> modelSourceFor(String userEmail) {
+        if (!userSettingsEnabled || userEmail == null || userEmail.isBlank()
+                || UserInfoService.ANONYMOUS_USER.equals(userEmail)) {
+            return Mono.fromSupplier(this::defaultModelSource);
+        }
+        return repository.existsById(userEmail)
+                .map(exists -> exists ? AiModelSource.PERSONAL : defaultModelSource());
+    }
+
+    /**
+     * Where the default (non-personal) model comes from: {@code ORGANISATION} when the runtime source
+     * has one, {@code DEPLOYMENT} when the deployment's configuration resolves one, else {@code NONE}.
+     * Answers from memory, never throws.
+     */
+    public AiModelSource defaultModelSource() {
+        if (defaultSource.current().isPresent()) {
+            return AiModelSource.ORGANISATION;
+        }
+        return deploymentDefault().isPresent() ? AiModelSource.DEPLOYMENT : AiModelSource.NONE;
+    }
+
+    /**
+     * The deployment's own default model ({@code OPENFILZ_AI_MODEL}, provider switches, the fallback
+     * chain's first entry, the auto-configured bean), ignoring any runtime source; empty when it has
+     * none. Never throws.
+     */
+    public Optional<ResolvedChat> deploymentDefault() {
+        try {
+            return Optional.ofNullable(deploymentChatOrNull());
+        } catch (RuntimeException e) {
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Version of the runtime model source ({@link DefaultChatModelSource#version()}): background
+     * callers that keep a default model resolve again when it moved.
+     */
+    public long defaultModelVersion() {
+        return defaultSource.version();
     }
 
     /** Drop the cached model after a settings change (save/delete). */
@@ -190,8 +306,12 @@ public class UserChatClientResolver {
             return cached.resolved();
         }
         AiProvider provider = AiProvider.valueOf(settings.getProvider());
+        // A stored address is checked like a new one: the rule may be stricter than when the row was
+        // saved, and a host name may point elsewhere by now. Runs on boundedElastic (see resolve).
+        String baseUrl = provider == AiProvider.OPENAI_COMPATIBLE
+                ? baseUrlPolicy.validate(settings.getBaseUrl()) : settings.getBaseUrl();
         String apiKey = cipher.decrypt(settings.getApiKeyEncrypted());
-        ChatModel model = buildChatModel(provider, apiKey, settings.getBaseUrl(), settings.getModel());
+        ChatModel model = buildChatModel(provider, apiKey, baseUrl, settings.getModel());
         ResolvedChat resolved = new ResolvedChat(model, provider.name(), settings.getModel(), AiKeyRef.of(apiKey));
         cache.put(userEmail, new CachedModel(hash, resolved));
         log.debug("[AI] Built {} chat model ({}) for user {}", provider, settings.getModel(), userEmail);
@@ -231,12 +351,12 @@ public class UserChatClientResolver {
                             provider == AiProvider.OPENAI_COMPATIBLE ? baseUrl : null,
                             apiKey, null, null, null, null, false, false, model,
                             PROVIDER_TIMEOUT, 1, null, null,
-                            ObservationRegistry.NOOP, null, List.of()))
+                            ObservationRegistry.NOOP, null, NO_REDIRECTS))
                     .openAiClientAsync(OpenAiSetup.setupAsyncClient(
                             provider == AiProvider.OPENAI_COMPATIBLE ? baseUrl : null,
                             apiKey, null, null, null, null, false, false, model,
                             PROVIDER_TIMEOUT, 1, null, null,
-                            ObservationRegistry.NOOP, null, List.of()))
+                            ObservationRegistry.NOOP, null, NO_REDIRECTS))
                     .options(OpenAiChatOptions.builder()
                             .model(model)
                             .build())
@@ -268,7 +388,47 @@ public class UserChatClientResolver {
         return defaultChatModelProvider.getIfAvailable();
     }
 
+    /**
+     * The default model for a user without personal settings: the runtime source's, then the
+     * deployment's. Throws {@link AiNoModelException} when neither has one.
+     */
     private ResolvedChat defaultChat() {
+        Optional<ResolvedChat> fromSource = defaultSource.current();
+        if (fromSource.isPresent()) {
+            return fromSource.get();
+        }
+        ResolvedChat deployment = deploymentChatOrNull();
+        if (deployment == null) {
+            // Deliberate configuration, not a bug: say which features need a model and which
+            // do not, so an operator running a light deployment knows whether to care.
+            String provider = environment.getProperty("spring.ai.model.chat", "none");
+            String message = "No chat model is configured on this deployment"
+                    + " (spring.ai.model.chat=" + provider + ")."
+                    + " The chat assistant, the 'llm' insight classifier and smart-filing stage 2"
+                    + " need one; classification with the prototype/learned classifier, the"
+                    + " neighbour vote, the by-kind reorganisation and the MCP server do not."
+                    + " An administrator can configure a model for everyone"
+                    + (userSettingsEnabled ? ", or each user can set their own model and key." : ".");
+            logNoModel(message);
+            throw new AiNoModelException(message, userSettingsEnabled);
+        }
+        return deployment;
+    }
+
+    /**
+     * With the "no model yet" panel, no model is an ordinary state rather than an error per click:
+     * the operator message is logged at most once a minute.
+     */
+    private void logNoModel(String message) {
+        long now = System.currentTimeMillis();
+        long last = lastNoModelLog.get();
+        if (now - last >= NO_MODEL_LOG_INTERVAL_MS && lastNoModelLog.compareAndSet(last, now)) {
+            log.warn("[AI] {}", message);
+        }
+    }
+
+    /** The deployment's default model, or null when it has none. */
+    private ResolvedChat deploymentChatOrNull() {
         String provider = environment.getProperty("spring.ai.model.chat", "none");
         Optional<ResolvedChat> switched = runtimeSwitchedDefault.get();
         if (switched == null) {
@@ -276,33 +436,22 @@ public class UserChatClientResolver {
             switched = Optional.ofNullable(runtimeSwitchedDefault(provider));
             runtimeSwitchedDefault.set(switched);
         }
-        return switched.orElseGet(() -> {
-            ChatModel bean = selectedBean(provider);
-            if (bean == null) {
-                // Deliberate configuration, not a bug: say which features need a model and which
-                // do not, so an operator running a light deployment knows whether to care.
-                throw new IllegalStateException("No chat model is configured on this deployment"
-                        + " (spring.ai.model.chat=" + provider + ")."
-                        + " The chat assistant, the 'llm' insight classifier and smart-filing stage 2"
-                        + " need one; classification with the prototype/learned classifier, the"
-                        + " neighbour vote, the by-kind reorganisation and the MCP server do not.");
-            }
-            return new ResolvedChat(bean, provider, defaultModelFor(provider), defaultKeyRefFor(provider));
-        });
+        if (switched.isPresent()) {
+            return switched.get();
+        }
+        ChatModel bean = selectedBean(provider);
+        return bean == null ? null
+                : new ResolvedChat(bean, provider, defaultModelFor(provider), defaultKeyRefFor(provider));
     }
 
     /**
-     * Whether the server has a default chat model, i.e. whether {@link #resolve} can answer a user
-     * without personal settings. Same decision as {@code defaultChat()}, without throwing: what
+     * Whether a default chat model exists (runtime source or deployment), i.e. whether
+     * {@link #resolve} can answer a user without personal settings. Never throws: what
      * {@code Settings.aiChatActive} / {@code aiChatUnavailableReason} report, so the web apps never
      * offer a chat that fails on its first message. Native-safe: runtime selector + bean lookup only.
      */
     public boolean hasDefaultChatModel() {
-        try {
-            return defaultChat() != null;
-        } catch (RuntimeException e) {
-            return false;
-        }
+        return defaultModelSource() != AiModelSource.NONE;
     }
 
     /**

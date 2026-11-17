@@ -1,11 +1,13 @@
 package org.openfilz.dms.service.impl;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.CommonProperties;
 import org.openfilz.dms.config.McpProperties;
 import org.openfilz.dms.config.QuotaProperties;
 import org.openfilz.dms.config.RecycleBinProperties;
 import org.openfilz.dms.dto.response.Settings;
+import org.openfilz.dms.enums.AiModelSource;
 import org.openfilz.dms.enums.SignatureAuthMethod;
 import org.openfilz.dms.service.SettingsService;
 import org.openfilz.dms.service.ai.UserChatClientResolver;
@@ -14,6 +16,7 @@ import org.openfilz.dms.service.insight.CategoryTaxonomy;
 import org.openfilz.dms.service.insight.PropertiesCategoryTaxonomy;
 import org.openfilz.dms.service.signature.SignatureOtpSender;
 import org.openfilz.dms.service.signature.SignatureReminderSender;
+import org.openfilz.dms.utils.UserInfoService;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,10 +27,12 @@ import reactor.core.publisher.Mono;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 @ConditionalOnProperty(name = "openfilz.features.custom-access", matchIfMissing = true, havingValue = "false")
+@Slf4j
 public class SettingsServiceImpl implements SettingsService {
 
     /** Mirrors spring.ai.mcp.server.streamable-http.mcp-endpoint, which the transport fixes at /mcp. */
@@ -189,8 +194,9 @@ public class SettingsServiceImpl implements SettingsService {
        String chatUnavailable = chatUnavailableReason();
        boolean chatActive = Boolean.TRUE.equals(aiActive) && chatUnavailable == null;
        boolean insightsActive = Boolean.TRUE.equals(aiActive) && Boolean.TRUE.equals(aiInsightsActive);
-       return Mono.just(Settings.builder()
-               .emptyBinInterval(emptyBinInterval)
+       Integer binInterval = emptyBinInterval;
+       return aiModelSource().map(Optional::of).defaultIfEmpty(Optional.empty()).map(modelSource -> Settings.builder()
+               .emptyBinInterval(binInterval)
                .fileQuotaMB(quotaProperties.getFileUpload())
                .userQuotaMB(quotaProperties.getUser())
                .thumbnailsActive(thumbnailActive)
@@ -201,6 +207,7 @@ public class SettingsServiceImpl implements SettingsService {
                .aiChatUnavailableReason(chatUnavailable)
                // BYOK only ever overrides the *chat* model, so it follows the chat availability too.
                .aiUserSettingsEnabled(chatActive && Boolean.TRUE.equals(aiUserSettingsEnabled))
+               .aiModelSource(modelSource.orElse(null))
                .aiInsightsActive(insightsActive)
                .aiInsightsCategories(insightsActive ? insightCategories() : List.of())
                .aiInsightsCategoryLabels(insightsActive ? insightCategoryLabels(CategoryLabels.resolveLanguage(languages)) : Map.of())
@@ -223,6 +230,40 @@ public class SettingsServiceImpl implements SettingsService {
                .extensions(extensions())
                .build());
 
+    }
+
+    /** Reads the caller of the current request from the reactive security context. */
+    private static final UserInfoService CALLER = new UserInfoService() {};
+
+    /**
+     * {@link Settings#aiModelSource()} for the caller: empty when the AI feature is off or the
+     * resolver is not available (plain construction in tests). One primary-key read of the caller's
+     * personal AI settings when per-user keys are on; the other sources answer from memory.
+     */
+    protected Mono<String> aiModelSource() {
+        if (!Boolean.TRUE.equals(aiActive) || chatResolverProvider == null) {
+            return Mono.empty();
+        }
+        UserChatClientResolver resolver;
+        try {
+            resolver = chatResolverProvider.getIfAvailable();
+        } catch (RuntimeException e) {
+            // The resolver itself cannot be built (its AI infrastructure is missing): no model.
+            return Mono.just(AiModelSource.NONE.name());
+        }
+        if (resolver == null) {
+            return Mono.empty();
+        }
+        return CALLER.getConnectedUserEmail()
+                .flatMap(email -> Mono.defer(() -> resolver.modelSourceFor(email)))
+                .map(AiModelSource::name)
+                .onErrorResume(e -> {
+                    // The settings page must never fail on this: fall back to the default source.
+                    log.warn("Could not tell where the AI model of the caller comes from: {}", e.toString());
+                    return Mono.fromSupplier(() -> resolver.defaultModelSource())
+                            .map(AiModelSource::name)
+                            .onErrorResume(ignored -> Mono.empty());
+                });
     }
 
     /**

@@ -104,14 +104,18 @@ public class AiChatServiceImpl implements AiChatService {
                 .map(ctx -> Optional.ofNullable(ctx.getAuthentication()))
                 .defaultIfEmpty(Optional.empty());
 
-        return Mono.zip(conversationIdMono, authenticationMono).flatMapMany(conversationAndAuth -> {
+        // The model is resolved FIRST, before any conversation is created or any event is sent: with no
+        // model anywhere the request then fails with AiNoModelException ahead of the first SSE event,
+        // so the error handler can still answer 409 AI_NO_MODEL (the response is not committed yet).
+        return chatResolver.resolve(userEmail).flatMapMany(resolvedModel ->
+                Mono.zip(conversationIdMono, authenticationMono).flatMapMany(conversationAndAuth -> {
             UUID conversationId = conversationAndAuth.getT1();
             Authentication authentication = conversationAndAuth.getT2().orElse(null);
             log.debug("[AI] Conversation ID resolved: {}", conversationId);
 
             // 2. Resolve the user's chat model (server default or BYOK) and build the
             //    per-request tool instance + client on top of it.
-            return chatResolver.resolve(userEmail).flatMapMany(resolved -> {
+            return Mono.just(resolvedModel).flatMapMany(resolved -> {
                 // Models to try, best first: the user's own (or the server default) unless it is
                 // cooling down after a quota failure, then the configured fallbacks.
                 List<ResolvedChat> candidates = fallbackChain.candidates(resolved);
@@ -247,7 +251,7 @@ public class AiChatServiceImpl implements AiChatService {
                                     });
                         });
             });
-        });
+        }));
     }
 
     /**

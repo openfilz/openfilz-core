@@ -32,6 +32,7 @@ import org.openfilz.dms.service.ai.ToolCapability;
 import org.openfilz.dms.service.ai.ModelAnswers;
 import org.openfilz.dms.service.ai.UserChatClientResolver;
 import org.openfilz.dms.service.ai.UserChatClientResolver.ResolvedChat;
+import org.openfilz.dms.exception.AiNoModelException;
 import org.openfilz.dms.service.filing.AutoFileDecision.ModelAnswer;
 import org.openfilz.dms.service.filing.AutoFileDecision.Neighbour;
 import org.openfilz.dms.service.filing.AutoFileDecision.FolderFit;
@@ -169,7 +170,13 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
      * drain. Sized to the concurrency, so a filing worker is never queued behind an upload.
      */
     private volatile Scheduler scheduler;
-    private volatile ResolvedChat model;
+    private volatile CachedModel model;
+
+    /**
+     * The stage-2 model and the {@link UserChatClientResolver#defaultModelVersion()} it was resolved
+     * under. {@code pinned} = {@code openfilz.ai.insights.model}, which no runtime change replaces.
+     */
+    private record CachedModel(ResolvedChat chat, long version, boolean pinned) {}
     /**
      * Serialises the applies that create a folder, striped by the folder they create: two
      * documents of a batch heading for the same new folder wait for each other (the second one
@@ -1290,16 +1297,30 @@ public class DefaultAutoFileService implements AutoFileService, UserInfoService 
         return sb.toString();
     }
 
-    private ResolvedChat model() {
-        ResolvedChat current = model;
-        if (current != null) return current;
+    /**
+     * The stage-2 model: {@code openfilz.ai.insights.model} when set (kept for the life of the
+     * process), else the default model, resolved again whenever the runtime model source moved
+     * (set, changed or removed at runtime), so a removed model is never called again. Null = none.
+     */
+    ResolvedChat model() {
+        // Read before resolving: a change landing during the resolution leaves an older version on
+        // the cached entry, so the next call resolves again.
+        long version = resolver.defaultModelVersion();
+        CachedModel current = model;
+        if (current != null && (current.pinned() || current.version() == version)) return current.chat();
         try {
-            ResolvedChat resolved = fallbackChain.configuredModel(aiProperties.getInsights().getModel())
-                    .orElseGet(() -> resolver.resolve(null).block());
-            model = resolved;
+            Optional<ResolvedChat> pinned = fallbackChain.configuredModel(aiProperties.getInsights().getModel());
+            ResolvedChat resolved = pinned.orElseGet(() -> resolver.resolve(null).block());
+            model = resolved == null ? null : new CachedModel(resolved, version, pinned.isPresent());
             return resolved;
         } catch (Exception e) {
-            log.warn("[AUTOFILE] no model available for stage 2: {}", e.getMessage());
+            model = null;
+            if (e instanceof AiNoModelException) {
+                // An ordinary state on a deployment without an LLM; the resolver logs it, rate-limited.
+                log.debug("[AUTOFILE] no model available for stage 2: {}", e.getMessage());
+            } else {
+                log.warn("[AUTOFILE] no model available for stage 2: {}", e.getMessage());
+            }
             return null;
         }
     }
