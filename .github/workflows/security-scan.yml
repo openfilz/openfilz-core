@@ -52,8 +52,9 @@ jobs:
       - name: Restore the Maven repository cached by the build workflow
         uses: actions/cache/restore@v5
         with:
-          path: ~/.m2/repository
-          # The key actions/setup-java writes with `cache: maven`; any pom state will do.
+          # The path and the key exactly as actions/setup-java writes them with `cache: maven`
+          # (a cache is found only under the path string it was saved with); any pom state will do.
+          path: /home/runner/.m2/repository
           key: setup-java-Linux-x64-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             setup-java-Linux-x64-maven-
