@@ -51,7 +51,7 @@ services:
   # OpenSearch - single node, security plugin off (http, no credentials)
   # ===========================================================================
   opensearch:
-    image: opensearchproject/opensearch:2.19.1
+    image: opensearchproject/opensearch:3.10.0
     container_name: openfilz-dev-opensearch
     restart: unless-stopped
     environment:
