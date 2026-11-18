@@ -4,21 +4,24 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[c4d9bcf9f4ea2a7](https://github.com/openfilz/openfilz-core/commit/c4d9bcf9f4ea2a7) maven-release-bot[bot] *2026-11-18 00:12:52*
+[3814588669941c0](https://github.com/openfilz/openfilz-core/commit/3814588669941c0) maven-release-bot[bot] *2026-11-18 15:29:39*
 
 
-## v1.4.14
+## v1.4.15
 ### No issue
 
-**[maven-release-plugin] prepare release v1.4.14**
+**[maven-release-plugin] prepare release v1.4.15**
 
 
-[4c32345dc2ff217](https://github.com/openfilz/openfilz-core/commit/4c32345dc2ff217) maven-release-bot[bot] *2026-11-18 00:12:49*
+[8a1ec958790b6ab](https://github.com/openfilz/openfilz-core/commit/8a1ec958790b6ab) maven-release-bot[bot] *2026-11-18 15:29:35*
 
-**Merge pull request #408 from openfilz/develop**
+**Revert "[maven-release-plugin] prepare release v1.4.15"**
 
- * Enhance AI model handling and fix redirect issues
+ * The v1.4.15 tag push was rejected by GitHub, so release:prepare stopped
+ * after this commit. Put main back on 1.4.15-SNAPSHOT so the release can be
+ * re-run.
+ * Co-Authored-By: Claude Opus 5.5 &lt;noreply@anthropic.com&gt;
 
-[75a552e443e15ad](https://github.com/openfilz/openfilz-core/commit/75a552e443e15ad) Yann Demel *2026-11-18 00:08:17*
+[8d37ef04776480e](https://github.com/openfilz/openfilz-core/commit/8d37ef04776480e) yanndemel *2026-11-18 15:26:16*
 
 
