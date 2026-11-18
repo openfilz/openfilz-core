@@ -407,6 +407,12 @@ If you need fewer than 4, duplicate an existing value — Keycloak ignores dupli
 
 ### Full-Text Search (OpenSearch)
 
+The deployment files run OpenSearch 3.10.0 (2.19.1 before). On an existing installation, stop every
+OpenSearch container and start them all on the new image: OpenSearch 3 opens an index created by
+OpenSearch 2 as it is, so nothing is rebuilt and search answers once the nodes are back. Once
+OpenSearch 3 has started on a data volume, 2.19 refuses it: to be able to go back, copy the volume
+while the containers are stopped. A node uses its heap plus about 600 MB (550 MB on 2.19).
+
 | Property / Env Variable | Default | Description |
 |--------------------------|---------|-------------|
 | `openfilz.full-text.active` / `OPENFILZ_FULLTEXT_ACTIVE` | `false` | Enable full-text indexing |
