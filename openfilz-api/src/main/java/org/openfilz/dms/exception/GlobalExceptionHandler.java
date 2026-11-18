@@ -129,6 +129,20 @@ public class GlobalExceptionHandler {
                 .contentType(org.springframework.http.MediaType.APPLICATION_JSON).body(body));
     }
 
+    /**
+     * A stored AI API key that no configured key opens (chat, Settings &gt; AI): 409 with a code the web apps
+     * branch on, never a 500. The user saves the key again.
+     */
+    @ExceptionHandler(AiKeyUnreadableException.class)
+    public Mono<ResponseEntity<Map<String, Object>>> handleAiKeyUnreadable(AiKeyUnreadableException ex) {
+        log.warn("Stored AI key unreadable: {}", ex.getMessage());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("code", AiKeyUnreadableException.CODE);
+        body.put("message", AiKeyUnreadableException.USER_MESSAGE);
+        return Mono.just(ResponseEntity.status(HttpStatus.CONFLICT)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON).body(body));
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public Mono<ResponseEntity<ErrorResponse>> handleIllegalArgumentException(IllegalArgumentException ex) {
         log.warn("Illegal argument : {}", ex.getMessage());

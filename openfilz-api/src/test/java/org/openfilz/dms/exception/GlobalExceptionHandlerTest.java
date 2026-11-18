@@ -52,6 +52,19 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void handleAiKeyUnreadable_returns409WithTheCode() {
+        StepVerifier.create(handler.handleAiKeyUnreadable(new AiKeyUnreadableException("no key opens it")))
+                .expectNextMatches(response -> {
+                    assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
+                    assertEquals("AI_KEY_UNREADABLE", response.getBody().get("code"));
+                    assertEquals(AiKeyUnreadableException.USER_MESSAGE, response.getBody().get("message"));
+                    assertEquals(org.springframework.http.MediaType.APPLICATION_JSON, response.getHeaders().getContentType());
+                    return true;
+                })
+                .verifyComplete();
+    }
+
+    @Test
     void handleDuplicateName_returns409() {
         DuplicateNameException ex = new DuplicateNameException("duplicate");
 

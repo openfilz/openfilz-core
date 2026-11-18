@@ -7,6 +7,7 @@ import org.openfilz.dms.dto.response.AiConnectionTestResult;
 import org.openfilz.dms.dto.response.AiModelsResponse;
 import org.openfilz.dms.dto.response.AiSettingsResponse;
 import org.openfilz.dms.entity.UserAiSettings;
+import org.openfilz.dms.exception.AiKeyUnreadableException;
 import org.openfilz.dms.enums.AiProvider;
 import org.openfilz.dms.repository.UserAiSettingsRepository;
 import org.openfilz.dms.service.AiSettingsService;
@@ -82,6 +83,9 @@ public class AiSettingsServiceImpl implements AiSettingsService {
                     if (isBlank(request.apiKey()) && existing.getApiKeyEncrypted() == null) {
                         throw badRequest("apiKey is required");
                     }
+                    if (isBlank(request.apiKey())) {
+                        cipher.decrypt(existing.getApiKeyEncrypted()); // keeping a key no key opens: 409 AI_KEY_UNREADABLE
+                    }
                     existing.setProvider(request.provider().name());
                     existing.setModel(request.model().trim());
                     existing.setBaseUrl(baseUrl);
@@ -150,7 +154,7 @@ public class AiSettingsServiceImpl implements AiSettingsService {
                         Mono.just(new AiConnectionTestResult(false,
                                 "Timed out after " + TEST_TIMEOUT.getSeconds() + "s", TEST_TIMEOUT.toMillis())))
                 .onErrorResume(e -> {
-                    if (e instanceof ResponseStatusException) {
+                    if (e instanceof ResponseStatusException || e instanceof AiKeyUnreadableException) {
                         return Mono.error(e); // validation errors stay 4xx — only provider failures become ok=false
                     }
                     log.debug("AI connection test failed for {}: {}", request.provider(), e.toString());
@@ -187,13 +191,22 @@ public class AiSettingsServiceImpl implements AiSettingsService {
                 });
     }
 
-    /** The submitted key, else the stored one, else empty — never an error: see {@link #listModels}. */
+    /**
+     * The submitted key, else the stored one, else empty — never an error: see {@link #listModels}. A stored
+     * key no configured key opens counts as none (the page shows the built-in list and asks for a key).
+     */
     private Mono<String> storedOrSubmittedKey(String userEmail, String submitted) {
         if (!isBlank(submitted)) {
             return Mono.just(submitted.trim());
         }
         return repository.findById(userEmail)
-                .map(settings -> cipher.decrypt(settings.getApiKeyEncrypted()));
+                .flatMap(settings -> {
+                    try {
+                        return Mono.just(cipher.decrypt(settings.getApiKeyEncrypted()));
+                    } catch (AiKeyUnreadableException e) {
+                        return Mono.empty();
+                    }
+                });
     }
 
     private void requireEnabled() {
@@ -231,14 +244,22 @@ public class AiSettingsServiceImpl implements AiSettingsService {
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
+    /** A stored key no configured key opens still shows the settings, with {@code keyUnreadable} and no suffix. */
     private AiSettingsResponse toResponse(UserAiSettings settings) {
-        String key = cipher.decrypt(settings.getApiKeyEncrypted());
+        String key;
+        try {
+            key = cipher.decrypt(settings.getApiKeyEncrypted());
+        } catch (AiKeyUnreadableException e) {
+            log.warn("AI settings of user {}: {}", settings.getUserEmail(), e.getMessage());
+            key = null;
+        }
         return baseResponse()
                 .provider(settings.getProvider())
                 .model(settings.getModel())
                 .baseUrl(settings.getBaseUrl())
                 .hasApiKey(true)
-                .keySuffix(key.length() > 4 ? key.substring(key.length() - 4) : "")
+                .keySuffix(key == null ? "" : key.length() > 4 ? key.substring(key.length() - 4) : "")
+                .keyUnreadable(key == null)
                 .build();
     }
 
