@@ -201,7 +201,7 @@ sequenceDiagram
     Boot->>FW: migrate (db/migration + db/ai-migration when AI active)
     Note over FW: V1_4 chat tables + vector_store<br/>V1_5 ai_embedding_registry<br/>V1_6 user_ai_settings
     Boot->>CTX: create beans (one ChatModel, one EmbeddingModel reach AiConfig)
-    Note over CTX: AiSettingsCipher fails fast if BYOK is enabled<br/>without AI_SETTINGS_ENCRYPTION_KEY
+    Note over CTX: AiSettingsCipher is lazy: BYOK enabled without<br/>AI_SETTINGS_ENCRYPTION_KEY fails at first use, not here
     Boot->>Guard: ApplicationRunner.run
     Guard->>Guard: compare configured embedding provider+model+dimensions<br/>against ai_embedding_registry (single row)
     alt first start
@@ -855,10 +855,16 @@ sequenceDiagram
 
 Security properties:
 
-- Keys at rest: `base64(iv[12] ‖ ciphertext+GCM-tag)`; startup **fails fast** if BYOK is enabled
-  without a valid 32-byte key; rotating `AI_SETTINGS_ENCRYPTION_KEY` invalidates all stored keys
-  (users re-enter them — a broken decrypt surfaces as an error in chat, never a silent fallback
-  to a model the user didn't choose).
+- Keys at rest: `v2:<kid>:base64(iv[12] ‖ ciphertext+GCM-tag)` (`SecretKeyring`; older rows have no
+  prefix and are still read). BYOK enabled without a valid 32-byte key (or a malformed previous key) does
+  not stop the start-up: `AiSettingsCipher` is lazy, so it fails when first built. `AiKeyReencryptionRunner`
+  builds it once the application is ready and logs the variable at fault; the chat and the settings then
+  answer 500 until it is corrected.
+  Rotation: new key in `AI_SETTINGS_ENCRYPTION_KEY`, old ones in `AI_SETTINGS_ENCRYPTION_PREVIOUS_KEYS`;
+  `AiKeyReencryptionRunner` rewrites every `AiSecretReencryption` table (core: `user_ai_settings`) at start-up,
+  in the background, with conditional updates (runbook in `admin-guide.md`). A key no configured key opens
+  is an `AiKeyUnreadableException`: 409 `AI_KEY_UNREADABLE` in the chat and the settings, never a silent
+  fallback to a model the user didn't choose; `GET /settings/ai` still answers, with `keyUnreadable: true`.
 - `UserChatClientResolver` caches built models per user (Caffeine, 30 min idle / 500 entries),
   invalidated on save/delete and by a config-hash comparison — the per-request cost is a cache
   lookup; the pooled HTTP clients live in the cached `ChatModel`.

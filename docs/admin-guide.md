@@ -792,6 +792,7 @@ RAG indexing) always use the server-configured embedding model.
 |--------------------------|---------|-------------|
 | `openfilz.ai.user-settings.enabled` / `AI_USER_SETTINGS_ENABLED` | `false` | Enable per-user model overrides (BYOK) |
 | `openfilz.ai.user-settings.encryption-key` / `AI_SETTINGS_ENCRYPTION_KEY` | *(empty)* | AES-256 key protecting stored user API keys — **required when BYOK is enabled** |
+| `openfilz.ai.user-settings.previous-encryption-keys` / `AI_SETTINGS_ENCRYPTION_PREVIOUS_KEYS` | *(empty)* | Keys `AI_SETTINGS_ENCRYPTION_KEY` replaced, comma-separated, same format. Used only during a key rotation (see below) |
 
 Generate the encryption key once per deployment:
 
@@ -801,9 +802,34 @@ openssl rand -base64 32
 
 Notes:
 - User keys are stored **AES-256-GCM encrypted** in the `user_ai_settings` table and are write-only through the API (only a `hasApiKey` flag and the last 4 characters are ever returned).
-- The startup fails fast if BYOK is enabled without an encryption key.
-- Changing `AI_SETTINGS_ENCRYPTION_KEY` invalidates all stored user keys — users must re-enter them.
+- BYOK enabled without a valid encryption key does not stop the start-up. With AI on, an error naming the variable is logged once the application is ready (`[AI-KEY-ROTATION] cannot read the AI settings keys`), and the chat and *Settings → AI Assistant* answer 500 until the key is set.
+- Changing `AI_SETTINGS_ENCRYPTION_KEY` without listing the old key in `AI_SETTINGS_ENCRYPTION_PREVIOUS_KEYS` makes the stored keys unreadable. The chat and *Settings → AI Assistant* then answer 409 `AI_KEY_UNREADABLE` ("Your saved key can no longer be read, save it again"); nothing else is lost. Rotate with the runbook below instead.
 - The settings page includes a **Test connection** button that sends a one-token probe with the submitted key, so users can validate their setup before saving.
+
+##### Rotating `AI_SETTINGS_ENCRYPTION_KEY`
+
+Stored values carry the id of the key that wrote them (`v2:<kid>:...`, `kid` = first 8 hex characters of the
+SHA-256 of the key). Values written before this format have no id and are tried with every configured key.
+
+1. Generate the new key: `openssl rand -base64 32`.
+2. Set it as `AI_SETTINGS_ENCRYPTION_KEY` and move the old key to `AI_SETTINGS_ENCRYPTION_PREVIOUS_KEYS`
+   (comma-separated if you already had previous keys). Change every instance the same way.
+3. Restart. Once the application is ready, a background pass rewrites every stored key under the new key
+   and logs one line per table, for example
+   `[AI-KEY-ROTATION] user_ai_settings: 12 rewritten, 0 already current, 1 unreadable (left as they are), 0 changed meanwhile`.
+   It runs only with AI on and previous keys set. Instances restarted together do not overwrite each
+   other: each update applies only where the row still holds the value read. A database error is logged and
+   never stops the start-up; the pass runs again at the next start.
+4. Read the counts. "Unreadable" rows were written under a key you did not list: add that key and restart,
+   or let those users save their key again.
+5. At the next restart, when the line shows nothing left to rewrite (only "already current"), empty
+   `AI_SETTINGS_ENCRYPTION_PREVIOUS_KEYS`.
+
+A value of `AI_SETTINGS_ENCRYPTION_PREVIOUS_KEYS` that is not base64 of 32 bytes, or previous keys without a
+current key, does not stop the start-up. Once the application is ready it logs
+`[AI-KEY-ROTATION] cannot read the AI settings keys, no re-encryption: ...` with a message naming the variable
+(never the key); nothing is rewritten, and the chat and *Settings → AI Assistant* answer 500 until the value
+is corrected and the application restarted. Read that line after every rotation.
 
 #### RAG and Embedding Configuration
 
