@@ -196,6 +196,10 @@ ai:
   # insights.classifier.mode prototype/learned needs no LLM at all. See docs/ai-overview.md §6.
   chat:
     active: true
+  # -- Whether "no chat provider configured" (no ai.model, no provider switch, no fallback chain)
+  # means a local Ollama (true) or no server chat model at all (false: the chat explains how to add
+  # one; personal keys, or a model an administrator sets for everyone, still serve it). Chat only.
+  ollamaDefault: true
   # -- Document insights: a model labels each uploaded file (category from a closed list,
   # summary, keywords, language, entities). Needs ai.active. See docs/ai.md §3b.
   insights:

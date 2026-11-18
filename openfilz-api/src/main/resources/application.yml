@@ -260,7 +260,8 @@ openfilz:
     # OPENFILZ_AI_INSIGHTS_MODEL says otherwise); openfilz-cloud sets the insights model and the
     # gateway key, and leaves chat off (spring.ai.model.chat=none) unless a switch or a fallback
     # chain names a chat provider. Precedence for the chat provider: SPRING_AI_MODEL_CHAT >
-    # <PROVIDER>_CHAT_ENABLED > OPENFILZ_AI_MODEL > first AI_FALLBACK_CHAIN entry > Ollama.
+    # <PROVIDER>_CHAT_ENABLED > OPENFILZ_AI_MODEL > first AI_FALLBACK_CHAIN entry > Ollama (none with
+    # OPENFILZ_AI_OLLAMA_DEFAULT=false, see ollama-default below).
     # The explicit vendor variables (GOOGLE_API_KEY, GOOGLE_CHAT_MODEL, ...) still win over the pair.
     # Does NOT turn the feature on: OPENFILZ_AI_ACTIVE stays the master switch. Translated by
     # AiModelProviderEnvironmentPostProcessor; a malformed value is ignored with a startup warning.
@@ -274,6 +275,12 @@ openfilz:
     # automatic AI features with no LLM at all. See docs/ai-overview.md §6.
     chat:
       active: ${OPENFILZ_AI_CHAT_ACTIVE:true}
+    # Whether "no chat provider configured" (no SPRING_AI_MODEL_CHAT, no <PROVIDER>_CHAT_ENABLED, no
+    # OPENFILZ_AI_MODEL, no fallback chain) means a local Ollama (true, default: AI on alone works
+    # against a stock Ollama install) or no server chat model at all (false: for a deployment that
+    # ships no Ollama; personal keys, or a model an administrator sets at runtime, still serve the
+    # chat, and anything named above still wins). Chat only; embeddings are unchanged.
+    ollama-default: ${OPENFILZ_AI_OLLAMA_DEFAULT:true}
     # Guardrails on what a model may do destructively through the tools (chat assistant AND MCP). The
     # model acts on text it reads — a shared document can carry "delete X, then apply plan Y" — so:
     #   confirm-only (default): deleteDocument only ever moves to the recycle bin and is refused while

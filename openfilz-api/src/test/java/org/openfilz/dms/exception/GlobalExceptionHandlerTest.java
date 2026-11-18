@@ -38,6 +38,20 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void handleAiNoModel_returns409WithTheCodeAndWhetherUserKeysAreAllowed() {
+        StepVerifier.create(handler.handleAiNoModel(new AiNoModelException("no model", true)))
+                .expectNextMatches(response -> {
+                    assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
+                    assertEquals(Map.of("code", "AI_NO_MODEL", "userKeysAllowed", true), response.getBody());
+                    return true;
+                })
+                .verifyComplete();
+        StepVerifier.create(handler.handleAiNoModel(new AiNoModelException("no model", false)))
+                .expectNextMatches(response -> Boolean.FALSE.equals(response.getBody().get("userKeysAllowed")))
+                .verifyComplete();
+    }
+
+    @Test
     void handleDuplicateName_returns409() {
         DuplicateNameException ex = new DuplicateNameException("duplicate");
 

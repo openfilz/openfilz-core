@@ -267,4 +267,56 @@ class AiDocumentInsightServiceTest {
         verify(store).markSkipped(eq(document.getId()), startsWith("disabled by policy: policy lookup failed"));
         assertThat(modelCalls).hasValue(0);
     }
+
+    // ── the cached model follows the runtime model source ───────────────────
+
+    @Test
+    @DisplayName("the default model is kept while the source version holds, resolved again when it moves")
+    void modelIsResolvedAgainWhenTheSourceMoves() {
+        start(Mode.LLM);
+        ResolvedChat first = new ResolvedChat(mock(ChatModel.class), "openai", "gpt-first");
+        ResolvedChat second = new ResolvedChat(mock(ChatModel.class), "google-genai", "gemini-org");
+        when(resolver.defaultModelVersion()).thenReturn(1L);
+        when(resolver.resolve(any())).thenReturn(Mono.just(first));
+        assertThat(service.model()).isSameAs(first);
+        when(resolver.resolve(any())).thenReturn(Mono.just(second));
+        assertThat(service.model()).as("same version: the cached model").isSameAs(first);
+
+        when(resolver.defaultModelVersion()).thenReturn(2L);
+        assertThat(service.model()).as("the source moved").isSameAs(second);
+    }
+
+    @Test
+    @DisplayName("a removed model is never called again: no default left = the call fails")
+    void removedModelStopsAtOnce() {
+        start(Mode.LLM);
+        ResolvedChat organisation = new ResolvedChat(mock(ChatModel.class), "google-genai", "gemini-org");
+        when(resolver.defaultModelVersion()).thenReturn(1L);
+        when(resolver.resolve(any())).thenReturn(Mono.just(organisation));
+        assertThat(service.model()).isSameAs(organisation);
+
+        when(resolver.defaultModelVersion()).thenReturn(2L);
+        when(resolver.resolve(any())).thenReturn(Mono.error(
+                new org.openfilz.dms.exception.AiNoModelException("no model", false)));
+        org.assertj.core.api.Assertions.assertThatThrownBy(service::model)
+                .isInstanceOf(org.openfilz.dms.exception.AiNoModelException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(service::model)
+                .as("still not the removed model on the next call")
+                .isInstanceOf(org.openfilz.dms.exception.AiNoModelException.class);
+    }
+
+    @Test
+    @DisplayName("openfilz.ai.insights.model wins and is not replaced by a runtime change")
+    void dedicatedInsightsModelIsPinned() {
+        start(Mode.LLM);
+        ResolvedChat dedicated = new ResolvedChat(mock(ChatModel.class), "openai", "gpt-insights");
+        when(fallbackChain.configuredModel(any())).thenReturn(Optional.of(dedicated));
+        when(resolver.defaultModelVersion()).thenReturn(1L);
+        assertThat(service.model()).isSameAs(dedicated);
+
+        when(resolver.defaultModelVersion()).thenReturn(2L);
+        when(fallbackChain.configuredModel(any())).thenReturn(Optional.empty());
+        assertThat(service.model()).isSameAs(dedicated);
+        verify(resolver, never()).resolve(any());
+    }
 }

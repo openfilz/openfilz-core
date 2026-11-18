@@ -22,6 +22,14 @@ public record Settings(Integer emptyBinInterval, Integer fileQuotaMB, Integer us
                         */
                        String aiChatUnavailableReason,
                        boolean aiUserSettingsEnabled,
+                       /**
+                        * Where the caller's chat model comes from: {@code "PERSONAL"} (their own key),
+                        * {@code "ORGANISATION"} (a model an administrator set for everyone),
+                        * {@code "DEPLOYMENT"} (the deployment's configuration) or {@code "NONE"} (no model
+                        * yet: the chat explains how to add one). {@code null} when the AI feature is off.
+                        * Independent of {@code aiChatActive}, which keeps its meaning for older clients.
+                        */
+                       String aiModelSource,
                        /** True when tier-2 document insights (AI category / summary at upload) are on: the frontend shows the Insights section and category facets. */
                        boolean aiInsightsActive,
                        /** The closed category list of tier-2 insights (openfilz.ai.insights.categories) — the details panel offers it when a user corrects a document's kind. */

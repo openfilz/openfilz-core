@@ -87,6 +87,9 @@ services:
       # "Organise with AI" and answers 404 on /ai/chat**, while insights, smart filing, the
       # by-kind reorganisation and MCP keep working (docs/ai-overview.md §6).
       OPENFILZ_AI_CHAT_ACTIVE: ${OPENFILZ_AI_CHAT_ACTIVE:-true}
+      # "Nothing configured" = the local Ollama (true) or no server chat model (false, no Ollama
+      # deployed); a model pair, a provider switch or a chain always wins (docs/ai-overview.md §6).
+      OPENFILZ_AI_OLLAMA_DEFAULT: ${OPENFILZ_AI_OLLAMA_DEFAULT:-true}
       # ONE model pair (recommended, bring your own model and key): provider:model + the provider's key.
       #   google:gemini-3.6-flash | anthropic:claude-haiku-4-5 | openai:gpt-4o-mini
       #   openfilz-cloud:default  (insights + smart filing only, no chat; requires the CLOUD_AI addon)

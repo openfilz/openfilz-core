@@ -2,7 +2,10 @@ package org.openfilz.dms.service.ai;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.openfilz.dms.entity.UserAiSettings;
+import org.openfilz.dms.enums.AiModelSource;
 import org.openfilz.dms.enums.AiProvider;
+import org.openfilz.dms.exception.AiNoModelException;
 import org.openfilz.dms.repository.UserAiSettingsRepository;
 import org.openfilz.dms.service.ai.UserChatClientResolver.ResolvedChat;
 import org.openfilz.dms.service.impl.AiSettingsCipher;
@@ -11,6 +14,10 @@ import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.ollama.OllamaChatModel;
 import org.springframework.mock.env.MockEnvironment;
 import org.springframework.test.util.ReflectionTestUtils;
+import reactor.core.publisher.Mono;
+
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -24,6 +31,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * The server-default primary handed out by {@link UserChatClientResolver#resolve}, and in
@@ -169,9 +177,157 @@ class UserChatClientResolverTest {
         UserChatClientResolver resolver = resolver(TestChatModelProvider.none());
 
         assertThatThrownBy(() -> resolver.resolve("user@example.com").block())
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(AiNoModelException.class)
                 .hasMessageContaining("No chat model is configured")
                 .hasMessageContaining("prototype/learned");
+        assertThat(resolver.hasDefaultChatModel()).isFalse();
+        assertThat(resolver.defaultModelSource()).isEqualTo(AiModelSource.NONE);
+        assertThat(resolver.deploymentDefault()).isEmpty();
+    }
+
+    // ── personal settings and the runtime model source ──────────────────────
+
+    private final UserAiSettingsRepository repository = mock(UserAiSettingsRepository.class);
+    private final AiSettingsCipher cipher = mock(AiSettingsCipher.class);
+
+    /** A runtime source an administrator controls; {@code version} moves on every change. */
+    private static final class FakeSource implements DefaultChatModelSource {
+        private volatile ResolvedChat model;
+        private final AtomicLong version = new AtomicLong();
+
+        void set(ResolvedChat model) {
+            this.model = model;
+            version.incrementAndGet();
+        }
+
+        @Override
+        public Optional<ResolvedChat> current() {
+            return Optional.ofNullable(model);
+        }
+
+        @Override
+        public long version() {
+            return version.get();
+        }
+    }
+
+    /** BYOK on, over the given bean provider and runtime source. */
+    private UserChatClientResolver byokResolver(org.springframework.beans.factory.ObjectProvider<ChatModel> provider,
+                                                DefaultChatModelSource source) {
+        return spy(new UserChatClientResolver(provider, mock(ToolCallingManager.class),
+                repository, cipher, environment, true, source));
+    }
+
+    private void personalRow(String email) {
+        UserAiSettings row = UserAiSettings.builder().userEmail(email).provider(AiProvider.ANTHROPIC.name())
+                .model("claude-haiku-4-5").apiKeyEncrypted("cipher").build();
+        when(repository.findById(email)).thenReturn(Mono.just(row));
+        when(repository.existsById(email)).thenReturn(Mono.just(true));
+        when(cipher.decrypt("cipher")).thenReturn("personal-key");
+    }
+
+    private void noPersonalRow(String email) {
+        when(repository.findById(email)).thenReturn(Mono.empty());
+        when(repository.existsById(email)).thenReturn(Mono.just(false));
+    }
+
+    @Test
+    @DisplayName("personal settings + no server model at all -> the personal model, the default is never asked")
+    void personalRowWorksWithoutAServerModel() {
+        environment.setProperty("spring.ai.model.chat", "none");
+        personalRow("me@example.com");
+        UserChatClientResolver resolver = byokResolver(TestChatModelProvider.none(), new NoDefaultChatModelSource());
+        doReturn(builtModel).when(resolver).buildChatModel(any(), any(), any(), any());
+
+        ResolvedChat resolved = resolver.resolve("me@example.com").block();
+
+        assertThat(resolved).isNotNull();
+        assertThat(resolved.chatModel()).isSameAs(builtModel);
+        assertThat(resolved.provider()).isEqualTo("ANTHROPIC");
+        assertThat(resolver.modelSourceFor("me@example.com").block()).isEqualTo(AiModelSource.PERSONAL);
+    }
+
+    @Test
+    @DisplayName("BYOK on, no personal row, no model anywhere -> AiNoModelException that allows user keys")
+    void noRowNoModelFailsWithUserKeysAllowed() {
+        environment.setProperty("spring.ai.model.chat", "none");
+        noPersonalRow("me@example.com");
+        UserChatClientResolver resolver = byokResolver(TestChatModelProvider.none(), new NoDefaultChatModelSource());
+
+        assertThatThrownBy(() -> resolver.resolve("me@example.com").block())
+                .isInstanceOf(AiNoModelException.class)
+                .satisfies(e -> assertThat(((AiNoModelException) e).isUserKeysAllowed()).isTrue());
+        assertThat(resolver.modelSourceFor("me@example.com").block()).isEqualTo(AiModelSource.NONE);
+    }
+
+    @Test
+    @DisplayName("a runtime source beats the deployment default; removing it falls back")
+    void sourceBeatsDeploymentAndRemovalFallsBack() {
+        ChatModel deploymentBean = mock(ChatModel.class);
+        ChatModel organisation = mock(ChatModel.class);
+        noPersonalRow("me@example.com");
+        FakeSource source = new FakeSource();
+        UserChatClientResolver resolver = byokResolver(TestChatModelProvider.of(deploymentBean), source);
+        assertThat(resolver.defaultModelSource()).isEqualTo(AiModelSource.DEPLOYMENT);
+
+        source.set(new ResolvedChat(organisation, "GOOGLE", "gemini-3.6-flash"));
+        assertThat(resolver.resolve("me@example.com").block().chatModel()).isSameAs(organisation);
+        assertThat(resolver.defaultModelSource()).isEqualTo(AiModelSource.ORGANISATION);
+        assertThat(resolver.modelSourceFor("me@example.com").block()).isEqualTo(AiModelSource.ORGANISATION);
+        // The deployment's own model stays visible on its own, whatever the source says.
+        assertThat(resolver.deploymentDefault()).map(ResolvedChat::chatModel).contains(deploymentBean);
+        long before = resolver.defaultModelVersion();
+
+        source.set(null);
+        assertThat(resolver.defaultModelVersion()).isNotEqualTo(before);
+        assertThat(resolver.resolve("me@example.com").block().chatModel()).isSameAs(deploymentBean);
+        assertThat(resolver.defaultModelSource()).isEqualTo(AiModelSource.DEPLOYMENT);
+    }
+
+    @Test
+    @DisplayName("a runtime source serves a deployment with no model of its own; removing it leaves none")
+    void sourceAloneAndRemovalLeavesNone() {
+        environment.setProperty("spring.ai.model.chat", "none");
+        noPersonalRow("me@example.com");
+        ChatModel organisation = mock(ChatModel.class);
+        FakeSource source = new FakeSource();
+        UserChatClientResolver resolver = byokResolver(TestChatModelProvider.none(), source);
+
+        source.set(new ResolvedChat(organisation, "GOOGLE", "gemini-3.6-flash"));
+        assertThat(resolver.resolve("me@example.com").block().chatModel()).isSameAs(organisation);
+        assertThat(resolver.hasDefaultChatModel()).isTrue();
+
+        source.set(null);
+        assertThatThrownBy(() -> resolver.resolve("me@example.com").block()).isInstanceOf(AiNoModelException.class);
+        assertThat(resolver.hasDefaultChatModel()).isFalse();
+    }
+
+    @Test
+    @DisplayName("personal settings beat the runtime source")
+    void personalBeatsSource() {
+        personalRow("me@example.com");
+        FakeSource source = new FakeSource();
+        source.set(new ResolvedChat(mock(ChatModel.class), "GOOGLE", "gemini-3.6-flash"));
+        UserChatClientResolver resolver = byokResolver(TestChatModelProvider.of(mock(ChatModel.class)), source);
+        doReturn(builtModel).when(resolver).buildChatModel(any(), any(), any(), any());
+
+        assertThat(resolver.resolve("me@example.com").block().chatModel()).isSameAs(builtModel);
+        assertThat(resolver.modelSourceFor("me@example.com").block()).isEqualTo(AiModelSource.PERSONAL);
+    }
+
+    @Test
+    @DisplayName("BYOK off: the personal row is never read, the source answers")
+    void byokOffIgnoresPersonalRows() {
+        FakeSource source = new FakeSource();
+        ChatModel organisation = mock(ChatModel.class);
+        source.set(new ResolvedChat(organisation, "GOOGLE", "gemini-3.6-flash"));
+        UserChatClientResolver resolver = spy(new UserChatClientResolver(TestChatModelProvider.none(),
+                mock(ToolCallingManager.class), repository, cipher, environment, false, source));
+
+        assertThat(resolver.resolve("me@example.com").block().chatModel()).isSameAs(organisation);
+        assertThat(resolver.modelSourceFor("me@example.com").block()).isEqualTo(AiModelSource.ORGANISATION);
+        verify(repository, never()).findById(any(String.class));
+        verify(repository, never()).existsById(any(String.class));
     }
 
     /**

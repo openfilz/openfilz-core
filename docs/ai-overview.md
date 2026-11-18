@@ -276,6 +276,11 @@ How to choose:
 | Reorganisation by kind | ❌ | ⚠️ needs kinds | ✅ | ✅ |
 | "Organise with AI" | ❌ | ✅ from the AI tool | ✅ from an AI tool only | ✅ |
 
+Profile C can still offer the in-app chat without a server model: an administrator can configure a
+model for everyone at runtime, or each user can set their own model and key when
+`AI_USER_SETTINGS_ENABLED` is on. Until one of them exists, the chat explains how to add one (see
+[§6.3](#63-the-chat-kill-switch)).
+
 ### 6.3 The chat kill switch
 
 `OPENFILZ_AI_ACTIVE` turns AI on as a whole. **`OPENFILZ_AI_CHAT_ACTIVE=false` turns off the in-app
@@ -289,6 +294,29 @@ OPENFILZ_AI_ACTIVE=true
 OPENFILZ_AI_CHAT_ACTIVE=false
 OPENFILZ_AI_INSIGHTS_CLASSIFIER=learned
 SPRING_AI_MODEL_CHAT=none          # no chat model is built at all
+```
+
+**Chat on, no model yet.** The chat can also stay on while the deployment has no model of its own.
+The model of a user is chosen in this order: **their own model and key** (when
+`AI_USER_SETTINGS_ENABLED` is on), then **a model an administrator configured for everyone** at
+runtime, then **the deployment's configuration** (`OPENFILZ_AI_MODEL`, provider switches, fallback
+chain). `GET /api/v1/settings` reports which one applies to the caller as `aiModelSource`
+(`PERSONAL`, `ORGANISATION`, `DEPLOYMENT` or `NONE`). When none applies, the chat endpoint answers
+`409 {"code": "AI_NO_MODEL", "userKeysAllowed": true|false}` instead of an error, and the web app
+shows how to add a model. Features served by the built-in classifier (kind, filing, reorganisation
+by kind, semantic search) never need one.
+
+When AI is on and nothing names a chat provider, OpenFilz assumes a local Ollama. A deployment that
+runs no Ollama sets **`OPENFILZ_AI_OLLAMA_DEFAULT=false`**: "nothing configured" then means "no
+server model" rather than a localhost that answers nobody. A model pair, a provider switch or a
+fallback chain still wins, so uncommenting `OPENFILZ_AI_MODEL` later just works:
+
+```bash
+OPENFILZ_AI_ACTIVE=true
+OPENFILZ_AI_OLLAMA_DEFAULT=false   # no Ollama here: no server chat model until one is named
+AI_USER_SETTINGS_ENABLED=true      # each user may bring their own model and key
+OPENFILZ_AI_INSIGHTS_CLASSIFIER=learned
+TRANSFORMERS_EMBEDDING_ENABLED=true
 ```
 
 ### 6.4 Choosing the model: two variables

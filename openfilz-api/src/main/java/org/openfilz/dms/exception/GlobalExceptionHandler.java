@@ -113,6 +113,22 @@ public class GlobalExceptionHandler {
                 .body(new WorkflowValidationException.Body(HttpStatus.BAD_REQUEST.value(), ex.getMessage(), ex.getProblems())));
     }
 
+    /**
+     * No chat model for the caller (chat endpoint, before its first event): 409 with a code the web
+     * apps branch on, never a 500. The operator message is logged by the resolver, rate-limited.
+     */
+    @ExceptionHandler(AiNoModelException.class)
+    public Mono<ResponseEntity<Map<String, Object>>> handleAiNoModel(AiNoModelException ex) {
+        log.debug("No AI model: {}", ex.getMessage());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("code", AiNoModelException.CODE);
+        body.put("userKeysAllowed", ex.isUserKeysAllowed());
+        // JSON whatever the endpoint produces: the chat endpoint produces text/event-stream, and its
+        // error must still be a plain JSON body the client can branch on.
+        return Mono.just(ResponseEntity.status(HttpStatus.CONFLICT)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON).body(body));
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public Mono<ResponseEntity<ErrorResponse>> handleIllegalArgumentException(IllegalArgumentException ex) {
         log.warn("Illegal argument : {}", ex.getMessage());

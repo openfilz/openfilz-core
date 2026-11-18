@@ -6,15 +6,18 @@ import org.openfilz.dms.config.McpProperties;
 import org.openfilz.dms.config.QuotaProperties;
 import org.openfilz.dms.config.RecycleBinProperties;
 import org.openfilz.dms.dto.response.Settings;
+import org.openfilz.dms.enums.AiModelSource;
 import org.openfilz.dms.service.ai.UserChatClientResolver;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.test.util.ReflectionTestUtils;
+import reactor.core.publisher.Mono;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -50,6 +53,13 @@ class SettingsServiceImplTest {
     /** {@code hasChatModel} null = no resolver wired (plain construction), else the resolver's verdict. */
     private Settings getSettings(boolean aiActive, boolean aiUserSettingsEnabled, boolean chatActive, Boolean hasChatModel,
                                  McpProperties mcpProperties, CommonProperties commonProperties) {
+        AiModelSource source = hasChatModel == null ? null : hasChatModel ? AiModelSource.DEPLOYMENT : AiModelSource.NONE;
+        return getSettings(aiActive, aiUserSettingsEnabled, chatActive, hasChatModel, source, mcpProperties, commonProperties);
+    }
+
+    /** As above, with the caller's model source the resolver reports. */
+    private Settings getSettings(boolean aiActive, boolean aiUserSettingsEnabled, boolean chatActive, Boolean hasChatModel,
+                                 AiModelSource source, McpProperties mcpProperties, CommonProperties commonProperties) {
         org.openfilz.dms.config.AiProperties aiProperties = new org.openfilz.dms.config.AiProperties();
         aiProperties.getChat().setActive(chatActive);
         SettingsServiceImpl service = new SettingsServiceImpl(new RecycleBinProperties(), new QuotaProperties(), aiProperties,
@@ -57,6 +67,8 @@ class SettingsServiceImplTest {
         if (hasChatModel != null) {
             UserChatClientResolver resolver = mock(UserChatClientResolver.class);
             when(resolver.hasDefaultChatModel()).thenReturn(hasChatModel);
+            when(resolver.modelSourceFor(any())).thenReturn(Mono.just(source));
+            when(resolver.defaultModelSource()).thenReturn(source == AiModelSource.PERSONAL ? AiModelSource.NONE : source);
             @SuppressWarnings("unchecked")
             ObjectProvider<UserChatClientResolver> provider = mock(ObjectProvider.class);
             when(provider.getIfAvailable()).thenReturn(resolver);
@@ -157,6 +169,45 @@ class SettingsServiceImplTest {
         assertTrue(settings.aiChatActive());
         assertNull(settings.aiChatUnavailableReason());
         assertTrue(settings.aiUserSettingsEnabled());
+    }
+
+    // ── aiModelSource: where the caller's model comes from ──────────────────
+
+    @Test
+    void aiModelSource_reportsEachSource_andLeavesAiChatActiveAsItWas() {
+        McpProperties mcp = new McpProperties();
+        CommonProperties common = new CommonProperties();
+
+        Settings personal = getSettings(true, true, true, false, AiModelSource.PERSONAL, mcp, common);
+        assertEquals("PERSONAL", personal.aiModelSource());
+        assertTrue(personal.aiChatActive());
+
+        Settings organisation = getSettings(true, false, true, true, AiModelSource.ORGANISATION, mcp, common);
+        assertEquals("ORGANISATION", organisation.aiModelSource());
+        assertTrue(organisation.aiChatActive());
+
+        Settings deployment = getSettings(true, false, true, true, AiModelSource.DEPLOYMENT, mcp, common);
+        assertEquals("DEPLOYMENT", deployment.aiModelSource());
+        assertTrue(deployment.aiChatActive());
+
+        // No model, no personal keys: the chat flag stays false for older clients, the source says NONE.
+        Settings none = getSettings(true, false, true, false, AiModelSource.NONE, mcp, common);
+        assertEquals("NONE", none.aiModelSource());
+        assertFalse(none.aiChatActive());
+        assertEquals("NO_MODEL", none.aiChatUnavailableReason());
+
+        // No model but personal keys allowed: chat offered (unchanged), the source says NONE.
+        Settings noneWithKeys = getSettings(true, true, true, false, AiModelSource.NONE, mcp, common);
+        assertEquals("NONE", noneWithKeys.aiModelSource());
+        assertTrue(noneWithKeys.aiChatActive());
+        assertTrue(noneWithKeys.aiUserSettingsEnabled());
+    }
+
+    @Test
+    void aiModelSource_isNullWhenAiIsOff_orWithoutAResolver() {
+        assertNull(getSettings(false, true, true, true, AiModelSource.DEPLOYMENT,
+                new McpProperties(), new CommonProperties()).aiModelSource());
+        assertNull(getSettings(true, false).aiModelSource());
     }
 
     /** With the whole AI feature off the section is hidden: no reason to report. */
