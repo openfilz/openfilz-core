@@ -2,12 +2,14 @@ name: Security scan
 
 # Looks for known vulnerabilities in what this repository builds and ships:
 #   - dependencies: Trivy over the Maven, npm, Python and .NET manifests of the repository;
-#   - images: Trivy over the published API image, the Keycloak image built from this
-#     repository and the JRE base image, plus a check of the Java runtime they carry
-#     (Trivy does not see a JDK unpacked under /opt).
+#   - images: Trivy over the published API and Keycloak images, the Keycloak image built
+#     from this repository and the JRE base image, plus a check of the Java runtime they
+#     carry (Trivy does not see a JDK unpacked under /opt).
 # A CRITICAL finding that already has a fix fails the run. Everything at HIGH and above goes
 # to the Security tab (code scanning). The daily run catches advisories published after the
 # last change, which is how a new JDK flaw shows up on an image nobody rebuilt.
+# The Java runtime of a published image fails the daily and manual runs only: a pull request
+# cannot change an image that is already published, so there it is an annotation.
 
 on:
   pull_request:
@@ -37,8 +39,24 @@ jobs:
     permissions:
       contents: read
       security-events: write
+    env:
+      # Trivy resolves each pom's parents, BOMs and transitive dependencies. Asked online,
+      # Maven Central answers the runners' shared addresses with 429 and the scan dies
+      # (first run of this workflow). So Trivy stays offline and reads the Maven repository
+      # the build workflow cached. A dependency the cache lacks is not resolved; the API's
+      # libraries are also read, jar by jar, by the image scan below.
+      TRIVY_OFFLINE_SCAN: 'true'
     steps:
       - uses: actions/checkout@v6
+
+      - name: Restore the Maven repository cached by the build workflow
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.m2/repository
+          # The key actions/setup-java writes with `cache: maven`; any pom state will do.
+          key: setup-java-Linux-x64-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            setup-java-Linux-x64-maven-
 
       - name: Trivy report (HIGH and CRITICAL) for the Security tab
         # aquasecurity/trivy-action v0.36.0, pinned by commit: its tags were rewritten once.
@@ -54,7 +72,7 @@ jobs:
           skip-dirs: '**/node_modules,**/target'
 
       - name: Upload to code scanning
-        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        if: always() && hashFiles('trivy-dependencies.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-dependencies.sarif
@@ -86,6 +104,14 @@ jobs:
           - name: openfilz-api
             image: ghcr.io/openfilz/openfilz-api:latest
             java: true
+            published: true
+          # What deployments pull. The image built below gets today's JDK packages at every
+          # build, so only this entry shows a published image that went stale.
+          - name: keycloak-published
+            image: ghcr.io/openfilz/keycloak
+            keycloak-tag: true
+            java: true
+            published: true
           - name: keycloak
             image: openfilz-keycloak:scan
             build: deploy/docker-compose/dokploy/keycloak
@@ -96,30 +122,44 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Resolve the image reference
+        run: |
+          image='${{ matrix.image }}'
+          if [ '${{ matrix.keycloak-tag }}' = 'true' ]; then
+            # The Keycloak version has one source: the first FROM of the Dockerfile.
+            tag=$(sed -n 's|^FROM  *quay\.io/keycloak/keycloak:\(.*\)$|\1|p' deploy/docker-compose/dokploy/keycloak/Dockerfile)
+            [ -n "$tag" ] || { echo '::error::no Keycloak version in the Dockerfile'; exit 1; }
+            image="$image:$tag"
+          fi
+          echo "IMAGE=$image" >> "$GITHUB_ENV"
+
       - name: Build the image
         if: matrix.build
-        run: docker build -t "${{ matrix.image }}" "${{ matrix.build }}"
+        run: docker build -t "$IMAGE" "${{ matrix.build }}"
 
       - name: Pull the image
         if: ${{ !matrix.build }}
-        run: docker pull "${{ matrix.image }}"
+        run: docker pull "$IMAGE"
 
       - name: Java runtime against the patched floor
         if: matrix.java
-        run: bash .github/scripts/check-java-runtime.sh "${{ matrix.image }}"
+        # A published image cannot be fixed by the change under review: blocking on the daily
+        # and manual runs, an annotation otherwise.
+        continue-on-error: ${{ matrix.published == true && github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' }}
+        run: bash .github/scripts/check-java-runtime.sh "$IMAGE"
 
       - name: Trivy report (HIGH and CRITICAL) for the Security tab
         if: always()
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           version: ${{ env.TRIVY_VERSION }}
-          image-ref: ${{ matrix.image }}
+          image-ref: ${{ env.IMAGE }}
           severity: HIGH,CRITICAL
           format: sarif
           output: trivy-${{ matrix.name }}.sarif
 
       - name: Upload to code scanning
-        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        if: always() && hashFiles(format('trivy-{0}.sarif', matrix.name)) != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-${{ matrix.name }}.sarif
@@ -130,7 +170,7 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           version: ${{ env.TRIVY_VERSION }}
-          image-ref: ${{ matrix.image }}
+          image-ref: ${{ env.IMAGE }}
           severity: CRITICAL
           ignore-unfixed: true
           exit-code: '1'

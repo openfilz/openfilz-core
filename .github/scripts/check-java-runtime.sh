@@ -14,6 +14,7 @@
 #
 # Raise a floor (and add the matching mitigation flag) whenever a JDK advisory lands.
 set -euo pipefail
+export MSYS_NO_PATHCONV=1   # Git Bash on Windows: keep the container paths as written
 
 image="$1"
 
