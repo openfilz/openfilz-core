@@ -349,12 +349,12 @@ public class UserChatClientResolver {
             case OPENAI, OPENAI_COMPATIBLE -> OpenAiChatModel.builder()
                     .openAiClient(OpenAiSetup.setupSyncClient(
                             openAiBaseUrl(provider, baseUrl),
-                            apiKey, null, null, null, null, false, false, model,
+                            openAiApiKey(apiKey), null, null, null, null, false, false, model,
                             PROVIDER_TIMEOUT, 1, null, null,
                             ObservationRegistry.NOOP, null, NO_REDIRECTS))
                     .openAiClientAsync(OpenAiSetup.setupAsyncClient(
                             openAiBaseUrl(provider, baseUrl),
-                            apiKey, null, null, null, null, false, false, model,
+                            openAiApiKey(apiKey), null, null, null, null, false, false, model,
                             PROVIDER_TIMEOUT, 1, null, null,
                             ObservationRegistry.NOOP, null, NO_REDIRECTS))
                     .options(OpenAiChatOptions.builder()
@@ -366,18 +366,56 @@ public class UserChatClientResolver {
     }
 
     /** The OpenAI platform's API root, version segment included, as the OpenAI SDK expects it. */
-    static final String OPENAI_PLATFORM_BASE_URL = "https://api.openai.com/v1";
+    static final String OPENAI_PLATFORM_BASE_URL = OpenAiBaseUrls.PLATFORM;
 
     /**
-     * The base URL handed to the OpenAI SDK, never null. Given null, the SDK falls back to the
-     * {@code OPENAI_BASE_URL} environment variable, which deployments set for Spring AI's own
-     * OpenAI configuration in another form ({@code https://api.openai.com}, no {@code /v1}): every
-     * request then went to {@code /chat/completions} and OpenAI answered 404, with a valid key too.
-     * A personal or organisation OPENAI model always talks to the OpenAI platform; an
-     * OpenAI-compatible one to the base URL its owner saved.
+     * The base URL handed to the OpenAI SDK, never null or blank. Given null, the SDK falls back
+     * to the {@code OPENAI_BASE_URL} environment variable, i.e. to the deployment's own endpoint:
+     * a personal key would go to whatever server the deployment uses, and in the form deployments
+     * write that variable ({@code https://api.openai.com}, no {@code /v1}) every request went to
+     * {@code /chat/completions}, which OpenAI answers with 404, a valid key included.
+     * A personal or organisation OPENAI model always talks to the OpenAI platform, whatever base
+     * URL its row carries; an OpenAI-compatible one to the base URL its owner saved. A model of the
+     * deployment's own configuration goes through {@link #buildDeploymentChatModel} instead.
      */
     static String openAiBaseUrl(AiProvider provider, String baseUrl) {
-        return provider == AiProvider.OPENAI_COMPATIBLE ? baseUrl : OPENAI_PLATFORM_BASE_URL;
+        if (provider != AiProvider.OPENAI_COMPATIBLE) {
+            return OPENAI_PLATFORM_BASE_URL;
+        }
+        if (baseUrl == null || baseUrl.isBlank()) {
+            throw new IllegalArgumentException("an OpenAI-compatible model needs a base URL");
+        }
+        return baseUrl;
+    }
+
+    /**
+     * The key handed to the OpenAI SDK, never null. Given null, the SDK reads the deployment's own
+     * {@code OPENAI_API_KEY} from the environment and sends it to the model's address, which for
+     * an OpenAI-compatible model is a server its owner chose. An empty key builds a client that
+     * sends no credential at all (a local server that asks for none).
+     */
+    static String openAiApiKey(String apiKey) {
+        return apiKey == null ? "" : apiKey;
+    }
+
+    /**
+     * A model of the deployment's own configuration (the primary rebuilt at runtime, a fallback
+     * chain entry, the insights model), on a server key. Unlike a personal model, an
+     * {@code openai} one talks to the deployment's own endpoint
+     * ({@link #deploymentOpenAiBaseUrl}), which may be any OpenAI-compatible server: the address
+     * Spring AI's own OpenAI bean is given, so both reach the same place.
+     */
+    public ChatModel buildDeploymentChatModel(AiProvider provider, String apiKey, String model) {
+        return switch (provider) {
+            case OPENAI, OPENAI_COMPATIBLE -> buildChatModel(AiProvider.OPENAI_COMPATIBLE, apiKey,
+                    deploymentOpenAiBaseUrl(environment), model);
+            case GOOGLE, ANTHROPIC -> buildChatModel(provider, apiKey, null, model);
+        };
+    }
+
+    /** The deployment's OpenAI endpoint ({@code OPENAI_BASE_URL}) in the form the SDK expects. */
+    public static String deploymentOpenAiBaseUrl(Environment environment) {
+        return OpenAiBaseUrls.deployment(environment.getProperty("spring.ai.openai.base-url"));
     }
 
     /**
@@ -534,7 +572,7 @@ public class UserChatClientResolver {
             return null;
         }
         try {
-            ChatModel built = buildChatModel(wanted, apiKey, null, model);
+            ChatModel built = buildDeploymentChatModel(wanted, apiKey, model);
             log.info("[AI] Runtime chat provider '{}' differs from the {} compiled into this image — "
                             + "built the {} ({}) primary programmatically (native-image runtime switch)",
                     selector, beanName(bean), wanted, model);

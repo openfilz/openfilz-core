@@ -607,7 +607,7 @@ class AiFallbackChainTest {
             assertThat(resolved.get().model()).as("the alias is passed through; the gateway resolves it").isEqualTo("default");
             assertThat(resolved.get().keyRef()).isEqualTo(AiKeyRef.of("tenant-key"));
             org.mockito.Mockito.verify(resolver).buildChatModel(
-                    eq(AiProvider.OPENAI_COMPATIBLE), eq("tenant-key"), eq("https://ai.example.test"), eq("default"));
+                    eq(AiProvider.OPENAI_COMPATIBLE), eq("tenant-key"), eq("https://ai.example.test/v1"), eq("default"));
             assertThat(chain.configuredModel("openfilz-cloud:default")).as("cached").containsSame(resolved.get());
         }
 
@@ -637,7 +637,32 @@ class AiFallbackChainTest {
             org.mockito.Mockito.verify(resolver).buildChatModel(
                     eq(AiProvider.OPENAI_COMPATIBLE), eq("sk-compat"), eq("https://api.mistral.ai"), eq("mistral-small"));
             org.mockito.Mockito.verify(resolver).buildChatModel(
-                    eq(AiProvider.OPENAI_COMPATIBLE), eq("tenant-key"), eq("https://ai.openfilz.com"), eq("default"));
+                    eq(AiProvider.OPENAI_COMPATIBLE), eq("tenant-key"), eq("https://ai.openfilz.com/v1"), eq("default"));
+        }
+
+        @Test
+        @DisplayName("an openai entry is built on the deployment's own endpoint, never pinned to the OpenAI platform")
+        void openAiEntryTalksToTheDeploymentsEndpoint() {
+            environment.setProperty("spring.ai.openai.api-key", "sk-local-server");
+            environment.setProperty("spring.ai.openai.base-url", "http://vllm:8000/v1");
+
+            assertThat(chain.configuredModel("openai:llama-3")).isPresent()
+                    .get().extracting(ResolvedChat::provider).isEqualTo("OPENAI");
+            // The client type that takes a base URL: as OPENAI the resolver would send the key of the
+            // deployment's own server to api.openai.com.
+            org.mockito.Mockito.verify(resolver).buildChatModel(
+                    eq(AiProvider.OPENAI_COMPATIBLE), eq("sk-local-server"), eq("http://vllm:8000/v1"), eq("llama-3"));
+        }
+
+        @Test
+        @DisplayName("OPENAI_BASE_URL as the compose files give it (no /v1) is the OpenAI platform with its version segment")
+        void theBarePlatformHostGetsItsVersionSegment() {
+            environment.setProperty("spring.ai.openai.api-key", "sk-openai");
+            environment.setProperty("spring.ai.openai.base-url", "https://api.openai.com");
+
+            assertThat(chain.configuredModel("openai:gpt-4o-mini")).isPresent();
+            org.mockito.Mockito.verify(resolver).buildChatModel(
+                    eq(AiProvider.OPENAI_COMPATIBLE), eq("sk-openai"), eq("https://api.openai.com/v1"), eq("gpt-4o-mini"));
         }
 
         @Test

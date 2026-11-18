@@ -305,7 +305,12 @@ public class AiFallbackChain {
 
     /** The client for one entry on one key: the vendor SDK, or the gateway for the managed provider. */
     private ResolvedChat build(ChainEntry entry, String apiKey, String keyRef) {
-        ChatModel chatModel = resolver.buildChatModel(entry.provider(), apiKey, baseUrl(entry), entry.model());
+        // An openai entry is the deployment's own endpoint, like an openai-compatible one: the same
+        // client on the same address. Built as OPENAI it would be pinned to the OpenAI platform, the
+        // rule of a personal model, and a deployment whose OPENAI_BASE_URL names its own server
+        // would send that server's key to OpenAI.
+        AiProvider client = entry.provider() == AiProvider.OPENAI ? AiProvider.OPENAI_COMPATIBLE : entry.provider();
+        ChatModel chatModel = resolver.buildChatModel(client, apiKey, baseUrl(entry), entry.model());
         return new ResolvedChat(chatModel, entry.providerLabel(), entry.model(), keyRef);
     }
 
@@ -587,13 +592,18 @@ public class AiFallbackChain {
         }
     }
 
-    /** The endpoint of an OpenAI-compatible entry: the gateway for the managed provider, the deployment's own otherwise. */
+    /**
+     * The endpoint of an OpenAI-type entry, in the form the SDK expects (it appends
+     * {@code /chat/completions} to it): the gateway for the managed provider, the deployment's own
+     * ({@code OPENAI_BASE_URL}) for {@code openai} and {@code openai-compatible}. Null for the others.
+     */
     private String baseUrl(ChainEntry entry) {
         if (entry.managed()) {
-            return aiProperties.getCloud().getUrl();
+            return OpenAiBaseUrls.gateway(aiProperties.getCloud().getUrl());
         }
-        return entry.provider() == AiProvider.OPENAI_COMPATIBLE
-                ? environment.getProperty("spring.ai.openai.base-url")
-                : null;
+        return switch (entry.provider()) {
+            case OPENAI, OPENAI_COMPATIBLE -> UserChatClientResolver.deploymentOpenAiBaseUrl(environment);
+            case GOOGLE, ANTHROPIC -> null;
+        };
     }
 }

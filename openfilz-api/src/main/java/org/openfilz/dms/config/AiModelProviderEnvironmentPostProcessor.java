@@ -5,6 +5,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.core.env.ConfigurableEnvironment;
+import org.openfilz.dms.service.ai.OpenAiBaseUrls;
 import org.springframework.core.env.MapPropertySource;
 
 import java.util.LinkedHashMap;
@@ -125,6 +126,16 @@ public class AiModelProviderEnvironmentPostProcessor implements EnvironmentPostP
     /** Gateway tenant key application.yml falls back to after {@code OPENFILZ_AI_CLOUD_API_KEY}. */
     static final String DERIVED_CLOUD_API_KEY = "openfilz-internal.ai.cloud-api-key";
 
+    /**
+     * The deployment's OpenAI endpoint in the form the OpenAI SDK expects, which application.yml
+     * consults ahead of {@code OPENAI_BASE_URL} for {@code spring.ai.openai.base-url}. The variable
+     * is commonly given as the bare platform host ({@code https://api.openai.com}: the compose
+     * files' own default); handed over as it is, Spring AI's OpenAI beans post to
+     * {@code https://api.openai.com/chat/completions} and get a 404. See {@link OpenAiBaseUrls}.
+     */
+    static final String DERIVED_OPENAI_BASE_URL = "openfilz-internal.ai.openai-base-url";
+    private static final String OPENAI_BASE_URL = "OPENAI_BASE_URL";
+
     /** Canonical provider token of the managed gateway (same as {@code AiFallbackChain.OPENFILZ_CLOUD}). */
     static final String OPENFILZ_CLOUD = "openfilz-cloud";
 
@@ -185,6 +196,11 @@ public class AiModelProviderEnvironmentPostProcessor implements EnvironmentPostP
                 : NONE);
         for (String unused : UNUSED_SELECTORS) {
             putIfAbsent(environment, selectors, unused, NONE);
+        }
+
+        String openAiBaseUrl = environment.getProperty(OPENAI_BASE_URL);
+        if (openAiBaseUrl != null && !openAiBaseUrl.isBlank()) {
+            selectors.put(DERIVED_OPENAI_BASE_URL, OpenAiBaseUrls.deployment(openAiBaseUrl));
         }
 
         if (!selectors.isEmpty()) {
