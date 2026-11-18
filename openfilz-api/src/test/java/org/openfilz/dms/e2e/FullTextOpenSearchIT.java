@@ -81,7 +81,7 @@ public class FullTextOpenSearchIT extends FullTextDefaultSearchIT {
     private static final Duration AWAIT_INTERVAL = Duration.ofMillis(500);
 
     @Container
-    static OpenSearchContainer<?> openSearch = new OpenSearchContainer<>(DockerImageName.parse("opensearchproject/opensearch:3"));
+    static OpenSearchContainer<?> openSearch = new OpenSearchContainer<>(DockerImageName.parse("opensearchproject/opensearch:3.10.0"));
 
     @Autowired
     private IndexService indexService;

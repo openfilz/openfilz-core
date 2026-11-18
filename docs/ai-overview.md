@@ -333,7 +333,7 @@ OPENFILZ_AI_API_KEY=AIza-…                      # that provider's key
 |---|---|---|
 | `google` | `gemini` | required |
 | `anthropic` | `claude` | required |
-| `openai` | `openai-compatible` (any compatible server, through `OPENAI_BASE_URL`) | required |
+| `openai` | `openai-compatible` (any compatible server, through `OPENAI_BASE_URL`: its API root with the version segment, `https://host/v1`) | required |
 | `ollama` | — (`ollama:qwen2.5:1.5b` keeps the tag) | none |
 
 The model becomes the chat model, and the model used for insights and filing unless

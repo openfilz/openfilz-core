@@ -126,7 +126,7 @@ every consumer (the vector store, `EmbeddingRegistryGuard`, the category classif
 |---|---|---|---|
 | **In-process** (`transformers`) | `TRANSFORMERS_EMBEDDING_ENABLED` | nomic-embed-text-v1.5 (or any ONNX model, `TRANSFORMERS_EMBEDDING_MODEL_URI` / `_TOKENIZER_URI`) inside the API through ONNX Runtime, fetched once into `TRANSFORMERS_EMBEDDING_CACHE_DIR` (~140 MB, mount it) | the API replicas — nothing else to deploy |
 | Ollama | `OLLAMA_EMBEDDING_ENABLED` | the Ollama daemon, `nomic-embed-text` | the Ollama container |
-| OpenAI-compatible | `OPENAI_EMBEDDING_ENABLED` + `OPENAI_BASE_URL` | OpenAI, or any server speaking `/v1/embeddings` — Hugging Face TEI, vLLM… | that server (GPU, batching) |
+| OpenAI-compatible | `OPENAI_EMBEDDING_ENABLED` + `OPENAI_BASE_URL` | OpenAI, or any server speaking `/v1/embeddings` — Hugging Face TEI, vLLM… (`OPENAI_BASE_URL` = its root with the version segment, `http://tei:8080/v1`) | that server (GPU, batching) |
 
 The in-process one is built at runtime by `EmbeddingModels` from the flag alone — never a bean,
 never a condition — so the enterprise native image, whose provider selector is fixed at build
@@ -1124,7 +1124,7 @@ behind them.
 |---|---|---|---|
 | `google` | `gemini`, `google-genai` | the chat model (Gemini Developer API) | required |
 | `anthropic` | `claude` | the chat model | required |
-| `openai` | `openai-compatible` | the chat model; any OpenAI-compatible server through `OPENAI_BASE_URL` | required |
+| `openai` | `openai-compatible` | the chat model; any OpenAI-compatible server through `OPENAI_BASE_URL` (its API root with the version segment, `https://host/v1`) | required |
 | `ollama` | — | the chat model on your Ollama (`ollama:qwen2.5:1.5b` keeps the tag) | none |
 | `openfilz-cloud` | `openfilz_cloud` | **document insights + smart filing only** — never the chat | the tenant key |
 

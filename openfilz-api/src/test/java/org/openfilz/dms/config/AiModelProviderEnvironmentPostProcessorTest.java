@@ -708,6 +708,34 @@ class AiModelProviderEnvironmentPostProcessorTest {
         assertEquals("disabled", environment.getProperty("spring.ai.google.genai.api-key"));
     }
 
+    /**
+     * The OpenAI SDK appends /chat/completions to the base URL as it is. OPENAI_BASE_URL as the
+     * compose files give it (the bare platform host) sent Spring AI's own OpenAI beans to
+     * https://api.openai.com/chat/completions, a 404: the address they get carries /v1.
+     */
+    @Test
+    void applicationYml_theBareOpenAiHostGetsItsVersionSegment() throws Exception {
+        assertEquals("https://api.openai.com/v1",
+                realYaml("OPENAI_BASE_URL", "https://api.openai.com").getProperty("spring.ai.openai.base-url"));
+        assertEquals("https://api.openai.com/v1",
+                realYaml("OPENAI_BASE_URL", "https://api.openai.com/").getProperty("spring.ai.openai.base-url"));
+        assertEquals("https://api.openai.com/v1",
+                realYaml("OPENAI_BASE_URL", "https://api.openai.com/v1").getProperty("spring.ai.openai.base-url"));
+        assertEquals("https://api.openai.com/v1", realYaml().getProperty("spring.ai.openai.base-url"),
+                "unset: the platform, version segment included");
+    }
+
+    /** Only its operator knows where another server's API root is: no segment is added to it. */
+    @Test
+    void applicationYml_anotherOpenAiCompatibleServerIsUsedAsWritten() throws Exception {
+        assertEquals("https://api.mistral.ai/v1",
+                realYaml("OPENAI_BASE_URL", "https://api.mistral.ai/v1").getProperty("spring.ai.openai.base-url"));
+        assertEquals("http://vllm:8000",
+                realYaml("OPENAI_BASE_URL", "http://vllm:8000").getProperty("spring.ai.openai.base-url"));
+        assertNull(process().getProperty("openfilz-internal.ai.openai-base-url"),
+                "nothing is derived when the variable is not set");
+    }
+
     @Test
     void applicationYml_explicitVendorVariablesWinOverThePair() throws Exception {
         var environment = realYaml(

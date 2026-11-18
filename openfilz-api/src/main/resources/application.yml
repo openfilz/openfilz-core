@@ -686,7 +686,11 @@ spring.ai.ollama:
 # from failing at startup. When actually using OpenAI, set OPENAI_API_KEY to your real key.
 spring.ai.openai:
   api-key: ${OPENAI_API_KEY:${openfilz-internal.ai.api-key.openai:disabled}}
-  base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+  # The API root WITH its version segment: the OpenAI SDK appends /chat/completions to it as it is.
+  # OPENAI_BASE_URL given as the bare platform host (https://api.openai.com) is completed with /v1
+  # (openfilz-internal.ai.openai-base-url, AiModelProviderEnvironmentPostProcessor); any other
+  # address, an OpenAI-compatible server, is used as written (https://api.mistral.ai/v1).
+  base-url: ${openfilz-internal.ai.openai-base-url:${OPENAI_BASE_URL:https://api.openai.com/v1}}
   chat:
     model: ${OPENAI_CHAT_MODEL:${openfilz-internal.ai.chat-model.openai:gpt-4o}}
   embedding:

@@ -150,9 +150,18 @@ spec:
             - name: MICROSOFT_CLIENT_SECRET
               value: {{ .Values.keycloak.idp.microsoftClientSecret | quote }}
             # --- Image-specific extras (replacement-image webhook/truststore vars) ---
-            {{- range $name, $value := .Values.keycloak.extraEnv }}
+            # CVE-2026-114938 ("Java4Shell"): turns off the JDK Base64 intrinsic. Set here as
+            # well as in the image's entrypoint, so an image published before the fix, or a
+            # replacement image, is covered. A JAVA_OPTS_APPEND from keycloak.extraEnv is
+            # kept and the flag added to it. Remove with a fixed JDK.
+            {{- $extraEnv := .Values.keycloak.extraEnv | default dict }}
+            - name: JAVA_OPTS_APPEND
+              value: {{ printf "%s -XX:-UseBASE64Intrinsics" (get $extraEnv "JAVA_OPTS_APPEND" | default "" | toString) | trim | quote }}
+            {{- range $name, $value := $extraEnv }}
+            {{- if ne $name "JAVA_OPTS_APPEND" }}
             - name: {{ $name }}
               value: {{ $value | quote }}
+            {{- end }}
             {{- end }}
           {{- with .Values.keycloak.extraEnvSecretRef }}
           envFrom:

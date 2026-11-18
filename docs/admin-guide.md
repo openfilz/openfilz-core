@@ -407,6 +407,12 @@ If you need fewer than 4, duplicate an existing value — Keycloak ignores dupli
 
 ### Full-Text Search (OpenSearch)
 
+The deployment files run OpenSearch 3.10.0 (2.19.1 before). On an existing installation, stop every
+OpenSearch container and start them all on the new image: OpenSearch 3 opens an index created by
+OpenSearch 2 as it is, so nothing is rebuilt and search answers once the nodes are back. Once
+OpenSearch 3 has started on a data volume, 2.19 refuses it: to be able to go back, copy the volume
+while the containers are stopped. A node uses its heap plus about 600 MB (550 MB on 2.19).
+
 | Property / Env Variable | Default | Description |
 |--------------------------|---------|-------------|
 | `openfilz.full-text.active` / `OPENFILZ_FULLTEXT_ACTIVE` | `false` | Enable full-text indexing |
@@ -629,7 +635,7 @@ different providers (e.g. Ollama for embeddings + OpenAI for chat).
 | Property / Env Variable | Default | Description |
 |--------------------------|---------|-------------|
 | `spring.ai.openai.api-key` / `OPENAI_API_KEY` | *(empty)* | API key (required when using OpenAI) |
-| `spring.ai.openai.base-url` / `OPENAI_BASE_URL` | `https://api.openai.com` | API base URL (change for Azure OpenAI or other providers) |
+| `spring.ai.openai.base-url` / `OPENAI_BASE_URL` | `https://api.openai.com/v1` | The API root **with its version segment**: `/chat/completions` is appended to it as it is. For another OpenAI-compatible server give its own root (`https://api.mistral.ai/v1`, `http://vllm:8000/v1`). `https://api.openai.com` alone is read as the OpenAI platform |
 | `openfilz.ai.openai.chat.enabled` / `OPENAI_CHAT_ENABLED` | `false` | Enable OpenAI as the chat model provider |
 | `spring.ai.openai.chat.model` / `OPENAI_CHAT_MODEL` | `gpt-4o` | Chat model name |
 | `openfilz.ai.openai.embedding.enabled` / `OPENAI_EMBEDDING_ENABLED` | `false` | Enable OpenAI as the embedding model provider |

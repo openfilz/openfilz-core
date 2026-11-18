@@ -78,6 +78,10 @@ services:
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
       KC_METRICS_ENABLED: "true"
+      # CVE-2026-114938 ("Java4Shell"): turns off the JDK Base64 intrinsic. Set here as well as
+      # in the image's entrypoint, so an image published before the fix, or a replacement
+      # image, is covered as soon as this file is applied. Remove with a fixed JDK.
+      JAVA_OPTS_APPEND: "${KEYCLOAK_JAVA_OPTS_APPEND:-} -XX:-UseBASE64Intrinsics"
 
       # Realm import substitution variables (resolved by entrypoint.sh envsubst)
       KEYCLOAK_PUBLIC_URL: https://${KEYCLOAK_HOSTNAME}
@@ -317,7 +321,7 @@ services:
       TRANSFORMERS_EMBEDDING_TOKENIZER_URI: ${TRANSFORMERS_EMBEDDING_TOKENIZER_URI:-https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/tokenizer.json}
       TRANSFORMERS_EMBEDDING_CACHE_DIR: /app/onnx-cache
       OPENAI_API_KEY:
-      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       OPENAI_CHAT_ENABLED: ${OPENAI_CHAT_ENABLED:-false}
       OPENAI_CHAT_MODEL:
       OPENAI_EMBEDDING_ENABLED: ${OPENAI_EMBEDDING_ENABLED:-false}
@@ -535,7 +539,7 @@ services:
   # OpenSearch"), otherwise node1 alone has no voting quorum and the cluster stays red.
   # =============================================================================
   opensearch-node1:
-    image: opensearchproject/opensearch:2.19.1
+    image: opensearchproject/opensearch:3.10.0
     restart: unless-stopped
     mem_limit: ${OPENSEARCH_MEM_LIMIT:-2g}
     environment:
@@ -544,7 +548,7 @@ services:
       - discovery.seed_hosts=${OPENSEARCH_SEED_HOSTS:-opensearch-node1,opensearch-node2}
       - cluster.initial_cluster_manager_nodes=${OPENSEARCH_INITIAL_MANAGER_NODES:-opensearch-node1,opensearch-node2}
       - bootstrap.memory_lock=true
-      - "OPENSEARCH_JAVA_OPTS=${OPENSEARCH_JAVA_OPTS:--Xms512m -Xmx512m}"
+      - "OPENSEARCH_JAVA_OPTS=${OPENSEARCH_JAVA_OPTS:--Xms512m -Xmx512m} -XX:-UseBASE64Intrinsics"
       - "DISABLE_PERFORMANCE_ANALYZER_AGENT_CLI=${OPENSEARCH_DISABLE_PERFORMANCE_ANALYZER:-false}"
       - "DISABLE_INSTALL_DEMO_CONFIG=true"
       - "DISABLE_SECURITY_PLUGIN=true"
@@ -568,7 +572,7 @@ services:
       start_period: 60s
 
   opensearch-node2:
-    image: opensearchproject/opensearch:2.19.1
+    image: opensearchproject/opensearch:3.10.0
     restart: unless-stopped
     mem_limit: ${OPENSEARCH_MEM_LIMIT:-2g}
     deploy:
@@ -579,7 +583,7 @@ services:
       - discovery.seed_hosts=${OPENSEARCH_SEED_HOSTS:-opensearch-node1,opensearch-node2}
       - cluster.initial_cluster_manager_nodes=${OPENSEARCH_INITIAL_MANAGER_NODES:-opensearch-node1,opensearch-node2}
       - bootstrap.memory_lock=true
-      - "OPENSEARCH_JAVA_OPTS=${OPENSEARCH_JAVA_OPTS:--Xms512m -Xmx512m}"
+      - "OPENSEARCH_JAVA_OPTS=${OPENSEARCH_JAVA_OPTS:--Xms512m -Xmx512m} -XX:-UseBASE64Intrinsics"
       - "DISABLE_PERFORMANCE_ANALYZER_AGENT_CLI=${OPENSEARCH_DISABLE_PERFORMANCE_ANALYZER:-false}"
       - "DISABLE_INSTALL_DEMO_CONFIG=true"
       - "DISABLE_SECURITY_PLUGIN=true"
@@ -597,7 +601,7 @@ services:
       - dokploy-network
 
   opensearch-dashboards:
-    image: opensearchproject/opensearch-dashboards:2.19.1
+    image: opensearchproject/opensearch-dashboards:3.10.0
     restart: unless-stopped
     deploy:
       replicas: ${OPENSEARCH_DASHBOARDS_REPLICAS:-1}

@@ -55,7 +55,9 @@ spec:
             - name: bootstrap.memory_lock
               value: "false"
             - name: OPENSEARCH_JAVA_OPTS
-              value: {{ .Values.opensearch.javaOpts | quote }}
+              # -XX:-UseBASE64Intrinsics: CVE-2026-114938 ("Java4Shell") mitigation, kept out of
+              # values.yaml so overriding javaOpts cannot drop it.
+              value: {{ printf "%s -XX:-UseBASE64Intrinsics" .Values.opensearch.javaOpts | quote }}
             - name: DISABLE_INSTALL_DEMO_CONFIG
               value: "true"
             - name: DISABLE_SECURITY_PLUGIN

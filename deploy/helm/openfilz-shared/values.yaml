@@ -36,7 +36,7 @@ images:
   # keycloak.extraEnv below — see "Replacing the Keycloak image" in the README.
   keycloak: ghcr.io/openfilz/keycloak:26.8
   keycloakDb: postgres:17-alpine
-  opensearch: opensearchproject/opensearch:2.19.1
+  opensearch: opensearchproject/opensearch:3.10.0
   gotenberg: gotenberg/gotenberg:8
   # Pinned: the tenancy below is checked against this version, re-test it before moving.
   onlyoffice: onlyoffice/documentserver:9.4.0.1

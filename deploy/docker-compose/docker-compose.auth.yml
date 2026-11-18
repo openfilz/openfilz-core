@@ -64,6 +64,10 @@ services:
       KC_HOSTNAME_STRICT: "false"
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
+      # CVE-2026-114938 ("Java4Shell"): turns off the JDK Base64 intrinsic. Set here as well as
+      # in the image's entrypoint, so an image published before the fix, or a replacement
+      # image, is covered as soon as this file is applied. Remove with a fixed JDK.
+      JAVA_OPTS_APPEND: "${KEYCLOAK_JAVA_OPTS_APPEND:-} -XX:-UseBASE64Intrinsics"
     command:
       - start
       - --import-realm

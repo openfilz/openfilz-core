@@ -51,7 +51,7 @@ services:
   # OpenSearch - single node, security plugin off (http, no credentials)
   # ===========================================================================
   opensearch:
-    image: opensearchproject/opensearch:2.19.1
+    image: opensearchproject/opensearch:3.10.0
     container_name: openfilz-dev-opensearch
     restart: unless-stopped
     environment:
@@ -59,7 +59,7 @@ services:
       node.name: opensearch-node1
       discovery.type: single-node
       bootstrap.memory_lock: "true"
-      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m -XX:-UseBASE64Intrinsics"
       DISABLE_SECURITY_PLUGIN: "true"
       DISABLE_INSTALL_DEMO_CONFIG: "true"
     ulimits:
@@ -91,7 +91,7 @@ services:
     environment:
       JWT_ENABLED: "true"
       # Required, no default (the API refuses published values): export ONLYOFFICE_JWT_SECRET for both
-      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:?ONLYOFFICE_JWT_SECRET is required (generate one with: openssl rand -hex 32)}
+      JWT_SECRET: "${ONLYOFFICE_JWT_SECRET:?ONLYOFFICE_JWT_SECRET is required (generate one with: openssl rand -hex 32)}"
       JWT_HEADER: Authorization
       ALLOW_META_IP_ADDRESS: "true"
       ALLOW_PRIVATE_IP_ADDRESS: "true"
