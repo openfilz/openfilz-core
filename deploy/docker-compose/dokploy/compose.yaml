@@ -544,7 +544,7 @@ services:
       - discovery.seed_hosts=${OPENSEARCH_SEED_HOSTS:-opensearch-node1,opensearch-node2}
       - cluster.initial_cluster_manager_nodes=${OPENSEARCH_INITIAL_MANAGER_NODES:-opensearch-node1,opensearch-node2}
       - bootstrap.memory_lock=true
-      - "OPENSEARCH_JAVA_OPTS=${OPENSEARCH_JAVA_OPTS:--Xms512m -Xmx512m}"
+      - "OPENSEARCH_JAVA_OPTS=${OPENSEARCH_JAVA_OPTS:--Xms512m -Xmx512m} -XX:-UseBASE64Intrinsics"
       - "DISABLE_PERFORMANCE_ANALYZER_AGENT_CLI=${OPENSEARCH_DISABLE_PERFORMANCE_ANALYZER:-false}"
       - "DISABLE_INSTALL_DEMO_CONFIG=true"
       - "DISABLE_SECURITY_PLUGIN=true"
@@ -579,7 +579,7 @@ services:
       - discovery.seed_hosts=${OPENSEARCH_SEED_HOSTS:-opensearch-node1,opensearch-node2}
       - cluster.initial_cluster_manager_nodes=${OPENSEARCH_INITIAL_MANAGER_NODES:-opensearch-node1,opensearch-node2}
       - bootstrap.memory_lock=true
-      - "OPENSEARCH_JAVA_OPTS=${OPENSEARCH_JAVA_OPTS:--Xms512m -Xmx512m}"
+      - "OPENSEARCH_JAVA_OPTS=${OPENSEARCH_JAVA_OPTS:--Xms512m -Xmx512m} -XX:-UseBASE64Intrinsics"
       - "DISABLE_PERFORMANCE_ANALYZER_AGENT_CLI=${OPENSEARCH_DISABLE_PERFORMANCE_ANALYZER:-false}"
       - "DISABLE_INSTALL_DEMO_CONFIG=true"
       - "DISABLE_SECURITY_PLUGIN=true"

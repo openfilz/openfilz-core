@@ -62,4 +62,10 @@ if [ -d "$IMPORT_DIR" ]; then
   echo "[entrypoint] Done substituting env vars"
 fi
 
+# CVE-2026-114938 ("Java4Shell"): Keycloak is reachable before login, and the JDK's AVX-512
+# Base64 intrinsic can overwrite heap memory on a malformed input. Turn the intrinsic off.
+# Appended here, not set as an ENV in the Dockerfile, so a compose file that sets its own
+# JAVA_OPTS_APPEND keeps the flag. Remove once the Keycloak image ships a fixed JDK.
+export JAVA_OPTS_APPEND="${JAVA_OPTS_APPEND:-} -XX:-UseBASE64Intrinsics"
+
 exec /opt/keycloak/bin/kc.sh "$@"
