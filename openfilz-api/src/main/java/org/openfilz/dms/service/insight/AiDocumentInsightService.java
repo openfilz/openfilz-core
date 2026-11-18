@@ -94,6 +94,8 @@ public class AiDocumentInsightService implements DocumentInsightService {
     /** At most one "no model, the local verdict is kept" line per this many milliseconds. */
     private static final long NO_MODEL_LOG_INTERVAL_MS = 60_000;
     private static final int BACKFILL_LIMIT = 10_000;
+    /** Reason of the SKIPPED row of a document the daily limit left out; the backfill offers it again. */
+    private static final String DAILY_LIMIT_REACHED = "daily enrichment limit reached";
 
     private final AiProperties aiProperties;
     private final DocumentInsightStore store;
@@ -336,7 +338,7 @@ public class AiDocumentInsightService implements DocumentInsightService {
                         }
                         // The daily cap counts model calls: with a local classifier there is always an answer
                         if (classifierMode() == Mode.LLM && verdict.modelAllowed() && !underDailyCap()) {
-                            return outcome(task, AiDocumentInsight.STATUS_SKIPPED, "daily enrichment limit reached");
+                            return outcome(task, AiDocumentInsight.STATUS_SKIPPED, DAILY_LIMIT_REACHED);
                         }
                         return store.markPending(document.getId())
                                 .then(textFor(document, task.textHead()))
@@ -390,10 +392,19 @@ public class AiDocumentInsightService implements DocumentInsightService {
                     // One call, with the chat's failover: a 429 on the insights model is retried on
                     // the next candidate of the chain instead of leaving the row FAILED. The permit
                     // bounds model calls; this runs on the insights scheduler, where blocking is fine.
-                    String answer;
+                    InsightResult result;
                     modelPermits.acquire();
                     try {
-                        answer = fallbackChain.callWithFailover(primary, "INSIGHTS", candidate -> {
+                        // The daily limit caps what the model costs, and this document passed it before
+                        // waiting here with the other workers: checked again, and counted, under the
+                        // permit, so the limit is exceeded by no more than the calls in flight.
+                        if (!underDailyCap()) {
+                            if (local.fallback() != null) {
+                                return local.fallback();
+                            }
+                            throw new SkipEnrichment(DAILY_LIMIT_REACHED);
+                        }
+                        String answer = fallbackChain.callWithFailover(primary, "INSIGHTS", candidate -> {
                             used.set(candidate);
                             return ModelAnswers.text(ChatClient.builder(candidate.chatModel()).build().prompt()
                                     .system(systemPrompt())
@@ -402,19 +413,18 @@ public class AiDocumentInsightService implements DocumentInsightService {
                                     .call()
                                     .chatResponse(), "INSIGHTS", cap);
                         });
+                        try {
+                            result = InsightResult.parse(answer, taxonomy.keys());
+                        } catch (IllegalArgumentException e) {
+                            // The answer itself goes to the log (not to the row) so the prompt can be tuned.
+                            log.warn("[INSIGHTS] model answer rejected for '{}' ({}): {}, answer: {}", document.getName(),
+                                    document.getId(), e.getMessage(), head(answer));
+                            throw e;
+                        }
+                        enrichedToday.incrementAndGet();
                     } finally {
                         modelPermits.release();
                     }
-                    InsightResult result;
-                    try {
-                        result = InsightResult.parse(answer, taxonomy.keys());
-                    } catch (IllegalArgumentException e) {
-                        // The answer itself goes to the log (not to the row) so the prompt can be tuned.
-                        log.warn("[INSIGHTS] model answer rejected for '{}' ({}): {} — answer: {}", document.getName(),
-                                document.getId(), e.getMessage(), head(answer));
-                        throw e;
-                    }
-                    enrichedToday.incrementAndGet();
                     return Map.entry(used.get().provider().toLowerCase(Locale.ROOT) + ":" + used.get().model(), result);
                 })
                 .subscribeOn(scheduler)
