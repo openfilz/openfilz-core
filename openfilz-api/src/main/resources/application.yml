@@ -365,6 +365,9 @@ openfilz:
     user-settings:
       enabled: ${AI_USER_SETTINGS_ENABLED:false}
       encryption-key: ${AI_SETTINGS_ENCRYPTION_KEY:}
+      # Keys AI_SETTINGS_ENCRYPTION_KEY replaced (comma-separated, same format): values stored under them stay
+      # readable and are rewritten under the current key at start-up. Remove them once the log shows none left.
+      previous-encryption-keys: ${AI_SETTINGS_ENCRYPTION_PREVIOUS_KEYS:}
     system-prompt: |
       You are OpenFilz AI Assistant, a helpful document management assistant.
       You help users find, organize, and understand their documents stored in OpenFilz.

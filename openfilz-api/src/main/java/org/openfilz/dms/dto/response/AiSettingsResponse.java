@@ -5,7 +5,8 @@ import lombok.Builder;
 /**
  * The connected user's personal chat-LLM settings. The API key is never returned —
  * only {@code hasApiKey} and its last characters ({@code keySuffix}) for display.
- * {@code provider} is null when the user runs on the server default.
+ * {@code provider} is null when the user runs on the server default. {@code keyUnreadable} is true when a key
+ * is stored but no configured encryption key opens it any more: the user enters it again.
  */
 @Builder
 public record AiSettingsResponse(
@@ -16,5 +17,6 @@ public record AiSettingsResponse(
         boolean hasApiKey,
         String keySuffix,
         String defaultProvider,
-        String defaultModel) {
+        String defaultModel,
+        boolean keyUnreadable) {
 }

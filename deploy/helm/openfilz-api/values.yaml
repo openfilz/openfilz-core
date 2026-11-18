@@ -357,6 +357,9 @@ ai:
   userSettings:
     enabled: false
     encryptionKey: ""
+    # Key rotation: the key(s) encryptionKey replaced, comma-separated. Stored keys are rewritten under
+    # encryptionKey at start-up; empty this once the log shows nothing left to rewrite.
+    previousEncryptionKeys: ""
 
 # -- Product brand of the e-mails (openfilz.branding.*). Empty = OpenFilz.
 branding:

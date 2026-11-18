@@ -376,6 +376,8 @@ spec:
               value: {{ .Values.ai.userSettings.enabled | quote }}
             - name: AI_SETTINGS_ENCRYPTION_KEY
               value: {{ .Values.ai.userSettings.encryptionKey | quote }}
+            - name: AI_SETTINGS_ENCRYPTION_PREVIOUS_KEYS
+              value: {{ .Values.ai.userSettings.previousEncryptionKeys | default "" | quote }}
             {{- end }}
             # Product brand of the e-mails (openfilz.branding.*); unset = OpenFilz. Passed only when set.
             {{- with .Values.branding }}

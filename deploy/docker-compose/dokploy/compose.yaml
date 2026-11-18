@@ -347,6 +347,7 @@ services:
       # Per-user AI settings (BYOK) — needs an encryption key: openssl rand -base64 32
       AI_USER_SETTINGS_ENABLED: ${AI_USER_SETTINGS_ENABLED:-false}
       AI_SETTINGS_ENCRYPTION_KEY: ${AI_SETTINGS_ENCRYPTION_KEY:-}
+      AI_SETTINGS_ENCRYPTION_PREVIOUS_KEYS: ${AI_SETTINGS_ENCRYPTION_PREVIOUS_KEYS:-}
       # Document insights (AI category / summary / entities at upload) and smart filing on
       # upload (OpenFilz chooses the folder on the user's request). Both need
       # OPENFILZ_AI_ACTIVE=true; smart filing also needs embeddings. See docs/ai.md §3b.
