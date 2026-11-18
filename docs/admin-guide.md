@@ -796,7 +796,7 @@ openssl rand -base64 32
 
 Notes:
 - User keys are stored **AES-256-GCM encrypted** in the `user_ai_settings` table and are write-only through the API (only a `hasApiKey` flag and the last 4 characters are ever returned).
-- The startup fails fast if BYOK is enabled without an encryption key.
+- BYOK enabled without a valid encryption key does not stop the start-up. With AI on, an error naming the variable is logged once the application is ready (`[AI-KEY-ROTATION] cannot read the AI settings keys`), and the chat and *Settings → AI Assistant* answer 500 until the key is set.
 - Changing `AI_SETTINGS_ENCRYPTION_KEY` without listing the old key in `AI_SETTINGS_ENCRYPTION_PREVIOUS_KEYS` makes the stored keys unreadable. The chat and *Settings → AI Assistant* then answer 409 `AI_KEY_UNREADABLE` ("Your saved key can no longer be read, save it again"); nothing else is lost. Rotate with the runbook below instead.
 - The settings page includes a **Test connection** button that sends a one-token probe with the submitted key, so users can validate their setup before saving.
 
@@ -820,7 +820,10 @@ SHA-256 of the key). Values written before this format have no id and are tried 
    `AI_SETTINGS_ENCRYPTION_PREVIOUS_KEYS`.
 
 A value of `AI_SETTINGS_ENCRYPTION_PREVIOUS_KEYS` that is not base64 of 32 bytes, or previous keys without a
-current key, stops the start-up with a message naming the variable (never the key).
+current key, does not stop the start-up. Once the application is ready it logs
+`[AI-KEY-ROTATION] cannot read the AI settings keys, no re-encryption: ...` with a message naming the variable
+(never the key); nothing is rewritten, and the chat and *Settings → AI Assistant* answer 500 until the value
+is corrected and the application restarted. Read that line after every rotation.
 
 #### RAG and Embedding Configuration
 

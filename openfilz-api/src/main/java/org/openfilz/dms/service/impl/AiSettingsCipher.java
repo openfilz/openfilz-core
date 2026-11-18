@@ -20,8 +20,10 @@ import org.springframework.stereotype.Component;
  * <p>
  * The BYOK feature flag is read at <em>runtime</em> (native-image-safe); this bean always
  * exists when AI is active, but the key is only required when the feature is enabled:
- * enforced by the fail-fast startup guard below, so a misconfigured deployment is caught
- * at boot rather than on the first user save.
+ * enforced by the guard below when the bean is built. The bean is lazy, so that is its first
+ * use, not the context refresh: the start-up goes on, {@code AiKeyReencryptionRunner} builds
+ * it once the application is ready and logs the variable at fault, and every later use fails
+ * the same way until the configuration is corrected.
  */
 @Component
 @Lazy
