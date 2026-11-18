@@ -9,6 +9,7 @@ import org.openfilz.dms.dto.response.InsightBackfillStatus;
 import org.openfilz.dms.entity.AiDocumentInsight;
 import org.openfilz.dms.entity.Document;
 import org.openfilz.dms.enums.DocumentType;
+import org.openfilz.dms.exception.AiNoModelException;
 import org.openfilz.dms.enums.OpenSearchDocumentKey;
 import org.openfilz.dms.repository.DocumentRepository;
 import org.openfilz.dms.service.IndexService;
@@ -46,14 +47,18 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * The real tier-2 insight service: one model call per document on a bounded queue.
  * <p>
- * Never on the upload path — {@link #enqueue} returns at once and the queue drains on
- * {@code boundedElastic} with {@code openfilz.ai.insights.concurrency} workers. The text is the
+ * Never on the upload path — {@link #enqueue} returns at once and the queue drains on its own
+ * scheduler with {@code openfilz.ai.insights.local-concurrency} workers, of which at most
+ * {@code openfilz.ai.insights.concurrency} call a model at once. The classifier mode is read per
+ * document, so it may change at runtime. The text is the
  * head the indexing pass already extracted ({@code max-chars}); documents above
  * {@code max-file-size} or without text are SKIPPED, a model answer that is not the JSON
  * contract is FAILED (never a half row), and the daily cap turns the rest into SKIPPED rows
@@ -86,6 +91,8 @@ public class AiDocumentInsightService implements DocumentInsightService {
     static final String PROMPT_MARKER = "INSIGHTS_V1";
 
     private static final int MAX_QUEUE = 20_000;
+    /** At most one "no model, the local verdict is kept" line per this many milliseconds. */
+    private static final long NO_MODEL_LOG_INTERVAL_MS = 60_000;
     private static final int BACKFILL_LIMIT = 10_000;
 
     private final AiProperties aiProperties;
@@ -114,6 +121,11 @@ public class AiDocumentInsightService implements DocumentInsightService {
      */
     private volatile Scheduler scheduler;
     private volatile CachedModel model;
+    /** Model calls in flight: {@code concurrency}, whatever the number of workers. */
+    private volatile Semaphore modelPermits;
+    /** The mode the last log line named: a runtime change is logged once, at the next document. */
+    private final AtomicReference<Mode> loggedMode = new AtomicReference<>();
+    private final AtomicLong lastNoModelLog = new AtomicLong();
 
     /**
      * The model in use and the {@link UserChatClientResolver#defaultModelVersion()} it was resolved
@@ -199,6 +211,8 @@ public class AiDocumentInsightService implements DocumentInsightService {
     @PostConstruct
     void start() {
         int concurrency = workerConcurrency();
+        modelPermits = new Semaphore(Math.max(1, aiProperties.getInsights().getConcurrency()), true);
+        loggedMode.set(classifierMode());
         scheduler = Schedulers.newBoundedElastic(concurrency, Integer.MAX_VALUE, "openfilz-insights", 60, true);
         worker = queue.asFlux()
                 .flatMap(task -> process(task)
@@ -208,26 +222,31 @@ public class AiDocumentInsightService implements DocumentInsightService {
                         }), concurrency)
                 .subscribeOn(scheduler)
                 .subscribe();
-        log.info("[INSIGHTS] tier-2 enrichment worker started (concurrency={}, classifier={}, daily-limit={}, model={}, policy={})",
-                concurrency, classifierMode(), aiProperties.getInsights().getDailyLimit(),
+        log.info("[INSIGHTS] tier-2 enrichment worker started (workers={}, model-calls={}, classifier={}, daily-limit={}, model={}, policy={})",
+                concurrency, modelPermits.availablePermits(), loggedMode.get(), aiProperties.getInsights().getDailyLimit(),
                 aiProperties.getInsights().getModel() == null || aiProperties.getInsights().getModel().isBlank()
                         ? "chat model" : aiProperties.getInsights().getModel(),
                 policy.getClass().getSimpleName());
     }
 
     /**
-     * How many documents are enriched at once. A mode that never calls a model
-     * ({@code prototype}, {@code learned}) is bound by CPU alone, not by a provider's quota, so
-     * it gets {@code local-concurrency} — an upload batch of hundreds of files would otherwise
-     * trickle through two at a time. Every other mode keeps {@code concurrency}, the number of
-     * concurrent model calls the deployment is willing to pay for.
+     * How many documents are enriched at once. The mode may change at runtime, so the workers are
+     * sized for the local classifier ({@code local-concurrency}): a classification is bound by CPU
+     * alone, and an upload batch of hundreds of files would otherwise trickle through two at a
+     * time. Model calls are bounded apart, by {@link #modelPermits} ({@code concurrency}, the
+     * number of concurrent model calls the deployment is willing to pay for).
      */
     private int workerConcurrency() {
         AiProperties.Insights insights = aiProperties.getInsights();
-        Mode mode = classifierMode();
-        int configured = mode == Mode.PROTOTYPE || mode == Mode.LEARNED
-                ? insights.getLocalConcurrency() : insights.getConcurrency();
-        return Math.max(1, configured);
+        return Math.max(1, Math.max(insights.getLocalConcurrency(), insights.getConcurrency()));
+    }
+
+    /** Logs the classifier mode when it changed since the last line (a runtime setting may move it). */
+    private void logModeChange(Mode mode) {
+        Mode previous = loggedMode.getAndSet(mode);
+        if (previous != mode) {
+            log.info("[INSIGHTS] classifier mode is now {} (was {})", mode, previous);
+        }
     }
 
     @PreDestroy
@@ -310,6 +329,7 @@ public class AiDocumentInsightService implements DocumentInsightService {
                     if (document.getSize() != null && document.getSize() > maxBytes) {
                         return outcome(task, AiDocumentInsight.STATUS_SKIPPED, "file larger than the insights size limit");
                     }
+                    logModeChange(classifierMode());
                     return verdictFor(document).flatMap(verdict -> {
                         if (!verdict.enrichmentAllowed()) {
                             return outcome(task, AiDocumentInsight.STATUS_SKIPPED, "disabled by policy" + reasonSuffix(verdict));
@@ -348,25 +368,43 @@ public class AiDocumentInsightService implements DocumentInsightService {
 
     private Mono<Void> enrich(Task task, Document document, String text, Verdict verdict) {
         return Mono.fromCallable(() -> {
-                    Map.Entry<String, InsightResult> local = classifyLocally(document, text, verdict);
-                    if (local != null) {
-                        return local;
+                    LocalVerdict local = classifyLocally(document, text, verdict);
+                    if (local.answer() != null) {
+                        return local.answer();
                     }
-                    ResolvedChat primary = model();
+                    ResolvedChat primary;
+                    try {
+                        primary = model();
+                    } catch (AiNoModelException noModel) {
+                        // auto with no model anywhere: the local verdict stands, as in learned mode,
+                        // rather than a FAILED row. Only "no model": a provider error stays FAILED.
+                        if (local.fallback() == null) {
+                            throw noModel;
+                        }
+                        logNoModelFallback();
+                        return local.fallback();
+                    }
                     AtomicReference<ResolvedChat> used = new AtomicReference<>(primary);
                     // The answer cap: a looping small model stops there, a thinking model must fit its thoughts in it
                     int cap = aiProperties.getMaxAnswerTokens();
                     // One call, with the chat's failover: a 429 on the insights model is retried on
-                    // the next candidate of the chain instead of leaving the row FAILED.
-                    String answer = fallbackChain.callWithFailover(primary, "INSIGHTS", candidate -> {
-                        used.set(candidate);
-                        return ModelAnswers.text(ChatClient.builder(candidate.chatModel()).build().prompt()
-                                .system(systemPrompt())
-                                .user(userPrompt(document, text))
-                                .options(ChatOptions.builder().temperature(0.0).maxTokens(cap))
-                                .call()
-                                .chatResponse(), "INSIGHTS", cap);
-                    });
+                    // the next candidate of the chain instead of leaving the row FAILED. The permit
+                    // bounds model calls; this runs on the insights scheduler, where blocking is fine.
+                    String answer;
+                    modelPermits.acquire();
+                    try {
+                        answer = fallbackChain.callWithFailover(primary, "INSIGHTS", candidate -> {
+                            used.set(candidate);
+                            return ModelAnswers.text(ChatClient.builder(candidate.chatModel()).build().prompt()
+                                    .system(systemPrompt())
+                                    .user(userPrompt(document, text))
+                                    .options(ChatOptions.builder().temperature(0.0).maxTokens(cap))
+                                    .call()
+                                    .chatResponse(), "INSIGHTS", cap);
+                        });
+                    } finally {
+                        modelPermits.release();
+                    }
                     InsightResult result;
                     try {
                         result = InsightResult.parse(answer, taxonomy.keys());
@@ -423,16 +461,17 @@ public class AiDocumentInsightService implements DocumentInsightService {
      * model is barred for this document the classifier's verdict is final whatever the mode;
      * when some kinds are barred from the model, the classifier screens the document before a
      * model call and a barred kind is stored as it is, without the call. A category-only
-     * insight: no summary, keywords or entities. Null = ask the model; {@link SkipEnrichment}
+     * insight: no summary, keywords or entities. No answer = ask the model, with, in {@code auto}
+     * mode, the local verdict to keep when no model exists; {@link SkipEnrichment}
      * = the policy wants a classifier and there is none, so the document is left alone (its text
      * never reaches a model as a fallback).
      */
-    private Map.Entry<String, InsightResult> classifyLocally(Document document, String text, Verdict verdict) {
+    private LocalVerdict classifyLocally(Document document, String text, Verdict verdict) {
         Mode mode = classifierMode();
         boolean modelBarred = !verdict.modelAllowed();
         boolean screening = !verdict.blockedCategories().isEmpty();
         if (mode == Mode.LLM && !modelBarred && !screening) {
-            return null;
+            return LocalVerdict.ASK_MODEL;
         }
         CategoryClassifier classifier = classifierProvider.getIfAvailable();
         if (classifier == null) {
@@ -443,7 +482,7 @@ public class AiDocumentInsightService implements DocumentInsightService {
                 throw new SkipEnrichment("the policy keeps some kinds away from the model and no local classifier can screen the document");
             }
             log.warn("[INSIGHTS] classifier mode {} but no CategoryClassifier bean — asking the model", mode);
-            return null;
+            return LocalVerdict.ASK_MODEL;
         }
         AiProperties.Insights.Classifier config = aiProperties.getInsights().getClassifier();
         CategoryPrediction prediction = classifier.classify(document.getId(), document.getName(),
@@ -451,23 +490,48 @@ public class AiDocumentInsightService implements DocumentInsightService {
         if (modelBarred) {
             log.debug("[INSIGHTS] '{}' ({}): the policy bars the model{} — {} says {} at {}", document.getName(),
                     document.getId(), reasonSuffix(verdict), classifier.name(), prediction.category(), fmt(prediction.confidence()));
-            return Map.entry(classifier.name(), categoryOnly(prediction.category()));
+            return LocalVerdict.of(Map.entry(classifier.name(), categoryOnly(prediction.category())));
         }
         if (mode != Mode.LLM && acceptLocal(mode, prediction.confidence(), config.getMinConfidence(), underDailyCap())) {
             log.debug("[INSIGHTS] '{}' ({}): {} says {} at {}", document.getName(), document.getId(), classifier.name(),
                     prediction.category(), fmt(prediction.confidence()));
-            return Map.entry(classifier.name(), categoryOnly(prediction.category()));
+            return LocalVerdict.of(Map.entry(classifier.name(), categoryOnly(prediction.category())));
         }
         // A model call is next: the policy may keep this kind of document away from it
         if (verdict.blocks(prediction.category())) {
             log.info("[INSIGHTS] '{}' ({}) looks like a {} ({} at {}) — a kind the policy keeps away from the model; "
                             + "stored as category-only", document.getName(), document.getId(), prediction.category(),
                     classifier.name(), fmt(prediction.confidence()));
-            return Map.entry(InsightsPolicy.SCREENED_MODEL_PREFIX + classifier.name(), categoryOnly(prediction.category()));
+            return LocalVerdict.of(Map.entry(InsightsPolicy.SCREENED_MODEL_PREFIX + classifier.name(),
+                    categoryOnly(prediction.category())));
         }
         log.debug("[INSIGHTS] '{}' ({}): {} says {} at {} — asking the model", document.getName(),
                 document.getId(), classifier.name(), prediction.category(), fmt(prediction.confidence()));
-        return null;
+        return mode == Mode.AUTO
+                ? new LocalVerdict(null, Map.entry(classifier.name(), categoryOnly(prediction.category())))
+                : LocalVerdict.ASK_MODEL;
+    }
+
+    /**
+     * What the local classifier decided: a final {@code answer}, or none (ask the model) with, in
+     * {@code auto} mode, the {@code fallback} to store when no model exists at all.
+     */
+    private record LocalVerdict(Map.Entry<String, InsightResult> answer, Map.Entry<String, InsightResult> fallback) {
+        static final LocalVerdict ASK_MODEL = new LocalVerdict(null, null);
+
+        static LocalVerdict of(Map.Entry<String, InsightResult> answer) {
+            return new LocalVerdict(answer, null);
+        }
+    }
+
+    /** At most once a minute: auto mode keeps the local verdict because no model exists. */
+    private void logNoModelFallback() {
+        long now = System.currentTimeMillis();
+        long last = lastNoModelLog.get();
+        if (now - last >= NO_MODEL_LOG_INTERVAL_MS && lastNoModelLog.compareAndSet(last, now)) {
+            log.info("[INSIGHTS] classifier mode auto but no chat model exists: the local verdict is kept "
+                    + "(category only) until a model is configured");
+        }
     }
 
     private static InsightResult categoryOnly(String category) {
@@ -585,7 +649,6 @@ public class AiDocumentInsightService implements DocumentInsightService {
         return limit <= 0 || enrichedToday.get() < limit;
     }
 
-    /** The insights model: the configured {@code provider:model} when set and buildable, else the chat model. */
     /**
      * The insights model: {@code openfilz.ai.insights.model} when set (kept for the life of the
      * process), else the default model, resolved again whenever the runtime model source moved
@@ -604,7 +667,7 @@ public class AiDocumentInsightService implements DocumentInsightService {
         ResolvedChat resolved = pinned.orElseGet(() -> resolver.resolve(null).block());
         if (resolved == null) {
             model = null;
-            throw new IllegalStateException("no chat model available for document insights");
+            throw new AiNoModelException("no chat model available for document insights", resolver.isUserSettingsEnabled());
         }
         model = new CachedModel(resolved, version, pinned.isPresent());
         return resolved;

@@ -268,6 +268,113 @@ class AiDocumentInsightServiceTest {
         assertThat(modelCalls).hasValue(0);
     }
 
+    // ── auto with no model: the local verdict stands ─────────────────────────
+
+    /** A classifier that answers {@code category} at {@code confidence}. */
+    private void classifier(String category, double confidence) {
+        classifier = new CategoryClassifier() {
+            @Override
+            public String name() {
+                return "learned:test";
+            }
+
+            @Override
+            public CategoryPrediction classify(UUID documentId, String fileName, String text) {
+                return new CategoryPrediction(category, confidence, List.of());
+            }
+        };
+    }
+
+    @Test
+    @DisplayName("auto, no model anywhere, unsure verdict: the category is stored (category only), the row is not FAILED; "
+            + "once a model appears, the next unsure document goes to it")
+    void autoWithoutModelKeepsTheLocalVerdict() {
+        aiProperties.getInsights().getClassifier().setMinConfidence(0.8);
+        classifier("contract", 0.3);
+        when(resolver.defaultModelVersion()).thenReturn(1L);
+        when(resolver.resolve(any())).thenReturn(Mono.error(
+                new org.openfilz.dms.exception.AiNoModelException("no model", false)));
+        start(Mode.AUTO);
+
+        process();
+
+        verify(store).saveEnrichment(eq(document.getId()),
+                argThat(result -> "contract".equals(result.category()) && result.summary() == null),
+                eq("learned:test"), eq(AiDocumentInsightService.PROMPT_VERSION));
+        verify(store, never()).markFailed(any(), any());
+        assertThat(modelCalls).hasValue(0);
+
+        // An organisation or deployment model is set: the source version moves
+        when(resolver.defaultModelVersion()).thenReturn(2L);
+        when(resolver.resolve(any())).thenReturn(Mono.just(new ResolvedChat(mock(ChatModel.class), "openai", "gpt-test")));
+
+        process();
+
+        verify(store).saveEnrichment(eq(document.getId()),
+                argThat(result -> "invoice".equals(result.category()) && result.summary() != null),
+                eq("openai:gpt-test"), eq(AiDocumentInsightService.PROMPT_VERSION));
+        assertThat(modelCalls).hasValue(1);
+        verify(store, never()).markFailed(any(), any());
+    }
+
+    @Test
+    @DisplayName("auto, an empty resolution is the same 'no model': the local verdict is kept")
+    void autoWithEmptyResolutionKeepsTheLocalVerdict() {
+        aiProperties.getInsights().getClassifier().setMinConfidence(0.8);
+        classifier("contract", 0.3);
+        when(resolver.resolve(any())).thenReturn(Mono.empty());
+        start(Mode.AUTO);
+
+        process();
+
+        verify(store).saveEnrichment(eq(document.getId()), argThat(result -> "contract".equals(result.category())),
+                eq("learned:test"), eq(AiDocumentInsightService.PROMPT_VERSION));
+        verify(store, never()).markFailed(any(), any());
+    }
+
+    @Test
+    @DisplayName("auto, a provider error (not 'no model'): the row still ends FAILED")
+    void autoProviderErrorStillFails() {
+        aiProperties.getInsights().getClassifier().setMinConfidence(0.8);
+        classifier("contract", 0.3);
+        when(fallbackChain.callWithFailover(any(), anyString(), any())).thenThrow(new RuntimeException("HTTP 429 quota exceeded"));
+        start(Mode.AUTO);
+
+        process();
+
+        verify(store).markFailed(eq(document.getId()), any());
+        verify(store, never()).saveEnrichment(any(), any(), any(), org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    @Test
+    @DisplayName("llm mode with no model: FAILED as before (no local verdict to fall back on)")
+    void llmWithoutModelStillFails() {
+        classifier(null);
+        when(resolver.resolve(any())).thenReturn(Mono.error(
+                new org.openfilz.dms.exception.AiNoModelException("no model", false)));
+        start(Mode.LLM);
+
+        process();
+
+        verify(store).markFailed(eq(document.getId()), any());
+        verify(store, never()).saveEnrichment(any(), any(), any(), org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    @Test
+    @DisplayName("the mode is read per document: learned at start, auto later sends the unsure document to the model")
+    void modeChangeAppliesAtTheNextDocument() {
+        aiProperties.getInsights().getClassifier().setMinConfidence(0.8);
+        classifier("contract", 0.3);
+        start(Mode.LEARNED);
+
+        process();
+        assertThat(modelCalls).hasValue(0);
+
+        aiProperties.getInsights().getClassifier().setMode(Mode.AUTO);
+        process();
+        assertThat(modelCalls).hasValue(1);
+    }
+
     // ── the cached model follows the runtime model source ───────────────────
 
     @Test
@@ -302,6 +409,15 @@ class AiDocumentInsightServiceTest {
                 .isInstanceOf(org.openfilz.dms.exception.AiNoModelException.class);
         org.assertj.core.api.Assertions.assertThatThrownBy(service::model)
                 .as("still not the removed model on the next call")
+                .isInstanceOf(org.openfilz.dms.exception.AiNoModelException.class);
+    }
+
+    @Test
+    @DisplayName("an empty resolution is AiNoModelException too (one 'no model' shape)")
+    void emptyResolutionIsNoModel() {
+        start(Mode.LLM);
+        when(resolver.resolve(any())).thenReturn(Mono.empty());
+        org.assertj.core.api.Assertions.assertThatThrownBy(service::model)
                 .isInstanceOf(org.openfilz.dms.exception.AiNoModelException.class);
     }
 

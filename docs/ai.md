@@ -293,9 +293,10 @@ no metadata audit):
   `Metadata`; `TikaFileMetadata` maps title, author, created/modified dates, page count, language;
   `DocumentInsightStore.saveFileMetadata` upserts). Free, deterministic, on whenever Tika runs.
 - **Tier 2 — AI enrichment** (`openfilz.ai.insights.active`): `AiDocumentInsightService` sends the
-  head of the text (`max-chars`) to a model on a bounded queue (`concurrency`, never on the upload
-  path — `local-concurrency`, higher by default, when `classifier.mode` is `prototype` or `learned`,
-  since those never call a model and only CPU limits them) and stores a category from the closed list (`categories`, unknown → `other`), a summary,
+  head of the text (`max-chars`) to a model on a bounded queue, never on the upload path. The queue
+  runs `local-concurrency` workers (8, a local classification is bound by CPU only) and at most
+  `concurrency` (2) of them call a model at once, so the mode can change at runtime without
+  resizing anything. It stores a category from the closed list (`categories`, unknown → `other`), a summary,
   keywords, the language and a few entities; FAILED on a non-contract answer, SKIPPED above
   `max-file-size` / without text / past `daily-limit`. The model is the chat model or
   `openfilz.ai.insights.model` (`provider:model`, server key — see *the managed model* below).
@@ -503,7 +504,7 @@ removes what it returns, and what nobody took is evicted by *total characters*
 on a bounded queue (`auto-file.concurrency`, 8). A worker is idle for most of its life — it waits
 for the document's tier-2 row, for a vector query, for the move — so the number to raise when users
 drop hundreds of files at once is that one, together with the insight worker's
-(`insights.concurrency`, or `insights.local-concurrency` for the no-model classifiers) that feeds
+(`insights.local-concurrency` workers, `insights.concurrency` of them on a model at once) that feeds
 it. Two documents of a batch heading for the *same* new folder still serialise, so the second finds
 the folder the first created; two heading for different folders no longer do (the lock is striped by
 scope + folder name). A long batch also outlives a short-lived access token — Keycloak's default is
@@ -561,7 +562,17 @@ puts a `CategoryClassifier` seam in front of it:
   read `learned:knn+names`. One vector query plus one read, no model;
 - `auto` — the learned classifier (descriptions as cold start) when its confidence reaches
   `classifier.min-confidence` (0.5), the model for the rest (and the local verdict again once the
-  daily model cap is spent).
+  daily model cap is spent). **With no chat model at all** (none configured, none set at runtime), an
+  unsure document keeps the local verdict as a category-only row, exactly as `learned` would write
+  it, instead of ending FAILED; one log line a minute says so. The next unsure document after a model
+  appears goes to it. Only "no model" falls back: a provider error, a 429 or a rejected answer still
+  ends FAILED. So `auto` behaves like `learned` until a model exists.
+
+**The mode can change at runtime.** The classifier bean holds the prototype and the learned
+classifiers and picks one per call from `classifier.mode`, and the worker reads the mode per
+document, so an extension that writes `AiProperties` (an admin setting, for instance) takes effect at
+the next document, with one log line naming the new mode. The same bean serves the by-kind
+reorganisation, which follows the mode too.
 
 **The user teaches it** with `PATCH /api/v1/documents/{id}/insights {"category": "…"}` (one of the
 deployment's categories or `other`; modify access required): the row becomes a tier-2 `DONE` row
