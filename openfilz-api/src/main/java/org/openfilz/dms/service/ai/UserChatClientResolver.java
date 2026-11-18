@@ -348,12 +348,12 @@ public class UserChatClientResolver {
                     .build();
             case OPENAI, OPENAI_COMPATIBLE -> OpenAiChatModel.builder()
                     .openAiClient(OpenAiSetup.setupSyncClient(
-                            provider == AiProvider.OPENAI_COMPATIBLE ? baseUrl : null,
+                            openAiBaseUrl(provider, baseUrl),
                             apiKey, null, null, null, null, false, false, model,
                             PROVIDER_TIMEOUT, 1, null, null,
                             ObservationRegistry.NOOP, null, NO_REDIRECTS))
                     .openAiClientAsync(OpenAiSetup.setupAsyncClient(
-                            provider == AiProvider.OPENAI_COMPATIBLE ? baseUrl : null,
+                            openAiBaseUrl(provider, baseUrl),
                             apiKey, null, null, null, null, false, false, model,
                             PROVIDER_TIMEOUT, 1, null, null,
                             ObservationRegistry.NOOP, null, NO_REDIRECTS))
@@ -363,6 +363,21 @@ public class UserChatClientResolver {
                     .toolCallingManager(toolCallingManager)
                     .build();
         };
+    }
+
+    /** The OpenAI platform's API root, version segment included, as the OpenAI SDK expects it. */
+    static final String OPENAI_PLATFORM_BASE_URL = "https://api.openai.com/v1";
+
+    /**
+     * The base URL handed to the OpenAI SDK, never null. Given null, the SDK falls back to the
+     * {@code OPENAI_BASE_URL} environment variable, which deployments set for Spring AI's own
+     * OpenAI configuration in another form ({@code https://api.openai.com}, no {@code /v1}): every
+     * request then went to {@code /chat/completions} and OpenAI answered 404, with a valid key too.
+     * A personal or organisation OPENAI model always talks to the OpenAI platform; an
+     * OpenAI-compatible one to the base URL its owner saved.
+     */
+    static String openAiBaseUrl(AiProvider provider, String baseUrl) {
+        return provider == AiProvider.OPENAI_COMPATIBLE ? baseUrl : OPENAI_PLATFORM_BASE_URL;
     }
 
     /**
