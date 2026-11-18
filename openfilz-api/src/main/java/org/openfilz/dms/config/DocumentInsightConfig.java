@@ -39,19 +39,18 @@ public class DocumentInsightConfig {
             log.warn("openfilz.ai.insights.active is on but openfilz.ai.active is off — document insights stay off");
         }
         log.info("Document insights (tier 2, AI enrichment): {}", active ? "ENABLED" : "disabled");
-        if (active) {
-            log.info("Document insights category classifier: {}", aiProperties.getInsights().getClassifier().getMode());
-        }
         return active ? aiService : noOpService;
     }
 
     /**
-     * The category classifier of the deployment, by {@code classifier.mode}: the prototype
-     * descriptions on the embedding model ({@code prototype}), or the library's own labelled
-     * documents with the descriptions as cold start ({@code learned}, {@code auto}). Lazy: built on
-     * the first tier-2 enrichment, never in {@code llm} mode; without an embedding model it exists
-     * but every classification fails with a clear message. The descriptions it embeds are the
-     * {@link CategoryTaxonomy}'s — an extension's taxonomy drives them, and the classifier
+     * The category classifier of the deployment. {@code classifier.mode} may change at runtime, so
+     * the bean holds both classifiers and picks one per call: the prototype descriptions on the
+     * embedding model ({@code prototype}, and {@code llm}, where it only screens or answers when a
+     * policy bars the model), or the library's own labelled documents with the descriptions as cold
+     * start ({@code learned}, {@code auto}). Building the learned one costs nothing until it is
+     * asked. Lazy: built on the first tier-2 enrichment; without an embedding model it exists but
+     * every classification fails with a clear message. The descriptions it embeds are the
+     * {@link CategoryTaxonomy}'s: an extension's taxonomy drives them, and the classifier
      * re-embeds when the taxonomy's content changes (it caches by content fingerprint). Either way
      * it sits behind {@link FileNameAwareCategoryClassifier}: a name that says its kind wins, a file
      * with no text is not guessed from its name.
@@ -73,8 +72,7 @@ public class DocumentInsightConfig {
                 : environment.getProperty("spring.ai." + provider + ".embedding.model", provider);
         CategoryClassifier prototype;
         if (embeddingModel == null) {
-            log.warn("openfilz.ai.insights.classifier.mode is {} but no embedding model is configured — tier-2 categories will fail",
-                    config.getMode());
+            log.warn("No embedding model is configured: tier-2 categories from the local classifier will fail");
             prototype = new CategoryClassifier() {
                 @Override
                 public String name() {
@@ -89,15 +87,50 @@ public class DocumentInsightConfig {
         } else {
             prototype = new PrototypeCategoryClassifier(embeddingModel, modelName, taxonomy, config);
         }
-        AiProperties.Insights.Classifier.Mode mode = config.getMode() == null ? AiProperties.Insights.Classifier.Mode.LLM : config.getMode();
-        if (mode == AiProperties.Insights.Classifier.Mode.LEARNED || mode == AiProperties.Insights.Classifier.Mode.AUTO) {
-            DocumentInsightStore insightStore = insightStoreProvider.getIfAvailable();
-            if (insightStore != null) {
-                return new FileNameAwareCategoryClassifier(
-                        new LearnedCategoryClassifier(vectorStoreProvider, insightStore, prototype, config), taxonomy);
-            }
-            log.warn("openfilz.ai.insights.classifier.mode is {} but there is no insight store — the prototype descriptions classify", mode);
+        CategoryClassifier byDescriptions = new FileNameAwareCategoryClassifier(prototype, taxonomy);
+        DocumentInsightStore insightStore = insightStoreProvider.getIfAvailable();
+        CategoryClassifier learned = null;
+        if (insightStore != null) {
+            learned = new FileNameAwareCategoryClassifier(
+                    new LearnedCategoryClassifier(vectorStoreProvider, insightStore, prototype, config), taxonomy);
+        } else {
+            log.warn("There is no insight store: in learned and auto modes the prototype descriptions classify");
         }
-        return new FileNameAwareCategoryClassifier(prototype, taxonomy);
+        return new ModeSwitchingCategoryClassifier(config, byDescriptions, learned);
+    }
+
+    /**
+     * Picks the classifier of the mode in force at each call. Safe to call concurrently: it holds
+     * no state of its own, both delegates are.
+     */
+    static final class ModeSwitchingCategoryClassifier implements CategoryClassifier {
+
+        private final AiProperties.Insights.Classifier config;
+        private final CategoryClassifier byDescriptions;
+        private final CategoryClassifier learned;
+
+        ModeSwitchingCategoryClassifier(AiProperties.Insights.Classifier config, CategoryClassifier byDescriptions,
+                                        CategoryClassifier learned) {
+            this.config = config;
+            this.byDescriptions = byDescriptions;
+            this.learned = learned;
+        }
+
+        CategoryClassifier current() {
+            AiProperties.Insights.Classifier.Mode mode = config.getMode();
+            boolean learning = mode == AiProperties.Insights.Classifier.Mode.LEARNED
+                    || mode == AiProperties.Insights.Classifier.Mode.AUTO;
+            return learning && learned != null ? learned : byDescriptions;
+        }
+
+        @Override
+        public String name() {
+            return current().name();
+        }
+
+        @Override
+        public CategoryPrediction classify(UUID documentId, String fileName, String text) {
+            return current().classify(documentId, fileName, text);
+        }
     }
 }

@@ -268,6 +268,268 @@ class AiDocumentInsightServiceTest {
         assertThat(modelCalls).hasValue(0);
     }
 
+    // ── auto with no model: the local verdict stands ─────────────────────────
+
+    /** A classifier that answers {@code category} at {@code confidence}. */
+    private void classifier(String category, double confidence) {
+        classifier = new CategoryClassifier() {
+            @Override
+            public String name() {
+                return "learned:test";
+            }
+
+            @Override
+            public CategoryPrediction classify(UUID documentId, String fileName, String text) {
+                return new CategoryPrediction(category, confidence, List.of());
+            }
+        };
+    }
+
+    @Test
+    @DisplayName("auto, no model anywhere, unsure verdict: the category is stored (category only), the row is not FAILED; "
+            + "once a model appears, the next unsure document goes to it")
+    void autoWithoutModelKeepsTheLocalVerdict() {
+        aiProperties.getInsights().getClassifier().setMinConfidence(0.8);
+        classifier("contract", 0.3);
+        when(resolver.defaultModelVersion()).thenReturn(1L);
+        when(resolver.resolve(any())).thenReturn(Mono.error(
+                new org.openfilz.dms.exception.AiNoModelException("no model", false)));
+        start(Mode.AUTO);
+
+        process();
+
+        verify(store).saveEnrichment(eq(document.getId()),
+                argThat(result -> "contract".equals(result.category()) && result.summary() == null),
+                eq("learned:test"), eq(AiDocumentInsightService.PROMPT_VERSION));
+        verify(store, never()).markFailed(any(), any());
+        assertThat(modelCalls).hasValue(0);
+
+        // An organisation or deployment model is set: the source version moves
+        when(resolver.defaultModelVersion()).thenReturn(2L);
+        when(resolver.resolve(any())).thenReturn(Mono.just(new ResolvedChat(mock(ChatModel.class), "openai", "gpt-test")));
+
+        process();
+
+        verify(store).saveEnrichment(eq(document.getId()),
+                argThat(result -> "invoice".equals(result.category()) && result.summary() != null),
+                eq("openai:gpt-test"), eq(AiDocumentInsightService.PROMPT_VERSION));
+        assertThat(modelCalls).hasValue(1);
+        verify(store, never()).markFailed(any(), any());
+    }
+
+    @Test
+    @DisplayName("auto, an empty resolution is the same 'no model': the local verdict is kept")
+    void autoWithEmptyResolutionKeepsTheLocalVerdict() {
+        aiProperties.getInsights().getClassifier().setMinConfidence(0.8);
+        classifier("contract", 0.3);
+        when(resolver.resolve(any())).thenReturn(Mono.empty());
+        start(Mode.AUTO);
+
+        process();
+
+        verify(store).saveEnrichment(eq(document.getId()), argThat(result -> "contract".equals(result.category())),
+                eq("learned:test"), eq(AiDocumentInsightService.PROMPT_VERSION));
+        verify(store, never()).markFailed(any(), any());
+    }
+
+    @Test
+    @DisplayName("auto, a provider error (not 'no model'): the row still ends FAILED")
+    void autoProviderErrorStillFails() {
+        aiProperties.getInsights().getClassifier().setMinConfidence(0.8);
+        classifier("contract", 0.3);
+        when(fallbackChain.callWithFailover(any(), anyString(), any())).thenThrow(new RuntimeException("HTTP 429 quota exceeded"));
+        start(Mode.AUTO);
+
+        process();
+
+        verify(store).markFailed(eq(document.getId()), any());
+        verify(store, never()).saveEnrichment(any(), any(), any(), org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    @Test
+    @DisplayName("llm mode with no model: FAILED as before (no local verdict to fall back on)")
+    void llmWithoutModelStillFails() {
+        classifier(null);
+        when(resolver.resolve(any())).thenReturn(Mono.error(
+                new org.openfilz.dms.exception.AiNoModelException("no model", false)));
+        start(Mode.LLM);
+
+        process();
+
+        verify(store).markFailed(eq(document.getId()), any());
+        verify(store, never()).saveEnrichment(any(), any(), any(), org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    @Test
+    @DisplayName("the mode is read per document: learned at start, auto later sends the unsure document to the model")
+    void modeChangeAppliesAtTheNextDocument() {
+        aiProperties.getInsights().getClassifier().setMinConfidence(0.8);
+        classifier("contract", 0.3);
+        start(Mode.LEARNED);
+
+        process();
+        assertThat(modelCalls).hasValue(0);
+
+        aiProperties.getInsights().getClassifier().setMode(Mode.AUTO);
+        process();
+        assertThat(modelCalls).hasValue(1);
+    }
+
+    // ── workers, model permits and the daily limit ───────────────────────────
+
+    /** A file the repository knows, whose name tells the test classifier what to answer. */
+    private Document file(String name) {
+        Document file = Document.builder().id(UUID.randomUUID()).name(name).type(DocumentType.FILE)
+                .contentType("application/pdf").size(1234L).active(true).storagePath("x").build();
+        when(documentRepository.findById(file.getId())).thenReturn(Mono.just(file));
+        return file;
+    }
+
+    private static void await(java.util.concurrent.CountDownLatch latch) throws InterruptedException {
+        assertThat(latch.await(10, java.util.concurrent.TimeUnit.SECONDS)).as("reached within 10 s").isTrue();
+    }
+
+    @Test
+    @DisplayName("a worker held by a model call does not stop the queue: the other workers keep receiving documents")
+    void aWorkerOnTheModelDoesNotHoldBackTheQueue() throws Exception {
+        aiProperties.getInsights().setLocalConcurrency(3);
+        aiProperties.getInsights().setConcurrency(1);
+        aiProperties.getInsights().getClassifier().setMinConfidence(0.8);
+        java.util.concurrent.CountDownLatch slowEntered = new java.util.concurrent.CountDownLatch(2);
+        java.util.concurrent.CountDownLatch slowGate = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch modelEntered = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch modelGate = new java.util.concurrent.CountDownLatch(1);
+        classifier = new CategoryClassifier() {
+            @Override
+            public String name() {
+                return "learned:test";
+            }
+
+            @Override
+            public CategoryPrediction classify(UUID documentId, String fileName, String text) {
+                if (fileName.startsWith("slow")) {
+                    slowEntered.countDown();
+                    try {
+                        slowGate.await(20, java.util.concurrent.TimeUnit.SECONDS);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+                return new CategoryPrediction("contract", fileName.startsWith("unsure") ? 0.3 : 0.9, List.of());
+            }
+        };
+        when(fallbackChain.callWithFailover(any(), anyString(), any())).thenAnswer(invocation -> {
+            modelEntered.countDown();
+            modelGate.await(20, java.util.concurrent.TimeUnit.SECONDS);
+            return MODEL_ANSWER;
+        });
+        start(Mode.AUTO);
+        try {
+            // Two workers busy on a local classification, the third one on a model call
+            service.enqueue(file("slow-1.pdf"), "some text");
+            service.enqueue(file("slow-2.pdf"), "some text");
+            await(slowEntered);
+            service.enqueue(file("unsure.pdf"), "some text");
+            await(modelEntered);
+
+            // The two local ones finish: their workers are free, the model call still runs
+            slowGate.countDown();
+            Document next = file("sure-1.pdf");
+            Document last = file("sure-2.pdf");
+            service.enqueue(next, "some text");
+            service.enqueue(last, "some text");
+
+            verify(store, org.mockito.Mockito.timeout(5000)).saveEnrichment(eq(next.getId()), any(), eq("learned:test"),
+                    org.mockito.ArgumentMatchers.anyInt());
+            verify(store, org.mockito.Mockito.timeout(5000)).saveEnrichment(eq(last.getId()), any(), eq("learned:test"),
+                    org.mockito.ArgumentMatchers.anyInt());
+        } finally {
+            slowGate.countDown();
+            modelGate.countDown();
+        }
+    }
+
+    @Test
+    @DisplayName("llm: a document that passed the daily limit while waiting for a model permit is checked again under it")
+    void dailyLimitIsCheckedAgainUnderTheModelPermit() throws Exception {
+        aiProperties.getInsights().setConcurrency(1);
+        aiProperties.getInsights().setDailyLimit(1);
+        classifier(null);
+        java.util.concurrent.CountDownLatch modelEntered = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch modelGate = new java.util.concurrent.CountDownLatch(1);
+        // Its own counter: stubbing again runs the answer wired for every test once
+        AtomicInteger calls = new AtomicInteger();
+        when(fallbackChain.callWithFailover(any(), anyString(), any())).thenAnswer(invocation -> {
+            calls.incrementAndGet();
+            modelEntered.countDown();
+            modelGate.await(20, java.util.concurrent.TimeUnit.SECONDS);
+            return MODEL_ANSWER;
+        });
+        start(Mode.LLM);
+        Document first = file("first.pdf");
+        Document second = file("second.pdf");
+        try {
+            // Both pass the first check (nothing counted yet); the second one waits for the only permit
+            service.process(new AiDocumentInsightService.Task(first.getId(), "some text", null)).subscribe();
+            await(modelEntered);
+            service.process(new AiDocumentInsightService.Task(second.getId(), "some text", null)).subscribe();
+            modelGate.countDown();
+
+            verify(store, org.mockito.Mockito.timeout(5000)).saveEnrichment(eq(first.getId()), any(), eq("openai:gpt-test"),
+                    org.mockito.ArgumentMatchers.anyInt());
+            verify(store, org.mockito.Mockito.timeout(5000)).markSkipped(second.getId(), "daily enrichment limit reached");
+            assertThat(calls).as("the limit is one model call").hasValue(1);
+            verify(store, never()).markFailed(any(), any());
+        } finally {
+            modelGate.countDown();
+        }
+    }
+
+    @Test
+    @DisplayName("auto: the daily limit spent while waiting for a model permit keeps the local verdict, without a call")
+    void autoKeepsTheLocalVerdictWhenTheLimitIsSpentUnderThePermit() throws Exception {
+        aiProperties.getInsights().setConcurrency(1);
+        aiProperties.getInsights().setDailyLimit(1);
+        aiProperties.getInsights().getClassifier().setMinConfidence(0.8);
+        classifier("contract", 0.3);
+        java.util.concurrent.CountDownLatch modelEntered = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch modelGate = new java.util.concurrent.CountDownLatch(1);
+        // Its own counter: stubbing again runs the answer wired for every test once
+        AtomicInteger calls = new AtomicInteger();
+        when(fallbackChain.callWithFailover(any(), anyString(), any())).thenAnswer(invocation -> {
+            calls.incrementAndGet();
+            modelEntered.countDown();
+            modelGate.await(20, java.util.concurrent.TimeUnit.SECONDS);
+            return MODEL_ANSWER;
+        });
+        // The model is looked up right after the local verdict passed the limit, right before the permit
+        java.util.concurrent.CountDownLatch secondPassedTheLimit = new java.util.concurrent.CountDownLatch(2);
+        when(resolver.defaultModelVersion()).thenAnswer(invocation -> {
+            secondPassedTheLimit.countDown();
+            return 1L;
+        });
+        start(Mode.AUTO);
+        Document first = file("first.pdf");
+        Document second = file("second.pdf");
+        try {
+            service.process(new AiDocumentInsightService.Task(first.getId(), "some text", null)).subscribe();
+            await(modelEntered);
+            service.process(new AiDocumentInsightService.Task(second.getId(), "some text", null)).subscribe();
+            await(secondPassedTheLimit);
+            modelGate.countDown();
+
+            verify(store, org.mockito.Mockito.timeout(5000)).saveEnrichment(eq(first.getId()), any(), eq("openai:gpt-test"),
+                    org.mockito.ArgumentMatchers.anyInt());
+            verify(store, org.mockito.Mockito.timeout(5000)).saveEnrichment(eq(second.getId()),
+                    argThat(result -> "contract".equals(result.category()) && result.summary() == null),
+                    eq("learned:test"), org.mockito.ArgumentMatchers.anyInt());
+            assertThat(calls).as("the limit is one model call").hasValue(1);
+            verify(store, never()).markFailed(any(), any());
+        } finally {
+            modelGate.countDown();
+        }
+    }
+
     // ── the cached model follows the runtime model source ───────────────────
 
     @Test
@@ -302,6 +564,15 @@ class AiDocumentInsightServiceTest {
                 .isInstanceOf(org.openfilz.dms.exception.AiNoModelException.class);
         org.assertj.core.api.Assertions.assertThatThrownBy(service::model)
                 .as("still not the removed model on the next call")
+                .isInstanceOf(org.openfilz.dms.exception.AiNoModelException.class);
+    }
+
+    @Test
+    @DisplayName("an empty resolution is AiNoModelException too (one 'no model' shape)")
+    void emptyResolutionIsNoModel() {
+        start(Mode.LLM);
+        when(resolver.resolve(any())).thenReturn(Mono.empty());
+        org.assertj.core.api.Assertions.assertThatThrownBy(service::model)
                 .isInstanceOf(org.openfilz.dms.exception.AiNoModelException.class);
     }
 
