@@ -317,7 +317,7 @@ services:
       TRANSFORMERS_EMBEDDING_TOKENIZER_URI: ${TRANSFORMERS_EMBEDDING_TOKENIZER_URI:-https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/tokenizer.json}
       TRANSFORMERS_EMBEDDING_CACHE_DIR: /app/onnx-cache
       OPENAI_API_KEY:
-      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       OPENAI_CHAT_ENABLED: ${OPENAI_CHAT_ENABLED:-false}
       OPENAI_CHAT_MODEL:
       OPENAI_EMBEDDING_ENABLED: ${OPENAI_EMBEDDING_ENABLED:-false}

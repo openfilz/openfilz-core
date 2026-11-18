@@ -119,7 +119,7 @@ services:
 
       # OpenAI configuration (disabled by default — set in .env to use)
       OPENAI_API_KEY:
-      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       OPENAI_CHAT_ENABLED: ${OPENAI_CHAT_ENABLED:-false}
       OPENAI_CHAT_MODEL:
       OPENAI_EMBEDDING_ENABLED: ${OPENAI_EMBEDDING_ENABLED:-false}

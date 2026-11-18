@@ -325,7 +325,7 @@ ai:
   # -- OpenAI-compatible API (cloud LLM)
   openai:
     apiKey: ""
-    baseUrl: "https://api.openai.com"
+    baseUrl: "https://api.openai.com/v1"
     chat:
       enabled: false
       # empty = ai.model, else the application default (gpt-4o)
