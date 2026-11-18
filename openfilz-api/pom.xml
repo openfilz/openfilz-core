@@ -688,6 +688,15 @@
                         <configuration>
                             <container>
                                 <mainClass>org.openfilz.dms.DmsApiApplication</mainClass>
+                                <!-- CVE-2026-114938 ("Java4Shell"): the AVX-512 Base64 intrinsic can
+                                     write past its output buffer on a malformed input. Turning the
+                                     intrinsic off closes it on every CPU (the flag exists on x86 and
+                                     ARM). Baked into the entrypoint so a JAVA_TOOL_OPTIONS set by the
+                                     compose file cannot drop it. Remove once the base image ships a
+                                     fixed JDK. -->
+                                <jvmFlags>
+                                    <jvmFlag>-XX:-UseBASE64Intrinsics</jvmFlag>
+                                </jvmFlags>
                             </container>
                             <from>
                                 <image>eclipse-temurin:25-jre-noble</image>
