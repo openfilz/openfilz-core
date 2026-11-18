@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.openfilz.dms.config.AiProperties;
 import org.openfilz.dms.service.impl.AiSettingsCipher;
 import org.openfilz.dms.utils.SecretReencryptionPass;
+import org.springframework.beans.factory.BeanCreationException;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import reactor.core.publisher.Mono;
@@ -11,8 +12,10 @@ import reactor.test.StepVerifier;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AiKeyReencryptionRunnerTest {
@@ -103,5 +106,42 @@ class AiKeyReencryptionRunnerTest {
 
         StepVerifier.create(runner.pass()).verifyComplete();
         org.junit.jupiter.api.Assertions.assertEquals(1, calls.get());
+    }
+
+    @Test
+    void aTableBeanThatCannotBeCreated_neverFailsTheReadyListener() {
+        StaticListableBeanFactory beans = new StaticListableBeanFactory();
+        beans.addBean("cipher", cipher(true));
+        @SuppressWarnings("unchecked")
+        ObjectProvider<AiSecretReencryption> broken = mock(ObjectProvider.class);
+        when(broken.orderedStream()).thenThrow(new BeanCreationException("userAiSettingsReencryption", "no database client"));
+        AiKeyReencryptionRunner runner = new AiKeyReencryptionRunner(ai(true),
+                beans.getBeanProvider(AiSettingsCipher.class), broken);
+
+        // An exception leaving a ready listener would fail SpringApplication.run
+        assertDoesNotThrow(runner::onReady);
+        verify(broken).orderedStream();
+    }
+
+    @Test
+    void aCipherThatCannotBeBuilt_isReportedWithTheVariableAtFault_andNothingRuns() {
+        // What the container throws for a failed @PostConstruct: its own message names no variable
+        BeanCreationException wrapped = new BeanCreationException("aiSettingsCipher", "Invocation of init method failed",
+                new IllegalStateException("AI_SETTINGS_ENCRYPTION_PREVIOUS_KEYS (entry 1) is not valid base64"));
+        @SuppressWarnings("unchecked")
+        ObjectProvider<AiSettingsCipher> failing = mock(ObjectProvider.class);
+        when(failing.getIfAvailable()).thenThrow(wrapped);
+        AtomicInteger calls = new AtomicInteger();
+        StaticListableBeanFactory beans = new StaticListableBeanFactory();
+        beans.addBean("target", target("ok", Mono.just(SecretReencryptionPass.Counts.NONE), calls));
+        AiKeyReencryptionRunner runner = new AiKeyReencryptionRunner(ai(true), failing,
+                beans.getBeanProvider(AiSecretReencryption.class));
+
+        assertNull(runner.pass());
+        assertDoesNotThrow(runner::onReady);
+        org.junit.jupiter.api.Assertions.assertEquals(0, calls.get());
+        org.junit.jupiter.api.Assertions.assertEquals("AI_SETTINGS_ENCRYPTION_PREVIOUS_KEYS (entry 1) is not valid base64",
+                AiKeyReencryptionRunner.reason(wrapped));
+        org.junit.jupiter.api.Assertions.assertFalse(wrapped.getMessage().contains("AI_SETTINGS_ENCRYPTION_PREVIOUS_KEYS"));
     }
 }
