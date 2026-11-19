@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[e867bbe5a12b9eb](https://github.com/openfilz/openfilz-core/commit/e867bbe5a12b9eb) maven-release-bot[bot] *2026-11-19 10:14:00*
+[c07c22cc1a5247d](https://github.com/openfilz/openfilz-core/commit/c07c22cc1a5247d) maven-release-bot[bot] *2026-11-19 22:49:24*
 
 
-## v1.4.19
+## v1.4.20
 ### No issue
 
-**[maven-release-plugin] prepare release v1.4.19**
+**[maven-release-plugin] prepare release v1.4.20**
 
 
-[fcf0630b084165a](https://github.com/openfilz/openfilz-core/commit/fcf0630b084165a) maven-release-bot[bot] *2026-11-19 10:13:57*
+[f69bb902713c8d9](https://github.com/openfilz/openfilz-core/commit/f69bb902713c8d9) maven-release-bot[bot] *2026-11-19 22:49:22*
 
-**Merge pull request #421 from openfilz/develop**
+**Merge pull request #424 from openfilz/develop**
 
- * Develop
+ * Enhance Flyway migration validation and update Keycloak CI
 
-[7b3fb0b022933e5](https://github.com/openfilz/openfilz-core/commit/7b3fb0b022933e5) Yann Demel *2026-11-19 10:10:25*
+[d0927a53eddb291](https://github.com/openfilz/openfilz-core/commit/d0927a53eddb291) Yann Demel *2026-11-19 22:45:51*
 
 
