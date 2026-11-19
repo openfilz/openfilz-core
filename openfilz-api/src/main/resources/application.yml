@@ -27,6 +27,10 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
     out-of-order: true
+    # Refuse to start on a database migrated by a newer release: Flyway's default (*:future) ignores applied
+    # migrations this image does not know, so an older image used to start silently on a newer schema. Only
+    # pending migrations are tolerated by validation (they are about to run). A profile may still add *:missing.
+    ignore-migration-patterns: ${OPENFILZ_FLYWAY_IGNORE_MIGRATION_PATTERNS:*:pending}
 
   security:
     oauth2:
