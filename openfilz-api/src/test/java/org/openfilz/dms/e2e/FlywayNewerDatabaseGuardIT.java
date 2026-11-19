@@ -50,7 +50,12 @@ class FlywayNewerDatabaseGuardIT {
     }
 
     private static List<String> configuredIgnorePatterns() throws Exception {
-        StandardEnvironment environment = new StandardEnvironment();
+        // application.yml alone: a build may override the property for its tests with a system property
+        StandardEnvironment environment = new StandardEnvironment() {
+            @Override
+            protected void customizePropertySources(org.springframework.core.env.MutablePropertySources sources) {
+            }
+        };
         new YamlPropertySourceLoader().load("application", new ClassPathResource("application.yml"))
                 .forEach(environment.getPropertySources()::addLast);
         return Binder.get(environment)
