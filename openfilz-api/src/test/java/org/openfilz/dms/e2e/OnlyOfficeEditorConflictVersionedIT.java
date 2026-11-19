@@ -12,7 +12,7 @@ import org.testcontainers.utility.DockerImageName;
 public class OnlyOfficeEditorConflictVersionedIT extends OnlyOfficeEditorConflictIT {
 
     @Container
-    static MinIOContainer minio = new MinIOContainer(DockerImageName.parse("ghcr.io/openfilz/minio:RELEASE.2026-11-09T00-10-40Z")
+    static MinIOContainer minio = new MinIOContainer(DockerImageName.parse("ghcr.io/openfilz/minio:RELEASE.2026-11-16T00-11-40Z")
             .asCompatibleSubstituteFor("minio/minio"));
 
     public OnlyOfficeEditorConflictVersionedIT(WebTestClient webTestClient, JacksonJsonEncoder customJacksonJsonEncoder) {
