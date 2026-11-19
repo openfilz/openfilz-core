@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[f913532b1d1f13c](https://github.com/openfilz/openfilz-core/commit/f913532b1d1f13c) maven-release-bot[bot] *2026-11-18 16:34:10*
+[48819ce8f66dfd9](https://github.com/openfilz/openfilz-core/commit/48819ce8f66dfd9) maven-release-bot[bot] *2026-11-19 07:56:56*
 
 
-## v1.4.16
+## v1.4.17
 ### No issue
 
-**[maven-release-plugin] prepare release v1.4.16**
+**[maven-release-plugin] prepare release v1.4.17**
 
 
-[6c360bcd6a2e9bf](https://github.com/openfilz/openfilz-core/commit/6c360bcd6a2e9bf) maven-release-bot[bot] *2026-11-18 16:34:06*
+[86ecf8719b94b8e](https://github.com/openfilz/openfilz-core/commit/86ecf8719b94b8e) maven-release-bot[bot] *2026-11-19 07:56:53*
 
-**Merge pull request #415 from openfilz/develop**
+**Merge pull request #417 from openfilz/develop**
 
- * Enhance AI settings with key rotation and auto verdict retention
+ * Fix in-process fallback handling for seal provider exceptions
 
-[682bad1a1478972](https://github.com/openfilz/openfilz-core/commit/682bad1a1478972) Yann Demel *2026-11-18 16:30:54*
+[99507002b773f8e](https://github.com/openfilz/openfilz-core/commit/99507002b773f8e) Yann Demel *2026-11-19 07:53:09*
 
 
