@@ -135,16 +135,18 @@ values, so overriding them goes through relaxed binding; the other three have en
 >
 > A keystore that fails to load (bad password or alias) is **not** fatal: it is logged
 > as an error and the ephemeral seal takes over. A keystore path that does not exist is logged
-> as a one-line warning (`Seal keystore … not found`) with the same ephemeral fallback: on an
-> Enterprise deployment that is expected before archiving-api has written its file, and on one
-> whose seal lives in an HSM or the cloud. Check the log after every deployment.
+> on one line (`Seal keystore … not found`) with the same ephemeral fallback: as an **error** when
+> `provider` is `pkcs12` (you asked for your own certificate and documents are not sealed with
+> it), as a warning otherwise (a file another service writes after this one starts, or a leftover
+> path on a setup whose seal key lives in an HSM or the cloud). Check the log after every
+> deployment.
 >
-> **A sealer can forbid the fallback.** The envelope engine seals through the primary sealer and,
-> when it fails, retries with the core sealer — except when the primary answers
+> **A sealer can forbid the fallback.** Where a replacement sealer is the primary one
+> ([extension points](internals/esign.md#extension-points)), the envelope engine seals through it and, when it fails,
+> retries with the core sealer, except when the primary answers
 > `SealProviderUnavailableException`. Then the completion rolls back with the last signature, the
-> signer gets a 503 asking to try again shortly, and nothing is sealed with another identity. The
-> Enterprise archiving sealer uses it when its seal key cannot be used in-process (Azure Key Vault,
-> `openfilz-cloud`).
+> signer gets a 503 asking to try again shortly, and nothing is sealed with another identity. It is
+> meant for a seal key the in-process sealer cannot use (an HSM, a cloud signing service).
 
 ### 3.4 Mail
 

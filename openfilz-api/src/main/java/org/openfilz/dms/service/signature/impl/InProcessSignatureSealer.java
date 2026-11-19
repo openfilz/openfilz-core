@@ -52,6 +52,8 @@ import java.util.List;
 @Slf4j
 public class InProcessSignatureSealer implements SignatureSealer {
 
+    private static final String PKCS12_PROVIDER = "pkcs12";
+
     private final SignatureProperties props;
     /** The product brand: the reason and, unless set, the signer name. Null = OpenFilz. */
     private final BrandingProvider branding;
@@ -75,14 +77,22 @@ public class InProcessSignatureSealer implements SignatureSealer {
         }
         SignatureProperties.Seal seal = props.getSeal();
         try {
-            if (seal.getKeystorePath() != null && !seal.getKeystorePath().isBlank()
-                    && !Files.exists(Path.of(seal.getKeystorePath()))) {
-                // Expected, not a failure: the file archiving-api's self-signed-dev provider writes is not there
-                // yet (first start) or never will be (an HSM-held or cloud seal, whose key cannot be used here).
+            boolean keystoreConfigured = seal.getKeystorePath() != null && !seal.getKeystorePath().isBlank();
+            if (keystoreConfigured && !Files.exists(Path.of(seal.getKeystorePath()))) {
                 generateEphemeralSeal();
-                log.warn("[e-sign] Seal keystore {} not found — the in-process seal uses an EPHEMERAL self-signed "
-                        + "certificate until it exists (restart to load it).", seal.getKeystorePath());
-            } else if (seal.getKeystorePath() != null && !seal.getKeystorePath().isBlank()) {
+                String message = "[e-sign] Seal keystore {} not found — the in-process seal uses an EPHEMERAL "
+                        + "self-signed certificate until it exists (restart to load it).";
+                if (PKCS12_PROVIDER.equalsIgnoreCase(seal.getProvider())) {
+                    // The operator asked for their own certificate: every document sealed from now on carries
+                    // an untrusted one instead. One line, no stack trace, but never a mere warning.
+                    log.error(message + " The seal provider is '{}': documents are NOT sealed with your certificate.",
+                            seal.getKeystorePath(), seal.getProvider());
+                } else {
+                    // Expected where the file is written by another service after this one starts, or where
+                    // the path is a leftover of a setup whose seal key cannot be used in-process.
+                    log.warn(message, seal.getKeystorePath());
+                }
+            } else if (keystoreConfigured) {
                 KeyStore ks = KeyStore.getInstance("PKCS12");
                 char[] pwd = seal.getKeystorePassword() == null ? new char[0] : seal.getKeystorePassword().toCharArray();
                 try (InputStream in = Files.newInputStream(Path.of(seal.getKeystorePath()))) {
@@ -90,7 +100,7 @@ public class InProcessSignatureSealer implements SignatureSealer {
                 }
                 this.sealKey = (PrivateKey) ks.getKey(seal.getKeystoreAlias(), pwd);
                 this.sealCert = (X509Certificate) ks.getCertificate(seal.getKeystoreAlias());
-                this.providerId = "pkcs12";
+                this.providerId = PKCS12_PROVIDER;
                 log.info("[e-sign] PAdES seal loaded from keystore alias '{}' ({})", seal.getKeystoreAlias(),
                         sealCert.getSubjectX500Principal());
             } else {
