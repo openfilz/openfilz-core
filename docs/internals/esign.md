@@ -190,4 +190,12 @@ default; register your own bean `@Primary` to take over.
 | `SignatureCompletionListener` | no-op | record compliance metadata after the signed document row is inserted (runs inside the completion transaction) |
 
 `SignatureSealer` is also the fallback seam: if the `@Primary` sealer fails, the core sealer is
-tried automatically, so envelope completion never blocks on an external signing service.
+tried automatically, so envelope completion does not block on an external signing service.
+
+The one exception is yours to raise: a `@Primary` sealer that answers
+`SealProviderUnavailableException` forbids that fallback. Use it when sealing with the core
+sealer's identity would be wrong, for example a trusted key in an HSM or a cloud signing service,
+which the in-process sealer cannot use. The completion transaction then rolls back with the last
+signature, so the envelope stays open and that signer can sign again once the provider answers.
+The exception's `reason` is the body of the 503 the signer's browser receives, unauthenticated:
+write it for that person and keep host names, URLs and provider errors in the `cause`.

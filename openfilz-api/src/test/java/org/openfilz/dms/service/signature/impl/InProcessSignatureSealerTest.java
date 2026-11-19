@@ -7,7 +7,10 @@ import org.bouncycastle.cms.CMSSignedData;
 import org.bouncycastle.cms.SignerInformation;
 import org.bouncycastle.cms.jcajce.JcaSimpleSignerInfoVerifierBuilder;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.openfilz.dms.config.SignatureProperties;
 import org.openfilz.dms.entity.SignatureEnvelope;
 import org.openfilz.dms.service.signature.SignatureSealer;
@@ -25,6 +28,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@ExtendWith(OutputCaptureExtension.class)
 class InProcessSignatureSealerTest {
 
     private static SignatureProperties props() {
@@ -140,7 +144,7 @@ class InProcessSignatureSealerTest {
     }
 
     @Test
-    void init_missingKeystoreFile_fallsBackToEphemeral(@TempDir Path tmp) {
+    void init_missingKeystoreFile_fallsBackToEphemeral_withAWarning(@TempDir Path tmp, CapturedOutput output) {
         SignatureProperties props = props();
         props.getSeal().setKeystorePath(tmp.resolve("does-not-exist.p12").toString());
 
@@ -148,6 +152,27 @@ class InProcessSignatureSealerTest {
 
         assertThat(sealer.id()).isEqualTo("self-signed-dev");
         assertThat(sealer.certificate()).isNotNull();
+        assertThat(sealLogLine(output)).contains("WARN").doesNotContain("ERROR");
+    }
+
+    /** Asking for {@code pkcs12} and getting an untrusted seal is a misconfiguration, not an expected start. */
+    @Test
+    void init_missingKeystoreFile_withPkcs12Provider_isLoggedAsAnError(@TempDir Path tmp, CapturedOutput output) {
+        SignatureProperties props = props();
+        props.getSeal().setProvider("pkcs12");
+        props.getSeal().setKeystorePath(tmp.resolve("does-not-exist.p12").toString());
+
+        InProcessSignatureSealer sealer = new InProcessSignatureSealer(props).init();
+
+        assertThat(sealer.id()).isEqualTo("self-signed-dev");
+        assertThat(sealer.certificate()).isNotNull();
+        assertThat(sealLogLine(output)).contains("ERROR").contains("NOT sealed with your certificate");
+        // One line: no stack trace for a file that is simply not there
+        assertThat(output.getAll()).doesNotContain("NoSuchFileException");
+    }
+
+    private static String sealLogLine(CapturedOutput output) {
+        return output.getAll().lines().filter(l -> l.contains("does-not-exist.p12")).findFirst().orElse("");
     }
 
     @Test
