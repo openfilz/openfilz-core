@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[a08ab98444ee7b5](https://github.com/openfilz/openfilz-core/commit/a08ab98444ee7b5) maven-release-bot[bot] *2026-11-19 09:17:26*
+[e867bbe5a12b9eb](https://github.com/openfilz/openfilz-core/commit/e867bbe5a12b9eb) maven-release-bot[bot] *2026-11-19 10:14:00*
 
 
-## v1.4.18
+## v1.4.19
 ### No issue
 
-**[maven-release-plugin] prepare release v1.4.18**
+**[maven-release-plugin] prepare release v1.4.19**
 
 
-[2ba8f38e6e0947a](https://github.com/openfilz/openfilz-core/commit/2ba8f38e6e0947a) maven-release-bot[bot] *2026-11-19 09:17:23*
+[fcf0630b084165a](https://github.com/openfilz/openfilz-core/commit/fcf0630b084165a) maven-release-bot[bot] *2026-11-19 10:13:57*
 
-**Merge pull request #419 from openfilz/develop**
+**Merge pull request #421 from openfilz/develop**
 
- * Fix pkcs12 seal keystore error handling and update documentation
+ * Develop
 
-[e3e4643894ca093](https://github.com/openfilz/openfilz-core/commit/e3e4643894ca093) Yann Demel *2026-11-19 09:13:50*
+[7b3fb0b022933e5](https://github.com/openfilz/openfilz-core/commit/7b3fb0b022933e5) Yann Demel *2026-11-19 10:10:25*
 
 
