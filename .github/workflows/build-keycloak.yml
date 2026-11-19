@@ -1,10 +1,18 @@
 name: Build & Push Docker image
 
+# The image takes its JDK and system packages from UBI at build time, so a published tag goes
+# stale when Red Hat ships a fix and nothing here changes (CVE-2026-114938: the 26.8 tag built
+# on 2026-11-18 kept JDK 25.0.5 while UBI already had 25.0.5.1). The weekly run rebuilds it from
+# the same sources with today's packages; a manual run does it at once after an advisory.
 on:
   push:
     branches: ["main"]
     paths:
       - "deploy/docker-compose/dokploy/keycloak/**"
+      - ".github/workflows/build-keycloak.yml"
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -33,7 +41,8 @@ jobs:
         run: sh ./deploy/docker-compose/dokploy/keycloak/check-keycloak-version.sh
 
       - name: Build image
-        run: docker build -t ghcr.io/openfilz/keycloak:${{ steps.version.outputs.keycloak_version }} deploy/docker-compose/dokploy/keycloak
+        # --pull: always start from the latest UBI and Keycloak base layers.
+        run: docker build --pull -t ghcr.io/openfilz/keycloak:${{ steps.version.outputs.keycloak_version }} deploy/docker-compose/dokploy/keycloak
 
       - name: Push image
         run: docker push ghcr.io/openfilz/keycloak:${{ steps.version.outputs.keycloak_version }}

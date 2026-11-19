@@ -8,8 +8,9 @@ name: Security scan
 # A CRITICAL finding that already has a fix fails the run. Everything at HIGH and above goes
 # to the Security tab (code scanning). The daily run catches advisories published after the
 # last change, which is how a new JDK flaw shows up on an image nobody rebuilt.
-# The Java runtime of a published image fails the daily and manual runs only: a pull request
-# cannot change an image that is already published, so there it is an annotation.
+# The Java runtime and the fixable CRITICALs of a published image fail the daily and manual
+# runs only: a pull request cannot change an image that is already published, so there they are
+# reported without blocking. build-keycloak.yml rebuilds the Keycloak image weekly for that reason.
 
 on:
   pull_request:
@@ -168,6 +169,9 @@ jobs:
 
       - name: Fail on a fixable CRITICAL vulnerability
         if: always()
+        # Same rule as the Java runtime check: a pull request cannot fix an image that is already
+        # published (only a rebuild can), so there it is reported, not blocking.
+        continue-on-error: ${{ matrix.published == true && github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' }}
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           version: ${{ env.TRIVY_VERSION }}
