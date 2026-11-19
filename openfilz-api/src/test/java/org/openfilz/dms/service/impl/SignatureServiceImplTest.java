@@ -26,6 +26,7 @@ import org.openfilz.dms.service.signature.SignatureCompletionListener;
 import org.openfilz.dms.service.signature.SignatureMailer;
 import org.openfilz.dms.service.signature.SignatureNotifier;
 import org.openfilz.dms.service.signature.SignatureOtpSender;
+import org.openfilz.dms.service.signature.SealProviderUnavailableException;
 import org.openfilz.dms.service.signature.SignatureSealer;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.transaction.reactive.TransactionalOperator;
@@ -178,6 +179,18 @@ class SignatureServiceImplTest {
                 .expectNext(fallback)
                 .verifyComplete();
         verify(coreSealer).seal(eq(STAMPED), eq(env));
+    }
+
+    @Test
+    void stampAndSeal_primaryUnavailable_noFallback_errorPropagates() {
+        when(pdfService.buildStampedDocument(ORIGINAL, env, recipients, fields, events)).thenReturn(STAMPED);
+        when(primarySealer.seal(STAMPED, env))
+                .thenReturn(Mono.error(new SealProviderUnavailableException("archiving-api unreachable")));
+
+        StepVerifier.create(service.stampAndSeal(env, ORIGINAL, recipients, fields, events))
+                .expectErrorSatisfies(e -> assertThat(e).isInstanceOf(SealProviderUnavailableException.class))
+                .verify();
+        verify(coreSealer, never()).seal(any(), any());
     }
 
     @Test

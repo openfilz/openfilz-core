@@ -133,8 +133,18 @@ values, so overriding them goes through relaxed binding; the other three have en
 > [e-sign] No openfilz.signature.seal.keystore-path configured — using an EPHEMERAL self-signed seal certificate …
 > ```
 >
-> A keystore that fails to load (bad path, password or alias) is **not** fatal: it is logged
-> as an error and the ephemeral seal takes over. Check the log after every deployment.
+> A keystore that fails to load (bad password or alias) is **not** fatal: it is logged
+> as an error and the ephemeral seal takes over. A keystore path that does not exist is logged
+> as a one-line warning (`Seal keystore … not found`) with the same ephemeral fallback: on an
+> Enterprise deployment that is expected before archiving-api has written its file, and on one
+> whose seal lives in an HSM or the cloud. Check the log after every deployment.
+>
+> **A sealer can forbid the fallback.** The envelope engine seals through the primary sealer and,
+> when it fails, retries with the core sealer — except when the primary answers
+> `SealProviderUnavailableException`. Then the completion rolls back with the last signature, the
+> signer gets a 503 asking to try again shortly, and nothing is sealed with another identity. The
+> Enterprise archiving sealer uses it when its seal key cannot be used in-process (Azure Key Vault,
+> `openfilz-cloud`).
 
 ### 3.4 Mail
 

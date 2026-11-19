@@ -47,6 +47,7 @@ import org.openfilz.dms.service.signature.SignatureCompletionListener;
 import org.openfilz.dms.service.signature.SignatureMailer;
 import org.openfilz.dms.service.signature.SignatureNotifier;
 import org.openfilz.dms.service.signature.SignatureOtpSender;
+import org.openfilz.dms.service.signature.SealProviderUnavailableException;
 import org.openfilz.dms.service.signature.SignatureSealer;
 import org.openfilz.dms.utils.SignatureJson;
 import org.springframework.beans.factory.ObjectProvider;
@@ -834,14 +835,19 @@ public class SignatureServiceImpl implements SignatureService {
     /** Sealed bytes plus what is derived from them off the event loop (digest, seal certificate name). */
     private record SealedPdf(SignatureSealer.SealResult seal, String sha256, String signerName) {}
 
-    /** Stamp fields + certificate, then seal through the primary sealer; fall back to the core sealer on failure. */
+    /**
+     * Stamp fields + certificate, then seal through the primary sealer; fall back to the core sealer on failure,
+     * except for a {@link SealProviderUnavailableException}, which propagates.
+     */
     Mono<SignatureSealer.SealResult> stampAndSeal(SignatureEnvelope env, byte[] original, List<SignatureRecipient> recipients,
                                                   List<SignatureField> fields, List<SignatureEvent> events) {
         return Mono.fromCallable(() -> pdfService.buildStampedDocument(original, env, recipients, fields, events))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(stamped -> sealer.seal(stamped, env)
                         .onErrorResume(err -> {
-                            if (sealer == coreSealer) {
+                            // No stand-in for a provider that said so (e.g. an HSM-held AATL key): the
+                            // completion rolls back and the signer retries once the provider is back.
+                            if (sealer == coreSealer || err instanceof SealProviderUnavailableException) {
                                 return Mono.error(err);
                             }
                             log.warn("[e-sign] seal provider '{}' failed for envelope {} — falling back to '{}'. Cause: {}",
