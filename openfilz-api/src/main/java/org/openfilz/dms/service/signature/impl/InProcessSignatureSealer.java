@@ -75,7 +75,14 @@ public class InProcessSignatureSealer implements SignatureSealer {
         }
         SignatureProperties.Seal seal = props.getSeal();
         try {
-            if (seal.getKeystorePath() != null && !seal.getKeystorePath().isBlank()) {
+            if (seal.getKeystorePath() != null && !seal.getKeystorePath().isBlank()
+                    && !Files.exists(Path.of(seal.getKeystorePath()))) {
+                // Expected, not a failure: the file archiving-api's self-signed-dev provider writes is not there
+                // yet (first start) or never will be (an HSM-held or cloud seal, whose key cannot be used here).
+                generateEphemeralSeal();
+                log.warn("[e-sign] Seal keystore {} not found — the in-process seal uses an EPHEMERAL self-signed "
+                        + "certificate until it exists (restart to load it).", seal.getKeystorePath());
+            } else if (seal.getKeystorePath() != null && !seal.getKeystorePath().isBlank()) {
                 KeyStore ks = KeyStore.getInstance("PKCS12");
                 char[] pwd = seal.getKeystorePassword() == null ? new char[0] : seal.getKeystorePassword().toCharArray();
                 try (InputStream in = Files.newInputStream(Path.of(seal.getKeystorePath()))) {
