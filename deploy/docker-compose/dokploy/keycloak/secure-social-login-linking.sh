@@ -156,7 +156,9 @@ while IFS=, read -r id level provider name requirement priority; do
       delete "authentication/executions/$id" -r "$REALM"
     continue
   fi
-  if [ "$level" = "1" ] && [ "$provider" = "idp-auto-link" ] && [ "$auto_link" = "false" ]; then
+  # Inside the sub-flow at any depth: a realm may group the linking steps in a nested sub-flow
+  # (followed by checks of its own), and the step checks nothing there either.
+  if [ "$level" -ge 1 ] && [ "$provider" = "idp-auto-link" ] && [ "$auto_link" = "false" ]; then
     apply "remove idp-auto-link from '$SUB' (it checks nothing before Keycloak $AUTO_LINK_MIN)" \
       delete "authentication/executions/$id" -r "$REALM"
     continue
