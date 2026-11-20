@@ -7,6 +7,28 @@
 <#assign isInvitedUser = !hasLoginError && (login.username!'')?has_content && (login.username!'')?contains('@') />
 <#assign invitedEmail = (login.username!'') />
 
+<#-- Identity providers whose alias starts with "host-" belong to a host application (a business
+     application that signs its users in for OpenFilz). Their button is shown only to a client that
+     carries the attribute openfilz.login.host-providers = true, so no other application and no web
+     sign-in sees it. Hiding the button is not a restriction: the broker endpoint stays reachable,
+     the realm's broker flows decide who may sign in through it. -->
+<#assign showHostProviders = false />
+<#if client?? >
+    <#attempt>
+        <#assign showHostProviders = ((client.getAttribute('openfilz.login.host-providers'))!'') == 'true' />
+    <#recover>
+        <#assign showHostProviders = false />
+    </#attempt>
+</#if>
+<#assign visibleProviders = [] />
+<#if social?? && social.providers??>
+    <#list social.providers as p>
+        <#if showHostProviders || !(p.alias!'')?starts_with('host-')>
+            <#assign visibleProviders = visibleProviders + [p] />
+        </#if>
+    </#list>
+</#if>
+
 <#-- Determine the recommended IdP based on email domain -->
 <#assign recommendedIdp = '' />
 <#if isInvitedUser>
@@ -34,7 +56,7 @@
         </#if>
 
     <#elseif section = "socialProviders">
-        <#if realm.password && social?? && social.providers?? && (social.providers?size gt 0)>
+        <#if realm.password && (visibleProviders?size gt 0)>
 
             <#if isInvitedUser>
                 <#-- Invited user: show email badge and recommended IdP prominently -->
@@ -50,7 +72,7 @@
                     <p class="of-invited-hint">${msg("loginInvitedRecommendedIdp")}</p>
                     <div class="of-social-section">
                         <div class="of-social-buttons">
-                            <#list social.providers as p>
+                            <#list visibleProviders as p>
                                 <#if p.providerId == recommendedIdp || p.alias?contains(recommendedIdp)>
                                     <a
                                         href="${p.loginUrl}"
@@ -87,7 +109,7 @@
                     <#-- Other IdPs (non-recommended) -->
                     <div class="of-social-section">
                         <div class="of-social-buttons">
-                            <#list social.providers as p>
+                            <#list visibleProviders as p>
                                 <#if p.providerId != recommendedIdp && !p.alias?contains(recommendedIdp)>
                                     <a
                                         href="${p.loginUrl}"
@@ -139,7 +161,7 @@
                     <p class="of-invited-hint">${msg("loginInvitedChooseIdp")}</p>
                     <div class="of-social-section">
                         <div class="of-social-buttons">
-                            <#list social.providers as p>
+                            <#list visibleProviders as p>
                                 <a
                                     href="${p.loginUrl}"
                                     class="of-social-btn of-social-btn--${p.alias!p.providerId}"
@@ -194,7 +216,7 @@
                 <#-- Standard login: show all providers normally -->
                 <div class="of-social-section">
                     <div class="of-social-buttons">
-                        <#list social.providers as p>
+                        <#list visibleProviders as p>
                             <a
                                 href="${p.loginUrl}"
                                 class="of-social-btn of-social-btn--${p.alias!p.providerId}"
