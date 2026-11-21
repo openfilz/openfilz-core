@@ -233,7 +233,11 @@ public class LocalFullTextServiceImpl implements FullTextService {
         }
     }
 
-    private static boolean isTextExtractable(String contentType) {
+    /**
+     * Whether the text of a file of this type is extracted and indexed. Only then (and for a file that is not
+     * empty) is a {@link org.openfilz.dms.event.DocumentTextExtractedEvent} published once it is indexed.
+     */
+    public static boolean isTextExtractable(String contentType) {
         if (contentType == null) {
             return false;
         }
