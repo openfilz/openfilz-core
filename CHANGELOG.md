@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[0a2309a7e2fdd4c](https://github.com/openfilz/openfilz-core/commit/0a2309a7e2fdd4c) maven-release-bot[bot] *2026-11-21 12:28:32*
+[bddc33a3c2de1f4](https://github.com/openfilz/openfilz-core/commit/bddc33a3c2de1f4) maven-release-bot[bot] *2026-11-21 21:30:42*
 
 
-## v1.4.22
+## v1.4.23
 ### No issue
 
-**[maven-release-plugin] prepare release v1.4.22**
+**[maven-release-plugin] prepare release v1.4.23**
 
 
-[a82209f828c678c](https://github.com/openfilz/openfilz-core/commit/a82209f828c678c) maven-release-bot[bot] *2026-11-21 12:28:29*
+[9e16f75bbcf03a4](https://github.com/openfilz/openfilz-core/commit/9e16f75bbcf03a4) maven-release-bot[bot] *2026-11-21 21:30:40*
 
-**Merge pull request #428 from openfilz/develop**
+**Merge pull request #430 from openfilz/develop**
 
- * Publish DocumentCategoryChangedEvent and improve error handling
+ * Enhance DocumentTextExtractedEvent for indexed files and caps
 
-[9d2e38b446d174c](https://github.com/openfilz/openfilz-core/commit/9d2e38b446d174c) Yann Demel *2026-11-21 12:25:05*
+[9f408870fe218bb](https://github.com/openfilz/openfilz-core/commit/9f408870fe218bb) Yann Demel *2026-11-21 21:27:21*
 
 
