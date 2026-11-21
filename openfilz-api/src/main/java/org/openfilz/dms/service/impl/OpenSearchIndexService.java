@@ -39,7 +39,8 @@ import java.util.*;
 public class OpenSearchIndexService implements IndexService {
 
     private static final int APPEND_RETRY_NUMBER = 3;
-    private static final int MAX_INDEXED_CONTENT_LENGTH = 1_000_000; // ~1MB of text per document
+    /** What the index keeps of a document's text: ~1MB. Read by {@code LocalFullTextServiceImpl} to say a text was cut. */
+    static final int MAX_INDEXED_CONTENT_LENGTH = 1_000_000;
 
     protected final OpenSearchAsyncClient openSearchAsyncClient;
     protected final IndexNameProvider indexNameProvider;
