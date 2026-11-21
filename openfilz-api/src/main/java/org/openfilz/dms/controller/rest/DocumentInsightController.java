@@ -3,6 +3,7 @@ package org.openfilz.dms.controller.rest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.extern.slf4j.Slf4j;
 import org.openfilz.dms.config.RestApiVersion;
 import org.openfilz.dms.dto.response.DocumentInsightView;
 import org.openfilz.dms.dto.request.InsightCategoryUpdate;
@@ -37,6 +38,7 @@ import java.util.UUID;
  * Read side of the document insights (what OpenFilz derived from a document's content). There
  * is deliberately no write endpoint: insights are recomputed, never edited.
  */
+@Slf4j
 @RestController
 @RequestMapping(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_DOCUMENTS)
 @SecurityRequirement(name = "keycloak_auth")
@@ -96,10 +98,21 @@ public class DocumentInsightController implements UserInfoService {
                         .then(store.saveCategory(document.getId(), category, LearnedCategoryClassifier.USER_SOURCE,
                                 AiDocumentInsightService.PROMPT_VERSION))
                         .then(mirror(document.getId(), category))
-                        .doOnSuccess(v -> events.publishEvent(new DocumentCategoryChangedEvent(document.getId(), category,
-                                LearnedCategoryClassifier.USER_SOURCE)))
+                        .doOnSuccess(v -> publishCategoryChanged(document.getId(), category))
                         .then(store.find(document.getId()))
                         .map(DocumentInsightStore::toView));
+    }
+
+    /**
+     * The kind is stored by now: a listener that fails must not turn the answer into an error, the
+     * same rule as the insights and filing events.
+     */
+    private void publishCategoryChanged(UUID documentId, String category) {
+        try {
+            events.publishEvent(new DocumentCategoryChangedEvent(documentId, category, LearnedCategoryClassifier.USER_SOURCE));
+        } catch (Exception e) {
+            log.debug("[INSIGHTS] category event publication failed for {}: {}", documentId, e.getMessage());
+        }
     }
 
     private Mono<Void> mirror(UUID documentId, String category) {
