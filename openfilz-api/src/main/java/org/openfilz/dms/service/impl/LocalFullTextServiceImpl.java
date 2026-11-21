@@ -88,6 +88,13 @@ public class LocalFullTextServiceImpl implements FullTextService {
     @Lazy
     private org.openfilz.dms.service.insight.DocumentInsightService insightService;
 
+    /** Says that a file's text reached the index ({@link org.openfilz.dms.event.DocumentTextExtractedEvent}). */
+    @Autowired(required = false)
+    private org.springframework.context.ApplicationEventPublisher events;
+
+    /** What the index keeps of a document's text ({@code OpenSearchIndexService}). */
+    static final int INDEXED_CONTENT_CAP = 1_000_000;
+
     public LocalFullTextServiceImpl(IndexService indexService, TikaService tikaService, StorageService storageService) {
         this.indexService = indexService;
         this.tikaService = tikaService;
@@ -157,6 +164,8 @@ public class LocalFullTextServiceImpl implements FullTextService {
         if (shareWithAi) {
             tikaFlux = tikaFlux.doOnNext(collectedText::append);
         }
+        final java.util.concurrent.atomic.AtomicLong extractedChars = new java.util.concurrent.atomic.AtomicLong();
+        tikaFlux = tikaFlux.doOnNext(chunk -> extractedChars.addAndGet(chunk.length()));
 
         return indexService.indexDocMetadataMono(document)
                 .then(tikaFlux.as(flux -> indexService.indexDocumentStream(flux, document.getId())))
@@ -169,6 +178,7 @@ public class LocalFullTextServiceImpl implements FullTextService {
                         postProcessingQueue.run(documentEmbeddingService.embedFromText(document, collectedText.toString()));
                         enqueueInsights(document, collectedText);
                     }
+                    publishTextExtracted(document, extractedChars.get());
                 }))
                 .doFinally(_ -> {
                     try {
@@ -178,6 +188,19 @@ public class LocalFullTextServiceImpl implements FullTextService {
                         log.error("Failed to clean up stable temp file [{}].", tempFile, e);
                     }
                 });
+    }
+
+    /** After a successful indexing only; a listener in error never fails it. */
+    private void publishTextExtracted(Document document, long chars) {
+        if (events == null) {
+            return;
+        }
+        try {
+            events.publishEvent(new org.openfilz.dms.event.DocumentTextExtractedEvent(document.getId(), document.getName(),
+                    (int) Math.min(chars, Integer.MAX_VALUE), chars > INDEXED_CONTENT_CAP));
+        } catch (Exception e) {
+            log.warn("[INDEX] text-extracted event not handled for {}: {}", document.getId(), e.getMessage());
+        }
     }
 
     /** Tier-2 insight: hand the text head to the enrichment queue (returns at once; off = no-op). */

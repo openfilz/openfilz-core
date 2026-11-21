@@ -435,4 +435,74 @@ class LocalFullTextServiceImplTest {
                 .storagePath("storage/doc.pdf")
                 .build();
     }
+
+    private Document pdf() {
+        return Document.builder()
+                .id(UUID.randomUUID())
+                .type(DocumentType.FILE)
+                .name("contract.pdf")
+                .contentType("application/pdf")
+                .size(1024L)
+                .storagePath("storage/contract.pdf")
+                .build();
+    }
+
+    @Test
+    void textExtractedEvent_publishedAfterIndexing_withCharCount() {
+        org.springframework.context.ApplicationEventPublisher events = mock(org.springframework.context.ApplicationEventPublisher.class);
+        ReflectionTestUtils.setField(service, "events", events);
+        Document doc = pdf();
+        doReturn(Mono.just(new ByteArrayResource("content".getBytes()))).when(storageService).loadFile(doc.getStoragePath());
+        when(indexService.indexDocMetadataMono(doc)).thenReturn(Mono.empty());
+        when(tikaService.processResource(any(), any(), any())).thenReturn(Flux.just("hello ", "world"));
+        // The index consumes the stream, as OpenSearchIndexService does
+        when(indexService.indexDocumentStream(any(), eq(doc.getId())))
+                .thenAnswer(inv -> inv.<Flux<String>>getArgument(0).then());
+
+        service.indexDocument(doc);
+
+        org.mockito.ArgumentCaptor<Object> captor = org.mockito.ArgumentCaptor.forClass(Object.class);
+        verify(events, timeout(2000)).publishEvent(captor.capture());
+        org.openfilz.dms.event.DocumentTextExtractedEvent event = (org.openfilz.dms.event.DocumentTextExtractedEvent) captor.getValue();
+        assertEquals(doc.getId(), event.documentId());
+        assertEquals("contract.pdf", event.name());
+        assertEquals(11, event.indexedChars());
+        assertEquals(false, event.truncated());
+    }
+
+    @Test
+    void textExtractedEvent_notPublishedWhenIndexingFails() {
+        org.springframework.context.ApplicationEventPublisher events = mock(org.springframework.context.ApplicationEventPublisher.class);
+        ReflectionTestUtils.setField(service, "events", events);
+        Document doc = pdf();
+        doReturn(Mono.just(new ByteArrayResource("content".getBytes()))).when(storageService).loadFile(doc.getStoragePath());
+        when(indexService.indexDocMetadataMono(doc)).thenReturn(Mono.empty());
+        when(tikaService.processResource(any(), any(), any())).thenReturn(Flux.just("text"));
+        when(indexService.indexDocumentStream(any(), eq(doc.getId()))).thenReturn(Mono.error(new IllegalStateException("index down")));
+        lenient().when(indexService.exists(doc.getId())).thenReturn(Mono.just(false));
+
+        service.indexDocument(doc);
+
+        verify(indexService, timeout(2000)).indexDocumentStream(any(), eq(doc.getId()));
+        verify(events, after(1500).never()).publishEvent(any(Object.class));
+    }
+
+    @Test
+    void textExtractedEvent_listenerErrorDoesNotFailIndexing() {
+        org.springframework.context.ApplicationEventPublisher events = mock(org.springframework.context.ApplicationEventPublisher.class);
+        doThrow(new IllegalStateException("listener broke")).when(events).publishEvent(any(Object.class));
+        ReflectionTestUtils.setField(service, "events", events);
+        Document doc = pdf();
+        doReturn(Mono.just(new ByteArrayResource("content".getBytes()))).when(storageService).loadFile(doc.getStoragePath());
+        when(indexService.indexDocMetadataMono(doc)).thenReturn(Mono.empty());
+        when(tikaService.processResource(any(), any(), any())).thenReturn(Flux.just("text"));
+        when(indexService.indexDocumentStream(any(), eq(doc.getId()))).thenReturn(Mono.empty());
+
+        service.indexDocument(doc);
+
+        verify(events, timeout(2000)).publishEvent(any(Object.class));
+        // No retry: a retry would ask the index whether the document still exists
+        verify(indexService, after(1000).never()).exists(doc.getId());
+        verify(indexService, times(1)).indexDocumentStream(any(), eq(doc.getId()));
+    }
 }
