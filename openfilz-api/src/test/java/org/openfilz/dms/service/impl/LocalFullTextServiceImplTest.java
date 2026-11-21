@@ -471,6 +471,28 @@ class LocalFullTextServiceImplTest {
     }
 
     @Test
+    void textExtractedEvent_truncatedCountsTheSpaceTheIndexAddsBetweenFragments() {
+        org.springframework.context.ApplicationEventPublisher events = mock(org.springframework.context.ApplicationEventPublisher.class);
+        ReflectionTestUtils.setField(service, "events", events);
+        Document doc = pdf();
+        doReturn(Mono.just(new ByteArrayResource("content".getBytes()))).when(storageService).loadFile(doc.getStoragePath());
+        when(indexService.indexDocMetadataMono(doc)).thenReturn(Mono.empty());
+        // Two halves of the cap: the index joins them with a space, which pushes the last character out
+        String half = "a".repeat(OpenSearchIndexService.MAX_INDEXED_CONTENT_LENGTH / 2);
+        when(tikaService.processResource(any(), any(), any())).thenReturn(Flux.just(half, half));
+        when(indexService.indexDocumentStream(any(), eq(doc.getId())))
+                .thenAnswer(inv -> inv.<Flux<String>>getArgument(0).then());
+
+        service.indexDocument(doc);
+
+        org.mockito.ArgumentCaptor<Object> captor = org.mockito.ArgumentCaptor.forClass(Object.class);
+        verify(events, timeout(2000)).publishEvent(captor.capture());
+        org.openfilz.dms.event.DocumentTextExtractedEvent event = (org.openfilz.dms.event.DocumentTextExtractedEvent) captor.getValue();
+        assertEquals(OpenSearchIndexService.MAX_INDEXED_CONTENT_LENGTH, event.indexedChars());
+        assertEquals(true, event.truncated());
+    }
+
+    @Test
     void textExtractedEvent_notPublishedWhenIndexingFails() {
         org.springframework.context.ApplicationEventPublisher events = mock(org.springframework.context.ApplicationEventPublisher.class);
         ReflectionTestUtils.setField(service, "events", events);

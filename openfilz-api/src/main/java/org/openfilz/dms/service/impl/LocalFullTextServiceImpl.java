@@ -92,9 +92,6 @@ public class LocalFullTextServiceImpl implements FullTextService {
     @Autowired(required = false)
     private org.springframework.context.ApplicationEventPublisher events;
 
-    /** What the index keeps of a document's text ({@code OpenSearchIndexService}). */
-    static final int INDEXED_CONTENT_CAP = 1_000_000;
-
     public LocalFullTextServiceImpl(IndexService indexService, TikaService tikaService, StorageService storageService) {
         this.indexService = indexService;
         this.tikaService = tikaService;
@@ -165,7 +162,13 @@ public class LocalFullTextServiceImpl implements FullTextService {
             tikaFlux = tikaFlux.doOnNext(collectedText::append);
         }
         final java.util.concurrent.atomic.AtomicLong extractedChars = new java.util.concurrent.atomic.AtomicLong();
-        tikaFlux = tikaFlux.doOnNext(chunk -> extractedChars.addAndGet(chunk.length()));
+        // The length the index would hold without its cap: it joins the fragments with one space, so
+        // "truncated" must count those spaces to say exactly whether the text was cut.
+        final java.util.concurrent.atomic.AtomicLong joinedChars = new java.util.concurrent.atomic.AtomicLong();
+        tikaFlux = tikaFlux.doOnNext(chunk -> {
+            extractedChars.addAndGet(chunk.length());
+            joinedChars.accumulateAndGet(chunk.length(), (total, length) -> total == 0 ? length : total + 1 + length);
+        });
 
         return indexService.indexDocMetadataMono(document)
                 .then(tikaFlux.as(flux -> indexService.indexDocumentStream(flux, document.getId())))
@@ -178,7 +181,8 @@ public class LocalFullTextServiceImpl implements FullTextService {
                         postProcessingQueue.run(documentEmbeddingService.embedFromText(document, collectedText.toString()));
                         enqueueInsights(document, collectedText);
                     }
-                    publishTextExtracted(document, extractedChars.get());
+                    publishTextExtracted(document, extractedChars.get(),
+                            joinedChars.get() > OpenSearchIndexService.MAX_INDEXED_CONTENT_LENGTH);
                 }))
                 .doFinally(_ -> {
                     try {
@@ -191,13 +195,13 @@ public class LocalFullTextServiceImpl implements FullTextService {
     }
 
     /** After a successful indexing only; a listener in error never fails it. */
-    private void publishTextExtracted(Document document, long chars) {
+    private void publishTextExtracted(Document document, long chars, boolean truncated) {
         if (events == null) {
             return;
         }
         try {
             events.publishEvent(new org.openfilz.dms.event.DocumentTextExtractedEvent(document.getId(), document.getName(),
-                    (int) Math.min(chars, Integer.MAX_VALUE), chars > INDEXED_CONTENT_CAP));
+                    (int) Math.min(chars, Integer.MAX_VALUE), truncated));
         } catch (Exception e) {
             log.warn("[INDEX] text-extracted event not handled for {}: {}", document.getId(), e.getMessage());
         }
