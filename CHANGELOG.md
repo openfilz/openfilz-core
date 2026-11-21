@@ -4,21 +4,21 @@
 **[maven-release-plugin] prepare for next development iteration**
 
 
-[97bb89d039cda78](https://github.com/openfilz/openfilz-core/commit/97bb89d039cda78) maven-release-bot[bot] *2026-11-20 16:31:00*
+[0a2309a7e2fdd4c](https://github.com/openfilz/openfilz-core/commit/0a2309a7e2fdd4c) maven-release-bot[bot] *2026-11-21 12:28:32*
 
 
-## v1.4.21
+## v1.4.22
 ### No issue
 
-**[maven-release-plugin] prepare release v1.4.21**
+**[maven-release-plugin] prepare release v1.4.22**
 
 
-[31759e41d4ff78d](https://github.com/openfilz/openfilz-core/commit/31759e41d4ff78d) maven-release-bot[bot] *2026-11-20 16:30:57*
+[a82209f828c678c](https://github.com/openfilz/openfilz-core/commit/a82209f828c678c) maven-release-bot[bot] *2026-11-21 12:28:29*
 
-**Merge pull request #426 from openfilz/develop**
+**Merge pull request #428 from openfilz/develop**
 
- * Show host identity providers for clients that opt in
+ * Publish DocumentCategoryChangedEvent and improve error handling
 
-[37c96a8ce1b9ef4](https://github.com/openfilz/openfilz-core/commit/37c96a8ce1b9ef4) Yann Demel *2026-11-20 16:26:36*
+[9d2e38b446d174c](https://github.com/openfilz/openfilz-core/commit/9d2e38b446d174c) Yann Demel *2026-11-21 12:25:05*
 
 
