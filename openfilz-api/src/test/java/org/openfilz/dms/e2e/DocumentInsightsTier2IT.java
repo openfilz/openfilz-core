@@ -10,10 +10,13 @@ import org.openfilz.dms.dto.response.InsightBackfillStatus;
 import org.openfilz.dms.dto.response.InsightFacets;
 import org.openfilz.dms.dto.response.Settings;
 import org.openfilz.dms.dto.response.UploadResponse;
+import org.openfilz.dms.event.DocumentCategoryChangedEvent;
 import org.openfilz.dms.service.ai.DocumentAiTools;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.event.EventListener;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.graphql.client.ClientGraphQlResponse;
 import org.springframework.graphql.client.HttpGraphQlClient;
@@ -32,6 +35,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Predicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -228,6 +232,39 @@ class DocumentInsightsTier2IT extends TestContainersBaseConfig {
         assertThat(view.category()).isEqualTo("contract");
         assertThat(view.model()).isEqualTo("user");
         assertThat(view.summary()).contains("short test summary");
+    }
+
+    @Test
+    @DisplayName("a person's kind is announced once it is stored, and a listener that fails does not fail the request")
+    void kindChangeIsAnnouncedAndAFailingListenerIsNotTheCallersProblem() {
+        UploadResponse uploaded = uploadDocument(textFile("kind-event-" + UUID.randomUUID() + ".txt",
+                "Quarterly report for ACME: revenue grew 12% and the outlook is stable."));
+        awaitInsights(uploaded.id(), v -> "DONE".equals(v.status()) && v.tier() == 2);
+
+        DocumentInsightView corrected = getWebTestClient().patch()
+                .uri(RestApiVersion.API_PREFIX + RestApiVersion.ENDPOINT_DOCUMENTS + "/" + uploaded.id() + "/insights")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(BodyInserters.fromValue("{\"category\":\"contract\"}"))
+                .exchange().expectStatus().isOk()
+                .expectBody(DocumentInsightView.class).returnResult().getResponseBody();
+
+        assertThat(corrected).isNotNull();
+        assertThat(corrected.category()).isEqualTo("contract");
+        assertThat(FailingCategoryListener.RECEIVED)
+                .contains(new DocumentCategoryChangedEvent(uploaded.id(), "contract", "user"));
+    }
+
+    /** An extension's listener of the kind change: it records the event, then fails. */
+    @TestConfiguration
+    static class FailingCategoryListener {
+
+        static final List<DocumentCategoryChangedEvent> RECEIVED = new CopyOnWriteArrayList<>();
+
+        @EventListener
+        void onCategoryChanged(DocumentCategoryChangedEvent event) {
+            RECEIVED.add(event);
+            throw new IllegalStateException("a listener that fails");
+        }
     }
 
     @Test
