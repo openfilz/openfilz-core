@@ -11,11 +11,13 @@ import org.openfilz.dms.service.DocumentService;
 import org.openfilz.dms.service.IndexService;
 import org.openfilz.dms.service.ai.AiAccessPolicy;
 import org.openfilz.dms.service.insight.AiDocumentInsightService;
+import org.openfilz.dms.event.DocumentCategoryChangedEvent;
 import org.openfilz.dms.service.insight.CategoryTaxonomy;
 import org.openfilz.dms.service.insight.LearnedCategoryClassifier;
 import org.openfilz.dms.utils.UserInfoService;
 import org.openfilz.dms.service.insight.DocumentInsightStore;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -50,17 +52,20 @@ public class DocumentInsightController implements UserInfoService {
     private final ObjectProvider<IndexService> indexServiceProvider;
     /** The deployment's kinds: the core's properties, or an extension's managed list — read per request, never cached. */
     private final CategoryTaxonomy taxonomy;
+    private final ApplicationEventPublisher events;
 
     public DocumentInsightController(DocumentService documentService,
                                      ObjectProvider<DocumentInsightStore> insightStoreProvider,
                                      ObjectProvider<AiAccessPolicy> accessPolicyProvider,
                                      ObjectProvider<IndexService> indexServiceProvider,
-                                     CategoryTaxonomy taxonomy) {
+                                     CategoryTaxonomy taxonomy,
+                                     ApplicationEventPublisher events) {
         this.documentService = documentService;
         this.insightStoreProvider = insightStoreProvider;
         this.accessPolicyProvider = accessPolicyProvider;
         this.indexServiceProvider = indexServiceProvider;
         this.taxonomy = taxonomy;
+        this.events = events;
     }
 
     @PatchMapping(value = "/{documentId}/insights", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
@@ -91,6 +96,8 @@ public class DocumentInsightController implements UserInfoService {
                         .then(store.saveCategory(document.getId(), category, LearnedCategoryClassifier.USER_SOURCE,
                                 AiDocumentInsightService.PROMPT_VERSION))
                         .then(mirror(document.getId(), category))
+                        .doOnSuccess(v -> events.publishEvent(new DocumentCategoryChangedEvent(document.getId(), category,
+                                LearnedCategoryClassifier.USER_SOURCE)))
                         .then(store.find(document.getId()))
                         .map(DocumentInsightStore::toView));
     }
