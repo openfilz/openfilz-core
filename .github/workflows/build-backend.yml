@@ -15,6 +15,24 @@ on:
       - 'openfilz-web/**'
       - '*.md'
       - '**/*.md'
+  # Build and test every pull request. PRs from forks get no secrets, so every
+  # step that needs one or writes anywhere only runs on push.
+  pull_request:
+    branches: [ "develop", "main" ]
+    paths-ignore:
+      - 'openfilz-web/**'
+      - '*.md'
+      - '**/*.md'
+
+# A new commit on a PR cancels the previous run of that PR. Pushes keep a group
+# of their own (run id), so they run exactly as before.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# The badge push uses the release app token, not GITHUB_TOKEN
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -23,13 +41,14 @@ jobs:
     steps:
       - uses: actions/create-github-app-token@v2
         id: app-token
+        if: github.event_name == 'push'
         with:
           app-id: ${{ secrets.RELEASE_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_PRIVATE_KEY }}
 
       - uses: actions/checkout@v6
         with:
-          token: ${{ steps.app-token.outputs.token }}
+          token: ${{ steps.app-token.outputs.token || github.token }}
           persist-credentials: false
 
       - name: Set up JDK 25
@@ -40,6 +59,7 @@ jobs:
           cache: maven
 
       - name: Configure Git Credentials
+        if: github.event_name == 'push'
         run: |
           git config --global user.name "maven-release-bot[bot]"
           git config --global user.email "maven-release-bot[bot]@users.noreply.github.com"
@@ -181,7 +201,7 @@ jobs:
           echo "branches = ${{ steps.jacoco.outputs.branches }}"
 
       - name: Commit and push
-        if: ${{ github.event_name != 'pull_request' }}
+        if: github.event_name == 'push'
         run: |
           cd .github/badges
           if [[ `git status --porcelain *.svg` ]]; then
@@ -198,6 +218,7 @@ jobs:
 
       - name: Add coverage to PR
         id: jacoco
+        if: github.event_name == 'push'
         uses: madrapps/jacoco-report@v1.7.2
         with:
           paths: |
