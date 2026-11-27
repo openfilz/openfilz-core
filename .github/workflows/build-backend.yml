@@ -17,12 +17,11 @@ on:
       - '**/*.md'
   # Build and test every pull request. PRs from forks get no secrets, so every
   # step that needs one or writes anywhere only runs on push.
+  # No paths-ignore here, unlike push: the "build" check is what a merge waits for
+  # (it must be green on the PR's last commit), and a PR this workflow skipped would
+  # never get that check, so a documentation-only PR could not be merged.
   pull_request:
     branches: [ "develop", "main" ]
-    paths-ignore:
-      - 'openfilz-web/**'
-      - '*.md'
-      - '**/*.md'
 
 # A new commit on a PR cancels the previous run of that PR. Pushes keep a group
 # of their own (run id), so they run exactly as before.
